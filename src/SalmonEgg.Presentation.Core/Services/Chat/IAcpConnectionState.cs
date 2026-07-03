@@ -46,172 +46,77 @@ public interface IAcpConnectionState : INotifyPropertyChanged
 /// </summary>
 public interface IAcpChatCoordinatorSink : IAcpConnectionState
 {
-    /// <summary>
-    /// Optional richer bridge hooks for the ACP facade adapter.
-    /// Default implementations keep the current ChatViewModel contract-compatible until that adapter lands.
-    /// </summary>
-    IChatService? CurrentChatService => null;
+    IChatService? CurrentChatService { get; }
 
-    bool IsInitialized => CurrentChatService?.IsInitialized ?? false;
+    bool IsInitialized { get; }
 
-    string? CurrentRemoteSessionId => null;
+    string? CurrentRemoteSessionId { get; }
 
-    string? SelectedProfileId => null;
+    string? SelectedProfileId { get; }
 
-    ServerConfiguration? ResolveProfile(string? profileId) => null;
+    ServerConfiguration? ResolveProfile(string? profileId);
 
     IReadOnlyList<McpServer> CurrentMcpServers { get; }
 
     void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers);
 
-    long ConnectionGeneration => 0;
+    long ConnectionGeneration { get; }
 
     IUiDispatcher Dispatcher { get; }
 
     IConversationBindingCommands ConversationBindingCommands { get; }
 
-    IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories() => [];
+    IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories();
 
-    ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(
-            string.IsNullOrWhiteSpace(CurrentSessionId)
-                ? null
-                : new ConversationRemoteBindingState(
-                    CurrentSessionId!,
-                    CurrentRemoteSessionId,
-                    SelectedProfileId));
-    }
+    ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default);
 
     ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
         string conversationId,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(conversationId)
-            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-        {
-            return ValueTask.FromResult<ConversationRemoteBindingState?>(null);
-        }
+        CancellationToken cancellationToken = default);
 
-        return GetCurrentRemoteBindingAsync(cancellationToken);
-    }
+    void SelectProfile(ServerConfiguration profile);
 
-    void SelectProfile(ServerConfiguration profile)
-    {
-    }
+    Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default);
 
-    Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        SelectProfile(profile);
-        return Task.CompletedTask;
-    }
+    void ReplaceChatService(IChatService? chatService);
 
-    void ReplaceChatService(IChatService? chatService)
-    {
-    }
+    Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default);
 
-    Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        ReplaceChatService(chatService);
-        return Task.CompletedTask;
-    }
+    Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default);
 
-    Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ReplaceChatServiceAsync(chatService, cancellationToken);
-    }
+    void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage);
 
-    void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
-    {
-    }
+    void UpdateInitializationState(bool isInitializing);
 
-    void UpdateInitializationState(bool isInitializing)
-    {
-    }
+    void UpdateAuthenticationState(bool isRequired, string? hintMessage);
 
-    void UpdateAuthenticationState(bool isRequired, string? hintMessage)
-    {
-    }
+    void UpdateAgentIdentity(string? agentName, string? agentVersion);
 
-    void UpdateAgentIdentity(string? agentName, string? agentVersion)
-    {
-    }
+    Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default);
 
-    Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
+    Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default);
 
-    Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
+    Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default);
 
-    Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return string.IsNullOrWhiteSpace(conversationId)
-            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
-            ? Task.CompletedTask
-            : ResetHydratedConversationForResyncAsync(cancellationToken);
-    }
+    string? GetActiveSessionCwdOrDefault();
 
-    string? GetActiveSessionCwdOrDefault() => null;
+    string? GetSessionCwdOrDefault(string conversationId);
 
-    string? GetSessionCwdOrDefault(string conversationId)
-        => string.IsNullOrWhiteSpace(conversationId)
-            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
-            ? null
-            : GetActiveSessionCwdOrDefault();
-
-    Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
+    Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default);
 
     Task SetConversationHydratingAsync(
         string conversationId,
         bool isHydrating,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return string.IsNullOrWhiteSpace(conversationId)
-            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
-            ? Task.CompletedTask
-            : SetIsHydratingAsync(isHydrating, cancellationToken);
-    }
+        CancellationToken cancellationToken = default);
 
-    Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
+    Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default);
 
     Task MarkConversationRemoteHydratedAsync(
         string conversationId,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return string.IsNullOrWhiteSpace(conversationId)
-            || !string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
-            ? Task.CompletedTask
-            : MarkActiveConversationRemoteHydratedAsync(cancellationToken);
-    }
+        CancellationToken cancellationToken = default);
 
     Task ApplyConversationSessionLoadResponseAsync(
         string conversationId,
         SessionLoadResponse response,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
-    }
+        CancellationToken cancellationToken = default);
 }

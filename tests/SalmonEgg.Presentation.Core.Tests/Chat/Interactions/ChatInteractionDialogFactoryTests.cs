@@ -49,7 +49,8 @@ public sealed class ChatInteractionDialogFactoryTests
             {
                 MessageId = "fs-1",
                 SessionId = "remote-1",
-                Operation = "read",
+                Method = "fs/read_text_file",
+                Kind = FileSystemRequestKind.ReadTextFile,
                 Path = "/tmp/file.txt",
                 Content = "abc"
             },
@@ -62,6 +63,9 @@ public sealed class ChatInteractionDialogFactoryTests
                 return Task.CompletedTask;
             },
             () => dismissed = true);
+
+        Assert.Equal("fs/read_text_file", sut.Method);
+        Assert.Equal(FileSystemRequestKind.ReadTextFile, sut.Kind);
 
         sut.ResponseContent = "payload";
         await sut.RespondCommand.ExecuteAsync(true);

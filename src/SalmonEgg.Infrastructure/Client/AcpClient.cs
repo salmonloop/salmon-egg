@@ -194,25 +194,14 @@ namespace SalmonEgg.Infrastructure.Client
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse initialize response");
             }
 
-            // Validate protocol compatibility.
-            // We allow older server versions but reject newer versions that this client cannot understand.
             var serverVersion = initializeResponse.ProtocolVersion;
             var clientVersion = @params.ProtocolVersion;
 
-            if (serverVersion > clientVersion)
+            if (serverVersion != clientVersion)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
-                    $"Protocol version mismatch. Max supported by client: {clientVersion}, Server: {serverVersion}");
-            }
-
-            if (serverVersion < clientVersion)
-            {
-                _errorLogger.LogError(new ErrorLogEntry(
-                    "PROTOCOL_VERSION_DOWNLEVEL",
-                    $"Server protocol version {serverVersion} is older than client requested {clientVersion}. Proceeding in compatibility mode.",
-                    ErrorSeverity.Info,
-                    nameof(InitializeAsync)));
+                    $"Protocol version mismatch. Expected by client: {clientVersion}, Server: {serverVersion}");
             }
 
             // 存储 Agent 信息
@@ -1170,12 +1159,11 @@ namespace SalmonEgg.Infrastructure.Client
                 var path = pathProp.GetString() ?? string.Empty;
                 var content = rawParams.TryGetProperty("content", out var cont) ? cont.GetString() : null;
 
-                // For legacy UI/viewmodels we expose an "operation" hint.
-                var operation = request.Method switch
+                var kind = request.Method switch
                 {
-                    "fs/read_text_file" => "read",
-                    "fs/write_text_file" => "write",
-                    _ => request.Method
+                    "fs/read_text_file" => FileSystemRequestKind.ReadTextFile,
+                    "fs/write_text_file" => FileSystemRequestKind.WriteTextFile,
+                    _ => throw new InvalidOperationException($"Unsupported file system request method: {request.Method}")
                 };
                 var encoding = (string?)null;
 
@@ -1185,7 +1173,8 @@ namespace SalmonEgg.Infrastructure.Client
                 var eventArgs = new FileSystemRequestEventArgs(
                 messageId,
                 sessionId,
-                operation,
+                request.Method,
+                kind,
                 path,
                 encoding,
                 content,

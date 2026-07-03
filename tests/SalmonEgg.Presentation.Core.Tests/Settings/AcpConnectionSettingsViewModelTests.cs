@@ -613,7 +613,7 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
-    public async Task RefreshCommand_WhenLegacyProfilesObserverFails_KeepsSettingsProfileItemsVisible()
+    public async Task RefreshCommand_WhenRawProfilesObserverFails_KeepsSettingsProfileItemsVisible()
     {
         // Arrange
         var preferences = await CreatePreferencesAsync();
@@ -652,7 +652,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             new ImmediateUiDispatcher(),
             new TestCoreStringLocalizer());
 
-        profiles.Profiles.CollectionChanged += ThrowWhenLegacyProfilesAdd;
+        profiles.Profiles.CollectionChanged += ThrowWhenRawProfilesAdd;
 
         // Act
         await profiles.RefreshCommand.ExecuteAsync(null);
@@ -1274,7 +1274,7 @@ public sealed class AcpConnectionSettingsViewModelTests
     private static ITransportSupportPolicy CreateTransportSupportPolicy(AppPreferencesViewModel preferences)
         => new TransportSupportPolicy(preferences.PlatformCapabilities);
 
-    private static void ThrowWhenLegacyProfilesAdd(object? sender, NotifyCollectionChangedEventArgs args)
+    private static void ThrowWhenRawProfilesAdd(object? sender, NotifyCollectionChangedEventArgs args)
     {
         if (args.Action == NotifyCollectionChangedAction.Add)
         {

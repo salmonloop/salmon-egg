@@ -673,6 +673,8 @@ public sealed class AcpConnectionCoordinatorTests
 
         public IChatService? CurrentChatService { get; set; }
 
+        public bool IsInitialized => CurrentChatService?.IsInitialized ?? false;
+
         public bool IsConnected { get; set; }
 
         public bool IsInitializing { get; set; }
@@ -711,9 +713,99 @@ public sealed class AcpConnectionCoordinatorTests
 
         public IUiDispatcher Dispatcher { get; } = new ImmediateUiDispatcher();
 
+        public long ConnectionGeneration { get; set; }
+
+        public ServerConfiguration? ResolveProfile(string? profileId)
+            => string.IsNullOrWhiteSpace(profileId)
+                ? null
+                : new ServerConfiguration { Id = profileId, Transport = TransportType.Stdio };
+
+        public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories()
+            => Array.Empty<AgentRemoteDirectory>();
+
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {
             CurrentMcpServers = mcpServers;
+        }
+
+        public ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(
+                string.IsNullOrWhiteSpace(CurrentSessionId)
+                    ? null
+                    : new ConversationRemoteBindingState(CurrentSessionId!, CurrentRemoteSessionId, SelectedProfileId));
+        }
+
+        public ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? GetCurrentRemoteBindingAsync(cancellationToken)
+                : ValueTask.FromResult<ConversationRemoteBindingState?>(null);
+        }
+
+        public void SelectProfile(ServerConfiguration profile)
+        {
+            SelectedProfileId = profile.Id;
+        }
+
+        public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SelectProfile(profile);
+            return Task.CompletedTask;
+        }
+
+        public void ReplaceChatService(IChatService? chatService)
+        {
+            CurrentChatService = chatService;
+        }
+
+        public Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
+        }
+
+        public Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
+        }
+
+        public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
+        {
+            IsConnecting = isConnecting;
+            IsConnected = isConnected;
+            ConnectionErrorMessage = errorMessage;
+        }
+
+        public void UpdateInitializationState(bool isInitializing)
+        {
+            IsInitializing = isInitializing;
+        }
+
+        public void UpdateAuthenticationState(bool isRequired, string? hintMessage)
+        {
+            IsAuthenticationRequired = isRequired;
+            AuthenticationHintMessage = hintMessage;
+        }
+
+        public void UpdateAgentIdentity(string? agentName, string? agentVersion)
+        {
+            AgentName = agentName;
+            AgentVersion = agentVersion;
+        }
+
+        public Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
         public int ResetHydratedConversationForResyncCalls { get; private set; }
@@ -727,11 +819,38 @@ public sealed class AcpConnectionCoordinatorTests
             return Task.CompletedTask;
         }
 
+        public Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? ResetHydratedConversationForResyncAsync(cancellationToken)
+                : Task.CompletedTask;
+        }
+
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             IsHydrating = isHydrating;
             return Task.CompletedTask;
+        }
+
+        public Task SetConversationHydratingAsync(string conversationId, bool isHydrating, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                IsHydrating = isHydrating;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.IsNullOrWhiteSpace(CurrentSessionId)
+                ? Task.CompletedTask
+                : MarkConversationRemoteHydratedAsync(CurrentSessionId!, cancellationToken);
         }
 
         public Task MarkConversationRemoteHydratedAsync(string conversationId, CancellationToken cancellationToken = default)
@@ -758,6 +877,11 @@ public sealed class AcpConnectionCoordinatorTests
 
             return Task.CompletedTask;
         }
+
+        public string? GetSessionCwdOrDefault(string conversationId)
+            => string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? SessionCwd
+                : null;
     }
 
     private sealed class RecordingConnectionStore : IChatConnectionStore

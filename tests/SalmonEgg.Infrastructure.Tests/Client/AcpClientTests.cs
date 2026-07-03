@@ -318,7 +318,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
-        public async Task InitializeAsync_WhenServerProtocolIsOlder_UsesCompatibilityMode()
+        public async Task InitializeAsync_WhenServerProtocolIsOlder_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
             var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
@@ -333,12 +333,12 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement(initResponse, parser.Options),
                 parser);
 
-            var response = await client.InitializeAsync(new InitializeParams(
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create()));
+                ClientCapabilityDefaults.Create())));
 
-            Assert.True(client.IsInitialized);
-            Assert.Equal(0, response.ProtocolVersion);
+            Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
+            Assert.False(client.IsInitialized);
         }
 
         [Fact]
@@ -1824,6 +1824,36 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.True(response.IsError);
             Assert.Equal(JsonRpcErrorCode.InternalError, response.Error!.Code);
             Assert.False(respondedAfterFailure);
+        }
+
+        [Fact]
+        public async Task FileSystemRequest_WhenReadTextFileArrives_PublishesProtocolMethodAndRequestKind()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(
+                clientCapabilities: new ClientCapabilities(fs: new FsCapability()));
+            FileSystemRequestEventArgs? published = null;
+            client.FileSystemRequestReceived += (_, args) => published = args;
+
+            var request = new JsonRpcRequest(
+                208,
+                "fs/read_text_file",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "path": "/workspace/file.txt"
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            Assert.NotNull(published);
+            Assert.Equal("fs/read_text_file", published.Method);
+            Assert.Equal(FileSystemRequestKind.ReadTextFile, published.Kind);
+            Assert.Equal("/workspace/file.txt", published.Path);
         }
 
         [Fact]

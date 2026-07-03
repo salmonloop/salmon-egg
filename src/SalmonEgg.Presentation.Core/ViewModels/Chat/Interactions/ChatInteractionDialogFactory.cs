@@ -65,7 +65,8 @@ public static class ChatInteractionDialogFactory
         {
             MessageId = request.MessageId,
             SessionId = request.SessionId,
-            Operation = request.Operation,
+            Method = request.Method,
+            Kind = request.Kind,
             Path = request.Path,
             Encoding = request.Encoding,
             Content = request.Content

@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -9,7 +10,8 @@ public partial class FileSystemRequestViewModel : ObservableObject
 {
     public object MessageId { get; set; } = string.Empty;
     public string SessionId { get; set; } = string.Empty;
-    public string Operation { get; set; } = string.Empty;
+    public string Method { get; set; } = string.Empty;
+    public FileSystemRequestKind Kind { get; set; }
     public string Path { get; set; } = string.Empty;
     public string? Encoding { get; set; }
     public string? Content { get; set; }
@@ -27,6 +29,6 @@ public partial class FileSystemRequestViewModel : ObservableObject
             return;
         }
 
-        await OnRespond(success, success ? ResponseContent : null, success ? null : "Operation failed");
+        await OnRespond(success, success ? ResponseContent : null, success ? null : "File system request failed");
     }
 }

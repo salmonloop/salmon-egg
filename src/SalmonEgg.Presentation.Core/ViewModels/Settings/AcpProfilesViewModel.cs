@@ -32,7 +32,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     private readonly ISettingsAcpConnectionCommands? _connectionCommands;
     private readonly ILoggerFactory? _loggerFactory;
 
-    // ── Existing contract (kept for backward-compat with ChatViewModel etc.) ──
+    // Raw profile projection shared by Chat, Discover, and Settings editors.
 
     [ObservableProperty]
     private ObservableCollection<ServerConfiguration> _profiles = new();
@@ -66,8 +66,6 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string _savedCurrentConnectionNoticeMessage = string.Empty;
-
-    // ── New: per-profile item VMs for the Settings card list ─────────────────
 
     /// <summary>
     /// One <see cref="AgentProfileItemViewModel"/> per profile, each carrying its own
@@ -116,8 +114,6 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         _connectionCommands = connectionCommands ?? throw new ArgumentNullException(nameof(connectionCommands));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
     }
-
-    // ── Public helpers (unchanged contract) ───────────────────────────────────
 
     public async Task RefreshIfEmptyAsync()
     {
@@ -195,10 +191,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             {
                 var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
 
-                // Keep the settings list visible even if legacy collection observers fail while projecting to older surfaces.
                 RebuildProfileItems(ordered);
 
-                // ── Update legacy flat list (backward compat) ────────────
                 Profiles.Clear();
                 foreach (var cfg in ordered)
                 {

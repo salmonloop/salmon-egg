@@ -3253,6 +3253,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             }
         }
 
+        public Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CanMutate()
+                ? ((IAcpChatCoordinatorSink)_owner).NotifyPromptRequestDispatchedAsync(cancellationToken)
+                : Task.CompletedTask;
+        }
+
         public Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();

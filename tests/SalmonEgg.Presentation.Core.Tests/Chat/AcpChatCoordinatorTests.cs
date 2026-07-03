@@ -2961,10 +2961,27 @@ public sealed class AcpChatCoordinatorTests
                     ? null
                     : new ConversationRemoteBindingState(CurrentSessionId!, CurrentRemoteSessionId, SelectedProfileId)));
 
+        public ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? GetCurrentRemoteBindingAsync(cancellationToken)
+                : ValueTask.FromResult<ConversationRemoteBindingState?>(null);
+        }
+
         public void SelectProfile(ServerConfiguration profile)
         {
             SelectedProfileId = profile.Id;
             ResolvedProfile = profile;
+        }
+
+        public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SelectProfile(profile);
+            return Task.CompletedTask;
         }
 
         public ServerConfiguration? ResolveProfile(string? profileId)
@@ -2995,6 +3012,13 @@ public sealed class AcpChatCoordinatorTests
             return Task.CompletedTask;
         }
 
+        public Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
+        }
+
         public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
         {
             IsConnecting = isConnecting;
@@ -3020,6 +3044,12 @@ public sealed class AcpChatCoordinatorTests
             AgentVersion = agentVersion;
         }
 
+        public Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
         public Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -3027,10 +3057,52 @@ public sealed class AcpChatCoordinatorTests
             return Task.CompletedTask;
         }
 
+        public Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? ResetHydratedConversationForResyncAsync(cancellationToken)
+                : Task.CompletedTask;
+        }
+
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             IsHydrating = isHydrating;
+            return Task.CompletedTask;
+        }
+
+        public Task SetConversationHydratingAsync(string conversationId, bool isHydrating, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                IsHydrating = isHydrating;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return string.IsNullOrWhiteSpace(CurrentSessionId)
+                ? Task.CompletedTask
+                : MarkConversationRemoteHydratedAsync(CurrentSessionId!, cancellationToken);
+        }
+
+        public Task MarkConversationRemoteHydratedAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyConversationSessionLoadResponseAsync(
+            string conversationId,
+            SessionLoadResponse response,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
 
@@ -3047,6 +3119,11 @@ public sealed class AcpChatCoordinatorTests
         }
 
         public string GetActiveSessionCwdOrDefault() => ActiveSessionCwd;
+
+        public string? GetSessionCwdOrDefault(string conversationId)
+            => string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                ? ActiveSessionCwd
+                : null;
     }
 
     private sealed class LaggingSelectedProfileSink : IAcpChatCoordinatorSink
@@ -3083,6 +3160,23 @@ public sealed class AcpChatCoordinatorTests
                 ? null
                 : new ServerConfiguration { Id = profileId, Transport = TransportType.Stdio };
 
+        public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories()
+            => Array.Empty<AgentRemoteDirectory>();
+
+        public ValueTask<ConversationRemoteBindingState?> GetCurrentRemoteBindingAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<ConversationRemoteBindingState?>(null);
+        }
+
+        public ValueTask<ConversationRemoteBindingState?> GetConversationRemoteBindingAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<ConversationRemoteBindingState?>(null);
+        }
+
         public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
         {
             CurrentMcpServers = mcpServers;
@@ -3104,6 +3198,13 @@ public sealed class AcpChatCoordinatorTests
         }
 
         public Task ReplaceChatServiceAsync(IChatService? chatService, ServiceReplaceIntent intent, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ReplaceChatService(chatService);
+            return Task.CompletedTask;
+        }
+
+        public Task ReplaceChatServiceAsync(IChatService? chatService, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ReplaceChatService(chatService);
@@ -3133,6 +3234,61 @@ public sealed class AcpChatCoordinatorTests
         {
             AgentName = agentName;
             AgentVersion = agentVersion;
+        }
+
+        public Task NotifyPromptRequestDispatchedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task ResetHydratedConversationForResyncAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task ResetConversationForResyncAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public string? GetActiveSessionCwdOrDefault() => null;
+
+        public string? GetSessionCwdOrDefault(string conversationId) => null;
+
+        public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task SetConversationHydratingAsync(string conversationId, bool isHydrating, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task MarkActiveConversationRemoteHydratedAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task MarkConversationRemoteHydratedAsync(string conversationId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyConversationSessionLoadResponseAsync(
+            string conversationId,
+            SessionLoadResponse response,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
     }
 

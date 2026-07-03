@@ -984,6 +984,12 @@ public partial class ChatViewModel
             ? new ScopedAcpChatCoordinatorSink(this, connectionContext)
             : this;
 
+    public ServerConfiguration? ResolveProfile(string? profileId)
+        => ResolveNewSessionDraftProfile(profileId);
+
+    public IReadOnlyList<AgentRemoteDirectory> GetAgentRemoteDirectories()
+        => _preferences.AgentRemoteDirectories;
+
     public void SelectProfile(ServerConfiguration profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -1127,6 +1133,12 @@ public partial class ChatViewModel
         cancellationToken.ThrowIfCancellationRequested();
         return PostToUiAsync(() => ApplyChatServiceReplacementAsync(chatService, intent));
     }
+
+    Task IAcpChatCoordinatorSink.ReplaceChatServiceAsync(
+        IChatService? chatService,
+        ServiceReplaceIntent intent,
+        CancellationToken cancellationToken)
+        => ReplaceChatServiceWithIntentAsync(chatService, intent, cancellationToken);
 
     public void UpdateConnectionState(bool isConnecting, bool isConnected, bool isInitialized, string? errorMessage)
     {

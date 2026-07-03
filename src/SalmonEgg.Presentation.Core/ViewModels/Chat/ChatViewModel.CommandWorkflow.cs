@@ -1290,9 +1290,11 @@ public partial class ChatViewModel
     }
 
     public string? GetActiveSessionCwdOrDefault()
-        => GetSessionCwdOrDefault(CurrentSessionId);
+        => string.IsNullOrWhiteSpace(CurrentSessionId)
+            ? null
+            : GetSessionCwdOrDefault(CurrentSessionId);
 
-    private string? GetSessionCwdOrDefault(string? conversationId)
+    public string? GetSessionCwdOrDefault(string conversationId)
     {
         try
         {

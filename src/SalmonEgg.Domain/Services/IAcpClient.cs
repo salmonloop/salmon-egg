@@ -307,6 +307,12 @@ namespace SalmonEgg.Domain.Services
         }
     }
 
+    public enum FileSystemRequestKind
+    {
+        ReadTextFile,
+        WriteTextFile
+    }
+
     /// <summary>
     /// 文件系统请求事件参数。
     /// </summary>
@@ -323,9 +329,14 @@ namespace SalmonEgg.Domain.Services
         public string SessionId { get; set; } = string.Empty;
 
         /// <summary>
-        /// 操作类型（"read" 或 "write"）。
+        /// ACP 文件系统请求方法。
         /// </summary>
-        public string Operation { get; set; } = string.Empty;
+        public string Method { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 文件系统请求类型。
+        /// </summary>
+        public FileSystemRequestKind Kind { get; set; }
 
         /// <summary>
         /// 文件路径。
@@ -359,7 +370,8 @@ namespace SalmonEgg.Domain.Services
         /// </summary>
         /// <param name="messageId">消息 ID</param>
         /// <param name="sessionId">会话 ID</param>
-        /// <param name="operation">操作类型</param>
+        /// <param name="method">ACP 方法名</param>
+        /// <param name="kind">请求类型</param>
         /// <param name="path">文件路径</param>
         /// <param name="encoding">编码</param>
         /// <param name="content">内容</param>
@@ -367,7 +379,8 @@ namespace SalmonEgg.Domain.Services
         public FileSystemRequestEventArgs(
             object messageId,
             string sessionId,
-            string operation,
+            string method,
+            FileSystemRequestKind kind,
             string path,
             string? encoding = null,
             string? content = null,
@@ -375,7 +388,8 @@ namespace SalmonEgg.Domain.Services
         {
             MessageId = messageId;
             SessionId = sessionId;
-            Operation = operation;
+            Method = method;
+            Kind = kind;
             Path = path;
             Encoding = encoding;
             Content = content;
