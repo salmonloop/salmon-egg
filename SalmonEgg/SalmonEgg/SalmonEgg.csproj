@@ -149,6 +149,8 @@
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
+    <!-- iOS additionally requires a macOS/Xcode toolchain, so it has an explicit opt-in under the mobile target gate. -->
+    <EnableIosTarget Condition="'$(EnableIosTarget)' == ''">false</EnableIosTarget>
     <!-- Windows dev environments need the WinUI target present during restore/design-time build so XAML-generated types resolve. -->
     <EnableWinUIBuild Condition="'$(EnableWinUIBuild)' == '' and '$(OS)' == 'Windows_NT'">true</EnableWinUIBuild>
     <!-- Avoid duplicate PRIResource items when we explicitly list them above -->
@@ -166,7 +168,12 @@
           OR '$(ANDROID_SDK_ROOT)' != ''
           OR '$(ANDROID_HOME)' != ''
         )">net10.0-android36.0</SalmonEggAndroidTargetFrameworks>
-    <SalmonEggMobileTargetFrameworks>$(SalmonEggAndroidTargetFrameworks)</SalmonEggMobileTargetFrameworks>
+    <SalmonEggIosTargetFrameworks Condition="
+        '$(EnableMobileTargets)' == 'true'
+        AND '$(EnableIosTarget)' == 'true'">net10.0-ios</SalmonEggIosTargetFrameworks>
+    <SalmonEggMobileTargetFrameworks Condition="'$(SalmonEggAndroidTargetFrameworks)' != ''">$(SalmonEggAndroidTargetFrameworks)</SalmonEggMobileTargetFrameworks>
+    <SalmonEggMobileTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' != '' AND '$(SalmonEggIosTargetFrameworks)' != ''">$(SalmonEggMobileTargetFrameworks);$(SalmonEggIosTargetFrameworks)</SalmonEggMobileTargetFrameworks>
+    <SalmonEggMobileTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' == '' AND '$(SalmonEggIosTargetFrameworks)' != ''">$(SalmonEggIosTargetFrameworks)</SalmonEggMobileTargetFrameworks>
 
     <SalmonEggAllTargetFrameworks>$(SalmonEggTargetFrameworks)</SalmonEggAllTargetFrameworks>
     <SalmonEggAllTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' != ''">$(SalmonEggTargetFrameworks);$(SalmonEggMobileTargetFrameworks)</SalmonEggAllTargetFrameworks>

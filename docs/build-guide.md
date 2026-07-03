@@ -6,7 +6,7 @@
 
 ### 开发环境
 
-- **.NET 10.0 SDK**（推荐 10.0.202，允许 patch 前滚）
+- **.NET 10.0 SDK**（推荐 10.0.109，允许 patch 前滚）
   - 下载地址：https://dotnet.microsoft.com/download/dotnet/10.0
   - 验证安装：`dotnet --version`
 
@@ -180,8 +180,7 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 
 ### iOS (需要 macOS，可选)
 
-> 说明：当前仓库默认只启用 `net10.0-android36.0`（见 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`）。
-> 如需 iOS/macOS，请先将对应 TFM 加入 `TargetFrameworks`。
+> 说明：`net10.0-ios` 需要 macOS/Xcode/iOS workload，不进入默认构建。需要 iOS 时通过 `EnableMobileTargets=true` + `EnableIosTarget=true` 启用，不手改 `TargetFrameworks`。
 
 ```bash
 # 安装 iOS 工作负载（首次需要）
@@ -190,6 +189,8 @@ dotnet workload install ios
 # 运行在 iOS 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net10.0-ios \
+  -p:EnableMobileTargets=true \
+  -p:EnableIosTarget=true \
   -t:RunSimulator
 ```
 

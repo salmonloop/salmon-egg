@@ -29,7 +29,7 @@
 
 ### 1.1 项目框架
 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`
-- `TargetFrameworks` 由 `SalmonEggTargetFrameworks` / `SalmonEggAllTargetFrameworks` 条件化生成。常规 .NET SDK 路径默认覆盖 `net10.0-desktop` 与 `net10.0-browserwasm`；WinUI 3 目标在 Windows / MSBuild 条件或 `EnableWinUIBuild=true` 下启用；Android 目标只在 `EnableMobileTargets=true` 且 Android SDK 可用时加入。
+- `TargetFrameworks` 由 `SalmonEggTargetFrameworks` / `SalmonEggAllTargetFrameworks` 条件化生成。常规 .NET SDK 路径默认覆盖 `net10.0-desktop` 与 `net10.0-browserwasm`；WinUI 3 目标在 Windows / MSBuild 条件或 `EnableWinUIBuild=true` 下启用；Android 目标只在 `EnableMobileTargets=true` 且 Android SDK 可用时加入；iOS 目标只在 `EnableMobileTargets=true` 且 `EnableIosTarget=true` 时加入。
 
 ### 1.2 Windows（WinUI3）必须使用 MSIX
 - `WindowsPackageType=MSIX`
@@ -189,4 +189,3 @@ UI 层提供 `FrameNavigationService` 实现：
   - Chat 侧不再显示“准备好开始了吗？”（会话激活）
   - 收到 `session/update` 不再出现“Failed to process session/update notification ... metadata property conflict”类错误
 - WinUI3 与 Skia 导航行为一致（包括回退栈）
-

@@ -164,6 +164,35 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
+    public void Project_ExposesMobileTargetsThroughOptInProperties()
+    {
+        var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
+
+        var enableMobileTargets = project.Descendants("EnableMobileTargets").Single();
+        var enableIosTarget = project.Descendants("EnableIosTarget").Single();
+        var androidTargets = project.Descendants("SalmonEggAndroidTargetFrameworks").Single();
+        var iosTargets = project.Descendants("SalmonEggIosTargetFrameworks").Single();
+        var mobileTargets = project.Descendants("SalmonEggMobileTargetFrameworks").ToArray();
+
+        Assert.Equal("false", enableMobileTargets.Value);
+        Assert.Equal("'$(EnableMobileTargets)' == ''", (string?)enableMobileTargets.Attribute("Condition"));
+        Assert.Equal("false", enableIosTarget.Value);
+        Assert.Equal("'$(EnableIosTarget)' == ''", (string?)enableIosTarget.Attribute("Condition"));
+
+        Assert.Equal("net10.0-android36.0", androidTargets.Value);
+        Assert.Contains("'$(EnableMobileTargets)' == 'true'", (string?)androidTargets.Attribute("Condition"), StringComparison.Ordinal);
+        Assert.Contains("'$(AndroidSdkDirectory)' != ''", (string?)androidTargets.Attribute("Condition"), StringComparison.Ordinal);
+
+        Assert.Equal("net10.0-ios", iosTargets.Value);
+        Assert.Contains("'$(EnableMobileTargets)' == 'true'", (string?)iosTargets.Attribute("Condition"), StringComparison.Ordinal);
+        Assert.Contains("'$(EnableIosTarget)' == 'true'", (string?)iosTargets.Attribute("Condition"), StringComparison.Ordinal);
+
+        Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggAndroidTargetFrameworks)");
+        Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggMobileTargetFrameworks);$(SalmonEggIosTargetFrameworks)");
+        Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggIosTargetFrameworks)");
+    }
+
+    [Fact]
     public void DependencyInjection_RegistersUnsupportedTerminalManagerForBrowserWasm()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");

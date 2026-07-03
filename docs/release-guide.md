@@ -226,14 +226,15 @@ dotnet build -t:Run -f net10.0-android36.0 -c Release
 
 ### 创建 IPA
 
-> 说明：当前仓库默认未启用 `net10.0-ios`（见 `SalmonEgg/SalmonEgg/SalmonEgg.csproj`）。
-> 如需 iOS/macOS，请先将对应 TFM 加入 `TargetFrameworks`。
+> 说明：`net10.0-ios` 需要 macOS/Xcode/iOS workload，不进入默认构建。需要 iOS 时通过 `EnableMobileTargets=true` + `EnableIosTarget=true` 启用，不手改 `TargetFrameworks`。
 
 ```bash
 cd SalmonEgg/SalmonEgg
 
 # 发布为 IPA
 dotnet publish -f net10.0-ios -c Release \
+  -p:EnableMobileTargets=true \
+  -p:EnableIosTarget=true \
   -p:ArchiveOnBuild=true \
   -p:CreateIpa=true \
   -p:CodesignKey="iPhone Distribution: Your Company" \
