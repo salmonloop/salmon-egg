@@ -518,18 +518,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallRawInputJson,
                 ToolCallRawOutputJson,
                 ToolCallContent,
-                ToolCallLocations,
-                ToolCallJson);
-        }
-
-        partial void OnToolCallJsonChanged(string? value)
-        {
-            if (_applyingSnapshot)
-            {
-                return;
-            }
-
-            RefreshToolCallDetails();
+                ToolCallLocations);
         }
 
         partial void OnToolCallRawInputJsonChanged(string? value)
@@ -604,12 +593,11 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             string? rawInputJson,
             string? rawOutputJson,
             IReadOnlyList<ToolCallContent>? content,
-            IReadOnlyList<ToolCallLocation>? locations,
-            string? legacyPayloadJson = null)
+            IReadOnlyList<ToolCallLocation>? locations)
         {
             var items = new List<ToolCallDetailItem>();
 
-            AppendJson(items, rawInputJson ?? legacyPayloadJson, prefix: null);
+            AppendJson(items, rawInputJson, prefix: null);
             AppendJson(items, rawOutputJson, prefix: "output");
             AppendContent(items, content);
             AppendLocations(items, locations);

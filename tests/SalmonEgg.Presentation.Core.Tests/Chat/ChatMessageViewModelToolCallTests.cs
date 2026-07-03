@@ -31,6 +31,7 @@ public sealed class ChatMessageViewModelToolCallTests
         vm.ToolCallJson = "{\"path\":\"/tmp/demo.txt\"}";
 
         Assert.True(vm.HasToolCallJson);
+        Assert.Empty(vm.ToolCallDetailItems);
         Assert.Contains(nameof(ChatMessageViewModel.HasToolCallJson), changedProperties);
     }
 
