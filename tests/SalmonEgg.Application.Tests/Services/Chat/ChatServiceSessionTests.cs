@@ -12,6 +12,7 @@ using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Content;
 using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Domain.Models.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -70,6 +71,37 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
+    public async Task SessionUpdate_PlanUpdate_ForBackgroundSession_DoesNotOverrideCurrentPlan()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "current",
+                new PlanUpdate([new PlanEntry("current plan")])));
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "background",
+                new PlanUpdate([new PlanEntry("background plan")])));
+
+        Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
+        var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.History);
+        Assert.Equal("background plan", Assert.Single(backgroundEntry.Entries!).Content);
+
+        sut.Dispose();
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_WhenClientThrows_RestoresCachedHistoryAndPreviousSession()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
@@ -93,6 +125,11 @@ public sealed class ChatServiceSessionTests
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "s1",
+                new PlanUpdate([new PlanEntry("current plan")])));
         Assert.Equal("s1", sut.CurrentSessionId);
 
         // Seed cached history for the target session.
@@ -105,6 +142,7 @@ public sealed class ChatServiceSessionTests
             sut.LoadSessionAsync(new SessionLoadParams("s2", Environment.CurrentDirectory)));
 
         Assert.Equal("s1", sut.CurrentSessionId);
+        Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
         Assert.Equal(before, sessionManager.GetSession("s2")!.History.Count);
 
         sut.Dispose();
@@ -209,6 +247,37 @@ public sealed class ChatServiceSessionTests
         Assert.NotNull(session);
         Assert.Single(session!.History);
         Assert.Equal("cached", ((TextContentBlock)session.History[0].Content!).Text);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenClientThrows_RestoresPreviousSessionAndPlan()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .ThrowsAsync(new InvalidOperationException("resume failed"));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs(
+                "current",
+                new PlanUpdate([new PlanEntry("current plan")])));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ResumeSessionAsync(new SessionResumeParams("remote-2", Environment.CurrentDirectory)));
+
+        Assert.Equal("current", sut.CurrentSessionId);
+        Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
 
         sut.Dispose();
     }
@@ -343,7 +412,9 @@ public sealed class ChatServiceSessionTests
             new SessionUpdateEventArgs("background", new CurrentModeUpdate("plan")));
 
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
-        Assert.Equal("plan", sessionManager.GetSession("background")!.Mode.CurrentModeId);
+        var backgroundMode = sessionManager.GetSession("background")!.Mode;
+        Assert.Equal("plan", backgroundMode.CurrentModeId);
+        Assert.Empty(backgroundMode.AvailableModes);
 
         sut.Dispose();
     }

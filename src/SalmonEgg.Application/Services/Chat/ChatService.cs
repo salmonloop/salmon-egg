@@ -105,7 +105,8 @@ namespace SalmonEgg.Application.Services.Chat
                         case ToolCallStatusUpdate toolCallStatusUpdate:
                             break;
                         case PlanUpdate planUpdate:
-                            if (planUpdate.Entries != null)
+                            if (planUpdate.Entries != null
+                                && string.Equals(_currentSessionId, e.SessionId, StringComparison.Ordinal))
                             {
                                 _currentPlan = new Plan { Entries = planUpdate.Entries };
                             }
@@ -246,8 +247,11 @@ namespace SalmonEgg.Application.Services.Chat
 
         private void ApplyCurrentModeId(string sessionId, string modeId)
         {
-            var state = CloneModeState(_currentMode ?? _sessionManager.GetSession(sessionId)?.Mode)
-                ?? new SessionModeState();
+            var sessionMode = _sessionManager.GetSession(sessionId)?.Mode;
+            var source = string.Equals(_currentSessionId, sessionId, StringComparison.Ordinal)
+                ? _currentMode ?? sessionMode
+                : sessionMode;
+            var state = CloneModeState(source) ?? new SessionModeState();
             state.CurrentModeId = modeId;
             state.CurrentMode = state.GetModeById(modeId);
             ApplyModeState(sessionId, state);
@@ -311,6 +315,25 @@ namespace SalmonEgg.Application.Services.Chat
             };
             clone.CurrentMode = clone.GetModeById(clone.CurrentModeId);
             return clone;
+        }
+
+        private static Plan? ClonePlan(Plan? source)
+        {
+            if (source is null)
+            {
+                return null;
+            }
+
+            return new Plan
+            {
+                Entries = source.Entries
+                    .Select(static entry => new PlanEntry(entry.Content, entry.Status, entry.Priority)
+                    {
+                        Meta = entry.Meta is null ? null : new Dictionary<string, object?>(entry.Meta)
+                    })
+                    .ToList(),
+                Meta = source.Meta is null ? null : new Dictionary<string, object?>(source.Meta)
+            };
         }
 
         private static List<ProtocolSessionMode> ToProtocolModes(SessionModeState state)
@@ -383,6 +406,7 @@ namespace SalmonEgg.Application.Services.Chat
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         {
             var previousSessionId = _currentSessionId;
+            var previousPlan = ClonePlan(_currentPlan);
             var previousMode = CloneModeState(_currentMode);
             List<SessionUpdateEntry>? previousHistory = null;
             var hadPreviousHistory = false;
@@ -437,6 +461,7 @@ namespace SalmonEgg.Application.Services.Chat
                 }
 
                 _currentSessionId = previousSessionId;
+                _currentPlan = previousPlan;
                 _currentMode = previousMode;
                 throw;
             }
@@ -456,6 +481,7 @@ namespace SalmonEgg.Application.Services.Chat
                 }
 
                 _currentSessionId = previousSessionId;
+                _currentPlan = previousPlan;
                 _currentMode = previousMode;
 
                 var entry = new ErrorLogEntry(
@@ -476,6 +502,7 @@ namespace SalmonEgg.Application.Services.Chat
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
         {
             var previousSessionId = _currentSessionId;
+            var previousPlan = ClonePlan(_currentPlan);
             var previousMode = CloneModeState(_currentMode);
 
             try
@@ -496,12 +523,14 @@ namespace SalmonEgg.Application.Services.Chat
             catch (OperationCanceledException)
             {
                 _currentSessionId = previousSessionId;
+                _currentPlan = previousPlan;
                 _currentMode = previousMode;
                 throw;
             }
             catch (Exception ex)
             {
                 _currentSessionId = previousSessionId;
+                _currentPlan = previousPlan;
                 _currentMode = previousMode;
 
                 var entry = new ErrorLogEntry(
