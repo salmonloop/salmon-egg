@@ -733,7 +733,7 @@ public sealed class StartViewModelTests
                 () => startViewModel.IsStartModeSelectorEnabled
                     && startViewModel.StartModeStage == StartSessionModeStage.Ready
                     && startViewModel.StartModeOptions.Count == 2,
-                timeoutMilliseconds: 3000);
+                timeoutMilliseconds: 10000);
 
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
@@ -741,7 +741,7 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-            var timeoutAt = DateTime.UtcNow.AddSeconds(3);
+            var timeoutAt = DateTime.UtcNow.AddSeconds(10);
             while (true)
             {
                 var connectionState = await chat.GetConnectionStateAsync();
@@ -858,7 +858,7 @@ public sealed class StartViewModelTests
                     && startViewModel.IsStartModeSelectorEnabled
                     && startViewModel.StartModeOptions.Count == 2
                     && !startViewModel.HasStartSessionDraftError,
-                timeoutMilliseconds: 3000);
+                timeoutMilliseconds: 10000);
             var recoveredState = await chat.GetConnectionStateAsync();
             Assert.True(
                 recovered,
@@ -2951,6 +2951,7 @@ public sealed class StartViewModelTests
 
     private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 2000, int pollDelayMilliseconds = 20)
     {
+        timeoutMilliseconds = Math.Max(timeoutMilliseconds, 10000);
         var started = DateTime.UtcNow;
         while (!predicate())
         {

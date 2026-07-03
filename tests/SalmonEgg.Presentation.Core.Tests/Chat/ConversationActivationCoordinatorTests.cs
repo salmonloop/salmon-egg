@@ -982,7 +982,7 @@ public sealed class ConversationActivationCoordinatorTests
         var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null);
 
         Assert.True(result.Succeeded);
-        var currentState = await state ?? ChatState.Empty;
+        var currentState = await chatStore.GetCurrentStateAsync();
         Assert.Null(currentState.ResolveBinding("session-1"));
     }
 
@@ -1022,7 +1022,7 @@ public sealed class ConversationActivationCoordinatorTests
         var result = await coordinator.DeleteConversationAsync("session-1", activeConversationId: null);
 
         Assert.True(result.Succeeded);
-        var currentState = await state ?? ChatState.Empty;
+        var currentState = await chatStore.GetCurrentStateAsync();
         Assert.Null(currentState.ResolveBinding("session-1"));
     }
 
@@ -1070,16 +1070,10 @@ public sealed class ConversationActivationCoordinatorTests
         var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
         workspace.Dispose();
 
-        var state = State.Value(new object(), () => ChatState.Empty);
-        await state.Update(
-            current => ChatReducer.Reduce(
-                ChatReducer.Reduce(
-                    current,
-                    new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1"))),
-                new SelectConversationAction("session-1")),
-            default);
-
-        var chatStore = CreateChatStore(state);
+        var chatStore = CreateChatStore(State.Value(new object(), () => ChatState.Empty));
+        await chatStore.Dispatch(new SetBindingSliceAction(
+            new ConversationBindingSlice("session-1", "remote-1", "profile-1")));
+        await chatStore.Dispatch(new SelectConversationAction("session-1"));
         var connectionStore = CreateConnectionStore();
         var bindings = new RecordingBindingCommands();
         var coordinator = new ConversationActivationCoordinator(
@@ -1380,6 +1374,12 @@ public sealed class ConversationActivationCoordinatorTests
 
             RestoreCalled = true;
             LastRestore = (conversationId, remoteSessionId, profileId);
+            return ValueTask.FromResult(BindingUpdateResult.Success());
+        }
+
+        public ValueTask<BindingUpdateResult> ClearBindingAsync(string conversationId)
+        {
+            ClearedCalled = true;
             return ValueTask.FromResult(BindingUpdateResult.Success());
         }
     }

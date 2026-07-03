@@ -23,6 +23,7 @@ public class NavigationStateServiceTests
         service.PaneStateChanged += (_, _) => signal.Set();
         var initialIsPaneOpen = service.IsPaneOpen;
 
+        await AllowReactiveSubscriptionToAttachAsync();
         await store.Dispatch(new NavToggleRequested("test"));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
 
@@ -38,6 +39,7 @@ public class NavigationStateServiceTests
         using var signal = new ManualResetEventSlim(false);
         service.PaneStateChanged += (_, _) => signal.Set();
 
+        await AllowReactiveSubscriptionToAttachAsync();
         await store.Dispatch(new NavToggleRequested("test"));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
         var stabilizedIsPaneOpen = service.IsPaneOpen;
@@ -86,6 +88,9 @@ public class NavigationStateServiceTests
         Assert.Same(disposeTask, completedTask);
         await disposeTask;
     }
+
+    private static async Task AllowReactiveSubscriptionToAttachAsync()
+        => await Task.Yield();
 
     private sealed class TestShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {

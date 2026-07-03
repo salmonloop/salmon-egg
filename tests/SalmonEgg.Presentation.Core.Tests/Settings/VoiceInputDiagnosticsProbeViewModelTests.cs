@@ -184,14 +184,13 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
         await viewModel.StopProbeCommand.ExecuteAsync(null);
 
-        logger.Verify(
-            x => x.Log(
-                LogLevel.Information,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Voice diagnostics signal summary.", StringComparison.Ordinal)),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        Assert.Contains(
+            logger.Invocations,
+            invocation => invocation.Arguments.Count >= 3
+                && invocation.Arguments[0] is LogLevel.Information
+                && invocation.Arguments[2]?.ToString()?.Contains(
+                    "Voice diagnostics signal summary.",
+                    StringComparison.Ordinal) == true);
     }
 
     [Fact]

@@ -230,6 +230,7 @@ public partial class ChatViewModel
         if (inFlightRequestTask is not null)
         {
             await inFlightRequestTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 

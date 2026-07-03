@@ -170,8 +170,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private readonly ConversationActivationOutcomePublisher _conversationActivationOutcomePublisher;
+    private readonly object _autoConnectSync = new();
     private bool _disposed;
     private bool _autoConnectAttempted;
+    private Task? _autoConnectInFlightTask;
     private bool _suppressAcpProfileConnect;
     private bool _suppressAutoConnectFromPreferenceChange;
     private CancellationTokenSource? _sendPromptCts;
@@ -2720,6 +2722,40 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     }
 
     public async Task TryAutoConnectAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        Task autoConnectTask;
+        lock (_autoConnectSync)
+        {
+            if (_autoConnectInFlightTask is null || _autoConnectInFlightTask.IsCompleted)
+            {
+                _autoConnectInFlightTask = TryAutoConnectCoreAsync(cancellationToken);
+            }
+
+            autoConnectTask = _autoConnectInFlightTask;
+        }
+
+        try
+        {
+            await autoConnectTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (autoConnectTask.IsCompleted)
+            {
+                lock (_autoConnectSync)
+                {
+                    if (ReferenceEquals(_autoConnectInFlightTask, autoConnectTask))
+                    {
+                        _autoConnectInFlightTask = null;
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task TryAutoConnectCoreAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 

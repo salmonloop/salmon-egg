@@ -373,19 +373,28 @@ public partial class ChatViewModelTests
         {
             HydratedConversationId = "conv-1",
             Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList.Create(new ConversationModeOptionSnapshot
+                    {
+                        ModeId = "dontAsk",
+                        ModeName = "Don't Ask",
+                        Description = string.Empty
+                    }),
+                    SelectedModeId: "dontAsk",
+                    ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    ShowConfigOptionsPanel: false,
+                    AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    SessionInfo: null,
+                    Usage: null))
         });
         SetCurrentSessionId(viewModel, "conv-1");
         SetCurrentRemoteSessionId(viewModel, "remote-1");
         viewModel.IsConnected = true;
         viewModel.IsSessionActive = true;
-        viewModel.AvailableModes.Add(new SessionModeViewModel
-        {
-            ModeId = "dontAsk",
-            ModeName = "Don't Ask",
-            Description = string.Empty
-        });
-        SetSelectedModeWithoutDispatch(viewModel, viewModel.AvailableModes.Single());
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        Assert.Equal("dontAsk", viewModel.SelectedMode?.ModeId);
 
         viewModel.SelectChatModeDisplayCommand.Execute(viewModel.SelectedChatModeSelectorItem);
 
@@ -496,15 +505,6 @@ public partial class ChatViewModelTests
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Assert.NotNull(property);
         property!.SetValue(viewModel, conversationId);
-    }
-
-    private static void SetSelectedModeWithoutDispatch(ChatViewModel viewModel, SessionModeViewModel? mode)
-    {
-        var method = typeof(ChatViewModel).GetMethod(
-            "SetSelectedModeWithoutDispatch",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-        method!.Invoke(viewModel, new object?[] { mode });
     }
 
     private static void SetProjectedConnectionInstanceId(ChatViewModel viewModel, string? connectionInstanceId)
@@ -4122,6 +4122,10 @@ public partial class ChatViewModelTests
         var syncContext = new QueueingSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
         syncContext.RunAll();
+        var diffPath = Path.GetFullPath(Path.Combine(
+            Path.GetTempPath(),
+            "salmon-acp-task-overview-tests",
+            "README.md"));
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -4138,7 +4142,7 @@ public partial class ChatViewModelTests
                             ToolCallContent = new List<ToolCallContent>
                             {
                                 new DiffToolCallContent(
-                                    @"C:\Users\shang\Project\salmon-acp\README.md",
+                                    diffPath,
                                     oldText: null,
                                     newText: "updated")
                             }
@@ -4154,19 +4158,19 @@ public partial class ChatViewModelTests
                     ToolCallContent = new List<ToolCallContent>
                     {
                         new DiffToolCallContent(
-                            @"C:\Users\shang\Project\salmon-acp\README.md",
+                            diffPath,
                             oldText: null,
                             newText: "updated")
                     }
                 })
         });
-        syncContext.RunAll();
+        await fixture.ApplyCurrentStoreProjectionAsync();
 
         var originalChanges = fixture.ViewModel.TaskOverviewChanges;
         Assert.Single(originalChanges);
 
         await fixture.DispatchAsync(new SetDraftTextAction("typing"));
-        syncContext.RunAll();
+        await fixture.ApplyCurrentStoreProjectionAsync();
 
         Assert.Same(originalChanges, fixture.ViewModel.TaskOverviewChanges);
     }

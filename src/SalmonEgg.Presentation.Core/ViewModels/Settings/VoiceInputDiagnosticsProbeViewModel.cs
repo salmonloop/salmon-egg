@@ -231,8 +231,10 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 IsRunning = false;
                 _activeRequestId = null;
                 TryDisposeProbeCts();
+                TryResumeAuthorizationProbeIfReady();
             }).ConfigureAwait(false);
             await StopSignalMonitoringAsync().ConfigureAwait(false);
+            TryResumeAuthorizationProbeIfReady();
         }
     }
 
@@ -271,14 +273,6 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
         _authorizationProbeRetryState = AuthorizationProbeRetryState.WaitingForProbeReady;
         TryResumeAuthorizationProbeIfReady();
-    }
-
-    partial void OnIsRunningChanged(bool value)
-    {
-        if (!value)
-        {
-            TryResumeAuthorizationProbeIfReady();
-        }
     }
 
     private void TryResumeAuthorizationProbeIfReady()
