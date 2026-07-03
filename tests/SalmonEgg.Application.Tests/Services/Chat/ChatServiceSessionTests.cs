@@ -183,6 +183,56 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
+    public async Task LoadSessionAsync_WhenClientThrowsAfterConfigUpdate_RestoresPreviousConfigAuthority()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-1"), default))
+            .Callback(() =>
+            {
+                acpClient.Raise(
+                    c => c.SessionUpdateReceived += null,
+                    new SessionUpdateEventArgs(
+                        "remote-1",
+                        new ConfigOptionUpdate { ConfigOptions = [] }));
+            })
+            .ThrowsAsync(new InvalidOperationException("load failed"));
+
+        await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
+        sessionManager.UpdateSession(
+            "remote-1",
+            session =>
+            {
+                session.Mode.CurrentModeId = "code";
+                session.Mode.AvailableModes =
+                [
+                    new SalmonEgg.Domain.Models.Session.SessionMode("code", "Code"),
+                    new SalmonEgg.Domain.Models.Session.SessionMode("plan", "Plan")
+                ];
+            });
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory)));
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
+
+        var mode = sessionManager.GetSession("remote-1")!.Mode;
+        Assert.Equal("plan", mode.CurrentModeId);
+        Assert.Equal(2, mode.AvailableModes.Count);
+
+        sut.Dispose();
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_WhenTargetSessionIsNotTracked_PreRegistersSessionBeforeClientCall()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
@@ -312,6 +362,40 @@ public sealed class ChatServiceSessionTests
 
         Assert.Equal("current", sut.CurrentSessionId);
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenClientThrowsAfterUpdateForNewTarget_RemovesPartialTargetSession()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
+        acpClient
+            .Setup(c => c.ResumeSessionAsync(It.Is<SessionResumeParams>(p => p.SessionId == "remote-resume"), default))
+            .Callback(() =>
+            {
+                acpClient.Raise(
+                    c => c.SessionUpdateReceived += null,
+                    new SessionUpdateEventArgs(
+                        "remote-resume",
+                        new AgentMessageUpdate(new TextContentBlock("partial resume update"))));
+            })
+            .ThrowsAsync(new InvalidOperationException("resume failed"));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ResumeSessionAsync(new SessionResumeParams("remote-resume", Environment.CurrentDirectory)));
+
+        Assert.Equal("current", sut.CurrentSessionId);
+        Assert.Null(sessionManager.GetSession("remote-resume"));
 
         sut.Dispose();
     }

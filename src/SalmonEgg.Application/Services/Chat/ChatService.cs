@@ -339,11 +339,13 @@ namespace SalmonEgg.Application.Services.Chat
         private SessionSnapshot CaptureSessionSnapshot(string sessionId)
         {
             var session = _sessionManager.GetSession(sessionId);
+            var configOptionsAuthoritative = _configAuthoritativeSessionIds.Contains(sessionId);
             if (session is null)
             {
                 return new SessionSnapshot(
                     sessionId,
                     false,
+                    configOptionsAuthoritative,
                     null,
                     SessionState.Active,
                     null,
@@ -353,6 +355,7 @@ namespace SalmonEgg.Application.Services.Chat
             return new SessionSnapshot(
                 sessionId,
                 true,
+                configOptionsAuthoritative,
                 session.Cwd,
                 session.State,
                 CloneModeState(session.Mode),
@@ -364,6 +367,7 @@ namespace SalmonEgg.Application.Services.Chat
             if (!snapshot.Existed)
             {
                 _sessionManager.RemoveSession(snapshot.SessionId);
+                RestoreConfigAuthority(snapshot);
                 return;
             }
 
@@ -381,6 +385,18 @@ namespace SalmonEgg.Application.Services.Chat
                     }
                 },
                 updateActivity: false);
+            RestoreConfigAuthority(snapshot);
+        }
+
+        private void RestoreConfigAuthority(SessionSnapshot snapshot)
+        {
+            if (snapshot.ConfigOptionsAuthoritative)
+            {
+                _configAuthoritativeSessionIds.Add(snapshot.SessionId);
+                return;
+            }
+
+            _configAuthoritativeSessionIds.Remove(snapshot.SessionId);
         }
 
         private static List<ProtocolSessionMode> ToProtocolModes(SessionModeState state)
@@ -398,6 +414,7 @@ namespace SalmonEgg.Application.Services.Chat
             public SessionSnapshot(
                 string sessionId,
                 bool existed,
+                bool configOptionsAuthoritative,
                 string? cwd,
                 SessionState state,
                 SessionModeState? mode,
@@ -405,6 +422,7 @@ namespace SalmonEgg.Application.Services.Chat
             {
                 SessionId = sessionId;
                 Existed = existed;
+                ConfigOptionsAuthoritative = configOptionsAuthoritative;
                 Cwd = cwd;
                 State = state;
                 Mode = mode;
@@ -414,6 +432,8 @@ namespace SalmonEgg.Application.Services.Chat
             public string SessionId { get; }
 
             public bool Existed { get; }
+
+            public bool ConfigOptionsAuthoritative { get; }
 
             public string? Cwd { get; }
 
@@ -554,6 +574,7 @@ namespace SalmonEgg.Application.Services.Chat
             var previousSessionId = _currentSessionId;
             var previousPlan = ClonePlan(_currentPlan);
             var previousMode = CloneModeState(_currentMode);
+            var targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
 
             try
             {
@@ -572,6 +593,8 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (OperationCanceledException)
             {
+                RestoreSessionSnapshot(targetSnapshot);
+
                 _currentSessionId = previousSessionId;
                 _currentPlan = previousPlan;
                 _currentMode = previousMode;
@@ -579,6 +602,8 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (Exception ex)
             {
+                RestoreSessionSnapshot(targetSnapshot);
+
                 _currentSessionId = previousSessionId;
                 _currentPlan = previousPlan;
                 _currentMode = previousMode;
