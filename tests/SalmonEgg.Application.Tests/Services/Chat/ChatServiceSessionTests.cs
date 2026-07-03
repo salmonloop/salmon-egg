@@ -149,6 +149,40 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
+    public async Task LoadSessionAsync_WhenClientThrowsAfterReplayForNewTarget_RemovesPartialTargetSession()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-failed"), default))
+            .Callback(() =>
+            {
+                acpClient.Raise(
+                    c => c.SessionUpdateReceived += null,
+                    new SessionUpdateEventArgs(
+                        "remote-failed",
+                        new AgentMessageUpdate(new TextContentBlock("partial replay"))));
+            })
+            .ThrowsAsync(new InvalidOperationException("load failed"));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.LoadSessionAsync(new SessionLoadParams("remote-failed", Environment.CurrentDirectory)));
+
+        Assert.Equal("current", sut.CurrentSessionId);
+        Assert.Null(sessionManager.GetSession("remote-failed"));
+
+        sut.Dispose();
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_WhenTargetSessionIsNotTracked_PreRegistersSessionBeforeClientCall()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);

@@ -336,6 +336,53 @@ namespace SalmonEgg.Application.Services.Chat
             };
         }
 
+        private SessionSnapshot CaptureSessionSnapshot(string sessionId)
+        {
+            var session = _sessionManager.GetSession(sessionId);
+            if (session is null)
+            {
+                return new SessionSnapshot(
+                    sessionId,
+                    false,
+                    null,
+                    SessionState.Active,
+                    null,
+                    []);
+            }
+
+            return new SessionSnapshot(
+                sessionId,
+                true,
+                session.Cwd,
+                session.State,
+                CloneModeState(session.Mode),
+                session.History.ToList());
+        }
+
+        private void RestoreSessionSnapshot(SessionSnapshot snapshot)
+        {
+            if (!snapshot.Existed)
+            {
+                _sessionManager.RemoveSession(snapshot.SessionId);
+                return;
+            }
+
+            _sessionManager.UpdateSession(
+                snapshot.SessionId,
+                session =>
+                {
+                    session.Cwd = snapshot.Cwd;
+                    session.State = snapshot.State;
+                    session.Mode = CloneModeState(snapshot.Mode) ?? new SessionModeState();
+                    session.History.Clear();
+                    foreach (var entry in snapshot.History)
+                    {
+                        session.History.Add(entry);
+                    }
+                },
+                updateActivity: false);
+        }
+
         private static List<ProtocolSessionMode> ToProtocolModes(SessionModeState state)
             => state.AvailableModes
                 .Select(static mode => new ProtocolSessionMode
@@ -345,6 +392,37 @@ namespace SalmonEgg.Application.Services.Chat
                     Description = mode.Description
                 })
                 .ToList();
+
+        private sealed class SessionSnapshot
+        {
+            public SessionSnapshot(
+                string sessionId,
+                bool existed,
+                string? cwd,
+                SessionState state,
+                SessionModeState? mode,
+                List<SessionUpdateEntry> history)
+            {
+                SessionId = sessionId;
+                Existed = existed;
+                Cwd = cwd;
+                State = state;
+                Mode = mode;
+                History = history;
+            }
+
+            public string SessionId { get; }
+
+            public bool Existed { get; }
+
+            public string? Cwd { get; }
+
+            public SessionState State { get; }
+
+            public SessionModeState? Mode { get; }
+
+            public List<SessionUpdateEntry> History { get; }
+        }
 
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params)
         {
@@ -408,8 +486,7 @@ namespace SalmonEgg.Application.Services.Chat
             var previousSessionId = _currentSessionId;
             var previousPlan = ClonePlan(_currentPlan);
             var previousMode = CloneModeState(_currentMode);
-            List<SessionUpdateEntry>? previousHistory = null;
-            var hadPreviousHistory = false;
+            var targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
 
             try
             {
@@ -422,12 +499,6 @@ namespace SalmonEgg.Application.Services.Chat
 
                 var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
                 session.Cwd = @params.Cwd;
-
-                if (session.History.Count > 0)
-                {
-                    hadPreviousHistory = true;
-                    previousHistory = session.History.ToList();
-                }
                 
                 // Clear history before loading to ensure we don't have duplicate entries 
                 // if the server replays the history during the load process.
@@ -448,17 +519,7 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (OperationCanceledException)
             {
-                if (hadPreviousHistory && previousHistory != null)
-                {
-                    _sessionManager.UpdateSession(@params.SessionId, s =>
-                    {
-                        s.History.Clear();
-                        foreach (var entry in previousHistory)
-                        {
-                            s.History.Add(entry);
-                        }
-                    });
-                }
+                RestoreSessionSnapshot(targetSnapshot);
 
                 _currentSessionId = previousSessionId;
                 _currentPlan = previousPlan;
@@ -467,18 +528,7 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (Exception ex)
             {
-                // ROLLBACK: If loading fails, restore the previous history and session context.
-                if (hadPreviousHistory && previousHistory != null)
-                {
-                    _sessionManager.UpdateSession(@params.SessionId, s =>
-                    {
-                        s.History.Clear();
-                        foreach (var entry in previousHistory)
-                        {
-                            s.History.Add(entry);
-                        }
-                    });
-                }
+                RestoreSessionSnapshot(targetSnapshot);
 
                 _currentSessionId = previousSessionId;
                 _currentPlan = previousPlan;
