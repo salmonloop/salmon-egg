@@ -2571,17 +2571,28 @@ public sealed class ChatSkeletonSmokeTests
             session.ActivateElement(remoteItem);
             Thread.Sleep(120);
 
+            var localSwitchTimeline = new List<string>();
             var localSwitchStopwatch = Stopwatch.StartNew();
+            var localInvokeStopwatch = Stopwatch.StartNew();
             session.ActivateElement(localItem);
+            localInvokeStopwatch.Stop();
+            localSwitchTimeline.Add($"activate={localInvokeStopwatch.ElapsedMilliseconds}ms");
             var localDeadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(1500);
             AutomationElement? localHeader = null;
+            long? localHeaderVisibleAtMs = null;
             while (DateTime.UtcNow < localDeadline)
             {
-                var header = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(120));
+                var probeStopwatch = Stopwatch.StartNew();
+                var header = session.TryFindTextByAutomationId("ChatView.CurrentSessionTitle");
+                probeStopwatch.Stop();
+                var probeStartedAtMs = Math.Max(0, localSwitchStopwatch.ElapsedMilliseconds - probeStopwatch.ElapsedMilliseconds);
+                localSwitchTimeline.Add(
+                    $"{localSwitchStopwatch.ElapsedMilliseconds}ms probe={probeStopwatch.ElapsedMilliseconds}ms probeStart={probeStartedAtMs}ms header={header?.Name ?? "<null>"}");
                 if (header is not null
                     && header.Name.Contains("GUI Local Session 01", StringComparison.Ordinal))
                 {
                     localHeader = header;
+                    localHeaderVisibleAtMs = probeStartedAtMs;
                     break;
                 }
 
@@ -2595,17 +2606,17 @@ public sealed class ChatSkeletonSmokeTests
                     session,
                     appData,
                     "remote-first-open-immediate-local-switch-not-responsive",
-                    $"Local switch did not settle quickly while remote hydration was in flight. elapsedMs={localSwitchStopwatch.ElapsedMilliseconds}");
+                    $"Local switch did not settle quickly while remote hydration was in flight. elapsedMs={localSwitchStopwatch.ElapsedMilliseconds}{Environment.NewLine}{string.Join(Environment.NewLine, localSwitchTimeline)}");
             }
 
             const int localSwitchBudgetMs = 1000;
-            if (localSwitchStopwatch.ElapsedMilliseconds > localSwitchBudgetMs)
+            if (localHeaderVisibleAtMs.GetValueOrDefault(localSwitchStopwatch.ElapsedMilliseconds) > localSwitchBudgetMs)
             {
                 ThrowWithScreenshot(
                     session,
                     appData,
                     "remote-first-open-immediate-local-switch-over-budget",
-                    $"Local switch responsiveness exceeded budget. elapsedMs={localSwitchStopwatch.ElapsedMilliseconds} budgetMs={localSwitchBudgetMs}");
+                    $"Local switch responsiveness exceeded budget. elapsedMs={localHeaderVisibleAtMs} budgetMs={localSwitchBudgetMs}{Environment.NewLine}{string.Join(Environment.NewLine, localSwitchTimeline)}");
             }
 
             // latest-intent contract: old remote activation completion must not rollback

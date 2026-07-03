@@ -189,6 +189,33 @@ internal sealed class WindowsGuiAppSession : IDisposable
         }
     }
 
+    public IReadOnlyDictionary<string, AutomationElement> SnapshotAutomationIds(params string[] automationIds)
+    {
+        var targets = new HashSet<string>(automationIds.Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
+        var matches = new Dictionary<string, AutomationElement>(StringComparer.Ordinal);
+        if (targets.Count == 0)
+        {
+            return matches;
+        }
+
+        foreach (var element in MainWindow.FindAllDescendants())
+        {
+            var automationId = SafeAutomationId(element);
+            if (!targets.Contains(automationId) || matches.ContainsKey(automationId))
+            {
+                continue;
+            }
+
+            matches.Add(automationId, element);
+            if (matches.Count == targets.Count)
+            {
+                break;
+            }
+        }
+
+        return matches;
+    }
+
     public AutomationElement? FindFirstByAutomationIdPrefix(string prefix, TimeSpan? timeout = null)
     {
         return RetryUntil(
@@ -237,6 +264,15 @@ internal sealed class WindowsGuiAppSession : IDisposable
         {
             return null;
         }
+    }
+
+    public AutomationElement? TryFindTextByAutomationId(string automationId)
+    {
+        return MainWindow
+            .FindAllDescendants(cf => cf.ByControlType(ControlType.Text))
+            .FirstOrDefault(element =>
+                !TryGetIsOffscreen(element)
+                && string.Equals(SafeAutomationId(element), automationId, StringComparison.Ordinal));
     }
 
     public IReadOnlyList<string> GetVisibleTexts(AutomationElement? scope = null)

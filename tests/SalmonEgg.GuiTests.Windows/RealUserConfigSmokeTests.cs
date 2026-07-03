@@ -539,22 +539,29 @@ public sealed partial class RealUserConfigSmokeTests
         long? overlayHiddenAtMs = null;
         while (DateTime.UtcNow < deadline)
         {
-            var statusVisible = session.TryFindByAutomationId("ChatView.LoadingOverlayStatus", TimeSpan.FromMilliseconds(100)) is not null;
-            var overlayVisible = session.TryFindByAutomationId("ChatView.LoadingOverlay", TimeSpan.FromMilliseconds(100)) is not null;
-            var headerVisible = session.TryFindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromMilliseconds(100)) is not null;
+            var probeStopwatch = Stopwatch.StartNew();
+            var snapshot = session.SnapshotAutomationIds(
+                "ChatView.LoadingOverlayStatus",
+                "ChatView.LoadingOverlay",
+                "ChatView.CurrentSessionTitle");
+            probeStopwatch.Stop();
+            var probeStartedAtMs = Math.Max(0, transitionStopwatch.ElapsedMilliseconds - probeStopwatch.ElapsedMilliseconds);
+            var statusVisible = snapshot.ContainsKey("ChatView.LoadingOverlayStatus");
+            var overlayVisible = snapshot.ContainsKey("ChatView.LoadingOverlay");
+            var headerVisible = snapshot.ContainsKey("ChatView.CurrentSessionTitle");
 
             if (statusVisible && statusVisibleAtMs is null)
             {
-                statusVisibleAtMs = transitionStopwatch.ElapsedMilliseconds;
+                statusVisibleAtMs = probeStartedAtMs;
             }
 
             if (!overlayVisible && overlayHiddenAtMs is null)
             {
-                overlayHiddenAtMs = transitionStopwatch.ElapsedMilliseconds;
+                overlayHiddenAtMs = probeStartedAtMs;
             }
 
             timeline.Add(
-                $"{transitionStopwatch.ElapsedMilliseconds,5}ms status={statusVisible} overlay={overlayVisible} header={headerVisible}");
+                $"{transitionStopwatch.ElapsedMilliseconds,5}ms probe={probeStopwatch.ElapsedMilliseconds}ms probeStart={probeStartedAtMs}ms status={statusVisible} overlay={overlayVisible} header={headerVisible}");
 
             if (statusVisibleAtMs is not null && overlayHiddenAtMs is not null)
             {
