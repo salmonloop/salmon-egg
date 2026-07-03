@@ -159,6 +159,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private IReadOnlyList<McpServer> _currentMcpServers = Array.Empty<McpServer>();
     private IReadOnlyList<OptionValueViewModel> _modelOptions = Array.Empty<OptionValueViewModel>();
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly UiDispatcherProjectionBarrier _uiProjectionBarrier;
     private readonly IConversationPreviewStore _previewStore;
     private readonly IPlatformShellService _platformShell;
     private readonly ChatTranscriptProjectionCoordinator _transcriptProjectionCoordinator;
@@ -774,6 +775,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         return PostToUiAsync(() => SetHydrationOverlayPhase(conversationId, phase));
     }
+
+    private Task AwaitRemoteHydrationOverlayProjectionAsync(string conversationId, long? activationVersion)
+        => ShouldOwnRemoteHydrationUi(conversationId, activationVersion)
+            && string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+            ? AwaitUiProjectionTurnAsync()
+            : Task.CompletedTask;
 
     private Task SetConversationHydrationPhaseAsync(
         string conversationId,
@@ -1398,6 +1405,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _slashCommandRegistry = new SlashCommandRegistry(localCommands: _localSlashCommandSource.GetCommands(), remoteCommands: []);
         _slashInteractionCoordinator = new SlashInteractionCoordinator(_slashCommandRegistry);
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
+        _uiProjectionBarrier = new UiDispatcherProjectionBarrier(_uiDispatcher);
         _previewStore = previewStore ?? throw new ArgumentNullException(nameof(previewStore));
         _platformShell = platformShell ?? NoOpPlatformShellService.Instance;
         _transcriptProjectionCoordinator = new ChatTranscriptProjectionCoordinator(_previewStore);
@@ -1425,7 +1433,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             GetSessionUpdateLastObservedAtUtc = GetSessionUpdateLastObservedAtUtc,
             AwaitBufferedReplayProjectionAsync = AwaitBufferedSessionReplayProjectionAsync,
             GetProjectedTranscriptCountAsync = GetProjectedTranscriptCountAsync,
-            YieldToUiAsync = () => PostToUiAsync(static () => { }),
+            YieldToUiAsync = AwaitUiProjectionTurnAsync,
             WaitForAdapterDrainAsync = WaitForAdapterReplayDrainAsync,
             WaitForPendingSessionUpdatesAsync = WaitForPendingSessionUpdatesAsync
         };
@@ -1999,6 +2007,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     /// </summary>
     private Task PostToUiAsync(Action action) => _uiDispatcher.EnqueueAsync(action);
     private Task PostToUiAsync(Func<Task> function) => _uiDispatcher.EnqueueAsync(function);
+
+    private Task AwaitUiProjectionTurnAsync() => _uiProjectionBarrier.AwaitQueuedTurnAsync();
 
     private void QueueLatestUiProjection(
         ChatUiProjection projection,

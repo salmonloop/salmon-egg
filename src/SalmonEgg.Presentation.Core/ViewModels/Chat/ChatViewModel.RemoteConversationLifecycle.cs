@@ -510,6 +510,9 @@ public partial class ChatViewModel
                         activationVersion,
                         HydrationOverlayPhase.RequestingSessionLoad)
                     .ConfigureAwait(false);
+                await AwaitRemoteHydrationOverlayProjectionAsync(conversationId, activationVersion)
+                    .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 recoveryStart.StartRecoveryTransport?.Invoke();
                 recoveryProjection = await recoveryStart.RecoveryTask
                     .WaitAsync(cancellationToken)
@@ -560,6 +563,9 @@ public partial class ChatViewModel
                         activationVersion,
                         HydrationOverlayPhase.RequestingSessionLoad)
                     .ConfigureAwait(false);
+                await AwaitRemoteHydrationOverlayProjectionAsync(conversationId, activationVersion)
+                    .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 recoveryStart.StartRecoveryTransport?.Invoke();
                 recoveryProjection = await recoveryStart.RecoveryTask
                     .WaitAsync(cancellationToken)

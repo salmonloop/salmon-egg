@@ -296,7 +296,7 @@ public partial class ChatViewModel
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        await PostToUiAsync(static () => { }).ConfigureAwait(false);
+        await AwaitUiProjectionTurnAsync().ConfigureAwait(false);
         if (_chatService is IAcpSessionUpdateBufferController adapter
             && hydrationAttemptId.HasValue)
         {
@@ -304,7 +304,7 @@ public partial class ChatViewModel
                 .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
                 .ConfigureAwait(false);
 
-            await PostToUiAsync(static () => { }).ConfigureAwait(false);
+            await AwaitUiProjectionTurnAsync().ConfigureAwait(false);
         }
 
         var pendingUpdates = WaitForPendingSessionUpdatesAsync();
@@ -313,7 +313,7 @@ public partial class ChatViewModel
             await pendingUpdates.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await PostToUiAsync(static () => { }).ConfigureAwait(false);
+        await AwaitUiProjectionTurnAsync().ConfigureAwait(false);
     }
 
     private void RecordSessionUpdateObservation(string? sessionId)
