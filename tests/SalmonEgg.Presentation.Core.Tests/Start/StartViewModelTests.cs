@@ -1062,12 +1062,12 @@ public sealed class StartViewModelTests
                     Close = new SessionCloseCapabilities()
                 }));
 
-            var createCallCount = 0;
+            var createCalls = new List<SessionNewParams>();
             chatService.Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
-                .Returns<SessionNewParams>(_ =>
+                .Returns<SessionNewParams>(request =>
                 {
-                    createCallCount++;
-                    return createCallCount switch
+                    createCalls.Add(request);
+                    return createCalls.Count switch
                     {
                         1 => slowResponseTcs.Task,
                         2 => Task.FromResult(new SessionNewResponse(
@@ -1101,7 +1101,7 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
             startViewModel.OnComposerLoaded();
 
-            await WaitForConditionAsync(() => createCallCount == 1);
+            await WaitForConditionAsync(() => createCalls.Count == 1);
 
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-2"));
@@ -1114,7 +1114,7 @@ public sealed class StartViewModelTests
             while (true)
             {
                 var connectionState = await chat.GetConnectionStateAsync();
-                if (createCallCount == 2
+                if (createCalls.Count == 2
                     && connectionState.NewSessionDraft is not null
                     && string.Equals(connectionState.NewSessionDraft.ProfileId, "profile-2", StringComparison.Ordinal)
                     && string.Equals(connectionState.NewSessionDraft.ConnectionInstanceId, "conn-2", StringComparison.Ordinal)
@@ -1149,6 +1149,9 @@ public sealed class StartViewModelTests
             Assert.Equal("remote-2", finalState.NewSessionDraft?.RemoteSessionId);
             Assert.Equal(StartSessionModeStage.Ready, startViewModel.StartModeStage);
             Assert.Equal(2, startViewModel.StartModeOptions.Count);
+            Assert.Equal("/remote/alpha", createCalls[0].Cwd);
+            Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), createCalls[1].Cwd);
+            Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
             chatService.Verify(
                 service => service.CloseSessionAsync(
                     It.Is<SessionCloseParams>(request => string.Equals(request.SessionId, "remote-1", StringComparison.Ordinal)),

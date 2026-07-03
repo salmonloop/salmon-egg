@@ -725,7 +725,7 @@ public sealed partial class StartViewModel : ObservableObject
         }
 
         var remoteDirectoryId = ProjectSelectionCwdResolver.TryParseRemoteDirectoryId(selectedProjectId);
-        if (string.IsNullOrWhiteSpace(remoteDirectoryId))
+        if (string.IsNullOrWhiteSpace(remoteDirectoryId) || !IsSelectedProfileRemote())
         {
             return null;
         }
@@ -843,7 +843,7 @@ public sealed partial class StartViewModel : ObservableObject
             && _startProjectOptions.Any(option =>
                 string.Equals(option.ProjectId, projectId, StringComparison.Ordinal)
                 && option.IsSelectable))
-            || HasConfiguredRemoteDirectoryOption(projectId);
+            || (IsSelectedProfileRemote() && HasConfiguredRemoteDirectoryOption(projectId));
 
     private bool HasConfiguredRemoteDirectoryOption(string? projectId)
     {
@@ -1285,7 +1285,7 @@ public sealed partial class StartViewModel : ObservableObject
     private string? ResolvePreviewCwd()
     {
         var selectedOption = ResolveSelectedProjectOption();
-        if (!string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
+        if (IsSelectedProfileRemote() && !string.IsNullOrWhiteSpace(selectedOption?.RemoteCwd))
         {
             return selectedOption.RemoteCwd;
         }

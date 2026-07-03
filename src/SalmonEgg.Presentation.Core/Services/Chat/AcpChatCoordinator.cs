@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +38,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     private readonly object _applyScopeLock = new();
     private readonly object _poolConnectionGateSync = new();
     private readonly Dictionary<PoolConnectionRequestKey, PoolConnectionRequestGate> _poolConnectionGates = new();
+    private readonly Dictionary<string, long> _poolProfileDisconnectGenerations = new(StringComparer.Ordinal);
     private CancellationTokenSource? _activeApplyScopeCts;
 
     public AcpChatCoordinator(
@@ -524,9 +526,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         EnsureTransportSupported(profile.Transport);
         ApplyProfileToTransportConfiguration(profile, transportConfiguration);
         var reuseKey = BuildConnectionReuseKey(transportConfiguration);
+        var requestGeneration = GetPoolProfileDisconnectGeneration(profile.Id);
 
         if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out var cachedSession))
         {
+            ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
             _sessionRegistry.Touch(profile.Id);
             return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
         }
@@ -534,15 +538,23 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var requestKey = new PoolConnectionRequestKey(profile.Id, reuseKey);
         await using var poolGate = await AcquirePoolConnectionGateAsync(requestKey, cancellationToken)
             .ConfigureAwait(false);
+        ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
 
         if (_connectionPoolManager.TryGetReusableSession(profile.Id, reuseKey, out cachedSession))
         {
+            ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, cancellationToken);
             _sessionRegistry.Touch(profile.Id);
             return new AcpTransportApplyResult(cachedSession.Service, cachedSession.InitializeResponse);
         }
 
+        using var attempt = BeginPoolConnectionAttempt(
+            requestKey,
+            poolGate.Gate,
+            requestGeneration,
+            cancellationToken);
         var service = _chatServiceFactory.CreateChatService(profile);
-        var wrapped = WrapChatService(service, sink: null, cancellationToken);
+        var wrapped = WrapChatService(service, sink: null, attempt.Token);
+        attempt.AttachService(wrapped);
         try
         {
             var initializeResponse = await InitializeCandidateAsync(
@@ -551,8 +563,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                     profile.Id,
                     conversationId: null,
                     ResolveInitializeTimeout(profile),
-                    cancellationToken)
+                    attempt.Token)
                 .ConfigureAwait(false);
+            ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, attempt.Token);
             var connectionInstanceId = CreateConnectionInstanceId();
             _connectionPoolManager.RecordSession(profile.Id, wrapped, initializeResponse, reuseKey, connectionInstanceId);
             return new AcpTransportApplyResult(wrapped, initializeResponse);
@@ -575,10 +588,30 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var inFlightAttempts = CancelPoolConnectionAttempts(profileId);
         if (_sessionRegistry.TryGetByProfile(profileId, out var session))
         {
             _connectionPoolManager.RemoveByService(session.Service, out _);
             await DisposeServiceAsync(session.Service).ConfigureAwait(false);
+        }
+
+        if (inFlightAttempts.Count > 0)
+        {
+            await Task.WhenAll(inFlightAttempts.Select(static attempt => attempt.Completion))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var attempt in inFlightAttempts)
+            {
+                if (attempt.Service is not { } service)
+                {
+                    continue;
+                }
+
+                if (_connectionPoolManager.RemoveByService(service, out _))
+                {
+                    await DisposeServiceAsync(service).ConfigureAwait(false);
+                }
+            }
         }
     }
 
@@ -629,6 +662,93 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 gate.Semaphore.Dispose();
             }
         }
+    }
+
+    private long GetPoolProfileDisconnectGeneration(string profileId)
+    {
+        lock (_poolConnectionGateSync)
+        {
+            return GetPoolProfileDisconnectGenerationLocked(profileId);
+        }
+    }
+
+    private long GetPoolProfileDisconnectGenerationLocked(string profileId)
+        => _poolProfileDisconnectGenerations.TryGetValue(profileId, out var generation)
+            ? generation
+            : 0;
+
+    private void ThrowIfPoolProfileRequestSuperseded(
+        string profileId,
+        long expectedGeneration,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (GetPoolProfileDisconnectGeneration(profileId) != expectedGeneration)
+        {
+            throw new OperationCanceledException("The pooled profile connection request was superseded by a disconnect intent.");
+        }
+    }
+
+    private PoolConnectionAttempt BeginPoolConnectionAttempt(
+        PoolConnectionRequestKey requestKey,
+        PoolConnectionRequestGate gate,
+        long expectedGeneration,
+        CancellationToken cancellationToken)
+    {
+        lock (_poolConnectionGateSync)
+        {
+            if (GetPoolProfileDisconnectGenerationLocked(requestKey.ProfileId) != expectedGeneration)
+            {
+                throw new OperationCanceledException("The pooled profile connection request was superseded by a disconnect intent.");
+            }
+
+            var attempt = new PoolConnectionAttempt(
+                this,
+                requestKey,
+                gate,
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken));
+            gate.ActiveAttempt = attempt;
+            return attempt;
+        }
+    }
+
+    private void CompletePoolConnectionAttempt(
+        PoolConnectionRequestKey requestKey,
+        PoolConnectionRequestGate gate,
+        PoolConnectionAttempt attempt)
+    {
+        lock (_poolConnectionGateSync)
+        {
+            if (ReferenceEquals(gate.ActiveAttempt, attempt))
+            {
+                gate.ActiveAttempt = null;
+            }
+        }
+
+        attempt.Complete();
+    }
+
+    private IReadOnlyList<PoolConnectionAttempt> CancelPoolConnectionAttempts(string profileId)
+    {
+        var attempts = new List<PoolConnectionAttempt>();
+        lock (_poolConnectionGateSync)
+        {
+            var nextGeneration = GetPoolProfileDisconnectGenerationLocked(profileId) + 1;
+            _poolProfileDisconnectGenerations[profileId] = nextGeneration;
+            foreach (var pair in _poolConnectionGates)
+            {
+                if (!string.Equals(pair.Key.ProfileId, profileId, StringComparison.Ordinal)
+                    || pair.Value.ActiveAttempt is not { } attempt)
+                {
+                    continue;
+                }
+
+                attempt.Cancel();
+                attempts.Add(attempt);
+            }
+        }
+
+        return attempts;
     }
 
     private AcpChatServiceAdapter WrapChatService(
@@ -1016,6 +1136,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         public SemaphoreSlim Semaphore { get; } = new(1, 1);
 
         public int RefCount { get; set; }
+
+        public PoolConnectionAttempt? ActiveAttempt { get; set; }
     }
 
     private readonly struct PoolConnectionGateLease : IAsyncDisposable
@@ -1034,6 +1156,8 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             _gate = gate;
         }
 
+        public PoolConnectionRequestGate Gate => _gate;
+
         public ValueTask DisposeAsync()
         {
             _owner.ReleasePoolConnectionGateReference(
@@ -1041,6 +1165,63 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 _gate,
                 hasSemaphoreLease: true);
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class PoolConnectionAttempt : IDisposable
+    {
+        private readonly AcpChatCoordinator _owner;
+        private readonly PoolConnectionRequestKey _requestKey;
+        private readonly PoolConnectionRequestGate _gate;
+        private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _disposed;
+
+        public PoolConnectionAttempt(
+            AcpChatCoordinator owner,
+            PoolConnectionRequestKey requestKey,
+            PoolConnectionRequestGate gate,
+            CancellationTokenSource cancellationTokenSource)
+        {
+            _owner = owner;
+            _requestKey = requestKey;
+            _gate = gate;
+            _cancellationTokenSource = cancellationTokenSource;
+        }
+
+        public CancellationToken Token => _cancellationTokenSource.Token;
+
+        public Task Completion => _completion.Task;
+
+        public AcpChatServiceAdapter? Service { get; private set; }
+
+        public void AttachService(AcpChatServiceAdapter service)
+            => Service = service ?? throw new ArgumentNullException(nameof(service));
+
+        public void Cancel()
+        {
+            try
+            {
+                _cancellationTokenSource.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        public void Complete()
+            => _completion.TrySetResult();
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _owner.CompletePoolConnectionAttempt(_requestKey, _gate, this);
+            _cancellationTokenSource.Dispose();
         }
     }
 

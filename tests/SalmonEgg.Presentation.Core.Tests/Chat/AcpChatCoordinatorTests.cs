@@ -2561,6 +2561,58 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectProfileInPoolAsync_WhenDisconnectArrivesDuringInitialize_CancelsInFlightSession()
+    {
+        var initializeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitialize = new TaskCompletionSource<InitializeResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var service = CreateChatService();
+        service.Setup(x => x.InitializeAsync(It.IsAny<InitializeParams>()))
+            .Returns(() =>
+            {
+                initializeStarted.TrySetResult();
+                return releaseInitialize.Task;
+            });
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var profileEvents = new List<(string ProfileId, bool IsConnected)>();
+        registry.ProfileConnectionChanged += (profileId, isConnected) => profileEvents.Add((profileId, isConnected));
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            sessionRegistry: registry,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArgs = "--serve"
+        };
+        var transport = new FakeTransportConfiguration();
+
+        factory
+            .Setup(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
+                string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
+            .Returns(service.Object);
+
+        var connectTask = sut.ConnectProfileInPoolAsync(profile, transport);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await sut.DisconnectProfileInPoolAsync("profile-1");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connectTask);
+        Assert.False(registry.TryGetByProfile("profile-1", out _));
+        Assert.DoesNotContain(profileEvents, entry => entry.ProfileId == "profile-1" && entry.IsConnected);
+        service.Verify(x => x.DisconnectAsync(), Times.Once);
+
+        releaseInitialize.TrySetResult(new InitializeResponse(1, new AgentInfo("agent", "1.0.0"), new AgentCapabilities()));
+    }
+
+    [Fact]
     public async Task ConnectToProfileAsync_WhenTransportUnsupported_DoesNotMutateSelectionOrCreateService()
     {
         var transport = new FakeTransportConfiguration();
