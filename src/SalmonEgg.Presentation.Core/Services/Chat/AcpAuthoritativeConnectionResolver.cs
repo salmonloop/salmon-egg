@@ -62,6 +62,11 @@ internal sealed class AcpAuthoritativeConnectionResolver
                 return false;
             }
 
+            if (string.IsNullOrWhiteSpace(connectionState.ConnectionInstanceId))
+            {
+                return false;
+            }
+
             snapshot = new(
                 foregroundChatService,
                 requiredProfileId,
@@ -92,17 +97,10 @@ internal sealed class AcpAuthoritativeConnectionResolver
     }
 
     private static bool ConnectionInstanceMatches(string? foregroundConnectionInstanceId, string? authoritativeConnectionInstanceId)
-    {
-        if (string.IsNullOrWhiteSpace(foregroundConnectionInstanceId)
-            || string.IsNullOrWhiteSpace(authoritativeConnectionInstanceId))
-        {
-            return string.IsNullOrWhiteSpace(foregroundConnectionInstanceId)
-                && string.IsNullOrWhiteSpace(authoritativeConnectionInstanceId);
-        }
-
-        return string.Equals(
+        => !string.IsNullOrWhiteSpace(foregroundConnectionInstanceId)
+            && !string.IsNullOrWhiteSpace(authoritativeConnectionInstanceId)
+            && string.Equals(
             foregroundConnectionInstanceId,
             authoritativeConnectionInstanceId,
             StringComparison.Ordinal);
-    }
 }

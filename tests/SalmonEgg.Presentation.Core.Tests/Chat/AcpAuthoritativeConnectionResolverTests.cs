@@ -80,6 +80,62 @@ public sealed class AcpAuthoritativeConnectionResolverTests
         Assert.False(resolved);
     }
 
+    [Fact]
+    public void TryResolveReadyForegroundConnection_WhenRegistrySessionConnectionInstanceIsMissing_ReturnsFalse()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var foregroundService = CreateConnectedChatService().Object;
+        registry.Upsert(new AcpConnectionSession(
+            ProfileId: "profile-1",
+            Service: CreateAdapterService(),
+            InitializeResponse: new InitializeResponse(),
+            ConnectionReuseKey: new AcpConnectionReuseKey(TransportType.WebSocket, string.Empty, string.Empty, "ws://agent.example.com"),
+            ConnectionInstanceId: null));
+
+        var sut = new AcpAuthoritativeConnectionResolver(registry);
+        var state = new ChatConnectionState(
+            Phase: ConnectionPhase.Connected,
+            SelectedProfileIntentId: "profile-1",
+            Error: null,
+            IsAuthenticationRequired: false,
+            AuthenticationHintMessage: null,
+            Generation: 1,
+            ConnectionInstanceId: null,
+            ForegroundTransportProfileId: "profile-1");
+
+        var resolved = sut.TryResolveReadyForegroundConnection(
+            foregroundService,
+            state,
+            requiredProfileId: "profile-1",
+            out _);
+
+        Assert.False(resolved);
+    }
+
+    [Fact]
+    public void TryResolveReadyForegroundConnection_WhenRequiredProfileHasNoRegistryAndConnectionInstanceIsMissing_ReturnsFalse()
+    {
+        var foregroundService = CreateConnectedChatService().Object;
+        var sut = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry: null);
+        var state = new ChatConnectionState(
+            Phase: ConnectionPhase.Connected,
+            SelectedProfileIntentId: "profile-1",
+            Error: null,
+            IsAuthenticationRequired: false,
+            AuthenticationHintMessage: null,
+            Generation: 1,
+            ConnectionInstanceId: null,
+            ForegroundTransportProfileId: "profile-1");
+
+        var resolved = sut.TryResolveReadyForegroundConnection(
+            foregroundService,
+            state,
+            requiredProfileId: "profile-1",
+            out _);
+
+        Assert.False(resolved);
+    }
+
     private static Mock<IChatService> CreateConnectedChatService()
     {
         var chatService = new Mock<IChatService>();
