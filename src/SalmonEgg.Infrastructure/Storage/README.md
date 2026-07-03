@@ -35,10 +35,20 @@
   - `secret-tool` 或 Secret Service 不可用时写入凭据 fail-closed
 - **DI 注册**: 见 `DependencyInjection.cs` 的 Linux desktop 分支
 
+### MacOSKeychainSecureStorage（macOS Desktop）
+
+- **文件**: `SalmonEgg.Infrastructure.Desktop/Storage/MacOSKeychainSecureStorage.cs`
+- **平台**: macOS desktop
+- **特点**:
+  - 使用 Security.framework Keychain generic password API
+  - secret 通过 Keychain data 写入，不作为命令行参数暴露
+  - Keychain 不可用时写入凭据 fail-closed
+- **DI 注册**: 见 `DependencyInjection.cs` 的 macOS desktop 分支
+
 ### VolatileSecureStorage（受限平台）
 
 - **文件**: `VolatileSecureStorage.cs`
-- **平台**: WASM、Android、iOS、macOS（直到接入平台 keychain）
+- **平台**: WASM、Android、iOS、未知 desktop 平台
 - **特点**:
   - 仅进程内保存，不持久化到普通文件
   - 防止把敏感凭据降级写入非安全存储
@@ -52,13 +62,9 @@
   - 文件内容为 value 的 Base64 编码；这不是加密
   - 当前不作为生产平台 `ISecureStorage` 注册
 
-## 废弃参考实现
-
-`AndroidSecureStorage.cs.txt`、`iOSSecureStorage.cs.txt`、`WindowsSecureStorage.cs.txt` 是历史参考代码，
-未编译进项目，仅供参考。
-
 ## 安全说明
 
 - Windows：DPAPI 提供系统级加密，只有创建数据的用户可以解密。
 - Linux：Secret Service provider 是持久敏感凭据的事实源。
+- macOS：Keychain 是持久敏感凭据的事实源。
 - 受限平台：没有 OS-backed secure store 时只允许 volatile 语义，不得降级到普通文件。

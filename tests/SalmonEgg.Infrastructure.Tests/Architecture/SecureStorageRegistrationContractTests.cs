@@ -14,6 +14,8 @@ public sealed class SecureStorageRegistrationContractTests
         Assert.DoesNotContain("new AppFileStoreSecureStorage", source, StringComparison.Ordinal);
         Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Linux)", source, StringComparison.Ordinal);
         Assert.Contains("new LinuxSecretServiceSecureStorage()", source, StringComparison.Ordinal);
+        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.OSX)", source, StringComparison.Ordinal);
+        Assert.Contains("new MacOSKeychainSecureStorage()", source, StringComparison.Ordinal);
         Assert.Contains("AddSingleton<ISecureStorage, VolatileSecureStorage>();", source, StringComparison.Ordinal);
     }
 

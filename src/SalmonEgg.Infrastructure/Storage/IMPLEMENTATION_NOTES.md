@@ -8,6 +8,7 @@
 
 Windows: WindowsDpapiSecureStorage (DPAPI 加密，用户账户绑定)
 Linux Desktop: LinuxSecretServiceSecureStorage (Secret Service / secret-tool)
+macOS Desktop: MacOSKeychainSecureStorage (Security.framework Keychain)
 受限平台: VolatileSecureStorage (进程内、不持久化)
 
 ### AppFileStoreSecureStorage
@@ -29,14 +30,13 @@ Linux Desktop: LinuxSecretServiceSecureStorage (Secret Service / secret-tool)
 - secret 通过 stdin 写入，命令行参数只包含哈希后的 key attribute
 - Secret Service 不可用时，保存敏感凭据失败，读取返回 null
 
+### MacOSKeychainSecureStorage
+
+- 通过 Security.framework Keychain generic password API 保存敏感凭据
+- secret 作为 Keychain item data 写入，不经过命令行参数
+- Keychain 不可用时，保存敏感凭据失败，读取 missing item 返回 null
+
 ### VolatileSecureStorage
 
 - 用于没有 OS-backed secure store 的受限平台
 - 不写入文件系统，不跨进程持久化
-
-## 废弃的历史文件
-
-以下文件保留仅供参考，不编译进任何目标：
-- AndroidSecureStorage.cs.txt
-- iOSSecureStorage.cs.txt
-- WindowsSecureStorage.cs.txt

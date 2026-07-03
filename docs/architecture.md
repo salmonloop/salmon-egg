@@ -85,7 +85,7 @@ SalmonEgg.sln
 |------|:--------------:|:----:|:--------------:|
 | 本地文件系统访问 | ✅ | ❌ | ✅ |
 | Stdio 子进程 | ✅ | ❌ | ✅ |
-| 安全凭据存储 | Windows Credential Manager | Volatile（内存） | Keychain / Secret Service |
+| 安全凭据存储 | DPAPI（当前用户） | Volatile（内存） | Keychain / Secret Service |
 | WebSocket (`ws://`) | ✅ | 仅 `http://` 来源下允许 | ✅ |
 | WebSocket (`wss://`) | ✅ | ✅ | ✅ |
 | ACP `clientCapabilities.fs` | ✅ | ❌（不声明） | ✅ |

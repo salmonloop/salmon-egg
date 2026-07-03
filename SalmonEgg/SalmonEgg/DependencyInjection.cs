@@ -228,6 +228,7 @@ public static class DependencyInjection
         // Secure Storage
         // Windows: DPAPI (hardware-bound, user-scoped encryption).
         // Linux desktop: Secret Service via libsecret's secret-tool.
+        // macOS desktop: Keychain via Security.framework.
         // Restricted platforms: volatile fail-closed storage; sensitive values are not persisted
         // unless an OS-backed secure store exists.
 #if WINDOWS
@@ -238,6 +239,8 @@ public static class DependencyInjection
         services.AddSingleton<ISecureStorage>(_ =>
             RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 ? new LinuxSecretServiceSecureStorage()
+                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                    ? new MacOSKeychainSecureStorage()
                 : new VolatileSecureStorage());
 #endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
