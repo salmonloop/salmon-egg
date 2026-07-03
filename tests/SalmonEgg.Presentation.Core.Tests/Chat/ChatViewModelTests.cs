@@ -164,6 +164,7 @@ public partial class ChatViewModelTests
             uiRuntime.Object,
             prefsLogger.Object,
             uiDispatcher);
+        _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configurationService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
@@ -3743,6 +3744,7 @@ public partial class ChatViewModelTests
             uiRuntime.Object,
             prefsLogger.Object,
             uiDispatcher);
+        _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
@@ -3846,6 +3848,7 @@ public partial class ChatViewModelTests
             uiRuntime.Object,
             prefsLogger.Object,
             uiDispatcher);
+        _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());
@@ -3973,6 +3976,7 @@ public partial class ChatViewModelTests
             uiRuntime.Object,
             prefsLogger.Object,
             uiDispatcher);
+        _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
         var profiles = new AcpProfilesViewModel(configService.Object, preferences, profilesLogger.Object, new ImmediateUiDispatcher());

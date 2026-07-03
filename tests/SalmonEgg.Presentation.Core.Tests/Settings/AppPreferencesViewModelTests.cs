@@ -16,6 +16,23 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public class AppPreferencesViewModelTests
 {
     [Fact]
+    public void Constructor_DoesNotLoadAppSettings()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+
+        _ = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        appSettingsService.Verify(service => service.LoadAsync(), Times.Never);
+    }
+
+    [Fact]
     public async Task IsAnimationEnabled_Changes_InvokeUiRuntimeService()
     {
         var appSettings = new AppSettings
@@ -54,7 +71,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await Task.Delay(10);
+        await vm.InitializeAsync();
         uiRuntime.Invocations.Clear();
 
         vm.IsAnimationEnabled = false;
@@ -101,7 +118,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
 
         Assert.False(vm.IsAnimationEnabled);
         uiRuntime.Verify(u => u.SetAnimationsEnabled(false), Times.AtLeastOnce);
@@ -131,7 +148,7 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
@@ -158,7 +175,7 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
         languageService.Invocations.Clear();
         uiRuntime.Invocations.Clear();
 
@@ -186,7 +203,7 @@ public class AppPreferencesViewModelTests
         });
         var vm = CreateViewModel(settingsService);
 
-        await settingsService.LoadCompletion;
+        await vm.InitializeAsync();
 
         var directory = Assert.Single(vm.AgentRemoteDirectories);
         Assert.Equal("dir-a", directory.DirectoryId);
@@ -199,7 +216,7 @@ public class AppPreferencesViewModelTests
     {
         var settingsService = new FakeAppSettingsService(new AppSettings());
         var vm = CreateViewModel(settingsService);
-        await settingsService.LoadCompletion;
+        await vm.InitializeAsync();
 
         vm.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
@@ -228,7 +245,7 @@ public class AppPreferencesViewModelTests
             }
         });
         var vm = CreateViewModel(settingsService);
-        await settingsService.LoadCompletion;
+        await vm.InitializeAsync();
 
         Assert.Collection(
             vm.AgentRemoteDirectories,
@@ -265,7 +282,7 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
 
         vm.AcpEnabled = false;
 
@@ -378,7 +395,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
 
         vm.ResetToDefaults();
 
@@ -419,7 +436,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await vm.InitializeAsync();
 
         var raisedCount = 0;
         vm.ShortcutBindingsChanged += (_, _) => raisedCount++;

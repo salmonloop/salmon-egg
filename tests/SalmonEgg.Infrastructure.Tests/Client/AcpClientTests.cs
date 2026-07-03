@@ -1742,6 +1742,91 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task SessionRequestPermission_WhenSubscriberThrows_ReturnsInternalErrorAndClearsPending()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+            var sentMessages = new ConcurrentQueue<string>();
+            client.PermissionRequestReceived += (_, _) => throw new InvalidOperationException("subscriber failed");
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                206,
+                "session/request_permission",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "toolCall": {
+                        "toolCallId": "call-1",
+                        "title": "Read file",
+                        "kind": "read",
+                        "status": "pending"
+                      },
+                      "options": [
+                        {
+                          "optionId": "allow",
+                          "name": "Allow",
+                          "kind": "allow_once"
+                        }
+                      ]
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 206);
+            var respondedAfterFailure = await client.RespondToPermissionRequestAsync(206, "cancelled");
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InternalError, response.Error!.Code);
+            Assert.False(respondedAfterFailure);
+        }
+
+        [Fact]
+        public async Task FileSystemRequest_WhenSubscriberThrows_ReturnsInternalErrorAndClearsPending()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(
+                clientCapabilities: new ClientCapabilities(fs: new FsCapability()));
+            var sentMessages = new ConcurrentQueue<string>();
+            client.FileSystemRequestReceived += (_, _) => throw new InvalidOperationException("subscriber failed");
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<string, CancellationToken>((message, _) => sentMessages.Enqueue(message))
+                .ReturnsAsync(true);
+
+            var request = new JsonRpcRequest(
+                207,
+                "fs/read_text_file",
+                ElementFromJson(
+                    """
+                    {
+                      "sessionId": "session-1",
+                      "path": "/workspace/file.txt"
+                    }
+                    """));
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+
+            var response = await WaitForResponseAsync(parser, sentMessages, responseId: 207);
+            var respondedAfterFailure = await client.RespondToFileSystemRequestAsync(207, success: true, content: "content");
+
+            Assert.True(response.IsError);
+            Assert.Equal(JsonRpcErrorCode.InternalError, response.Error!.Code);
+            Assert.False(respondedAfterFailure);
+        }
+
+        [Fact]
         public async Task SessionRequestPermission_WhenPayloadIsStandard_PublishesAllOptions()
         {
             var parser = new MessageParser();

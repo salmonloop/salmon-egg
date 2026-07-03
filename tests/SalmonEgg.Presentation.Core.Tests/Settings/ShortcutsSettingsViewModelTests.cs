@@ -91,7 +91,7 @@ public sealed class ShortcutsSettingsViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await Task.Delay(100);
+        await preferences.InitializeAsync();
         return preferences;
     }
 }

@@ -603,9 +603,6 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatLaunchWorkflowChatFacade>(),
                 sp.GetRequiredService<ISessionManager>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
-                CreateStartCwdResolver(
-                    sp.GetRequiredService<MainNavigationViewModel>(),
-                    sp.GetRequiredService<AppPreferencesViewModel>()),
                 sp.GetRequiredService<ILogger<ChatLaunchWorkflow>>(),
                 sp.GetRequiredService<ConversationCatalogFacade>()));
 
@@ -724,23 +721,6 @@ public static class DependencyInjection
     private static string GetAppDataPath()
     {
         return SalmonEggPaths.GetAppDataRootPath();
-    }
-
-    private static Func<string?> CreateStartCwdResolver(
-        MainNavigationViewModel navigationViewModel,
-        AppPreferencesViewModel preferences)
-    {
-        ArgumentNullException.ThrowIfNull(navigationViewModel);
-        ArgumentNullException.ThrowIfNull(preferences);
-
-        return () =>
-        {
-            return StartSessionCwdResolver.Resolve(
-                navigationViewModel.ConsumePendingProjectRootPath(),
-                preferences.LastSelectedProjectId,
-                preferences.Projects,
-                preferences.AgentRemoteDirectories);
-        };
     }
 
     private static Func<IChatService, IChatService>? CreateChatServiceDecorator()

@@ -25,7 +25,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     private readonly IUiRuntimeService _uiRuntime;
     private readonly ILogger<AppPreferencesViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private CancellationTokenSource? _saveCts;
+    private bool _isInitialized;
     private bool _suppressSave;
 
     [ObservableProperty]
@@ -123,14 +125,39 @@ public partial class AppPreferencesViewModel : ObservableObject
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
-        _ = LoadAsync();
     }
 
-    private async Task LoadAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        if (_isInitialized)
+        {
+            return;
+        }
+
+        await _initializeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            await LoadAsync(cancellationToken).ConfigureAwait(false);
+            _isInitialized = true;
+        }
+        finally
+        {
+            _initializeGate.Release();
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var markLoaded = true;
         try
         {
             _suppressSave = true;
+            cancellationToken.ThrowIfCancellationRequested();
             var settings = await _appSettingsService.LoadAsync();
             var launchOnStartup = settings.LaunchOnStartup;
 
@@ -204,7 +231,13 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
             });
 
-            _ = _languageService.ApplyLanguageOverrideAsync(AppLanguageCatalog.NormalizeTag(settings.Language));
+            cancellationToken.ThrowIfCancellationRequested();
+            await _languageService.ApplyLanguageOverrideAsync(AppLanguageCatalog.NormalizeTag(settings.Language)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            markLoaded = false;
+            throw;
         }
         catch (Exception ex)
         {
@@ -214,7 +247,11 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             _uiDispatcher.Enqueue(() =>
             {
-                IsLoaded = true;
+                if (markLoaded)
+                {
+                    IsLoaded = true;
+                }
+
                 _suppressSave = false;
             });
         }
@@ -393,43 +430,14 @@ public partial class AppPreferencesViewModel : ObservableObject
             try
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(750), token).ConfigureAwait(false);
-                await _appSettingsService.SaveAsync(new AppSettings
+                AppSettings? snapshot = null;
+                await _uiDispatcher.EnqueueAsync(() => snapshot = CreateSettingsSnapshot()).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+
+                if (snapshot is not null)
                 {
-                    Theme = Theme,
-                    IsAnimationEnabled = IsAnimationEnabled,
-                    Backdrop = Backdrop,
-                    LaunchOnStartup = LaunchOnStartup,
-                    MinimizeToTray = MinimizeToTray,
-                    Language = AppLanguageCatalog.NormalizeTag(Language),
-                    LastSelectedServerId = LastSelectedServerId,
-                    AcpEnabled = AcpEnabled,
-                    SaveLocalHistory = SaveLocalHistory,
-                    CacheRetentionDays = CacheRetentionDays,
-                    AcpEnableConnectionEviction = AcpEnableConnectionEviction,
-                    AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,
-                    AcpMaxWarmProfiles = AcpMaxWarmProfiles,
-                    AcpMaxPinnedProfiles = AcpMaxPinnedProfiles,
-                    AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(AcpHydrationCompletionMode)
-                        ? "StrictReplay"
-                        : AcpHydrationCompletionMode.Trim(),
-                    AgentRemoteDirectories = NormalizeAgentRemoteDirectories(AgentRemoteDirectories),
-                    LastSelectedProjectId = LastSelectedProjectId,
-                    Projects = Projects
-                        .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
-                                    && !string.IsNullOrWhiteSpace(p.Name)
-                                    && !string.IsNullOrWhiteSpace(p.RootPath))
-                        .Select(p => new ProjectDefinition
-                        {
-                            ProjectId = p.ProjectId.Trim(),
-                            Name = p.Name.Trim(),
-                            RootPath = p.RootPath.Trim()
-                        })
-                        .ToList(),
-                    KeyBindings = KeyBindings
-                        .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
-                        .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)
-                        .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase)
-                }).ConfigureAwait(false);
+                    await _appSettingsService.SaveAsync(snapshot).ConfigureAwait(false);
+                }
             }
             catch (TaskCanceledException)
             {
@@ -440,6 +448,45 @@ public partial class AppPreferencesViewModel : ObservableObject
             }
         }, token);
     }
+
+    private AppSettings CreateSettingsSnapshot()
+        => new()
+        {
+            Theme = Theme,
+            IsAnimationEnabled = IsAnimationEnabled,
+            Backdrop = Backdrop,
+            LaunchOnStartup = LaunchOnStartup,
+            MinimizeToTray = MinimizeToTray,
+            Language = AppLanguageCatalog.NormalizeTag(Language),
+            LastSelectedServerId = LastSelectedServerId,
+            AcpEnabled = AcpEnabled,
+            SaveLocalHistory = SaveLocalHistory,
+            CacheRetentionDays = CacheRetentionDays,
+            AcpEnableConnectionEviction = AcpEnableConnectionEviction,
+            AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,
+            AcpMaxWarmProfiles = AcpMaxWarmProfiles,
+            AcpMaxPinnedProfiles = AcpMaxPinnedProfiles,
+            AcpHydrationCompletionMode = string.IsNullOrWhiteSpace(AcpHydrationCompletionMode)
+                ? "StrictReplay"
+                : AcpHydrationCompletionMode.Trim(),
+            AgentRemoteDirectories = NormalizeAgentRemoteDirectories(AgentRemoteDirectories),
+            LastSelectedProjectId = LastSelectedProjectId,
+            Projects = Projects
+                .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
+                            && !string.IsNullOrWhiteSpace(p.Name)
+                            && !string.IsNullOrWhiteSpace(p.RootPath))
+                .Select(p => new ProjectDefinition
+                {
+                    ProjectId = p.ProjectId.Trim(),
+                    Name = p.Name.Trim(),
+                    RootPath = p.RootPath.Trim()
+                })
+                .ToList(),
+            KeyBindings = KeyBindings
+                .Where(k => !string.IsNullOrWhiteSpace(k.ActionId) && !string.IsNullOrWhiteSpace(k.Gesture))
+                .GroupBy(k => k.ActionId.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase)
+        };
 
     private async Task ApplyLaunchOnStartupAsync(bool enabled)
     {

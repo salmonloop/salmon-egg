@@ -17,13 +17,14 @@ public sealed class PlatformCapabilityServiceTests
     }
 
     [Fact]
-    public void SupportsInteractiveTerminalSurface_FollowsWebView2HostAvailability()
+    public void SupportsInteractiveTerminalSurface_FollowsDesktopProcessHostAvailability()
     {
         var sut = new PlatformCapabilityService();
+        var expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
-        Assert.Equal(
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
-            sut.SupportsInteractiveTerminalSurface);
+        Assert.Equal(expected, sut.SupportsInteractiveTerminalSurface);
     }
 
     [Fact]

@@ -30,6 +30,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<VoiceInputDiagnosticsProbeViewModel> _logger;
+    private readonly SemaphoreSlim _signalMonitoringGate = new(1, 1);
     private CancellationTokenSource? _probeCts;
     private CancellationTokenSource? _signalMonitoringCancellationTokenSource;
     private Task? _signalMonitoringTask;
@@ -342,6 +343,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 _activeRequestId = null;
                 TryDisposeProbeCts();
             }).ConfigureAwait(false);
+        }
+        finally
+        {
             await StopSignalMonitoringAsync(logSummary: true, requestId: requestId).ConfigureAwait(false);
         }
     }
@@ -388,7 +392,15 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         });
 
     private void OnSessionEnded(object? sender, VoiceInputSessionEndedResult result)
-        => _ = _uiDispatcher.EnqueueAsync(() =>
+        => _ = CompleteSessionEndedAsync(result);
+
+    private void OnErrorOccurred(object? sender, VoiceInputErrorResult result)
+        => _ = CompleteSessionErrorAsync(result);
+
+    private async Task CompleteSessionEndedAsync(VoiceInputSessionEndedResult result)
+    {
+        var shouldStopSignalMonitoring = false;
+        await _uiDispatcher.EnqueueAsync(() =>
         {
             if (!IsCurrentRequest(result.RequestId))
             {
@@ -401,11 +413,19 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             IsRunning = false;
             _activeRequestId = null;
             TryDisposeProbeCts();
-            _ = StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId);
-        });
+            shouldStopSignalMonitoring = _stopRequestedAt is null;
+        }).ConfigureAwait(false);
 
-    private void OnErrorOccurred(object? sender, VoiceInputErrorResult result)
-        => _ = _uiDispatcher.EnqueueAsync(() =>
+        if (shouldStopSignalMonitoring)
+        {
+            await StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId).ConfigureAwait(false);
+        }
+    }
+
+    private async Task CompleteSessionErrorAsync(VoiceInputErrorResult result)
+    {
+        var shouldStopSignalMonitoring = false;
+        await _uiDispatcher.EnqueueAsync(() =>
         {
             if (!IsCurrentRequest(result.RequestId))
             {
@@ -422,8 +442,14 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             IsRunning = false;
             _activeRequestId = null;
             TryDisposeProbeCts();
-            _ = StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId);
-        });
+            shouldStopSignalMonitoring = _stopRequestedAt is null;
+        }).ConfigureAwait(false);
+
+        if (shouldStopSignalMonitoring)
+        {
+            await StopSignalMonitoringAsync(logSummary: true, requestId: result.RequestId).ConfigureAwait(false);
+        }
+    }
 
     private string ResolveCompletedStatus()
     {
@@ -534,9 +560,28 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     {
         await StopSignalMonitoringAsync().ConfigureAwait(false);
 
+        AudioInputSignalDiagnosticsSnapshot snapshot;
+        try
+        {
+            await _signalMonitoringGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
         try
         {
             await _signalDiagnosticsService.StartMonitoringAsync(cancellationToken).ConfigureAwait(false);
+            snapshot = _signalDiagnosticsService.GetCurrentSnapshot();
+
+            if (snapshot.IsSupported)
+            {
+                Interlocked.Exchange(ref _signalMonitoringActive, 1);
+                var pollingCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                _signalMonitoringCancellationTokenSource = pollingCancellationTokenSource;
+                _signalMonitoringTask = Task.Run(() => ObserveSignalMonitoringAsync(pollingCancellationTokenSource));
+            }
         }
         catch (Exception ex)
         {
@@ -551,71 +596,72 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             }).ConfigureAwait(false);
             return;
         }
-
-        var snapshot = _signalDiagnosticsService.GetCurrentSnapshot();
-        await RunOnUiAsync(() => ApplySignalSnapshot(snapshot)).ConfigureAwait(false);
-
-        if (!snapshot.IsSupported)
+        finally
         {
-            return;
+            _signalMonitoringGate.Release();
         }
 
-        Interlocked.Exchange(ref _signalMonitoringActive, 1);
-        var pollingCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _signalMonitoringCancellationTokenSource = pollingCancellationTokenSource;
-        _signalMonitoringTask = Task.Run(() => ObserveSignalMonitoringAsync(pollingCancellationTokenSource));
+        await RunOnUiAsync(() => ApplySignalSnapshot(snapshot)).ConfigureAwait(false);
     }
 
     private async Task StopSignalMonitoringAsync(bool logSummary = false, string? requestId = null)
     {
-        var cancellationTokenSource = _signalMonitoringCancellationTokenSource;
-        var monitoringTask = _signalMonitoringTask;
-        _signalMonitoringCancellationTokenSource = null;
-        _signalMonitoringTask = null;
-        var shouldStopService = cancellationTokenSource is not null
-            || monitoringTask is not null
-            || Interlocked.Exchange(ref _signalMonitoringActive, 0) == 1;
-
+        await _signalMonitoringGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            cancellationTokenSource?.Cancel();
-        }
-        catch
-        {
-        }
+            var cancellationTokenSource = _signalMonitoringCancellationTokenSource;
+            var monitoringTask = _signalMonitoringTask;
+            _signalMonitoringCancellationTokenSource = null;
+            _signalMonitoringTask = null;
+            var shouldStopService = cancellationTokenSource is not null
+                || monitoringTask is not null
+                || Interlocked.Exchange(ref _signalMonitoringActive, 0) == 1;
 
-        try
-        {
-            if (monitoringTask is not null)
+            try
             {
-                await monitoringTask.ConfigureAwait(false);
+                cancellationTokenSource?.Cancel();
             }
-        }
-        catch (OperationCanceledException)
-        {
+            catch
+            {
+            }
+
+            try
+            {
+                if (monitoringTask is not null)
+                {
+                    await monitoringTask.ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                cancellationTokenSource?.Dispose();
+            }
+
+            if (!shouldStopService)
+            {
+                return;
+            }
+
+            try
+            {
+                await _signalDiagnosticsService.StopMonitoringAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Voice diagnostics signal monitoring failed to stop.");
+            }
+
+            if (logSummary)
+            {
+                LogSignalMonitoringSummary(requestId, _signalDiagnosticsService.GetCurrentSnapshot());
+            }
         }
         finally
         {
-            cancellationTokenSource?.Dispose();
-        }
-
-        if (!shouldStopService)
-        {
-            return;
-        }
-
-        try
-        {
-            await _signalDiagnosticsService.StopMonitoringAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Voice diagnostics signal monitoring failed to stop.");
-        }
-
-        if (logSummary)
-        {
-            LogSignalMonitoringSummary(requestId, _signalDiagnosticsService.GetCurrentSnapshot());
+            _signalMonitoringGate.Release();
         }
     }
 

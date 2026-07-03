@@ -13,5 +13,5 @@ public sealed class AppPreferencesAcpAvailabilityPolicy : IAcpAvailabilityPolicy
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
     }
 
-    public bool IsAcpEnabled => _preferences.AcpEnabled;
+    public bool IsAcpEnabled => _preferences.IsLoaded && _preferences.AcpEnabled;
 }

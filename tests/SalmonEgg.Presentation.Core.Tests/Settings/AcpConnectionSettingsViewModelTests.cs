@@ -1146,7 +1146,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await Task.Delay(10);
+        await preferences.InitializeAsync();
         return preferences;
     }
 

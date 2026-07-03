@@ -1124,6 +1124,9 @@ namespace SalmonEgg.Infrastructure.Client
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to process permission request: {ex.Message}");
+                FailPendingInboundRequest(
+                    request,
+                    JsonRpcError.CreateInternalError("Client failed to process inbound permission request."));
             }
         }
 
@@ -1200,6 +1203,9 @@ namespace SalmonEgg.Infrastructure.Client
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to process file system request: {ex.Message}");
+                FailPendingInboundRequest(
+                    request,
+                    JsonRpcError.CreateInternalError("Client failed to process inbound file system request."));
             }
         }
 
@@ -1529,6 +1535,17 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             _pendingInboundRequests.TryRemove(idStr, out _);
+        }
+
+        private void FailPendingInboundRequest(JsonRpcRequest request, JsonRpcError error)
+        {
+            RemovePendingInboundTracking(request.Id?.ToString() ?? string.Empty);
+            if (request.Id == null)
+            {
+                return;
+            }
+
+            _ = SendResponseAsync(new JsonRpcResponse(request.Id, error));
         }
 
         private void TrackPendingInboundRequest(string idStr, string method, object? messageId)

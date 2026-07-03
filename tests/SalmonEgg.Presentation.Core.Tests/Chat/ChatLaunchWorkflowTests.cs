@@ -44,10 +44,9 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager.Object,
             navigation,
-            () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello", "project-1");
+        await workflow.StartSessionAndSendAsync(CreateRequest("project-1"));
 
         sessionManager.Verify(s => s.CreateSessionAsync(It.IsAny<string>(), @"C:\repo\demo"), Times.Once);
         Assert.Equal(1, navigation.ActivateSessionCount);
@@ -78,10 +77,9 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager.Object,
             navigation,
-            () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello", null);
+        await workflow.StartSessionAndSendAsync(CreateRequest());
 
         Assert.Equal(1, navigation.ActivateSessionCount);
         Assert.Equal(0, chat.AutoConnectCallCount);
@@ -116,10 +114,9 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager.Object,
             navigation,
-            () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello", null);
+        await workflow.StartSessionAndSendAsync(CreateRequest());
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
@@ -154,10 +151,9 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager.Object,
             navigation,
-            () => @"C:\repo\demo",
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync("hello", null);
+        await workflow.StartSessionAndSendAsync(CreateRequest());
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(1, navigation.ActivateSettingsCount);
@@ -201,11 +197,10 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager,
             navigation,
-            () => @"C:\repo\demo",
             logger.Object,
             catalogFacade);
 
-        await workflow.StartSessionAndSendAsync("hello", null);
+        await workflow.StartSessionAndSendAsync(CreateRequest());
 
         Assert.Single(workspace.GetKnownConversationIds());
         Assert.Equal(1, workspace.ConversationListVersion);
@@ -242,10 +237,9 @@ public sealed class ChatLaunchWorkflowTests
             chat,
             sessionManager,
             navigation,
-            () => @"C:\repo\demo",
             catalogFacade: catalogFacade);
 
-        await workflow.StartSessionAndSendAsync("hello", null);
+        await workflow.StartSessionAndSendAsync(CreateRequest());
 
         var saved = await store.WaitForSaveAsync();
 
@@ -273,11 +267,10 @@ public sealed class ChatLaunchWorkflowTests
         var workflow = new ChatLaunchWorkflow(
             chat,
             sessionManager.Object,
-            navigation,
-            () => @"C:\repo\demo");
+            navigation);
 
         using var cts = new CancellationTokenSource();
-        await workflow.StartSessionAndSendAsync("hello", null, cts.Token);
+        await workflow.StartSessionAndSendAsync(CreateRequest(), cts.Token);
 
         Assert.Equal(cts.Token, chat.LastAutoConnectToken);
         Assert.Equal(1, chat.AutoConnectCallCount);
@@ -302,16 +295,18 @@ public sealed class ChatLaunchWorkflowTests
         var workflow = new ChatLaunchWorkflow(
             chat,
             sessionManager.Object,
-            navigation,
-            () => @"C:\repo\demo");
+            navigation);
 
-        await workflow.StartSessionAndSendAsync("hello", "project-2", CancellationToken.None);
+        await workflow.StartSessionAndSendAsync(CreateRequest("project-2"), CancellationToken.None);
 
         Assert.Equal(1, chat.PromoteDraftCallCount);
         Assert.True(chat.PromoteDraftObservedActivatedSession);
         Assert.Equal(1, chat.SendPromptCount);
         Assert.Equal("project-2", navigation.LastActivatedProjectId);
     }
+
+    private static ChatLaunchRequest CreateRequest(string? projectId = null, string? cwd = @"C:\repo\demo")
+        => new("hello", projectId, cwd);
 
     private static AppPreferencesViewModel CreatePreferences(string? lastSelectedProjectId = null)
     {

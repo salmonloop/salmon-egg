@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg;
@@ -16,7 +17,6 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
     public static Microsoft.UI.Xaml.Window? MainWindowInstance => (Current as App)?.MainWindow;
 
-    private readonly SalmonEgg.Domain.Services.IAppSettingsService? _appSettingsService;
     private readonly SalmonEgg.Domain.Services.IAppMaintenanceService? _maintenanceService;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
 
@@ -66,7 +66,6 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         ServiceProvider = services.BuildServiceProvider();
 
         // Resolve DI dependencies before InitializeComponent() so x:Bind has stable inputs.
-        _appSettingsService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppSettingsService>();
         _maintenanceService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
         _windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();
 
@@ -119,16 +118,6 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         MainWindow = new Microsoft.UI.Xaml.Window();
         BootLog("OnLaunched: window created");
 
-        try
-        {
-            _windowBackdropService?.Attach(MainWindow);
-            BootLog("OnLaunched: backdrop service attached");
-        }
-        catch
-        {
-            BootLog("OnLaunched: backdrop service attach failed");
-        }
-
         if (MainWindow.Content is not Frame rootFrame)
         {
             rootFrame = new Frame { AllowDrop = false };
@@ -149,24 +138,36 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             BootLog("OnLaunched: failed to initialize motion policy");
         }
 
+        AppPreferencesViewModel? preferences = null;
         try
         {
-            if (_appSettingsService != null)
+            preferences = ServiceProvider.GetService<AppPreferencesViewModel>();
+            if (preferences != null)
             {
-                var settings = await _appSettingsService.LoadAsync();
+                await preferences.InitializeAsync();
                 if (uiRuntimeService != null)
                 {
-                    uiRuntimeService.SetAnimationsEnabled(settings.IsAnimationEnabled);
+                    uiRuntimeService.SetAnimationsEnabled(preferences.IsAnimationEnabled);
                 }
                 else
                 {
-                    UiMotionController.Current.IsAnimationEnabled = settings.IsAnimationEnabled;
+                    UiMotionController.Current.IsAnimationEnabled = preferences.IsAnimationEnabled;
                 }
             }
         }
         catch
         {
-            BootLog("OnLaunched: failed to load settings for motion");
+            BootLog("OnLaunched: failed to initialize preferences");
+        }
+
+        try
+        {
+            _windowBackdropService?.Attach(MainWindow);
+            BootLog("OnLaunched: backdrop service attached");
+        }
+        catch
+        {
+            BootLog("OnLaunched: backdrop service attach failed");
         }
 
         if (rootFrame.Content == null)
@@ -178,14 +179,14 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         // Best-effort cache cleanup based on retention settings.
         try
         {
-            if (_appSettingsService != null && _maintenanceService != null)
+            if (preferences != null && _maintenanceService != null)
             {
+                var cacheRetentionDays = preferences.CacheRetentionDays;
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        var settings = await _appSettingsService.LoadAsync().ConfigureAwait(false);
-                        await _maintenanceService.CleanupCacheAsync(settings.CacheRetentionDays).ConfigureAwait(false);
+                        await _maintenanceService.CleanupCacheAsync(cacheRetentionDays).ConfigureAwait(false);
                     }
                     catch
                     {

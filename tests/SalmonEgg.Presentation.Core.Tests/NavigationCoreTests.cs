@@ -275,10 +275,41 @@ public sealed class NavigationCoreTests
         Assert.DoesNotContain("AppPreferencesViewModel", chatLaunchWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("ObservableObject, IAcpAvailabilityPolicy", appPreferences, StringComparison.Ordinal);
         Assert.Contains("class AppPreferencesAcpAvailabilityPolicy : IAcpAvailabilityPolicy", availabilityAdapter, StringComparison.Ordinal);
+        Assert.Contains("_preferences.IsLoaded && _preferences.AcpEnabled", availabilityAdapter, StringComparison.Ordinal);
         Assert.Contains("class AcpConnectionEvictionOptionsBridge : IDisposable", evictionBridge, StringComparison.Ordinal);
         Assert.Contains("sp.GetRequiredService<IAcpMcpServerProvider>()", dependencyInjection, StringComparison.Ordinal);
         Assert.Contains("sp.GetRequiredService<IAcpSessionCommandOrchestrator>()", dependencyInjection, StringComparison.Ordinal);
         Assert.Contains("new AppPreferencesAcpAvailabilityPolicy(sp.GetRequiredService<AppPreferencesViewModel>())", dependencyInjection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AppLaunch_InitializesPreferencesBeforeAttachingBackdropService()
+    {
+        var app = NormalizeLineEndings(LoadFile(@"SalmonEgg\SalmonEgg\App.xaml.cs"));
+        var initializeIndex = app.IndexOf("await preferences.InitializeAsync();", StringComparison.Ordinal);
+        var attachIndex = app.IndexOf("_windowBackdropService?.Attach(MainWindow);", StringComparison.Ordinal);
+
+        Assert.True(initializeIndex >= 0, "App launch must explicitly initialize preferences.");
+        Assert.True(attachIndex >= 0, "App launch must attach the backdrop service.");
+        Assert.True(
+            initializeIndex < attachIndex,
+            "Window backdrop attachment must read initialized preferences instead of constructor defaults.");
+    }
+
+    [Fact]
+    public void StartLaunch_DoesNotRetainLegacyProfileAgnosticCwdResolver()
+    {
+        var root = FindRepoRoot();
+        var legacyResolver = Path.Combine(
+            root,
+            NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Services\StartSessionCwdResolver.cs"));
+        var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var chatLaunchWorkflow = LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Chat\ChatLaunchWorkflow.cs");
+
+        Assert.False(File.Exists(legacyResolver));
+        Assert.DoesNotContain("CreateStartCwdResolver", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartSessionCwdResolver", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartSessionCwdResolver", chatLaunchWorkflow, StringComparison.Ordinal);
     }
 
     [Fact]

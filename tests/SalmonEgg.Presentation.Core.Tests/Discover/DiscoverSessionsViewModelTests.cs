@@ -648,15 +648,14 @@ public sealed class DiscoverSessionsViewModelTests
 
         Assert.True(viewModel.LoadSessionCommand.CanExecute(item));
 
-        viewModel.SelectedProfile = null;
-        Assert.False(viewModel.LoadSessionCommand.CanExecute(item));
-
-        viewModel.SelectedProfile = profile;
         viewModel.LoadPhase = DiscoverSessionsLoadPhase.ImportingSession;
         Assert.False(viewModel.LoadSessionCommand.CanExecute(item));
 
         viewModel.LoadPhase = DiscoverSessionsLoadPhase.Loaded;
         Assert.True(viewModel.LoadSessionCommand.CanExecute(item));
+
+        viewModel.SelectedProfile = null;
+        Assert.False(viewModel.LoadSessionCommand.CanExecute(item));
     }
 
     [Fact]

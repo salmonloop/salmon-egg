@@ -62,7 +62,7 @@ public sealed class StartViewModelTests
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -90,7 +90,53 @@ public sealed class StartViewModelTests
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-            workflow.Verify(w => w.StartSessionAndSendAsync("hello", NavigationProjectIds.Unclassified, It.IsAny<CancellationToken>()), Times.Once);
+            workflow.Verify(w => w.StartSessionAndSendAsync(
+                It.Is<ChatLaunchRequest>(request =>
+                    request.PromptText == "hello"
+                    && request.ProjectId == NavigationProjectIds.Unclassified),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_LocalProfile_DoesNotLeakPersistedRemoteDirectoryCwd()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AgentRemoteDirectories.Add(new AgentRemoteDirectory
+            {
+                DirectoryId = "dir-remote",
+                DisplayName = "Remote",
+                RemotePath = "/remote/workspace"
+            });
+            preferences.LastSelectedProjectId = "remote-directory:dir-remote";
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            ChatLaunchRequest? capturedRequest = null;
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ChatLaunchRequest, CancellationToken>((request, _) => capturedRequest = request)
+                .Returns(Task.CompletedTask);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.StartPrompt = "hello";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.NotNull(capturedRequest);
+            Assert.Equal(NavigationProjectIds.Unclassified, capturedRequest!.ProjectId);
+            Assert.Null(capturedRequest.Cwd);
         }
         finally
         {
@@ -109,7 +155,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
-            workflow.Setup(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("boom"));
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -152,7 +198,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
-            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -559,7 +605,7 @@ public sealed class StartViewModelTests
 
             await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
 
-            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
         {
@@ -2367,8 +2413,7 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
 
             workflow.Verify(x => x.StartSessionAndSendAsync(
-                It.IsAny<string>(),
-                It.IsAny<string?>(),
+                It.IsAny<ChatLaunchRequest>(),
                 It.IsAny<CancellationToken>()), Times.Never);
         }
         finally
@@ -2480,7 +2525,9 @@ public sealed class StartViewModelTests
             var workflowStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflow = new Mock<IChatLaunchWorkflow>();
-            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
                 .Returns(() =>
                 {
                     workflowStarted.TrySetResult(null);
@@ -2523,7 +2570,9 @@ public sealed class StartViewModelTests
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
             var exception = new InvalidOperationException("boom");
-            workflow.Setup(w => w.StartSessionAndSendAsync("launch", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);

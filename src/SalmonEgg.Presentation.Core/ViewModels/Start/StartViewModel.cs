@@ -287,8 +287,7 @@ public sealed partial class StartViewModel : ObservableObject
                 Chat,
                 _chatConnectionStore),
             sessionManager,
-            navigationCoordinator,
-            ResolveDefaultCwd);
+            navigationCoordinator);
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, CanStartSessionAndSend);
         ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
@@ -448,8 +447,10 @@ public sealed partial class StartViewModel : ObservableObject
         {
             await _chatLaunchWorkflow
                 .StartSessionAndSendAsync(
-                    promptText,
-                    NormalizeProjectSelectionValue(SelectedStartProjectId))
+                    new ChatLaunchRequest(
+                        promptText,
+                        NormalizeProjectSelectionValue(SelectedStartProjectId),
+                        ResolveDefaultCwd()))
                 .ConfigureAwait(true);
             submitSucceeded = true;
         }

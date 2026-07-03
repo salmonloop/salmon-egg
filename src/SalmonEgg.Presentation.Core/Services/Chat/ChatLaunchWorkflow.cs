@@ -39,7 +39,6 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
     private readonly IChatLaunchWorkflowChatFacade _chat;
     private readonly ISessionManager _sessionManager;
     private readonly INavigationCoordinator _navigationCoordinator;
-    private readonly Func<string?> _resolveDefaultCwd;
     private readonly ConversationCatalogFacade? _catalogFacade;
     private readonly ILogger<ChatLaunchWorkflow> _logger;
 
@@ -47,31 +46,30 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         IChatLaunchWorkflowChatFacade chat,
         ISessionManager sessionManager,
         INavigationCoordinator navigationCoordinator,
-        Func<string?> resolveDefaultCwd,
         ILogger<ChatLaunchWorkflow>? logger = null,
         ConversationCatalogFacade? catalogFacade = null)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
-        _resolveDefaultCwd = resolveDefaultCwd ?? throw new ArgumentNullException(nameof(resolveDefaultCwd));
         _logger = logger ?? NullLogger<ChatLaunchWorkflow>.Instance;
         _catalogFacade = catalogFacade;
     }
 
     public async Task StartSessionAndSendAsync(
-        string promptText,
-        string? projectId,
+        ChatLaunchRequest request,
         CancellationToken cancellationToken = default)
     {
-        var normalizedPrompt = (promptText ?? string.Empty).Trim();
+        ArgumentNullException.ThrowIfNull(request);
+
+        var normalizedPrompt = (request.PromptText ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedPrompt))
         {
             return;
         }
 
         var sessionId = Guid.NewGuid().ToString("N");
-        var cwd = _resolveDefaultCwd();
+        var cwd = request.Cwd;
 
         try
         {
@@ -91,7 +89,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         // Navigation owns the session switch for the Start path.
         // Calling chat activation directly here would reintroduce the current double-owner bug.
         var activated = await _navigationCoordinator
-            .ActivateSessionAsync(sessionId, projectId)
+            .ActivateSessionAsync(sessionId, request.ProjectId)
             .ConfigureAwait(true);
         if (!activated)
         {

@@ -3,6 +3,11 @@ using System.Threading.Tasks;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
+public sealed record ChatLaunchRequest(
+    string PromptText,
+    string? ProjectId,
+    string? Cwd);
+
 /// <summary>
 /// Single-owner Start launch workflow: create a local session, activate it through navigation,
 /// connect if needed, then dispatch the initial prompt.
@@ -10,7 +15,6 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 public interface IChatLaunchWorkflow
 {
     Task StartSessionAndSendAsync(
-        string promptText,
-        string? projectId,
+        ChatLaunchRequest request,
         CancellationToken cancellationToken = default);
 }
