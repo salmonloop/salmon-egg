@@ -137,6 +137,15 @@ scripts/gates/verify-linux-desktop-runtime.sh publish/linux-desktop
 
 该 gate 会检查 `publish/linux-desktop/SalmonEgg`、`xvfb-run`、WebKitGTK、JavaScriptCoreGTK，并在 Xvfb 下启动本次 publish 产物。缺少运行库、Skia/freetype native crash、`DllNotFoundException`、`EntryPointNotFoundException` 或未处理异常都会失败。纯 headless X11 缺少 EWMH window manager 时的窗口状态警告不作为应用启动失败处理。
 
+#### Mobile target contract gate
+移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：
+
+```bash
+scripts/gates/verify-mobile-target-contracts.sh
+```
+
+该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
+
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
 

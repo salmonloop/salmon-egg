@@ -194,6 +194,14 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -t:RunSimulator
 ```
 
+### Mobile target contract gate
+
+```bash
+scripts/gates/verify-mobile-target-contracts.sh
+```
+
+该 gate 验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合项目文件；当本机安装 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍需要可运行的 Android build-tools；iOS 打包仍需要 macOS/Xcode。
+
 ## 测试
 
 ### 运行所有测试

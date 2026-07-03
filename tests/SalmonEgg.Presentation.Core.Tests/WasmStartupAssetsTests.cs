@@ -193,6 +193,19 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
+    public void MobileTargetGate_VerifiesTargetExpansionAndAndroidSecureStorageSource()
+    {
+        var gate = LoadFile(@"scripts\gates\verify-mobile-target-contracts.sh");
+
+        Assert.Contains("-getProperty:TargetFrameworks", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:EnableMobileTargets=true -p:EnableIosTarget=true", gate, StringComparison.Ordinal);
+        Assert.Contains("net10.0-android36.0;net10.0-ios", gate, StringComparison.Ordinal);
+        Assert.Contains("-define:__ANDROID__", gate, StringComparison.Ordinal);
+        Assert.Contains("AndroidKeyStoreSecureStorage.cs", gate, StringComparison.Ordinal);
+        Assert.Contains("Android ref pack or Roslyn compiler not available; skipped Android source compile", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DependencyInjection_RegistersUnsupportedTerminalManagerForBrowserWasm()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
