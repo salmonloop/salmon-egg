@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Models.Navigation;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Activation;
 
@@ -37,6 +38,12 @@ internal sealed class ConversationActivationOutcomePublisher
             return false;
         }
 
+        if (_runtimeState?.PendingShellContent is { } pendingShellContent
+            && pendingShellContent != ShellNavigationContent.Chat)
+        {
+            return false;
+        }
+
         return !activationVersion.HasValue || _isLatestActivationVersion(activationVersion.Value);
     }
 
@@ -68,6 +75,11 @@ internal sealed class ConversationActivationOutcomePublisher
 
         return _uiDispatcher.EnqueueAsync(() =>
         {
+            if (!CanPublish(activationVersion))
+            {
+                return;
+            }
+
             var activeActivation = _runtimeState.ActiveSessionActivation;
             if (activeActivation is null || !activeActivation.Matches(conversationId))
             {

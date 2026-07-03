@@ -44,7 +44,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public async Task<bool> ActivateStartAsync(string? projectIdForNewSession = null)
     {
-        var activationToken = BeginActivation();
+        var activationToken = BeginActivation(ShellNavigationContent.Start);
         try
         {
             CancelInFlightSessionActivation();
@@ -83,13 +83,17 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 activationToken,
                 ActivationFaultReasons.StartNavigationException);
         }
+        finally
+        {
+            ClearPendingShellContent(activationToken);
+        }
 
         return false;
     }
 
     public async Task ActivateDiscoverSessionsAsync()
     {
-        var activationToken = BeginActivation();
+        var activationToken = BeginActivation(ShellNavigationContent.DiscoverSessions);
         try
         {
             CancelInFlightSessionActivation();
@@ -127,11 +131,15 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 activationToken,
                 ActivationFaultReasons.DiscoverSessionsNavigationException);
         }
+        finally
+        {
+            ClearPendingShellContent(activationToken);
+        }
     }
 
     public async Task ActivateSettingsAsync(string settingsKey)
     {
-        var activationToken = BeginActivation();
+        var activationToken = BeginActivation(ShellNavigationContent.Settings);
         var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey)
             ? SettingsSectionCatalog.GeneralKey
             : settingsKey;
@@ -178,6 +186,10 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 activationToken,
                 ActivationFaultReasons.SettingsNavigationException);
         }
+        finally
+        {
+            ClearPendingShellContent(activationToken);
+        }
     }
 
     public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
@@ -212,7 +224,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             request = new SessionActivationRequest(
                 sessionId,
                 projectId,
-                BeginActivation(),
+                BeginActivation(ShellNavigationContent.Chat),
                 cancellationTokenSource,
                 cancellationTokenSource.Token);
             _sessionActivationCts = request.CancellationTokenSource;
@@ -456,6 +468,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     public void SyncSelectionFromShellContent(ShellNavigationContent content)
     {
         _runtimeState.CurrentShellContent = content;
+        _runtimeState.PendingShellContent = null;
         if (content == ShellNavigationContent.Chat
             && _runtimeState.ActiveSessionActivation is { } activeActivation
             && !IsTerminalPhase(activeActivation.Phase))
@@ -485,12 +498,13 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
-    private long BeginActivation()
+    private long BeginActivation(ShellNavigationContent pendingShellContent)
     {
         lock (_sessionActivationSync)
         {
             var activationToken = _runtimeState.LatestActivationToken + 1;
             _runtimeState.LatestActivationToken = activationToken;
+            _runtimeState.PendingShellContent = pendingShellContent;
             return activationToken;
         }
     }
@@ -507,6 +521,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             previousActivationCanBeDisposed = _sessionActivationCtsCanBeDisposedByCanceler;
             activationToken = _runtimeState.LatestActivationToken + 1;
             _runtimeState.LatestActivationToken = activationToken;
+            _runtimeState.PendingShellContent = ShellNavigationContent.Chat;
             _sessionActivationCts = cancellationTokenSource;
             _sessionActivationCtsCanBeDisposedByCanceler = false;
             _runtimeState.DesiredSessionId = null;
@@ -541,6 +556,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         lock (_sessionActivationSync)
         {
             _runtimeState.DesiredSessionId = sessionId;
+            _runtimeState.PendingShellContent = ShellNavigationContent.Chat;
             _runtimeState.ActiveSessionActivationVersion = importRequest.Version;
             _runtimeState.IsSessionActivationInProgress = true;
             _runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
@@ -570,6 +586,11 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             {
                 _sessionActivationCts = null;
                 _sessionActivationCtsCanBeDisposedByCanceler = false;
+            }
+
+            if (IsLatestActivationToken(request.Version))
+            {
+                _runtimeState.PendingShellContent = null;
             }
         }
 
@@ -611,6 +632,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
             if (IsLatestActivationToken(request.Version))
             {
+                _runtimeState.PendingShellContent = null;
                 if (committed)
                 {
                     _runtimeState.DesiredSessionId = null;
@@ -651,6 +673,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             _sessionActivationCts = null;
             _sessionActivationCtsCanBeDisposedByCanceler = false;
             _runtimeState.DesiredSessionId = null;
+            _runtimeState.PendingShellContent = null;
             _runtimeState.IsSessionActivationInProgress = false;
             _runtimeState.ActiveSessionActivationVersion = 0;
             _runtimeState.ActiveSessionActivation = null;
@@ -680,6 +703,17 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 request.Version,
                 phase,
                 reason);
+        }
+    }
+
+    private void ClearPendingShellContent(long activationToken)
+    {
+        lock (_sessionActivationSync)
+        {
+            if (IsLatestActivationToken(activationToken))
+            {
+                _runtimeState.PendingShellContent = null;
+            }
         }
     }
 

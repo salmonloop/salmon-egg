@@ -20,4 +20,6 @@ public interface IShellNavigationRuntimeState : INotifyPropertyChanged
     bool IsSessionActivationInProgress { get; set; }
 
     ShellNavigationContent CurrentShellContent { get; set; }
+
+    ShellNavigationContent? PendingShellContent { get; set; }
 }

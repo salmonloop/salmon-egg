@@ -577,7 +577,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private bool IsChatShellVisibleForRemoteUi
         => _shellNavigationRuntimeState is null
-            || _shellNavigationRuntimeState.CurrentShellContent == ShellNavigationContent.Chat;
+            || (_shellNavigationRuntimeState.CurrentShellContent == ShellNavigationContent.Chat
+                && _shellNavigationRuntimeState.PendingShellContent is null or ShellNavigationContent.Chat);
 
     private string? PendingShellActivationConversationId
         => _shellNavigationRuntimeState?.IsSessionActivationInProgress == true
@@ -1497,6 +1498,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private void OnShellNavigationRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(IShellNavigationRuntimeState.CurrentShellContent)
+            || e.PropertyName == nameof(IShellNavigationRuntimeState.PendingShellContent)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.DesiredSessionId)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.IsSessionActivationInProgress)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))

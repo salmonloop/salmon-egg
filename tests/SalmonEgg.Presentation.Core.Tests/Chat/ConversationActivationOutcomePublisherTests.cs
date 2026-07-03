@@ -113,6 +113,41 @@ public sealed class ConversationActivationOutcomePublisherTests
         Assert.Equal(0, runtimeState.ActiveSessionActivationVersion);
     }
 
+    [Fact]
+    public async Task TryPublishPhaseAsync_WhenNonChatNavigationIsPending_DoesNotPublishRemoteOutcome()
+    {
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            PendingShellContent = ShellNavigationContent.Start,
+            LatestActivationToken = 10,
+            ActiveSessionActivationVersion = 10,
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "conv-1",
+                "project-1",
+                10,
+                SessionActivationPhase.Selected)
+        };
+        string? errorMessage = null;
+        var publisher = CreatePublisher(runtimeState, message => errorMessage = message);
+
+        await publisher.TryPublishPhaseAsync(
+            "conv-1",
+            10,
+            SessionActivationPhase.Faulted,
+            "RemoteLoadFailed");
+        await publisher.TrySetActivationErrorAsync(
+            "conv-1",
+            10,
+            "Failed to load session: remote load failed.");
+
+        Assert.Equal(SessionActivationPhase.Selected, runtimeState.ActiveSessionActivation?.Phase);
+        Assert.True(runtimeState.IsSessionActivationInProgress);
+        Assert.Equal(10, runtimeState.ActiveSessionActivationVersion);
+        Assert.Null(errorMessage);
+    }
+
     private static ConversationActivationOutcomePublisher CreatePublisher(
         IShellNavigationRuntimeState runtimeState,
         Action<string> setError)

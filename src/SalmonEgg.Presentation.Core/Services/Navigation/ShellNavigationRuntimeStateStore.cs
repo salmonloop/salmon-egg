@@ -25,4 +25,7 @@ public sealed partial class ShellNavigationRuntimeStateStore : ObservableObject,
 
     [ObservableProperty]
     private ShellNavigationContent _currentShellContent = ShellNavigationContent.Start;
+
+    [ObservableProperty]
+    private ShellNavigationContent? _pendingShellContent;
 }
