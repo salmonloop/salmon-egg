@@ -109,7 +109,7 @@ SalmonEgg.sln
 | `HTTP SSE` | 全平台 | `src/SalmonEgg.Infrastructure/Network/` |
 | `Stdio` (含 SSH bridge) | 桌面（MSIX / Desktop） | `src/SalmonEgg.Infrastructure.Desktop/Transport/` |
 
-> `ssh` 不是独立传输类型，SSH bridge 通过 `stdio` transport 的 `stdio_command`/`stdio_args` 字段配置。详见 `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`。
+> `ssh` 不是独立传输类型，SSH bridge 通过 `stdio` transport 的 `stdio_command`/`stdio_arguments` 字段配置。详见 `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`。
 
 ## 会话与导航
 

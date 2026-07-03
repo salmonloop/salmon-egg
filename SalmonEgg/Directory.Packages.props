@@ -27,6 +27,8 @@
     <PackageVersion Include="Uno.Extensions.Reactive.WinUI" Version="7.1.1" />
     <PackageVersion Include="Uno.Extensions.Reactive.Messaging" Version="7.1.1" />
     <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.205" />
+    <PackageVersion Include="Uno.Fonts.Fluent" Version="2.6.1" />
+    <PackageVersion Include="Uno.Fonts.OpenSans" Version="2.8.1" />
     <!-- Uno 6.5.31 still resolves this transitively on desktop; pin the patched version centrally. -->
     <PackageVersion Include="Tmds.DBus.Protocol"
                     Version="0.21.3"

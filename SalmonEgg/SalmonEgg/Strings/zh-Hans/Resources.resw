@@ -561,10 +561,10 @@
   <data name="Conn_StdioCommand.PlaceholderText" xml:space="preserve">
     <value>例如: python, node</value>
   </data>
-  <data name="Conn_StdioArgs.Header" xml:space="preserve">
+  <data name="Conn_StdioArguments.Header" xml:space="preserve">
     <value>参数</value>
   </data>
-  <data name="Conn_StdioArgs.PlaceholderText" xml:space="preserve">
+  <data name="Conn_StdioArguments.PlaceholderText" xml:space="preserve">
     <value>例如: server.py</value>
   </data>
   <data name="Conn_RemoteUrl.Header" xml:space="preserve">

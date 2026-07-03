@@ -19,7 +19,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 /// </summary>
 public sealed class ConfigurationManager : IConfigurationService
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly ISecureStorage _secureStorage;
     private readonly IAppFileStore _fileStore;
@@ -45,7 +45,17 @@ public sealed class ConfigurationManager : IConfigurationService
         await EnsureWritableSchemaAsync(serverPath).ConfigureAwait(false);
 
         var mode = GetAuthenticationMode(config.Authentication);
-        await PersistSecretsAsync(config.Id, mode, config.Authentication).ConfigureAwait(false);
+        try
+        {
+            await PersistSecretsAsync(config.Id, mode, config.Authentication).ConfigureAwait(false);
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
+                ex.Message,
+                ex);
+        }
 
         var yamlModel = ToYaml(config, mode);
         var yaml = YamlSerialization.CreateSerializer().Serialize(yamlModel);
@@ -57,7 +67,7 @@ public sealed class ConfigurationManager : IConfigurationService
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Configuration ID cannot be empty", nameof(id));
 
         var path = GetServerYamlPath(id);
-        ServerConfigurationYamlV1 yamlModel;
+        ServerConfigurationYaml yamlModel;
         try
         {
             var yaml = await _fileStore.ReadAllTextAsync(path).ConfigureAwait(false);
@@ -66,7 +76,7 @@ public sealed class ConfigurationManager : IConfigurationService
                 return null;
             }
 
-            yamlModel = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYamlV1>(yaml);
+            yamlModel = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYaml>(yaml);
         }
         catch (YamlException)
         {
@@ -120,7 +130,7 @@ public sealed class ConfigurationManager : IConfigurationService
                         continue;
                     }
 
-                    var yamlModel = deserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
+                    var yamlModel = deserializer.Deserialize<ServerConfigurationYaml>(yaml);
                     if (yamlModel.SchemaVersion <= 0)
                     {
                         continue;
@@ -180,9 +190,9 @@ public sealed class ConfigurationManager : IConfigurationService
         await _secureStorage.DeleteAsync(GetApiKeyKey(id)).ConfigureAwait(false);
     }
 
-    private static ServerConfigurationYamlV1 ToYaml(ServerConfiguration config, string mode)
+    private static ServerConfigurationYaml ToYaml(ServerConfiguration config, string mode)
     {
-        return new ServerConfigurationYamlV1
+        return new ServerConfigurationYaml
         {
             SchemaVersion = CurrentSchemaVersion,
             UpdatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
@@ -191,7 +201,7 @@ public sealed class ConfigurationManager : IConfigurationService
             Transport = TransportToString(config.Transport),
             ServerUrl = config.ServerUrl,
             StdioCommand = config.StdioCommand,
-            StdioArgs = config.StdioArgs,
+            StdioArguments = config.StdioArguments?.ToList() ?? new List<string>(),
             ConnectionTimeoutSeconds = config.ConnectionTimeout,
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = new ProxyYamlV1
@@ -202,7 +212,7 @@ public sealed class ConfigurationManager : IConfigurationService
         };
     }
 
-    private static ServerConfiguration FromYaml(ServerConfigurationYamlV1 yamlModel, string fallbackId)
+    private static ServerConfiguration FromYaml(ServerConfigurationYaml yamlModel, string fallbackId)
     {
         var config = new ServerConfiguration
         {
@@ -210,7 +220,7 @@ public sealed class ConfigurationManager : IConfigurationService
             Name = yamlModel.Name ?? string.Empty,
             ServerUrl = yamlModel.ServerUrl ?? string.Empty,
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
-            StdioArgs = yamlModel.StdioArgs ?? string.Empty,
+            StdioArguments = yamlModel.StdioArguments ?? new List<string>(),
             Transport = TransportFromString(yamlModel.Transport),
             ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds)
         };
@@ -395,7 +405,7 @@ public sealed class ConfigurationManager : IConfigurationService
                 return;
             }
 
-            var existing = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYamlV1>(yaml);
+            var existing = YamlSerialization.CreateDeserializer().Deserialize<ServerConfigurationYaml>(yaml);
             if (existing.SchemaVersion > CurrentSchemaVersion)
             {
                 throw new InvalidOperationException(

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using FlaUI.Core.AutomationElements;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.GuiTests.Windows;
 
@@ -714,7 +715,7 @@ public sealed class StartPageAcpSmokeTests
         {
             var lines = new List<string>
             {
-                "schema_version: 1",
+                "schema_version: 2",
                 $"id: '{EscapeYaml(profileId)}'",
                 $"name: '{EscapeYaml(name)}'",
                 $"transport: '{EscapeYaml(transport)}'",
@@ -734,7 +735,7 @@ public sealed class StartPageAcpSmokeTests
                 }
 
                 lines.Insert(4, $"stdio_command: '{EscapeYaml(stdioCommand)}'");
-                lines.Insert(5, $"stdio_args: '{EscapeYaml(stdioArgs ?? string.Empty)}'");
+                lines.InsertRange(5, BuildStdioArgumentsYaml(stdioArgs));
             }
             else
             {
@@ -802,6 +803,15 @@ public sealed class StartPageAcpSmokeTests
 
         private static string EscapeYaml(string value)
             => value.Replace("'", "''", StringComparison.Ordinal);
+
+        private static IEnumerable<string> BuildStdioArgumentsYaml(string? argumentsText)
+        {
+            yield return "stdio_arguments:";
+            foreach (var argument in StdioCommandLine.ParseArgumentsText(argumentsText))
+            {
+                yield return $"  - '{EscapeYaml(argument)}'";
+            }
+        }
 
         private static string QuoteCommandLineArgument(string value)
         {

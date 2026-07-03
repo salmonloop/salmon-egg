@@ -44,7 +44,7 @@
                 <TextBox x:Uid="ConfigurationEditorDialogCommand"
                          Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
                 <TextBox x:Uid="ConfigurationEditorDialogArgs"
-                         Text="{x:Bind ViewModel.StdioArgs, Mode=TwoWay}"/>
+                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"/>
             </StackPanel>
 
             <StackPanel Spacing="12"

@@ -410,7 +410,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         return _chatServiceFactory.CreateChatService(
             transportConfiguration.SelectedTransportType,
             transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioCommand : null,
-            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArgs : null,
+            transportConfiguration.SelectedTransportType == TransportType.Stdio ? transportConfiguration.StdioArguments : null,
             transportConfiguration.SelectedTransportType == TransportType.Stdio ? null : transportConfiguration.RemoteUrl);
     }
 
@@ -1098,14 +1098,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         if (profile.Transport == TransportType.Stdio)
         {
             transportConfiguration.StdioCommand = profile.StdioCommand ?? string.Empty;
-            transportConfiguration.StdioArgs = profile.StdioArgs ?? string.Empty;
+            transportConfiguration.StdioArguments = profile.StdioArguments;
             transportConfiguration.RemoteUrl = string.Empty;
             return;
         }
 
         transportConfiguration.RemoteUrl = profile.ServerUrl ?? string.Empty;
         transportConfiguration.StdioCommand = string.Empty;
-        transportConfiguration.StdioArgs = string.Empty;
+        transportConfiguration.StdioArguments = Array.Empty<string>();
     }
 
     private static IChatService RequireReadyChatService(IAcpChatCoordinatorSink sink)

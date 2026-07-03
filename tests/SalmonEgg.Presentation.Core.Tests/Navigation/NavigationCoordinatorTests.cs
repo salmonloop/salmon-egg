@@ -1812,7 +1812,7 @@ public sealed class NavigationCoordinatorTests
             Name = name,
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
 
     private sealed class FakeNavigationPaneState : INavigationPaneState

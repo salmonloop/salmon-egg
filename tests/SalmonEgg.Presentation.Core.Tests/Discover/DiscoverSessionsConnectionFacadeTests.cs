@@ -42,7 +42,7 @@ public sealed class DiscoverSessionsConnectionFacadeTests
             x => x.CreateChatService(
                 It.IsAny<TransportType>(),
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
+                It.IsAny<System.Collections.Generic.IReadOnlyList<string>?>(),
                 It.IsAny<string?>()),
             Times.Never);
     }
@@ -75,7 +75,7 @@ public sealed class DiscoverSessionsConnectionFacadeTests
             x => x.CreateChatService(
                 It.IsAny<TransportType>(),
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
+                It.IsAny<System.Collections.Generic.IReadOnlyList<string>?>(),
                 It.IsAny<string?>()),
             Times.Never);
     }

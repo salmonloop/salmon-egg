@@ -327,7 +327,7 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
     private readonly record struct DiscoverConnectionTarget(
         TransportType TransportType,
         string StdioCommand,
-        string StdioArgs,
+        string StdioArgumentsCanonical,
         string RemoteUrl)
     {
         public static DiscoverConnectionTarget None { get; } = new(TransportType.Stdio, string.Empty, string.Empty, string.Empty);
@@ -338,7 +338,7 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
             return new DiscoverConnectionTarget(
                 profile.Transport,
                 (profile.StdioCommand ?? string.Empty).Trim(),
-                (profile.StdioArgs ?? string.Empty).Trim(),
+                StdioCommandLine.CanonicalizeArguments(profile.StdioArguments),
                 (profile.ServerUrl ?? string.Empty).Trim());
         }
     }

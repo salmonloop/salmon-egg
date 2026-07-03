@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
 namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
-internal sealed class ServerConfigurationYamlV1
+internal sealed class ServerConfigurationYaml
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
 
     public string UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow.ToString("O");
 
@@ -18,7 +19,7 @@ internal sealed class ServerConfigurationYamlV1
 
     public string StdioCommand { get; set; } = string.Empty;
 
-    public string StdioArgs { get; set; } = string.Empty;
+    public List<string> StdioArguments { get; set; } = new();
 
     public int ConnectionTimeoutSeconds { get; set; } = AcpConnectionTimeoutPolicy.DefaultSeconds;
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -53,7 +54,13 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     /// Stdio 命令行参数 (例如：--port 8080 或 user@host /opt/acp/bin/agent stdio)
     /// </summary>
     [ObservableProperty]
-    private string _stdioArgs = string.Empty;
+    private string _stdioArgumentsText = string.Empty;
+
+    public IReadOnlyList<string> StdioArguments
+    {
+        get => StdioCommandLine.ParseArgumentsText(StdioArgumentsText);
+        set => StdioArgumentsText = StdioCommandLine.FormatArgumentsText(value);
+    }
 
     /// <summary>
     /// WebSocket 或 HTTP SSE 的 URL
@@ -120,7 +127,10 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     {
         SelectedTransportType = defaultTransportType;
         StdioCommand = string.Empty;
-        StdioArgs = string.Empty;
+        StdioArgumentsText = string.Empty;
         RemoteUrl = string.Empty;
     }
+
+    partial void OnStdioArgumentsTextChanged(string value)
+        => OnPropertyChanged(nameof(StdioArguments));
 }

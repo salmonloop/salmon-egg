@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 
@@ -16,7 +17,7 @@ public interface ITransportFactory
     /// </summary>
     /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
     /// <param name="command">命令（仅用于 Stdio 传输）</param>
-    /// <param name="args">命令行参数（仅用于 Stdio 传输）</param>
+    /// <param name="arguments">命令行参数（仅用于 Stdio 传输）</param>
     /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
     /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
     /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
@@ -24,7 +25,7 @@ public interface ITransportFactory
     ITransport CreateTransport(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null);
 
     ITransport CreateTransport(ServerConfiguration configuration);

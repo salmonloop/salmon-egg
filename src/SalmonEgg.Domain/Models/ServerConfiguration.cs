@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace SalmonEgg.Domain.Models
 {
     /// <summary>
@@ -28,7 +30,7 @@ namespace SalmonEgg.Domain.Models
         /// <summary>
         /// Stdio 参数（仅当 Transport=Stdio 时使用）
         /// </summary>
-        public string StdioArgs { get; set; } = string.Empty;
+        public List<string> StdioArguments { get; set; } = new();
 
         /// <summary>
         /// 传输类型
@@ -73,7 +75,7 @@ namespace SalmonEgg.Domain.Models
                 if (Transport == TransportType.Stdio)
                 {
                     var command = (StdioCommand ?? string.Empty).Trim();
-                    var args = (StdioArgs ?? string.Empty).Trim();
+                    var args = StdioCommandLine.FormatArgumentsText(StdioArguments);
                     if (string.IsNullOrWhiteSpace(command))
                     {
                         return string.Empty;

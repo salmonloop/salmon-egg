@@ -53,13 +53,13 @@ SalmonEgg/
 
 ### 3.1 顶层字段
 每个 YAML 文件必须包含：
-- `schemaVersion`：整数，默认从 `1` 开始。
+- `schemaVersion`：整数，当前版本为 `2`。
 - `updatedAtUtc`：UTC 时间（ISO 8601）。
 
 ### 3.2 ServerConfiguration 文件示例
 `config/servers/agent-local.yaml`：
 ```yaml
-schema_version: 1
+schema_version: 2
 updated_at_utc: "2026-03-08T13:20:00Z"
 
 id: "agent-local"
@@ -77,14 +77,24 @@ authentication:
 SSH bridge 仍然必须使用同一个 `stdio` transport token，不允许新增 `ssh` transport：
 
 ```yaml
-schema_version: 1
+schema_version: 2
 updated_at_utc: "2026-04-17T09:20:00Z"
 
 id: "agent-ssh"
 name: "Remote Agent via SSH"
 transport: "stdio"
 stdio_command: "ssh"
-stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
+stdio_arguments:
+  - "-T"
+  - "-o"
+  - "BatchMode=yes"
+  - "-o"
+  - "RequestTTY=no"
+  - "-o"
+  - "LogLevel=ERROR"
+  - "user@host"
+  - "/opt/acp/bin/agent"
+  - "stdio"
 connection_timeout_seconds: 120
 authentication:
   mode: "none"

@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.GuiTests.Windows;
 
@@ -1880,7 +1881,7 @@ internal sealed class GuiAppDataScope : IDisposable
         var normalizedTransport = transport.Replace("'", "''", StringComparison.Ordinal);
         var lines = new List<string>
         {
-            "schema_version: 1",
+            "schema_version: 2",
             $"id: '{profileId}'",
             "name: 'GUI Mock ACP Harness'",
             $"transport: '{normalizedTransport}'",
@@ -1900,9 +1901,8 @@ internal sealed class GuiAppDataScope : IDisposable
             }
 
             var normalizedCommand = stdioCommand.Replace("'", "''", StringComparison.Ordinal);
-            var normalizedArgs = (stdioArgs ?? string.Empty).Replace("'", "''", StringComparison.Ordinal);
             lines.Insert(4, $"stdio_command: '{normalizedCommand}'");
-            lines.Insert(5, $"stdio_args: '{normalizedArgs}'");
+            lines.InsertRange(5, BuildStdioArgumentsYaml(stdioArgs));
         }
         else
         {
@@ -1916,6 +1916,15 @@ internal sealed class GuiAppDataScope : IDisposable
 
         lines.Add(string.Empty);
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static IEnumerable<string> BuildStdioArgumentsYaml(string? argumentsText)
+    {
+        yield return "stdio_arguments:";
+        foreach (var argument in StdioCommandLine.ParseArgumentsText(argumentsText))
+        {
+            yield return $"  - '{argument.Replace("'", "''", StringComparison.Ordinal)}'";
+        }
     }
 
     private static MockAcpHarnessScenario NormalizeMockAcpHarnessScenario(

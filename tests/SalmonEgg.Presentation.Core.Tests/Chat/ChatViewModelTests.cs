@@ -94,7 +94,7 @@ public partial class ChatViewModelTests
         transportFactory.Setup(factory => factory.CreateTransport(
                 It.IsAny<TransportType>(),
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
+                It.IsAny<IReadOnlyList<string>?>(),
                 It.IsAny<string?>()))
             .Returns(transport.Object);
         var messageParser = new Mock<IMessageParser>();
@@ -5527,7 +5527,7 @@ public partial class ChatViewModelTests
             Name = name,
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
 
     private sealed class ReplayLoadChatService : IChatService

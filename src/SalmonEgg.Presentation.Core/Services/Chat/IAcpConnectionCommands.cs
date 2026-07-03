@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Services.Chat;
@@ -111,6 +112,6 @@ public interface IAcpChatServiceFactory
     IChatService CreateChatService(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null);
 }

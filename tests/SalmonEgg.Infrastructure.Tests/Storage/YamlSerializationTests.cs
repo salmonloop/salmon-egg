@@ -30,25 +30,30 @@ public class YamlSerializationTests
     }
 
     [Fact]
-    public void Deserializer_ServerConfigurationYamlV1_DoesNotRegress()
+    public void Deserializer_ServerConfigurationYaml_DoesNotRegress()
     {
-        var yaml = @"schema_version: 1
+        var yaml = @"schema_version: 2
 id: test-id
 name: test-server
 transport: stdio
 stdio_command: my_cmd
+stdio_arguments:
+- --serve
+- --mode
+- plan
 connection_timeout_seconds: 15";
         var deserializer = YamlSerialization.CreateDeserializer();
 
-        var result = deserializer.Deserialize<ServerConfigurationYamlV1>(yaml);
+        var result = deserializer.Deserialize<ServerConfigurationYaml>(yaml);
 
         Assert.NotNull(result);
         Assert.Equal("test-id", result.Id);
         Assert.Equal("test-server", result.Name);
         Assert.Equal("stdio", result.Transport);
         Assert.Equal("my_cmd", result.StdioCommand);
+        Assert.Equal(["--serve", "--mode", "plan"], result.StdioArguments);
         Assert.Equal(15, result.ConnectionTimeoutSeconds);
-        Assert.Null(typeof(ServerConfigurationYamlV1).GetProperty("McpServers"));
+        Assert.Null(typeof(ServerConfigurationYaml).GetProperty("McpServers"));
     }
 
     [Fact]

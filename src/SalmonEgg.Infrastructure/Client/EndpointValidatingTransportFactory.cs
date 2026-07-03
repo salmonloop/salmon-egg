@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
@@ -21,7 +22,7 @@ public sealed class EndpointValidatingTransportFactory : ITransportFactory
     public ITransport CreateTransport(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
         if (transportType is TransportType.WebSocket or TransportType.HttpSse)
@@ -36,7 +37,7 @@ public sealed class EndpointValidatingTransportFactory : ITransportFactory
             }
         }
 
-        return _inner.CreateTransport(transportType, command, args, url);
+        return _inner.CreateTransport(transportType, command, arguments, url);
     }
 
     public ITransport CreateTransport(ServerConfiguration configuration)

@@ -50,12 +50,22 @@
 
 配置文件格式示例：
 ```yaml
-schema_version: 1
+schema_version: 2
 id: "server-stdio-ssh"
 name: "远程 SSH Agent"
 transport: "stdio"
 stdio_command: "ssh"
-stdio_args: "-T -o BatchMode=yes -o RequestTTY=no -o LogLevel=ERROR user@host /opt/acp/bin/agent stdio"
+stdio_arguments:
+  - "-T"
+  - "-o"
+  - "BatchMode=yes"
+  - "-o"
+  - "RequestTTY=no"
+  - "-o"
+  - "LogLevel=ERROR"
+  - "user@host"
+  - "/opt/acp/bin/agent"
+  - "stdio"
 connection_timeout_seconds: 120
 authentication:
   mode: "none"

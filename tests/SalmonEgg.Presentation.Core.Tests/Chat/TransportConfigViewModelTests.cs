@@ -27,7 +27,7 @@ public sealed class TransportConfigViewModelTests
         {
             SelectedTransportType = TransportType.Stdio,
             StdioCommand = "ssh",
-            StdioArgs = "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio"
+            StdioArgumentsText = "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio"
         };
 
         var result = viewModel.Validate();

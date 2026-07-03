@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 
@@ -16,9 +17,9 @@ public sealed class ChatServiceFactoryAdapter : IAcpChatServiceFactory
     public IChatService CreateChatService(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null)
-        => _inner.CreateChatService(transportType, command, args, url);
+        => _inner.CreateChatService(transportType, command, arguments, url);
 
     public IChatService CreateChatService(ServerConfiguration configuration)
         => _inner.CreateChatService(configuration);

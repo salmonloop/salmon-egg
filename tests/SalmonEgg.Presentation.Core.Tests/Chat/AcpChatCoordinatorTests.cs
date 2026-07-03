@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,7 +94,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Local Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -108,7 +109,7 @@ public sealed class AcpChatCoordinatorTests
 
         Assert.Equal(TransportType.Stdio, transport.SelectedTransportType);
         Assert.Equal("agent.exe", transport.StdioCommand);
-        Assert.Equal("--serve", transport.StdioArgs);
+        Assert.Equal(["--serve"], transport.StdioArguments);
         Assert.Equal(string.Empty, transport.RemoteUrl);
         Assert.IsType<AcpChatServiceAdapter>(sink.CurrentChatService);
         Assert.Equal("profile-1", sink.SelectedProfileId);
@@ -160,7 +161,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Local Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -212,7 +213,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Local Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -246,7 +247,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Local Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -287,7 +288,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 1",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-1.exe",
-            StdioArgs = "--serve-1"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-1").ToList()
         };
         var profile2 = new ServerConfiguration
         {
@@ -295,7 +296,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 2",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-2.exe",
-            StdioArgs = "--serve-2"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-2").ToList()
         };
         SetupProfileChatService(factory, profile1, profile1Service.Object);
         SetupProfileChatService(factory, profile2, profile2Service.Object);
@@ -387,7 +388,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 1",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-1.exe",
-            StdioArgs = "--serve-1"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-1").ToList()
         };
         SetupProfileChatService(factory, profile, profileService.Object);
 
@@ -439,7 +440,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -545,7 +546,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -580,7 +581,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "  agent.exe  ",
-            StdioArgs = " --serve   --mode   plan "
+            StdioArguments = StdioCommandLine.ParseArgumentsText(" --serve   --mode   plan ").ToList()
         };
         var normalizedProfile = new ServerConfiguration
         {
@@ -588,7 +589,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve --mode plan"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve --mode plan").ToList()
         };
         SetupProfileChatService(factory, profileWithSpacing, service.Object);
 
@@ -643,7 +644,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent Old",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-old.exe",
-            StdioArgs = "--serve-old"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-old").ToList()
         };
         var newProfile = new ServerConfiguration
         {
@@ -651,7 +652,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent New",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-new.exe",
-            StdioArgs = "--serve-new"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-new").ToList()
         };
         SetupProfileChatService(factory, oldProfile, firstService.Object);
         SetupProfileChatService(factory, newProfile, secondService.Object);
@@ -705,7 +706,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         factory
             .SetupSequence(x => x.CreateChatService(It.Is<ServerConfiguration>(candidate =>
@@ -749,7 +750,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 1",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         SetupProfileChatService(factory, profile, service.Object);
 
@@ -803,7 +804,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 1",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-1.exe",
-            StdioArgs = "--serve-1"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-1").ToList()
         };
         var profile2 = new ServerConfiguration
         {
@@ -811,7 +812,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent 2",
             Transport = TransportType.Stdio,
             StdioCommand = "agent-2.exe",
-            StdioArgs = "--serve-2"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve-2").ToList()
         };
         SetupProfileChatService(factory, profile1, staleBackgroundService.Object);
         SetupProfileChatService(factory, profile2, activeService.Object);
@@ -1719,7 +1720,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Profile",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
         var service = CreateChatService(new AgentCapabilities(loadSession: true));
@@ -1761,7 +1762,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Profile",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
         var service = CreateChatService(new AgentCapabilities(loadSession: true));
@@ -2469,7 +2470,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent B",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
 
@@ -2499,7 +2500,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
 
@@ -2538,7 +2539,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var firstTransport = new FakeTransportConfiguration();
         var secondTransport = new FakeTransportConfiguration();
@@ -2590,7 +2591,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
 
@@ -2642,7 +2643,7 @@ public sealed class AcpChatCoordinatorTests
             x => x.CreateChatService(
                 It.IsAny<TransportType>(),
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
+                It.IsAny<IReadOnlyList<string>?>(),
                 It.IsAny<string?>()),
             Times.Never);
     }
@@ -2674,7 +2675,7 @@ public sealed class AcpChatCoordinatorTests
             x => x.CreateChatService(
                 It.IsAny<TransportType>(),
                 It.IsAny<string?>(),
-                It.IsAny<string?>(),
+                It.IsAny<IReadOnlyList<string>?>(),
                 It.IsAny<string?>()),
             Times.Never);
     }
@@ -2699,7 +2700,7 @@ public sealed class AcpChatCoordinatorTests
             Name = "Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent.exe",
-            StdioArgs = "--serve"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
         };
         var transport = new FakeTransportConfiguration();
 
@@ -2780,7 +2781,7 @@ public sealed class AcpChatCoordinatorTests
         => string.Equals(candidate.Id, expected.Id, StringComparison.Ordinal)
             && candidate.Transport == expected.Transport
             && string.Equals(candidate.StdioCommand, expected.StdioCommand, StringComparison.Ordinal)
-            && string.Equals(candidate.StdioArgs, expected.StdioArgs, StringComparison.Ordinal)
+            && candidate.StdioArguments.SequenceEqual(expected.StdioArguments)
             && string.Equals(candidate.ServerUrl, expected.ServerUrl, StringComparison.Ordinal)
             && candidate.ConnectionTimeout == expected.ConnectionTimeout;
 
@@ -2847,7 +2848,7 @@ public sealed class AcpChatCoordinatorTests
 
         public TransportType SelectedTransportType { get; set; } = TransportType.WebSocket;
         public string StdioCommand { get; set; } = string.Empty;
-        public string StdioArgs { get; set; } = string.Empty;
+        public IReadOnlyList<string> StdioArguments { get; set; } = Array.Empty<string>();
         public string RemoteUrl { get; set; } = string.Empty;
         public bool IsValid { get; set; } = true;
         public string? ValidationError { get; set; }

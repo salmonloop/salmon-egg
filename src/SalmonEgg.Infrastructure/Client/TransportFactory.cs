@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Serilog;
 using SalmonEgg.Domain.Interfaces;
@@ -41,7 +42,7 @@ public class TransportFactory : ITransportFactory
     /// </summary>
     /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
     /// <param name="command">命令（仅用于 Stdio 传输）</param>
-    /// <param name="args">命令行参数（仅用于 Stdio 传输）</param>
+    /// <param name="arguments">命令行参数（仅用于 Stdio 传输）</param>
     /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
     /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
     /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
@@ -49,13 +50,13 @@ public class TransportFactory : ITransportFactory
     public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
         _logger.Information("正在创建传输实例：{TransportType}", transportType);
         var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
 
-        return CreateTransportCore(transportType, command, args, url, webSocketConnectTimeout);
+        return CreateTransportCore(transportType, command, arguments, url, webSocketConnectTimeout);
     }
 
     public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration configuration)
@@ -71,7 +72,7 @@ public class TransportFactory : ITransportFactory
         return CreateTransportCore(
             configuration.Transport,
             configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
-            configuration.Transport == TransportType.Stdio ? configuration.StdioArgs : null,
+            configuration.Transport == TransportType.Stdio ? configuration.StdioArguments : null,
             configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
             webSocketConnectTimeout,
             configuration.Proxy);
@@ -80,7 +81,7 @@ public class TransportFactory : ITransportFactory
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
         TransportType transportType,
         string? command,
-        string? args,
+        IReadOnlyList<string>? arguments,
         string? url,
         TimeSpan webSocketConnectTimeout,
         ProxyConfig? proxy = null)
@@ -89,7 +90,7 @@ public class TransportFactory : ITransportFactory
 
         return transportType switch
         {
-            TransportType.Stdio => CreateStdioTransport(command, args),
+            TransportType.Stdio => CreateStdioTransport(command, arguments),
             TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
             TransportType.HttpSse => CreateHttpSseTransport(url),
             _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
@@ -100,12 +101,12 @@ public class TransportFactory : ITransportFactory
     /// 创建 Stdio 传输实例。
     /// </summary>
     /// <param name="command">命令</param>
-    /// <param name="args">命令行参数</param>
+    /// <param name="arguments">命令行参数</param>
     /// <returns>Stdio 传输实例</returns>
     /// <exception cref="ArgumentException">当命令为空时抛出</exception>
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(
         string? command,
-        string? args)
+        IReadOnlyList<string>? arguments)
     {
         if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
@@ -119,63 +120,10 @@ public class TransportFactory : ITransportFactory
             throw new ArgumentException("Stdio 传输必须指定命令", nameof(command));
         }
 
-        _logger.Information("创建 Stdio 传输：Command={Command}, Args={Args}", command, args);
-
-        // Stdio remains a subprocess transport even when the subprocess is a bridge such as ssh.
-        var argsArray = ParseCommandLineArguments(args);
+        var argsArray = arguments?.ToArray() ?? Array.Empty<string>();
+        _logger.Information("创建 Stdio 传输：Command={Command}, ArgsCount={ArgsCount}", command, argsArray.Length);
 
         return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
-    }
-
-    private static string[] ParseCommandLineArguments(string? args)
-    {
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            return Array.Empty<string>();
-        }
-
-        var results = new List<string>();
-        var current = new StringBuilder();
-        char? activeQuote = null;
-
-        foreach (var character in args)
-        {
-            if ((character == '"' || character == '\''))
-            {
-                if (activeQuote == character)
-                {
-                    activeQuote = null;
-                    continue;
-                }
-
-                if (activeQuote == null)
-                {
-                    activeQuote = character;
-                    continue;
-                }
-            }
-
-            if (char.IsWhiteSpace(character) && activeQuote == null)
-            {
-                if (current.Length == 0)
-                {
-                    continue;
-                }
-
-                results.Add(current.ToString());
-                current.Clear();
-                continue;
-            }
-
-            current.Append(character);
-        }
-
-        if (current.Length > 0)
-        {
-            results.Add(current.ToString());
-        }
-
-        return results.ToArray();
     }
 
     /// <summary>

@@ -37,7 +37,7 @@ public partial class ConfigurationEditorViewModel(
     private string _stdioCommand = string.Empty;
 
     [ObservableProperty]
-    private string _stdioArgs = string.Empty;
+    private string _stdioArgumentsText = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStdio))]
@@ -95,14 +95,14 @@ public partial class ConfigurationEditorViewModel(
             Transport = defaultTransport,
             ServerUrl = string.Empty,
             StdioCommand = string.Empty,
-            StdioArgs = string.Empty,
+            StdioArguments = new(),
             ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
         };
 
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
-        StdioArgs = Configuration.StdioArgs;
+        StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
@@ -156,7 +156,7 @@ public partial class ConfigurationEditorViewModel(
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
-        StdioArgs = Configuration.StdioArgs;
+        StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = transport;
         Token = Configuration.Authentication?.Token ?? string.Empty;
         ApiKey = Configuration.Authentication?.ApiKey ?? string.Empty;
@@ -193,7 +193,7 @@ public partial class ConfigurationEditorViewModel(
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
-        StdioArgs = Configuration.StdioArgs;
+        StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
@@ -220,14 +220,14 @@ public partial class ConfigurationEditorViewModel(
             Transport = transport,
             ServerUrl = transport == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
             StdioCommand = transport == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
-            StdioArgs = transport == TransportType.Stdio ? (transportConfig.StdioArgs ?? string.Empty) : string.Empty,
+            StdioArguments = transport == TransportType.Stdio ? transportConfig.StdioArguments.ToList() : new(),
             ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
         };
 
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
         StdioCommand = Configuration.StdioCommand;
-        StdioArgs = Configuration.StdioArgs;
+        StdioArgumentsText = StdioCommandLine.FormatArgumentsText(Configuration.StdioArguments);
         Transport = Configuration.Transport;
         SelectedTransportOption = TransportOptions.FirstOrDefault(o => o.Type == Transport) ?? TransportOptions.FirstOrDefault();
         Token = string.Empty;
@@ -251,13 +251,13 @@ public partial class ConfigurationEditorViewModel(
             {
                 Configuration.ServerUrl = string.Empty;
                 Configuration.StdioCommand = StdioCommand;
-                Configuration.StdioArgs = StdioArgs;
+                Configuration.StdioArguments = StdioCommandLine.ParseArgumentsText(StdioArgumentsText).ToList();
             }
             else
             {
                 Configuration.ServerUrl = ServerUrl;
                 Configuration.StdioCommand = string.Empty;
-                Configuration.StdioArgs = string.Empty;
+                Configuration.StdioArguments = new();
             }
 
             Configuration.ConnectionTimeout = ConnectionTimeout;
@@ -286,6 +286,11 @@ public partial class ConfigurationEditorViewModel(
             }
 
             await _configurationService.SaveConfigurationAsync(Configuration);
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            Logger.LogError(ex, "保存配置失败：{Reason}", ex.Reason);
+            SetError("保存配置失败：" + ex.UserMessage);
         }
         catch (Exception ex)
         {

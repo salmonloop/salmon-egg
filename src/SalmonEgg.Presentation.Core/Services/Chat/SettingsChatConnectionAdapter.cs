@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
@@ -84,10 +85,10 @@ internal sealed class SettingsTransportConfigurationAdapter : ISettingsAcpTransp
         set => _transportConfig.StdioCommand = value;
     }
 
-    public string StdioArgs
+    public IReadOnlyList<string> StdioArguments
     {
-        get => _transportConfig.StdioArgs;
-        set => _transportConfig.StdioArgs = value;
+        get => _transportConfig.StdioArguments;
+        set => _transportConfig.StdioArguments = value;
     }
 
     public string RemoteUrl

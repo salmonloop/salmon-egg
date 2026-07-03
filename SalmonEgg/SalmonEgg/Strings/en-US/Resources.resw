@@ -648,10 +648,10 @@
   <data name="Conn_StdioCommand.PlaceholderText" xml:space="preserve">
     <value>e.g. python, node</value>
   </data>
-  <data name="Conn_StdioArgs.Header" xml:space="preserve">
+  <data name="Conn_StdioArguments.Header" xml:space="preserve">
     <value>Arguments</value>
   </data>
-  <data name="Conn_StdioArgs.PlaceholderText" xml:space="preserve">
+  <data name="Conn_StdioArguments.PlaceholderText" xml:space="preserve">
     <value>e.g. server.py</value>
   </data>
   <data name="Conn_RemoteUrl.Header" xml:space="preserve">

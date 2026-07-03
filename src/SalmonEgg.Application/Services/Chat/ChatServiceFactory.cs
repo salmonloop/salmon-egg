@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Serilog;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Models;
@@ -46,20 +47,20 @@ public class ChatServiceFactory
     /// </summary>
     /// <param name="transportType">传输类型</param>
     /// <param name="command">命令（仅用于 Stdio）</param>
-    /// <param name="args">命令行参数（仅用于 Stdio）</param>
+    /// <param name="arguments">命令行参数（仅用于 Stdio）</param>
     /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse）</param>
     /// <returns>新创建的 <see cref="IChatService"/> 实例</returns>
     /// <exception cref="InvalidOperationException">当必要参数缺失时抛出</exception>
     public IChatService CreateChatService(
         TransportType transportType,
         string? command = null,
-        string? args = null,
+        IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
         _logger?.Information("正在创建新的 ChatService 实例：TransportType={TransportType}", transportType);
 
         // 1. 创建传输层
-        var transport = _transportFactory.CreateTransport(transportType, command, args, url);
+        var transport = _transportFactory.CreateTransport(transportType, command, arguments, url);
 
         // 2. 创建 ACP 客户端
         var acpClient = _acpClientFactory.CreateClient(transport);

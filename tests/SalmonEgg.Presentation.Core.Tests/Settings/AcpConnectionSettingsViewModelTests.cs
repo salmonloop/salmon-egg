@@ -1567,7 +1567,7 @@ public sealed class AcpConnectionSettingsViewModelTests
     {
         private TransportType _selectedTransportType = TransportType.Stdio;
         private string _stdioCommand = string.Empty;
-        private string _stdioArgs = string.Empty;
+        private IReadOnlyList<string> _stdioArguments = Array.Empty<string>();
         private string _remoteUrl = string.Empty;
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -1584,10 +1584,10 @@ public sealed class AcpConnectionSettingsViewModelTests
             set => SetField(ref _stdioCommand, value, nameof(StdioCommand));
         }
 
-        public string StdioArgs
+        public IReadOnlyList<string> StdioArguments
         {
-            get => _stdioArgs;
-            set => SetField(ref _stdioArgs, value, nameof(StdioArgs));
+            get => _stdioArguments;
+            set => SetField(ref _stdioArguments, value, nameof(StdioArguments));
         }
 
         public string RemoteUrl

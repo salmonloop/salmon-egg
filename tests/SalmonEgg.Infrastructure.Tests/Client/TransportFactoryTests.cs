@@ -169,7 +169,7 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory(supportsStdioTransport: true);
 
-        var transport = factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--mode test");
+        var transport = factory.CreateTransport(TransportType.Stdio, command: "agent", arguments: ["--mode", "test"]);
 
         Assert.IsType<StdioTransport>(transport);
     }
@@ -182,7 +182,7 @@ public sealed class TransportFactoryTests
         var transport = factory.CreateTransport(
             TransportType.Stdio,
             command: "ssh",
-            args: "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio");
+            arguments: ["-T", "-o", "BatchMode=yes", "user@host", "/opt/acp/bin/agent", "stdio"]);
 
         Assert.IsType<StdioTransport>(transport);
     }
@@ -206,7 +206,7 @@ public sealed class TransportFactoryTests
             var transport = factory.CreateTransport(
                 TransportType.Stdio,
                 command: "powershell.exe",
-                args: $"-NoLogo -NoProfile -File \"{scriptPath}\"");
+                arguments: ["-NoLogo", "-NoProfile", "-File", scriptPath]);
 
             var connected = await transport.ConnectAsync();
             Assert.True(
@@ -233,7 +233,7 @@ public sealed class TransportFactoryTests
         var factory = CreateFactory(supportsStdioTransport: true);
 
         Assert.Throws<ArgumentException>(() =>
-            factory.CreateTransport(TransportType.Stdio, command: null, args: null));
+            factory.CreateTransport(TransportType.Stdio, command: null, arguments: null));
     }
 
     [Fact]
@@ -242,7 +242,7 @@ public sealed class TransportFactoryTests
         var factory = CreateFactory(supportsStdioTransport: false);
 
         Assert.Throws<NotSupportedException>(() =>
-            factory.CreateTransport(TransportType.Stdio, command: "agent", args: "--stdio"));
+            factory.CreateTransport(TransportType.Stdio, command: "agent", arguments: ["--stdio"]));
     }
 
     [Fact]

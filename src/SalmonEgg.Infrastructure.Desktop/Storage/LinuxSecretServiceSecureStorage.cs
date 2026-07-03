@@ -48,7 +48,7 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
 
         if (result.ExitCode != 0)
         {
-            throw new InvalidOperationException(CreateUnavailableMessage(result));
+            throw new SecureStorageUnavailableException(CreateUnavailableMessage(result));
         }
     }
 

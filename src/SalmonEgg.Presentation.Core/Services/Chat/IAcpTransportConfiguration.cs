@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel;
 using SalmonEgg.Domain.Models;
 
@@ -13,7 +14,7 @@ public interface IAcpTransportConfiguration : INotifyPropertyChanged
 
     string StdioCommand { get; set; }
 
-    string StdioArgs { get; set; }
+    IReadOnlyList<string> StdioArguments { get; set; }
 
     string RemoteUrl { get; set; }
 

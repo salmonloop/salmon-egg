@@ -53,7 +53,7 @@ public sealed class LinuxSecretServiceSecureStorageTests
         var runner = new RecordingSecretToolRunner(new LinuxSecretServiceSecureStorage.SecretToolResult(127, string.Empty, "missing"));
         var storage = new LinuxSecretServiceSecureStorage(runner);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<SecureStorageUnavailableException>(
             () => storage.SaveAsync("salmonegg/config/profile/token", "secret-token"));
     }
 

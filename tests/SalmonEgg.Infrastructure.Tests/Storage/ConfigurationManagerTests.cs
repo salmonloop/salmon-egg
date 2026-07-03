@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
 
@@ -109,7 +110,7 @@ public sealed class ConfigurationManagerTests : IDisposable
             Name = "SSH Bridge",
             Transport = TransportType.Stdio,
             StdioCommand = "ssh",
-            StdioArgs = "-T -o BatchMode=yes user@host /opt/acp/bin/agent stdio",
+            StdioArguments = ["-T", "-o", "BatchMode=yes", "user@host", "/opt/acp/bin/agent", "stdio"],
             ConnectionTimeout = 10
         };
 
@@ -118,7 +119,56 @@ public sealed class ConfigurationManagerTests : IDisposable
         var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
         Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
         Assert.Contains("stdio_command: ssh", yaml, StringComparison.Ordinal);
-        Assert.Contains("stdio_args: -T -o BatchMode=yes user@host /opt/acp/bin/agent stdio", yaml, StringComparison.Ordinal);
+        Assert.Contains("stdio_arguments:", yaml, StringComparison.Ordinal);
+        Assert.Contains("- -T", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("stdio_args:", yaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WithLegacyStdioArgsField_DoesNotHydrateArguments()
+    {
+        var configId = "legacy-stdio-args-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 2
+            id: legacy-stdio-args-001
+            name: Legacy Args
+            transport: stdio
+            stdio_command: agent
+            stdio_args: --serve
+            connection_timeout_seconds: 10
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Empty(loaded!.StdioArguments);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenSecureStorageUnavailable_ThrowsConfigurationPersistenceException()
+    {
+        var config = CreateTestConfiguration("secret-service-unavailable-001");
+        config.Authentication = new AuthenticationConfig { Token = "secret-token" };
+        var manager = new ConfigurationManager(
+            new FailingSecureStorage(),
+            new FileSystemAppFileStore(),
+            new AppDataService(),
+            NullLogger<ConfigurationManager>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.SaveConfigurationAsync(config));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.SecureStorageUnavailable, ex.Reason);
+        Assert.Contains("Secret Service", ex.UserMessage, StringComparison.Ordinal);
+        Assert.False(File.Exists(GetServerYamlPath(config.Id)));
     }
 
     [Fact]
@@ -350,4 +400,16 @@ public sealed class ConfigurationManagerTests : IDisposable
             Transport = TransportType.WebSocket,
             ConnectionTimeout = 10
         };
+
+    private sealed class FailingSecureStorage : ISecureStorage
+    {
+        public Task SaveAsync(string key, string value)
+            => throw new SecureStorageUnavailableException("Linux Secret Service is unavailable.");
+
+        public Task<string?> LoadAsync(string key)
+            => Task.FromResult<string?>(null);
+
+        public Task DeleteAsync(string key)
+            => Task.CompletedTask;
+    }
 }

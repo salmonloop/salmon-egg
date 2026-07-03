@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -83,7 +85,7 @@ public sealed class ConfigurationEditorViewModelTests
             Name = "Local Agent",
             Transport = TransportType.Stdio,
             StdioCommand = "agent",
-            StdioArgs = "--stdio"
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--stdio").ToList()
         });
 
         Assert.Equal(TransportType.WebSocket, viewModel.Transport);
@@ -169,6 +171,37 @@ public sealed class ConfigurationEditorViewModelTests
                 && config.Proxy.Mode == ProxyMode.Custom
                 && config.Proxy.ProxyUrl == "http://proxy.example.com:8080")),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenSecureStorageUnavailable_ShouldExposeActionableError()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(x => x.SaveConfigurationAsync(It.IsAny<ServerConfiguration>()))
+            .ThrowsAsync(new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
+                "Linux Secret Service is unavailable. Install libsecret-tools and ensure a Secret Service provider is running."));
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            logger.Object);
+
+        viewModel.LoadBlankConfiguration();
+        viewModel.Name = "Remote Agent";
+        viewModel.Transport = TransportType.WebSocket;
+        viewModel.ServerUrl = "ws://example.com/acp/ws";
+        viewModel.Token = "secret-token";
+
+        await viewModel.SaveConfigurationAsync();
+
+        Assert.True(viewModel.HasError);
+        Assert.Contains("Linux Secret Service is unavailable", viewModel.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("libsecret-tools", viewModel.ErrorMessage, StringComparison.Ordinal);
     }
 
     private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)

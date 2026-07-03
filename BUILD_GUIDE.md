@@ -127,6 +127,16 @@ run.bat
 
 Headless 环境没有 EWMH-compliant window manager 或 DBus desktop portal 时，Uno 可能输出窗口状态/主题监听警告；这类警告不等价于应用启动失败。需要验证本地交互终端时，还必须安装 WebKitGTK / JavaScriptCore 运行库。
 
+#### Linux Desktop runtime gate
+发布 Linux desktop 产物后，使用当前构建产物做运行时门禁：
+
+```bash
+./build.sh desktop
+scripts/gates/verify-linux-desktop-runtime.sh publish/linux-desktop
+```
+
+该 gate 会检查 `publish/linux-desktop/SalmonEgg`、`xvfb-run`、WebKitGTK、JavaScriptCoreGTK，并在 Xvfb 下启动本次 publish 产物。缺少运行库、Skia/freetype native crash、`DllNotFoundException`、`EntryPointNotFoundException` 或未处理异常都会失败。纯 headless X11 缺少 EWMH window manager 时的窗口状态警告不作为应用启动失败处理。
+
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
 
