@@ -108,7 +108,12 @@ public sealed class ConfigurationManager : IConfigurationService
             return null;
         }
 
-        var config = FromYaml(yamlModel, fallbackId: id);
+        if (string.IsNullOrWhiteSpace(yamlModel.Id))
+        {
+            return null;
+        }
+
+        var config = FromYaml(yamlModel);
         await HydrateSecretsAsync(config, yamlModel.Authentication?.Mode).ConfigureAwait(false);
         return config;
     }
@@ -152,7 +157,12 @@ public sealed class ConfigurationManager : IConfigurationService
                         continue;
                     }
 
-                    var config = FromYaml(yamlModel, fallbackId: System.IO.Path.GetFileNameWithoutExtension(path));
+                    if (string.IsNullOrWhiteSpace(yamlModel.Id))
+                    {
+                        continue;
+                    }
+
+                    var config = FromYaml(yamlModel);
                     result.Add(config);
                 }
                 catch (Exception)
@@ -212,11 +222,11 @@ public sealed class ConfigurationManager : IConfigurationService
         };
     }
 
-    private static ServerConfiguration FromYaml(ServerConfigurationYaml yamlModel, string fallbackId)
+    private static ServerConfiguration FromYaml(ServerConfigurationYaml yamlModel)
     {
         var config = new ServerConfiguration
         {
-            Id = string.IsNullOrWhiteSpace(yamlModel.Id) ? fallbackId : yamlModel.Id,
+            Id = yamlModel.Id!,
             Name = yamlModel.Name ?? string.Empty,
             ServerUrl = yamlModel.ServerUrl ?? string.Empty,
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,

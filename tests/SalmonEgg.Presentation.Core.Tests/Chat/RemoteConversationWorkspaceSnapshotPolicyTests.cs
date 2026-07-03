@@ -57,14 +57,6 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
         bool expected)
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtimeState = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-1",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
         var snapshot = CreateSnapshot();
 
         var result = RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterInterruptedHydration(
@@ -95,14 +87,6 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
     public void CanRestoreCachedTranscriptAfterInterruptedHydration_WhenRemoteWarmRuntimeConnectionChanged_ReturnsFalse()
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var runtimeState = new ConversationRuntimeSlice(
-            "conv-1",
-            ConversationRuntimePhase.Warm,
-            "conn-old",
-            "remote-1",
-            "profile-1",
-            "SessionLoadCompleted",
-            DateTime.UtcNow);
         var snapshot = CreateSnapshot();
 
         var result = RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterInterruptedHydration(
@@ -110,6 +94,21 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             snapshot,
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection,
             currentConnectionInstanceId: "conn-new");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void CanRestoreCachedTranscriptAfterInterruptedHydration_WhenCurrentConnectionIsUnknown_ReturnsFalse()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var snapshot = CreateSnapshot();
+
+        var result = RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterInterruptedHydration(
+            binding,
+            snapshot,
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection,
+            currentConnectionInstanceId: null);
 
         Assert.False(result);
     }
@@ -140,6 +139,21 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             snapshot,
             ConversationWorkspaceSnapshotOrigin.Restored,
             currentConnectionInstanceId: "conn-1");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void CanRestoreCachedTranscriptAfterAuthoritativeHydration_WhenCurrentConnectionIsUnknown_ReturnsFalse()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var snapshot = CreateSnapshot();
+
+        var result = RemoteConversationWorkspaceSnapshotPolicy.CanRestoreCachedTranscriptAfterAuthoritativeHydration(
+            binding,
+            snapshot,
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection,
+            currentConnectionInstanceId: null);
 
         Assert.False(result);
     }

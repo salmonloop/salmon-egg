@@ -124,17 +124,17 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadConfigurationAsync_WithLegacyStdioArgsField_DoesNotHydrateArguments()
+    public async Task LoadConfigurationAsync_WithNonCanonicalStdioArgsField_DoesNotHydrateArguments()
     {
-        var configId = "legacy-stdio-args-001";
+        var configId = "noncanonical-stdio-args-001";
         var path = GetServerYamlPath(configId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
             """
             schema_version: 2
-            id: legacy-stdio-args-001
-            name: Legacy Args
+            id: noncanonical-stdio-args-001
+            name: Noncanonical Args
             transport: stdio
             stdio_command: agent
             stdio_args: --serve
@@ -214,6 +214,31 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WhenYamlIdIsMissing_ReturnsNull()
+    {
+        var configId = "missing-id-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 2
+            name: Missing Id
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.Null(loaded);
+    }
+
+    [Fact]
     public async Task LoadConfigurationAsync_WhenConfigurationFileCannotBeRead_ReturnsNull()
     {
         var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
@@ -239,6 +264,33 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.Contains(configs, c => c.Id == "test-list-001");
         Assert.Contains(configs, c => c.Id == "test-list-002");
         Assert.Contains(configs, c => c.Id == "test-list-003");
+    }
+
+    [Fact]
+    public async Task ListConfigurationsAsync_WhenYamlIdIsMissing_SkipsConfiguration()
+    {
+        var validConfig = CreateTestConfiguration("valid-list-id-001");
+        await _configManager.SaveConfigurationAsync(validConfig);
+        var missingIdPath = GetServerYamlPath("missing-list-id-001");
+        Directory.CreateDirectory(Path.GetDirectoryName(missingIdPath)!);
+        await File.WriteAllTextAsync(
+            missingIdPath,
+            """
+            schema_version: 2
+            name: Missing List Id
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """);
+
+        var configs = (await _configManager.ListConfigurationsAsync()).ToList();
+
+        Assert.Single(configs);
+        Assert.Equal(validConfig.Id, configs[0].Id);
     }
 
     [Fact]

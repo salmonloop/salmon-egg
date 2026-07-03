@@ -67,8 +67,8 @@ internal static class RemoteConversationWorkspaceSnapshotPolicy
         string? currentConnectionInstanceId)
         => origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
             && !string.IsNullOrWhiteSpace(snapshot.ConnectionInstanceId)
-            && (string.IsNullOrWhiteSpace(currentConnectionInstanceId)
-                || string.Equals(snapshot.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal));
+            && !string.IsNullOrWhiteSpace(currentConnectionInstanceId)
+            && string.Equals(snapshot.ConnectionInstanceId, currentConnectionInstanceId, StringComparison.Ordinal);
 }
 
 internal static class ConversationProjectionRestoreConnectionPolicy
