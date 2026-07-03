@@ -240,28 +240,6 @@ public sealed class AcpEventAdapter
         }
     }
 
-    public bool MarkHydrated()
-    {
-        long hydrationAttemptId;
-        lock (_gate)
-        {
-            hydrationAttemptId = _hydrationAttemptId;
-        }
-
-        return MarkHydrated(hydrationAttemptId, lowTrust: false);
-    }
-
-    public bool MarkHydrated(bool lowTrust, string? reason = null)
-    {
-        long hydrationAttemptId;
-        lock (_gate)
-        {
-            hydrationAttemptId = _hydrationAttemptId;
-        }
-
-        return MarkHydrated(hydrationAttemptId, lowTrust, reason);
-    }
-
     public bool MarkHydrated(long hydrationAttemptId, bool lowTrust, string? reason = null)
     {
         long? drainAttemptId = null;
@@ -355,6 +333,51 @@ public sealed class AcpEventAdapter
         }
 
         return true;
+    }
+
+    public void ReleaseUnscopedBufferedUpdates(bool lowTrust = false, string? reason = null)
+    {
+        var scheduleGlobalDrain = false;
+        var bufferedCount = 0;
+        var logLowTrustRelease = false;
+
+        lock (_gate)
+        {
+            bufferedCount = _buffer.Count;
+            _isHydrated = true;
+            _isReplayProjectionReleased = false;
+            _isSuppressing = false;
+            _resyncRaised = false;
+
+            if (lowTrust && bufferedCount > 0 && !_lowTrustReleaseLogged)
+            {
+                _lowTrustReleaseLogged = true;
+                logLowTrustRelease = true;
+            }
+            else if (!lowTrust)
+            {
+                _lowTrustReleaseLogged = false;
+            }
+
+            if (_buffer.Count > 0 && !_drainScheduled)
+            {
+                _drainScheduled = true;
+                scheduleGlobalDrain = true;
+            }
+        }
+
+        if (logLowTrustRelease)
+        {
+            _logger?.LogWarning(
+                "Releasing unscoped ACP session updates without hydration gate. bufferedCount={BufferedCount} reason={Reason}",
+                bufferedCount,
+                string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
+        }
+
+        if (scheduleGlobalDrain)
+        {
+            PostDrain();
+        }
     }
 
     public Task WaitForDrainIdleAsync(CancellationToken cancellationToken = default)
@@ -457,15 +480,30 @@ public sealed class AcpEventAdapter
         return hydrationAttemptId;
     }
 
-    public void SuppressBufferedUpdates(string? reason = null)
+    public void SuppressAllBufferedUpdates(string? reason = null)
     {
-        long hydrationAttemptId;
+        var droppedBufferedCount = 0;
+        var drainIdles = new List<TaskCompletionSource<object?>>();
         lock (_gate)
         {
-            hydrationAttemptId = _hydrationAttemptId;
+            droppedBufferedCount = _buffer.Count + CountScopedBufferedUpdatesLocked();
+            ClearAllHydrationScopesLocked(drainIdles, markCompleted: true);
+            _buffer.Clear();
+            _isHydrated = false;
+            _isReplayProjectionReleased = false;
+            _isSuppressing = true;
+            _resyncRaised = false;
+            _lowTrustReleaseLogged = false;
+            _drainScheduled = false;
+            AddDrainIdleIfPresent(drainIdles, _drainIdleTcs);
+            _drainIdleTcs = null;
         }
 
-        SuppressBufferedUpdates(hydrationAttemptId, reason);
+        _logger?.LogInformation(
+            "ACP buffered session updates suppressed. droppedBufferedCount={DroppedBufferedCount} reason={Reason}",
+            droppedBufferedCount,
+            string.IsNullOrWhiteSpace(reason) ? "Unknown" : reason);
+        CompleteDrainIdles(drainIdles);
     }
 
     public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)

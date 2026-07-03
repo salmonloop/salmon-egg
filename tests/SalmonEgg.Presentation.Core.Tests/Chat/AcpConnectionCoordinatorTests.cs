@@ -421,7 +421,7 @@ public sealed class AcpConnectionCoordinatorTests
             update => adapter!.PublishBufferedUpdate(update),
             uiDispatcher);
         adapter = new AcpChatServiceAdapter(inner, eventAdapter);
-        adapter.MarkHydrated();
+        adapter.ReleaseUnscopedBufferedUpdates();
 
         var sink = new FakeSink
         {
@@ -1056,6 +1056,10 @@ public sealed class AcpConnectionCoordinatorTests
         public List<(long AttemptId, bool LowTrust, string? Reason)> MarkHydratedCalls { get; } = new();
 
         public long BeginHydrationBufferingScope(string? sessionId) => 1;
+
+        public void ReleaseUnscopedBufferedUpdates(bool lowTrust = false, string? reason = null)
+        {
+        }
 
         public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)
         {

@@ -35,7 +35,7 @@ public sealed class AcpChatServiceAdapterTests
         Assert.Empty(updates);
 
         // Act
-        adapter.MarkHydrated();
+        adapter.ReleaseUnscopedBufferedUpdates();
 
         // Assert
         Assert.Single(updates);
@@ -90,7 +90,7 @@ public sealed class AcpChatServiceAdapterTests
         var updates = new List<SessionUpdateEventArgs>();
         adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
 
-        adapter.MarkHydrated();
+        adapter.ReleaseUnscopedBufferedUpdates();
         var attemptId = adapter.BeginHydrationBufferingScope("remote-1");
 
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(CreatePlanEntries("replay"))));
@@ -134,11 +134,40 @@ public sealed class AcpChatServiceAdapterTests
         Assert.Empty(updates);
 
         // Act
-        adapter.MarkHydrated(lowTrust: true, reason: "GenerationAdvanced");
+        adapter.ReleaseUnscopedBufferedUpdates(lowTrust: true, reason: "GenerationAdvanced");
 
         // Assert
         Assert.Single(updates);
         Assert.Equal("remote-1", updates[0].SessionId);
+    }
+
+    [Fact]
+    public void ReleaseUnscopedBufferedUpdates_DoesNotDrainScopedHydrationReplay()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-recovering");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-recovering",
+            new AgentMessageUpdate(new TextContentBlock("scoped replay"))));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-active",
+            new AgentMessageUpdate(new TextContentBlock("unscoped update"))));
+
+        adapter.ReleaseUnscopedBufferedUpdates();
+
+        var update = Assert.Single(updates);
+        Assert.Equal("remote-active", update.SessionId);
+        Assert.Equal("unscoped update", AssertText(update));
+
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+        Assert.Equal(2, updates.Count);
+        Assert.Equal("remote-recovering", updates[1].SessionId);
+        Assert.Equal("scoped replay", AssertText(updates[1]));
     }
 
     [Fact]
@@ -150,7 +179,7 @@ public sealed class AcpChatServiceAdapterTests
         var updates = new List<SessionUpdateEventArgs>();
         adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
 
-        adapter.MarkHydrated();
+        adapter.ReleaseUnscopedBufferedUpdates();
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-previous", new PlanUpdate(CreatePlanEntries("before"))));
         Assert.Single(updates);
 
@@ -162,7 +191,7 @@ public sealed class AcpChatServiceAdapterTests
         Assert.Equal("remote-previous", updates[1].SessionId);
         AssertPlanEntryContent(updates[1], "stale");
 
-        adapter.MarkHydrated(nextAttempt);
+        Assert.True(adapter.TryMarkHydrated(nextAttempt));
 
         Assert.Equal(3, updates.Count);
         Assert.Equal("remote-next", updates[2].SessionId);
@@ -182,16 +211,40 @@ public sealed class AcpChatServiceAdapterTests
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(CreatePlanEntries("discard-me"))));
 
         adapter.SuppressBufferedUpdates(firstAttempt);
-        Assert.True(adapter.MarkHydrated(firstAttempt));
+        Assert.True(adapter.TryMarkHydrated(firstAttempt));
         Assert.Empty(updates);
 
         var secondAttempt = adapter.BeginHydrationBufferingScope("remote-1");
         inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(CreatePlanEntries("keep-me"))));
-        adapter.MarkHydrated(secondAttempt);
+        Assert.True(adapter.TryMarkHydrated(secondAttempt));
 
         var update = Assert.Single(updates);
         Assert.Equal("remote-1", update.SessionId);
         AssertPlanEntryContent(update, "keep-me");
+    }
+
+    [Fact]
+    public void SuppressAllBufferedUpdates_DropsUnscopedAndScopedBuffers()
+    {
+        var uiDispatcher = new ImmediateUiDispatcher();
+        var inner = new FakeChatService();
+        using var adapter = BuildAdapter(inner, uiDispatcher);
+        var updates = new List<SessionUpdateEventArgs>();
+        adapter.SessionUpdateReceived += (_, args) => updates.Add(args);
+
+        var attemptId = adapter.BeginHydrationBufferingScope("remote-recovering");
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-recovering",
+            new AgentMessageUpdate(new TextContentBlock("scoped replay"))));
+        inner.RaiseSessionUpdate(new SessionUpdateEventArgs(
+            "remote-active",
+            new AgentMessageUpdate(new TextContentBlock("unscoped update"))));
+
+        adapter.SuppressAllBufferedUpdates("stale-service");
+        adapter.ReleaseUnscopedBufferedUpdates();
+        Assert.True(adapter.TryMarkHydrated(attemptId));
+
+        Assert.Empty(updates);
     }
 
     [Fact]
@@ -394,7 +447,7 @@ public sealed class AcpChatServiceAdapterTests
 
         Assert.Equal(0, handledCount);
 
-        adapter.MarkHydrated();
+        adapter.ReleaseUnscopedBufferedUpdates();
         dispatcher.Enqueue(() => markerObservedHandledCount = handledCount);
 
         dispatcher.RunNext();
@@ -420,7 +473,7 @@ public sealed class AcpChatServiceAdapterTests
             }
 
             suppressed = true;
-            adapter.SuppressBufferedUpdates("test");
+            adapter.SuppressBufferedUpdates(attemptId, "test");
         };
 
         for (var i = 0; i < 16; i++)
@@ -428,7 +481,7 @@ public sealed class AcpChatServiceAdapterTests
             inner.RaiseSessionUpdate(new SessionUpdateEventArgs("remote-1", new PlanUpdate(CreatePlanEntries($"step-{i}"))));
         }
 
-        adapter.MarkHydrated(attemptId);
+        Assert.True(adapter.TryMarkHydrated(attemptId));
         var waitTask = adapter.WaitForBufferedUpdatesDrainedAsync(attemptId);
 
         while (dispatcher.RunNext())
@@ -471,6 +524,13 @@ public sealed class AcpChatServiceAdapterTests
         var planUpdate = Assert.IsType<PlanUpdate>(update.Update);
         var entry = Assert.Single(planUpdate.Entries);
         Assert.Equal(expectedContent, entry.Content);
+    }
+
+    private static string? AssertText(SessionUpdateEventArgs update)
+    {
+        var agentMessage = Assert.IsType<AgentMessageUpdate>(update.Update);
+        var text = Assert.IsType<TextContentBlock>(agentMessage.Content);
+        return text.Text;
     }
 
     private sealed class FakeChatService : IChatService

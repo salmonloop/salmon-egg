@@ -150,17 +150,14 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
     public long BeginHydrationBufferingScope(string? sessionId)
         => _eventAdapter.BeginHydrationBuffering(sessionId);
 
-    public void SuppressBufferedUpdates(string? reason = null)
-        => _eventAdapter.SuppressBufferedUpdates(reason);
+    public void ReleaseUnscopedBufferedUpdates(bool lowTrust = false, string? reason = null)
+        => _eventAdapter.ReleaseUnscopedBufferedUpdates(lowTrust, reason);
+
+    public void SuppressAllBufferedUpdates(string? reason = null)
+        => _eventAdapter.SuppressAllBufferedUpdates(reason);
 
     public void SuppressBufferedUpdates(long hydrationAttemptId, string? reason = null)
         => _eventAdapter.SuppressBufferedUpdates(hydrationAttemptId, reason);
-
-    public bool MarkHydrated(bool lowTrust = false, string? reason = null)
-        => _eventAdapter.MarkHydrated(lowTrust, reason);
-
-    public bool MarkHydrated(long hydrationAttemptId, bool lowTrust = false, string? reason = null)
-        => _eventAdapter.MarkHydrated(hydrationAttemptId, lowTrust, reason);
 
     public bool TryMarkHydrated(long hydrationAttemptId, bool lowTrust = false, string? reason = null)
         => _eventAdapter.MarkHydrated(hydrationAttemptId, lowTrust, reason);

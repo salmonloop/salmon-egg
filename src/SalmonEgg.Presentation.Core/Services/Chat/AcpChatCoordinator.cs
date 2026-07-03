@@ -329,7 +329,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             if (!committed)
             {
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
-                wrappedService?.SuppressBufferedUpdates("ApplySupersededBeforeCommit");
+                wrappedService?.SuppressAllBufferedUpdates("ApplySupersededBeforeCommit");
 
                 if (applyScope.IsSuperseded(cancellationToken))
                 {
@@ -357,7 +357,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             if (!committed)
             {
                 await DisposeServiceAsync(candidateService).ConfigureAwait(false);
-                wrappedService?.SuppressBufferedUpdates("ApplySupersededBeforeCommitError");
+                wrappedService?.SuppressAllBufferedUpdates("ApplySupersededBeforeCommitError");
                 if (applyScope.IsSuperseded(cancellationToken))
                 {
                     _logger.LogInformation(
@@ -425,7 +425,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         return await _sessionCommandOrchestrator.EnsureRemoteSessionAsync(
                 sink,
                 authenticateAsync,
-                () => adapter?.MarkHydrated(),
+                () => adapter?.ReleaseUnscopedBufferedUpdates(),
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -795,7 +795,7 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     {
         if (applyScopeToken.IsCancellationRequested)
         {
-            sourceService.SuppressBufferedUpdates("StaleApplyScope");
+            sourceService.SuppressAllBufferedUpdates("StaleApplyScope");
             _logger.LogDebug("Ignoring ACP resync request from stale apply scope.");
             return;
         }
@@ -883,14 +883,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 && sink.IsSessionActive
                 && string.Equals(binding.ConversationId, sink.CurrentSessionId, StringComparison.Ordinal))
             {
-                wrappedService.MarkHydrated();
+                wrappedService.ReleaseUnscopedBufferedUpdates();
                 return;
             }
         }
 
         if (sink.ConnectionGeneration > 0)
         {
-            wrappedService.MarkHydrated(lowTrust: true, reason: "ConnectionGenerationAdvanced");
+            wrappedService.ReleaseUnscopedBufferedUpdates(lowTrust: true, reason: "ConnectionGenerationAdvanced");
         }
     }
 

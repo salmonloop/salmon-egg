@@ -434,7 +434,7 @@ public partial class ChatViewModel
 
             if (_chatService is AcpChatServiceAdapter adapter)
             {
-                adapter.MarkHydrated();
+                adapter.ReleaseUnscopedBufferedUpdates();
             }
 
             await ClearNewSessionDraftStateAsync().ConfigureAwait(false);
