@@ -73,7 +73,6 @@ SalmonEgg.sln
     ├── SalmonEgg.Domain.Tests/
     ├── SalmonEgg.Infrastructure.Tests/
     ├── SalmonEgg.Presentation.Core.Tests/
-    ├── SalmonEgg.IntegrationTests/
     ├── SalmonEgg.GamepadBridge.Windows/    # 手柄输入诊断（Windows）
     └── SalmonEgg.GuiTests.Windows/         # GUI smoke（Windows FlaUI）
 ```

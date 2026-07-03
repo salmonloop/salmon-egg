@@ -80,7 +80,6 @@
 
 **Files:**
 - Modify: `tests/SalmonEgg.Infrastructure.Tests/Storage/ConfigurationManagerTests.cs` (rename/retarget)
-- Modify: `tests/SalmonEgg.IntegrationTests/ConfigurationIntegrationTests.cs`
 
 **Test cases:**
 1. Round-trip server config: YAML contains no token/apiKey; secrets load correctly.

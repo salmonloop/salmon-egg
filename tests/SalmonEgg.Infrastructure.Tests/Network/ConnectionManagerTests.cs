@@ -27,6 +27,19 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task ConnectAsync_WithNullConfig_ShouldThrowArgumentNullException()
+        {
+            var transportFactory = new Func<TransportType, ITransport>(_ => _mockTransport.Object);
+            var connectionManager = new ConnectionManager(
+                _mockProtocolService.Object,
+                _mockLogger.Object,
+                transportFactory);
+
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                connectionManager.ConnectAsync(null!, CancellationToken.None));
+        }
+
+        [Fact]
         public async Task ConnectAsync_ShouldInitialize_WhenConnected()
         {
             // Arrange
