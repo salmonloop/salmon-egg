@@ -14,18 +14,6 @@
 
 ## 实现
 
-### AppFileStoreSecureStorage（非 Windows 平台）
-
-- **文件**: `AppFileStoreSecureStorage.cs`
-- **平台**: WASM、Android、iOS 及其他非 Windows 平台
-- **存储位置**: `<AppDataRoot>/SecureStorage/`（由 `IAppDataService.AppDataRootPath` 决定）
-- **特点**:
-  - 通过 `IAppFileStore` 读写，自动复用 `IFileSystemPersistence`（WASM 下接入 IndexedDB）
-  - 文件名为 key 的 SHA-256 哈希（不暴露 key 明文）
-  - 文件内容为 value 的 Base64 编码（不以明文存储）
-  - 构造函数不触盘，首次写入时自动创建目录
-- **DI 注册**: 见 `DependencyInjection.cs` 的 `#else` 分支（非 Windows）
-
 ### WindowsDpapiSecureStorage（Windows 平台）
 
 - **文件**: `SalmonEgg/Platforms/Windows/WindowsDpapiSecureStorage.cs`
@@ -37,14 +25,40 @@
   - 支持从旧明文格式迁移（TryDecodeLegacyPlainText）
 - **DI 注册**: 见 `DependencyInjection.cs` 的 `#if WINDOWS` 分支
 
+### LinuxSecretServiceSecureStorage（Linux Desktop）
+
+- **文件**: `SalmonEgg.Infrastructure.Desktop/Storage/LinuxSecretServiceSecureStorage.cs`
+- **平台**: Linux desktop
+- **特点**:
+  - 使用 Secret Service provider，通过 `secret-tool` 访问系统密钥环
+  - secret 通过 stdin 写入，不作为命令行参数暴露
+  - `secret-tool` 或 Secret Service 不可用时写入凭据 fail-closed
+- **DI 注册**: 见 `DependencyInjection.cs` 的 Linux desktop 分支
+
+### VolatileSecureStorage（受限平台）
+
+- **文件**: `VolatileSecureStorage.cs`
+- **平台**: WASM、Android、iOS、macOS（直到接入平台 keychain）
+- **特点**:
+  - 仅进程内保存，不持久化到普通文件
+  - 防止把敏感凭据降级写入非安全存储
+
+### AppFileStoreSecureStorage（测试/兼容实现）
+
+- **文件**: `AppFileStoreSecureStorage.cs`
+- **特点**:
+  - 通过 `IAppFileStore` 读写
+  - 文件名为 key 的 SHA-256 哈希（不暴露 key 明文）
+  - 文件内容为 value 的 Base64 编码；这不是加密
+  - 当前不作为生产平台 `ISecureStorage` 注册
+
 ## 废弃参考实现
 
 `AndroidSecureStorage.cs.txt`、`iOSSecureStorage.cs.txt`、`WindowsSecureStorage.cs.txt` 是历史参考代码，
-未编译进项目，仅供参考。当前生产路径走 `AppFileStoreSecureStorage`（Android/iOS）和
-`WindowsDpapiSecureStorage`（Windows）。
+未编译进项目，仅供参考。
 
 ## 安全说明
 
 - Windows：DPAPI 提供系统级加密，只有创建数据的用户可以解密。
-- 非 Windows：base64 编码防止明文存储，但不是加密。WASM 环境无原生 keychain，
-  IndexedDB 存储的安全性由浏览器沙盒提供。
+- Linux：Secret Service provider 是持久敏感凭据的事实源。
+- 受限平台：没有 OS-backed secure store 时只允许 volatile 语义，不得降级到普通文件。

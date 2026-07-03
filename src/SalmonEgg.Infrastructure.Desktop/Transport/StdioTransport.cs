@@ -116,26 +116,13 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 _readCts = new CancellationTokenSource();
 
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = _command,
-                    Arguments = string.Join(" ", _args.Select(a => $"\"{a}\"")),
-                    RedirectStandardInput = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    StandardInputEncoding = _encoding,
-                    StandardOutputEncoding = _encoding,
-                    StandardErrorEncoding = _encoding,
-                    WorkingDirectory = _workingDirectory
-                };
+                var processInfo = CreateProcessStartInfo();
 
                 _process = new Process { StartInfo = processInfo };
                 _process.EnableRaisingEvents = true;
                 _process.Exited += OnProcessExited;
 
-                _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} {Args}", _command, processInfo.Arguments);
+                _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
@@ -185,6 +172,30 @@ namespace SalmonEgg.Infrastructure.Transport
                     TransportErrorKind.ProcessStartFailed));
                 return false;
             }
+        }
+
+        internal ProcessStartInfo CreateProcessStartInfo()
+        {
+            var processInfo = new ProcessStartInfo
+            {
+                FileName = _command,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardInputEncoding = _encoding,
+                StandardOutputEncoding = _encoding,
+                StandardErrorEncoding = _encoding,
+                WorkingDirectory = _workingDirectory
+            };
+
+            foreach (var argument in _args)
+            {
+                processInfo.ArgumentList.Add(argument);
+            }
+
+            return processInfo;
         }
 
         /// <summary>

@@ -1,7 +1,23 @@
 #!/bin/bash
 
+desktop_publish_dir() {
+  case "$(uname -s)" in
+    Linux )
+      echo "publish/linux-desktop"
+      ;;
+    Darwin )
+      echo "publish/macos-desktop"
+      ;;
+    * )
+      echo "publish/desktop"
+      ;;
+  esac
+}
+
 case "$1" in
   ""|desktop )
+    output_dir="$(desktop_publish_dir)"
+
     echo "========================================"
     echo "SalmonEgg Build Script"
     echo "========================================"
@@ -23,13 +39,13 @@ case "$1" in
     dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
       --configuration Release \
       --framework net10.0-desktop \
-      --output publish/windows-desktop \
+      --output "${output_dir}" \
       --no-build
 
     echo
     echo "========================================"
     echo "Build completed successfully!"
-    echo "Output: publish/windows-desktop/"
+    echo "Output: ${output_dir}/"
     echo "========================================"
     ;;
   msix )

@@ -9,10 +9,19 @@ namespace SalmonEgg.Infrastructure.Services;
 public sealed class PlatformShellService : IPlatformShellService
 {
     private readonly IPlatformCapabilityService _capabilities;
+    private readonly IPlatformRuntimeCapabilityProbe _runtimeProbe;
 
     public PlatformShellService(IPlatformCapabilityService capabilities)
+        : this(capabilities, new PlatformRuntimeCapabilityProbe())
+    {
+    }
+
+    public PlatformShellService(
+        IPlatformCapabilityService capabilities,
+        IPlatformRuntimeCapabilityProbe runtimeProbe)
     {
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
+        _runtimeProbe = runtimeProbe ?? throw new ArgumentNullException(nameof(runtimeProbe));
     }
 
     public Task<bool> OpenFolderAsync(string path) => OpenWithShellAsync(path);
@@ -26,7 +35,7 @@ public sealed class PlatformShellService : IPlatformShellService
             return Task.FromResult(false);
         }
 
-        return LaunchShellTargetAsync(uri.AbsoluteUri);
+        return LaunchShellTargetAsync(uri.AbsoluteUri, _runtimeProbe);
     }
 
     public Task<bool> CopyToClipboardAsync(string text)
@@ -73,10 +82,12 @@ public sealed class PlatformShellService : IPlatformShellService
             return Task.FromResult(false);
         }
 
-        return LaunchShellTargetAsync(path);
+        return LaunchShellTargetAsync(path, _runtimeProbe);
     }
 
-    private static Task<bool> LaunchShellTargetAsync(string target)
+    private static Task<bool> LaunchShellTargetAsync(
+        string target,
+        IPlatformRuntimeCapabilityProbe? runtimeProbe = null)
     {
         if (string.IsNullOrWhiteSpace(target))
         {
@@ -85,7 +96,7 @@ public sealed class PlatformShellService : IPlatformShellService
 
         try
         {
-            Process.Start(CreateLaunchProcessStartInfo(target));
+            Process.Start(CreateLaunchProcessStartInfo(target, runtimeProbe));
             return Task.FromResult(true);
         }
         catch
@@ -94,7 +105,9 @@ public sealed class PlatformShellService : IPlatformShellService
         }
     }
 
-    internal static ProcessStartInfo CreateLaunchProcessStartInfo(string target)
+    internal static ProcessStartInfo CreateLaunchProcessStartInfo(
+        string target,
+        IPlatformRuntimeCapabilityProbe? runtimeProbe = null)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -105,13 +118,29 @@ public sealed class PlatformShellService : IPlatformShellService
             };
         }
 
+        var opener = runtimeProbe?.ResolveExternalFileOpener()
+            ?? new PlatformRuntimeCapabilityProbe().ResolveExternalFileOpener()
+            ?? (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open");
+
         var startInfo = new ProcessStartInfo
         {
-            FileName = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "open" : "xdg-open",
+            FileName = opener,
             UseShellExecute = false
         };
+
+        if (IsGioOpenCommand(opener))
+        {
+            startInfo.ArgumentList.Add("open");
+        }
+
         startInfo.ArgumentList.Add(SanitizeUnixShellTarget(target));
         return startInfo;
+    }
+
+    private static bool IsGioOpenCommand(string opener)
+    {
+        var fileName = System.IO.Path.GetFileName(opener);
+        return string.Equals(fileName, "gio", StringComparison.Ordinal);
     }
 
     private static string SanitizeUnixShellTarget(string target)

@@ -107,7 +107,7 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   -f net10.0-desktop \
   -c Release \
-  -o ./publish/windows-desktop
+  -o ./publish/desktop
 ```
 
 如果你怀疑本机仍在反复装证书，可以用下面两条命令核对当前签名证书和本机信任证书是否是同一个 thumbprint：

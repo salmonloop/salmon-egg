@@ -97,6 +97,9 @@ namespace SalmonEgg.Infrastructure.Services
             }
         }
 
+        internal static ProcessStartInfo CreateProcessStartInfo(TerminalCreateRequest request)
+            => TerminalSession.CreateProcessStartInfo(request);
+
         private TerminalSession GetRequiredSession(string? terminalId)
         {
             if (string.IsNullOrWhiteSpace(terminalId))
@@ -133,16 +136,7 @@ namespace SalmonEgg.Infrastructure.Services
             {
                 var process = new Process
                 {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = request.Command,
-                        Arguments = BuildArguments(request.Args),
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        WorkingDirectory = string.IsNullOrWhiteSpace(request.Cwd) ? Environment.CurrentDirectory : request.Cwd
-                    },
+                    StartInfo = CreateProcessStartInfo(request),
                     EnableRaisingEvents = true
                 };
 
@@ -174,6 +168,34 @@ namespace SalmonEgg.Infrastructure.Services
                 }
 
                 return session;
+            }
+
+            internal static ProcessStartInfo CreateProcessStartInfo(TerminalCreateRequest request)
+            {
+                if (request == null)
+                {
+                    throw new ArgumentNullException(nameof(request));
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = request.Command,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = string.IsNullOrWhiteSpace(request.Cwd) ? Environment.CurrentDirectory : request.Cwd
+                };
+
+                if (request.Args != null)
+                {
+                    foreach (var argument in request.Args)
+                    {
+                        startInfo.ArgumentList.Add(argument ?? string.Empty);
+                    }
+                }
+
+                return startInfo;
             }
 
             public TerminalOutputResponse CreateOutputResponse()
@@ -338,30 +360,6 @@ namespace SalmonEgg.Infrastructure.Services
                 return await task.ConfigureAwait(false);
             }
 
-            private static string BuildArguments(IReadOnlyList<string>? args)
-            {
-                if (args == null || args.Count == 0)
-                {
-                    return string.Empty;
-                }
-
-                return string.Join(" ", args.Select(EscapeArgument));
-            }
-
-            private static string EscapeArgument(string arg)
-            {
-                if (string.IsNullOrEmpty(arg))
-                {
-                    return "\"\"";
-                }
-
-                if (arg.IndexOfAny(new[] { ' ', '\t', '"', '\\' }) < 0)
-                {
-                    return arg;
-                }
-
-                return "\"" + arg.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
-            }
         }
     }
 }

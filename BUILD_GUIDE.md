@@ -43,6 +43,16 @@ run.bat desktop
   - Linux (Ubuntu 20.04+, Debian 11+, 等)
   - macOS 12+
 
+Linux 桌面运行时依赖按能力分层：
+
+- 基础 Skia Desktop / X11：`libfreetype6`、`fontconfig`、`libfontconfig1`、`libgtk-3-0`；
+- Headless GUI：`xvfb`；
+- 外部文件/目录打开：`xdg-utils`（提供 `xdg-open`）或等价桌面 opener；
+- 本地交互终端 WebView：WebKitGTK / JavaScriptCore（例如 Ubuntu 上的 `libwebkit2gtk-4.1-0` 或发行版对应包）；
+- Linux 安全凭据持久化：Secret Service provider 和 `libsecret-tools`（提供 `secret-tool`）。
+
+缺少可选依赖时，对应能力会被平台能力服务关闭或 fail-closed；敏感凭据不会降级写入普通文件。
+
 ### 2. 检查环境
 
 ```bash
@@ -76,7 +86,7 @@ dotnet test SalmonEgg.sln
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --configuration Release \
   --framework net10.0-desktop \
-  --output publish/windows-desktop
+  --output publish/linux-desktop
 ```
 
 #### 快速构建（开发时）
@@ -114,6 +124,8 @@ run.bat
 - `XVFB_SCREEN`：指定 `Xvfb` 屏幕参数，默认 `0 1920x1080x24`
 
 如果当前 shell 已经设置了 `DISPLAY`，脚本会复用现有 X server，而不会再次启动 `Xvfb`。
+
+Headless 环境没有 EWMH-compliant window manager 或 DBus desktop portal 时，Uno 可能输出窗口状态/主题监听警告；这类警告不等价于应用启动失败。需要验证本地交互终端时，还必须安装 WebKitGTK / JavaScriptCore 运行库。
 
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
@@ -261,7 +273,8 @@ Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=Sa
 
 构建成功后，您会在以下目录找到输出：
 
-- **Windows Desktop**: `publish/windows-desktop/SalmonEgg.exe`
+- **Linux Desktop**: `publish/linux-desktop/SalmonEgg`
+- **macOS Desktop**: `publish/macos-desktop/SalmonEgg`
 - **WebAssembly**: `publish/wasm/wwwroot/`
 
 ## 开发工作流

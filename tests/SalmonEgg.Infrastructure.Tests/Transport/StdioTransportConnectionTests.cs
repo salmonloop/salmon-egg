@@ -62,6 +62,33 @@ public sealed class StdioTransportConnectionTests
             message => message.Contains("ssh config permissions are invalid", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void CreateProcessStartInfo_UsesArgumentListWithoutStringQuoting()
+    {
+        using var transport = new StdioTransport(
+            "agent-command",
+            [
+                "--empty",
+                string.Empty,
+                "value with spaces",
+                "quote\"value",
+                @"path\with\slashes"
+            ]);
+
+        var startInfo = transport.CreateProcessStartInfo();
+
+        Assert.Equal(string.Empty, startInfo.Arguments);
+        Assert.Equal(
+            [
+                "--empty",
+                string.Empty,
+                "value with spaces",
+                "quote\"value",
+                @"path\with\slashes"
+            ],
+            startInfo.ArgumentList);
+    }
+
     private static (string Command, string[] Args) CreateImmediateFailureCommand(string stderrMessage)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

@@ -7,10 +7,10 @@ using SalmonEgg.Domain.Services;
 namespace SalmonEgg.Infrastructure.Storage;
 
 /// <summary>
-/// Cross-platform ISecureStorage backed by IAppFileStore.
-/// Secrets are stored as base-64-encoded bytes so they are never persisted as plain text.
+/// File-backed ISecureStorage test/compatibility implementation.
+/// Values are base-64 encoded, not encrypted, so production platforms must prefer
+/// OS-backed secure storage or a fail-closed volatile implementation.
 /// The file name is derived from a SHA-256 hash of the key so the key is never exposed on disk.
-/// Safe for WASM (IndexedDB-backed via IFileSystemPersistence), Android, iOS.
 /// </summary>
 public sealed class AppFileStoreSecureStorage : ISecureStorage
 {

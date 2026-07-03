@@ -9,41 +9,50 @@ public sealed class PlatformCapabilityServiceTests
     [Fact]
     public void SupportsLocalTerminal_RequiresTransportAndInteractiveSurface()
     {
-        var sut = new PlatformCapabilityService();
+        var probe = new FakeRuntimeCapabilityProbe(
+            isDesktopProcessHost: true,
+            hasExternalFileOpener: true,
+            hasInteractiveTerminalSurface: false);
+        var sut = new PlatformCapabilityService(probe);
 
         Assert.Equal(
             sut.SupportsStdioTransport && sut.SupportsInteractiveTerminalSurface,
             sut.SupportsLocalTerminal);
+        Assert.False(sut.SupportsLocalTerminal);
     }
 
     [Fact]
-    public void SupportsInteractiveTerminalSurface_FollowsDesktopProcessHostAvailability()
+    public void SupportsInteractiveTerminalSurface_FollowsRuntimeProbe()
     {
-        var sut = new PlatformCapabilityService();
-        var expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+        var sut = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(
+            isDesktopProcessHost: true,
+            hasExternalFileOpener: true,
+            hasInteractiveTerminalSurface: false));
 
-        Assert.Equal(expected, sut.SupportsInteractiveTerminalSurface);
+        Assert.False(sut.SupportsInteractiveTerminalSurface);
     }
 
     [Fact]
-    public void SupportsExternalFileOpen_FollowsDesktopProcessHostAvailability()
+    public void SupportsExternalFileOpen_FollowsRuntimeProbe()
     {
-        var sut = new PlatformCapabilityService();
-        var expected = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-            || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+        var sut = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(
+            isDesktopProcessHost: true,
+            hasExternalFileOpener: false,
+            hasInteractiveTerminalSurface: true));
 
-        Assert.Equal(expected, sut.SupportsExternalFileOpen);
+        Assert.False(sut.SupportsExternalFileOpen);
     }
 
     [Fact]
     public void SupportsLocalFileExport_FollowsDesktopProcessHostAvailability()
     {
-        var sut = new PlatformCapabilityService();
+        var sut = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(
+            isDesktopProcessHost: true,
+            hasExternalFileOpener: false,
+            hasInteractiveTerminalSurface: false));
 
-        Assert.Equal(sut.SupportsExternalFileOpen, sut.SupportsLocalFileExport);
+        Assert.True(sut.SupportsLocalFileExport);
+        Assert.False(sut.SupportsExternalFileOpen);
     }
 
     [Fact]
@@ -54,5 +63,28 @@ public sealed class PlatformCapabilityServiceTests
         Assert.Equal(
             RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
             sut.SupportsGamepadInput);
+    }
+
+    private sealed class FakeRuntimeCapabilityProbe : IPlatformRuntimeCapabilityProbe
+    {
+        public FakeRuntimeCapabilityProbe(
+            bool isDesktopProcessHost,
+            bool hasExternalFileOpener,
+            bool hasInteractiveTerminalSurface)
+        {
+            IsDesktopProcessHost = isDesktopProcessHost;
+            HasExternalFileOpener = hasExternalFileOpener;
+            HasInteractiveTerminalSurface = hasInteractiveTerminalSurface;
+        }
+
+        public bool IsDesktopProcessHost { get; }
+
+        public bool HasExternalFileOpener { get; }
+
+        public bool HasInteractiveTerminalSurface { get; }
+
+        public string? ResolveExternalFileOpener() => null;
+
+        public bool CanLoadNativeLibrary(string libraryName) => false;
     }
 }

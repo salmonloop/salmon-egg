@@ -6,6 +6,18 @@ namespace SalmonEgg.Infrastructure.Services;
 
 public sealed class PlatformCapabilityService : IPlatformCapabilityService
 {
+    private readonly IPlatformRuntimeCapabilityProbe _runtimeProbe;
+
+    public PlatformCapabilityService()
+        : this(new PlatformRuntimeCapabilityProbe())
+    {
+    }
+
+    public PlatformCapabilityService(IPlatformRuntimeCapabilityProbe runtimeProbe)
+    {
+        _runtimeProbe = runtimeProbe ?? throw new ArgumentNullException(nameof(runtimeProbe));
+    }
+
     public bool SupportsLaunchOnStartup => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
     public bool SupportsTray => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
@@ -14,29 +26,15 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsMiniWindow => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    public bool SupportsExternalFileOpen => IsDesktopProcessHost;
+    public bool SupportsExternalFileOpen => _runtimeProbe.HasExternalFileOpener;
 
-    public bool SupportsLocalFileExport => IsDesktopProcessHost;
+    public bool SupportsLocalFileExport => _runtimeProbe.IsDesktopProcessHost;
 
-    public bool SupportsStdioTransport => IsDesktopProcessHost;
+    public bool SupportsStdioTransport => _runtimeProbe.IsDesktopProcessHost;
 
-    public bool SupportsInteractiveTerminalSurface => IsDesktopProcessHost;
+    public bool SupportsInteractiveTerminalSurface => _runtimeProbe.HasInteractiveTerminalSurface;
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
     public bool SupportsGamepadInput => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-
-    private static bool IsDesktopProcessHost
-    {
-        get
-        {
-#if __WASM__ || __ANDROID__ || __IOS__
-            return false;
-#else
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-#endif
-        }
-    }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -226,15 +227,18 @@ public static class DependencyInjection
 
         // Secure Storage
         // Windows: DPAPI (hardware-bound, user-scoped encryption).
-        // All other platforms: AppFileStoreSecureStorage backed by IAppFileStore so secrets
-        // flow through the same IFileSystemPersistence path (including IDBFS on WASM).
+        // Linux desktop: Secret Service via libsecret's secret-tool.
+        // Restricted platforms: volatile fail-closed storage; sensitive values are not persisted
+        // unless an OS-backed secure store exists.
 #if WINDOWS
         services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
+#elif __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<ISecureStorage, VolatileSecureStorage>();
 #else
-        services.AddSingleton<ISecureStorage>(sp =>
-            new AppFileStoreSecureStorage(
-                sp.GetRequiredService<IAppFileStore>(),
-                System.IO.Path.Combine(sp.GetRequiredService<IAppDataService>().AppDataRootPath, "SecureStorage")));
+        services.AddSingleton<ISecureStorage>(_ =>
+            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? new LinuxSecretServiceSecureStorage()
+                : new VolatileSecureStorage());
 #endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
@@ -243,6 +247,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IAppSupportInfoService>(_ => new AppSupportInfoService(typeof(App).Assembly));
         services.AddSingleton<IConversationStore, ConversationStore>();
+        services.AddSingleton<IPlatformRuntimeCapabilityProbe, PlatformRuntimeCapabilityProbe>();
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
 #if __WASM__
@@ -294,7 +299,9 @@ public static class DependencyInjection
 #else
         services.AddSingleton<IPlatformShellService>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsExternalFileOpen
-                ? new PlatformShellService(sp.GetRequiredService<IPlatformCapabilityService>())
+                ? new PlatformShellService(
+                    sp.GetRequiredService<IPlatformCapabilityService>(),
+                    sp.GetRequiredService<IPlatformRuntimeCapabilityProbe>())
                 : new UnsupportedPlatformShellService());
 #endif
         services.AddSingleton<IStorageLocationService, SalmonEgg.Infrastructure.Services.StorageLocationService>();

@@ -1,4 +1,5 @@
 using System;
+using SalmonEgg.Infrastructure.Services;
 using Uno.UI.Hosting;
 
 namespace SalmonEgg;
@@ -8,6 +9,7 @@ internal class Program
     [STAThread]
     static void Main(string[] args)
    {
+       DesktopNativePrerequisites.Initialize();
        App.InitializeLogging();
 
        var host = UnoPlatformHostBuilder.Create()
