@@ -86,8 +86,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             throw new InvalidOperationException("No active local conversation is available for ACP session creation.");
         }
 
+        var conversationId = sink.CurrentSessionId!;
         var selectedProfileId = sink.SelectedProfileId;
-        var currentBinding = await sink.GetCurrentRemoteBindingAsync(cancellationToken).ConfigureAwait(false);
+        var currentBinding = await sink.GetConversationRemoteBindingAsync(conversationId, cancellationToken)
+            .ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(currentBinding?.RemoteSessionId))
         {
             return new AcpRemoteSessionResult(
@@ -126,7 +128,8 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);
         }
 
-        await UpdateBindingForCurrentConversationAsync(sink, response.SessionId, selectedProfileId).ConfigureAwait(false);
+        await UpdateBindingForConversationAsync(sink, conversationId, response.SessionId, selectedProfileId)
+            .ConfigureAwait(false);
         markHydrated();
         return new AcpRemoteSessionResult(response.SessionId, response, UsedExistingBinding: false);
     }
@@ -247,6 +250,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         ArgumentNullException.ThrowIfNull(authenticateAsync);
         ArgumentNullException.ThrowIfNull(ensureRemoteSessionAsync);
 
+        var conversationId = sink.CurrentSessionId;
         var chatService = RequireReadyChatService(sink);
         var promptParams = new SessionPromptParams(
             remoteSessionId,
@@ -280,8 +284,16 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             // but the agent-side session timed out in the interim). Clear the stale binding so
             // EnsureRemoteSessionAsync will create a fresh remote session, then retry the prompt.
             cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(conversationId)
+                || !string.Equals(sink.CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Remote session recovery was abandoned because the active conversation changed.",
+                    ex);
+            }
+
             await sink.ConversationBindingCommands
-                .ClearBindingAsync(sink.CurrentSessionId!)
+                .ClearBindingAsync(conversationId!)
                 .ConfigureAwait(false);
             var recovered = await ensureRemoteSessionAsync(
                     sink, authenticateAsync, static () => { }, cancellationToken)
@@ -289,8 +301,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             var recoveredParams = new SessionPromptParams(recovered.RemoteSessionId, promptParams.Prompt);
             cancellationToken.ThrowIfCancellationRequested();
             await sink.NotifyPromptRequestDispatchedAsync(cancellationToken).ConfigureAwait(false);
-            var recoveredResponse = await RequireReadyChatService(sink)
-                .SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
+            var recoveredResponse = await chatService.SendPromptAsync(recoveredParams, cancellationToken).ConfigureAwait(false);
             return new AcpPromptDispatchResult(recovered.RemoteSessionId, recoveredResponse, RetriedAfterSessionRecovery: true);
         }
     }
@@ -314,8 +325,9 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             new SessionCancelParams(currentBinding.RemoteSessionId!, reason)).ConfigureAwait(false);
     }
 
-    private static async Task UpdateBindingForCurrentConversationAsync(
+    private static async Task UpdateBindingForConversationAsync(
         IAcpChatCoordinatorSink sink,
+        string conversationId,
         string remoteSessionId,
         string? profileId)
     {
@@ -324,14 +336,14 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             throw new ArgumentException("Remote session id must not be empty.", nameof(remoteSessionId));
         }
 
-        if (string.IsNullOrWhiteSpace(sink.CurrentSessionId))
+        if (string.IsNullOrWhiteSpace(conversationId))
         {
             throw new InvalidOperationException("Cannot update remote binding without an active local conversation.");
         }
 
         var result = await sink.ConversationBindingCommands
             .UpdateBindingAsync(
-                sink.CurrentSessionId!,
+                conversationId,
                 remoteSessionId,
                 profileId)
             .ConfigureAwait(false);

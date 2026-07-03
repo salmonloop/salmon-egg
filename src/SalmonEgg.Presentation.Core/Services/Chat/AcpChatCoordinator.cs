@@ -421,10 +421,11 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
     {
         EnsureAcpEnabled();
 
+        var adapter = sink.CurrentChatService as AcpChatServiceAdapter;
         return await _sessionCommandOrchestrator.EnsureRemoteSessionAsync(
                 sink,
                 authenticateAsync,
-                () => _activeChatServiceAdapter?.MarkHydrated(),
+                () => adapter?.MarkHydrated(),
                 cancellationToken)
             .ConfigureAwait(false);
     }

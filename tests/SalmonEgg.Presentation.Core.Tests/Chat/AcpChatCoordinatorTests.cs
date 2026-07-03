@@ -1895,6 +1895,43 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task EnsureRemoteSessionAsync_WhenCurrentSessionChangesWhilePending_BindsOriginalConversation()
+    {
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-session-1",
+            ActiveSessionCwd = @"C:\repo\demo",
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var createSessionTcs = new TaskCompletionSource<SessionNewResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        service
+            .Setup(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()))
+            .Returns(createSessionTcs.Task);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+
+        sink.CurrentSessionId = "local-session-2";
+        createSessionTcs.SetResult(new SessionNewResponse("remote-session-1"));
+
+        var result = await ensureTask;
+
+        Assert.Equal("remote-session-1", result.RemoteSessionId);
+        Assert.Single(sink.BindingCommands.Updates);
+        Assert.Equal("local-session-1", sink.BindingCommands.Updates[0].ConversationId);
+        Assert.Equal("remote-session-1", sink.BindingCommands.Updates[0].RemoteSessionId);
+    }
+
+    [Fact]
     public async Task ApplyTransportConfigurationAsync_WhenSelectedProfileChangesDuringInitialize_UsesOriginalProfileForConnectionState()
     {
         var transport = new FakeTransportConfiguration
@@ -2112,6 +2149,47 @@ public sealed class AcpChatCoordinatorTests
         // Result is marked as a recovery retry.
         Assert.True(result.RetriedAfterSessionRecovery);
         Assert.Equal("remote-new", result.RemoteSessionId);
+    }
+
+    [Fact]
+    public async Task DispatchPromptToRemoteSessionAsync_WhenCurrentSessionChangesBeforeRecovery_DoesNotClearLatestBinding()
+    {
+        var service = CreateChatService();
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            IsSessionActive = true,
+            CurrentSessionId = "local-1",
+            CurrentRemoteSessionId = "remote-stale",
+            ActiveSessionCwd = @"C:\repo\demo",
+            SelectedProfileId = "profile-1",
+            ResolvedProfile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.Stdio }
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var sendPromptTcs = new TaskCompletionSource<SessionPromptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        service
+            .Setup(x => x.SendPromptAsync(It.IsAny<SessionPromptParams>(), It.IsAny<CancellationToken>()))
+            .Returns(sendPromptTcs.Task);
+
+        var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
+        IAcpConnectionCommands commands = sut;
+        var dispatchTask = commands.DispatchPromptToRemoteSessionAsync(
+            "remote-stale",
+            "hi",
+            null,
+            sink,
+            _ => Task.FromResult(true));
+
+        sink.CurrentSessionId = "local-2";
+        sendPromptTcs.SetException(new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatchTask);
+        Assert.Empty(sink.BindingCommands.Updates);
+        service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
     }
 
     [Fact]
