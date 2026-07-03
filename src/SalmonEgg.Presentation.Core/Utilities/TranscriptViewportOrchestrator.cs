@@ -402,7 +402,7 @@ public sealed class TranscriptViewportOrchestrator
             return new(Handle(CreateUserDetachedEvent(conversationId, updatedRestoreToken)));
         }
 
-        return new(Handle(CreateViewportFactChangedEvent(conversationId, fact)));
+        return new(Handle(CreateViewportObservedEvent(conversationId, fact)));
     }
 
     public TranscriptViewportCommand Activate(string conversationId, TranscriptViewportActivationKind activationKind)
@@ -432,7 +432,7 @@ public sealed class TranscriptViewportOrchestrator
     public TranscriptViewportEvent.UserAttached CreateUserAttachedEvent(string conversationId)
         => new(conversationId, _scrollScheduleGeneration);
 
-    public TranscriptViewportEvent.ViewportFactChanged CreateViewportFactChangedEvent(
+    public TranscriptViewportEvent.ViewportObserved CreateViewportObservedEvent(
         string conversationId,
         TranscriptViewportFact fact)
         => new(conversationId, _scrollScheduleGeneration, fact);

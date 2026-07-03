@@ -10,6 +10,8 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
+using DomainSessionMode = SalmonEgg.Domain.Models.Session.SessionMode;
+using ProtocolSessionMode = SalmonEgg.Domain.Models.Protocol.SessionMode;
 
 namespace SalmonEgg.Application.Services.Chat
 {
@@ -18,6 +20,7 @@ namespace SalmonEgg.Application.Services.Chat
         private readonly IAcpClient _acpClient;
         private readonly IErrorLogger _errorLogger;
         private readonly ISessionManager _sessionManager;
+        private readonly HashSet<string> _configAuthoritativeSessionIds = new(StringComparer.Ordinal);
         private string? _currentSessionId;
         private Plan? _currentPlan;
         private SessionModeState? _currentMode;
@@ -108,12 +111,23 @@ namespace SalmonEgg.Application.Services.Chat
                             }
                             break;
                         case CurrentModeUpdate modeChange:
-                            if (!string.IsNullOrEmpty(modeChange.ModeId))
+                            if (!string.IsNullOrEmpty(modeChange.ModeId)
+                                && !_configAuthoritativeSessionIds.Contains(e.SessionId))
                             {
-                                _currentMode = new SessionModeState { CurrentModeId = modeChange.ModeId };
+                                ApplyCurrentModeId(e.SessionId, modeChange.ModeId);
                             }
                             break;
                         case ConfigOptionUpdate configOption:
+                            if (configOption.ConfigOptions is not null)
+                            {
+                                MarkConfigOptionsAuthoritative(e.SessionId);
+                            }
+                            break;
+                        case ConfigUpdateUpdate configUpdate:
+                            if (configUpdate.ConfigOptions is not null)
+                            {
+                                MarkConfigOptionsAuthoritative(e.SessionId);
+                            }
                             break;
                     }
                 }
@@ -215,6 +229,100 @@ namespace SalmonEgg.Application.Services.Chat
                 _ => "unknown"
             };
 
+        private void ApplySessionResponseModeState(
+            string sessionId,
+            SessionModesState? modes,
+            IReadOnlyList<ConfigOption>? configOptions)
+        {
+            if (configOptions is not null)
+            {
+                MarkConfigOptionsAuthoritative(sessionId);
+                return;
+            }
+
+            _configAuthoritativeSessionIds.Remove(sessionId);
+            ApplyModeState(sessionId, BuildModeState(modes));
+        }
+
+        private void ApplyCurrentModeId(string sessionId, string modeId)
+        {
+            var state = CloneModeState(_currentMode ?? _sessionManager.GetSession(sessionId)?.Mode)
+                ?? new SessionModeState();
+            state.CurrentModeId = modeId;
+            state.CurrentMode = state.GetModeById(modeId);
+            ApplyModeState(sessionId, state);
+        }
+
+        private void MarkConfigOptionsAuthoritative(string sessionId)
+        {
+            _configAuthoritativeSessionIds.Add(sessionId);
+            ApplyModeState(sessionId, null);
+        }
+
+        private void ApplyModeState(string sessionId, SessionModeState? state)
+        {
+            var projectedState = state ?? new SessionModeState();
+            if (string.Equals(_currentSessionId, sessionId, StringComparison.Ordinal))
+            {
+                _currentMode = state;
+            }
+
+            _sessionManager.UpdateSession(
+                sessionId,
+                session => session.Mode = CloneModeState(projectedState) ?? new SessionModeState(),
+                updateActivity: false);
+        }
+
+        private static SessionModeState? BuildModeState(SessionModesState? modes)
+        {
+            if (modes is null)
+            {
+                return null;
+            }
+
+            var state = new SessionModeState
+            {
+                CurrentModeId = modes.CurrentModeId ?? string.Empty,
+                AvailableModes = modes.AvailableModes?
+                    .Where(static mode => mode is not null)
+                    .Select(static mode => new DomainSessionMode(
+                        mode!.Id ?? string.Empty,
+                        mode.Name ?? string.Empty,
+                        mode.Description))
+                    .ToList() ?? new List<DomainSessionMode>()
+            };
+            state.CurrentMode = state.GetModeById(state.CurrentModeId);
+            return state;
+        }
+
+        private static SessionModeState? CloneModeState(SessionModeState? source)
+        {
+            if (source is null)
+            {
+                return null;
+            }
+
+            var clone = new SessionModeState
+            {
+                CurrentModeId = source.CurrentModeId,
+                AvailableModes = source.AvailableModes
+                    .Select(static mode => new DomainSessionMode(mode.Id, mode.Name, mode.Description))
+                    .ToList()
+            };
+            clone.CurrentMode = clone.GetModeById(clone.CurrentModeId);
+            return clone;
+        }
+
+        private static List<ProtocolSessionMode> ToProtocolModes(SessionModeState state)
+            => state.AvailableModes
+                .Select(static mode => new ProtocolSessionMode
+                {
+                    Id = mode.Id,
+                    Name = mode.Name,
+                    Description = mode.Description
+                })
+                .ToList();
+
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params)
         {
             try
@@ -250,6 +358,7 @@ namespace SalmonEgg.Application.Services.Chat
                     var session = await GetOrCreateSessionAsync(response.SessionId, @params.Cwd).ConfigureAwait(false);
                     session.History.Clear();
                     session.State = SessionState.Active;
+                    ApplySessionResponseModeState(response.SessionId, response.Modes, response.ConfigOptions);
                 }
 
                 return response;
@@ -274,6 +383,7 @@ namespace SalmonEgg.Application.Services.Chat
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         {
             var previousSessionId = _currentSessionId;
+            var previousMode = CloneModeState(_currentMode);
             List<SessionUpdateEntry>? previousHistory = null;
             var hadPreviousHistory = false;
 
@@ -304,6 +414,7 @@ namespace SalmonEgg.Application.Services.Chat
                 {
                     session.Cwd = @params.Cwd;
                     session.State = SessionState.Active;
+                    ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
                 }
                 catch
                 {
@@ -326,6 +437,7 @@ namespace SalmonEgg.Application.Services.Chat
                 }
 
                 _currentSessionId = previousSessionId;
+                _currentMode = previousMode;
                 throw;
             }
             catch (Exception ex)
@@ -344,6 +456,7 @@ namespace SalmonEgg.Application.Services.Chat
                 }
 
                 _currentSessionId = previousSessionId;
+                _currentMode = previousMode;
 
                 var entry = new ErrorLogEntry(
                     "LoadSessionAsync failed",
@@ -363,6 +476,7 @@ namespace SalmonEgg.Application.Services.Chat
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
         {
             var previousSessionId = _currentSessionId;
+            var previousMode = CloneModeState(_currentMode);
 
             try
             {
@@ -376,16 +490,19 @@ namespace SalmonEgg.Application.Services.Chat
                 var response = await _acpClient.ResumeSessionAsync(@params, cancellationToken).ConfigureAwait(false);
                 session.Cwd = @params.Cwd;
                 session.State = SessionState.Active;
+                ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
                 return response;
             }
             catch (OperationCanceledException)
             {
                 _currentSessionId = previousSessionId;
+                _currentMode = previousMode;
                 throw;
             }
             catch (Exception ex)
             {
                 _currentSessionId = previousSessionId;
+                _currentMode = previousMode;
 
                 var entry = new ErrorLogEntry(
                     "ResumeSessionAsync failed",
@@ -412,6 +529,7 @@ namespace SalmonEgg.Application.Services.Chat
                     _currentPlan = null;
                     _currentMode = null;
                 }
+                _configAuthoritativeSessionIds.Remove(@params.SessionId);
 
                 return response;
             }
@@ -478,7 +596,7 @@ namespace SalmonEgg.Application.Services.Chat
                 var response = await _acpClient.SetSessionModeAsync(@params);
                 if (!string.IsNullOrEmpty(@params.ModeId))
                 {
-                    _currentMode = new SessionModeState { CurrentModeId = @params.ModeId };
+                    ApplyCurrentModeId(@params.SessionId, @params.ModeId);
                 }
                 return response;
             }
@@ -630,6 +748,7 @@ namespace SalmonEgg.Application.Services.Chat
                 _currentSessionId = null;
                 _currentPlan = null;
                 _currentMode = null;
+                _configAuthoritativeSessionIds.Clear();
 
                 return await _acpClient.DisconnectAsync();
             }
@@ -647,15 +766,17 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
-        public async Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
         {
             try
             {
                 if (string.IsNullOrEmpty(_currentSessionId))
-                    return null;
+                {
+                    return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(null);
+                }
 
-                // TODO: Modes should be cached from response or requested via separate protocol call if available.
-                return null;
+                return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(
+                    _currentMode is null ? null : ToProtocolModes(_currentMode));
             }
             catch (Exception ex)
             {

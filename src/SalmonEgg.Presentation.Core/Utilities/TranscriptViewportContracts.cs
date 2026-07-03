@@ -89,14 +89,6 @@ public abstract record TranscriptViewportEvent(string ConversationId, int Genera
         TranscriptViewportFact Fact)
         : TranscriptViewportEvent(ConversationId, Generation);
 
-    // Compatibility bridge for the existing page-local coordinator call sites.
-    // Task 1 introduces the conversation-scoped name without forcing coordinator edits yet.
-    public sealed record ViewportFactChanged(
-        string ConversationId,
-        int Generation,
-        TranscriptViewportFact Fact)
-        : ViewportObserved(ConversationId, Generation, Fact);
-
     public sealed record ProjectionReady(
         string ConversationId,
         int Generation,

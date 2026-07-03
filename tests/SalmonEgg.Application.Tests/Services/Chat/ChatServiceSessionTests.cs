@@ -287,14 +287,18 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
-    public void SessionUpdate_CurrentModeUpdate_UsesOfficialModeId()
+    public async Task SessionUpdate_CurrentModeUpdate_UsesOfficialModeIdForCurrentSession()
     {
         var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "s1" });
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
         acpClient.Raise(
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("s1", new CurrentModeUpdate
@@ -307,6 +311,162 @@ public sealed class ChatServiceSessionTests
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
         Assert.Equal("code", session!.History.Single().ModeId);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SessionUpdate_CurrentModeUpdate_ForBackgroundSession_DoesNotOverrideCurrentMode()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse(
+                "current",
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                    ]
+                }));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        acpClient.Raise(
+            client => client.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("background", new CurrentModeUpdate("plan")));
+
+        Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
+        Assert.Equal("plan", sessionManager.GetSession("background")!.Mode.CurrentModeId);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithSessionModes_ExposesAuthoritativeAvailableModes()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse(
+                "s1",
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode
+                        {
+                            Id = "code",
+                            Name = "Code",
+                            Description = "Code mode"
+                        },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode
+                        {
+                            Id = "plan",
+                            Name = "Plan",
+                            Description = "Plan mode"
+                        }
+                    ]
+                }));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        var modes = await sut.GetAvailableModesAsync();
+
+        Assert.Equal("s1", sut.CurrentSessionId);
+        Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
+        Assert.Equal("Code", sut.CurrentMode?.CurrentMode?.Name);
+        Assert.NotNull(modes);
+        Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
+        Assert.Equal("code", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SetSessionModeAsync_PreservesAvailableModesFromSessionResponse()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse(
+                "s1",
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                    ]
+                }));
+        acpClient
+            .Setup(c => c.SetSessionModeAsync(
+                It.Is<SessionSetModeParams>(p => p.SessionId == "s1" && p.ModeId == "plan"),
+                default))
+            .ReturnsAsync(new SessionSetModeResponse());
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        await sut.SetSessionModeAsync(new SessionSetModeParams("s1", "plan"));
+        var modes = await sut.GetAvailableModesAsync();
+
+        Assert.Equal("plan", sut.CurrentMode?.CurrentModeId);
+        Assert.Equal("Plan", sut.CurrentMode?.CurrentMode?.Name);
+        Assert.NotNull(modes);
+        Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
+        Assert.Equal("plan", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+        Assert.Equal(2, sessionManager.GetSession("s1")!.Mode.AvailableModes.Count);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task ConfigOptionsAuthority_IgnoresSessionModesAndCurrentModeUpdates()
+    {
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Strict);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .ReturnsAsync(new SessionNewResponse(
+                "s1",
+                modes: new SessionModesState
+                {
+                    CurrentModeId = "code",
+                    AvailableModes =
+                    [
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                    ]
+                },
+                configOptions: []));
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        acpClient.Raise(
+            client => client.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("s1", new CurrentModeUpdate("plan")));
+        var modes = await sut.GetAvailableModesAsync();
+
+        Assert.Null(sut.CurrentMode);
+        Assert.Null(modes);
+        Assert.Empty(sessionManager.GetSession("s1")!.Mode.AvailableModes);
+        Assert.Equal(string.Empty, sessionManager.GetSession("s1")!.Mode.CurrentModeId);
 
         sut.Dispose();
     }

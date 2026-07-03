@@ -11,7 +11,7 @@ public sealed class TranscriptViewportCoordinatorTests
 
         sut.Handle(new TranscriptViewportEvent.SessionActivated("conv-a", 1, TranscriptViewportActivationKind.ColdEnter));
 
-        var command = sut.Handle(new TranscriptViewportEvent.ViewportFactChanged(
+        var command = sut.Handle(new TranscriptViewportEvent.ViewportObserved(
             "conv-a",
             1,
             new TranscriptViewportFact(
