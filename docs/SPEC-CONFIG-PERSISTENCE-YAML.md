@@ -1,6 +1,6 @@
 # 配置持久化方案 SPEC（YAML + 安全存储 + 版本化）
 
-本文档钉死 Salmon Egg 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的非敏感配置，敏感字段进入**平台安全存储**（Windows DPAPI / macOS Keychain / Linux Secret Service / Web 的替代实现），并提供可演进的版本化与迁移策略。
+本文档钉死 Salmon Egg 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的非敏感配置，敏感字段进入**平台安全存储**（Windows DPAPI / macOS Keychain / Linux Secret Service / AndroidKeyStore / iOS Keychain / Web 的替代实现），并提供可演进的版本化与迁移策略。
 
 > 目标：可读、可合并、可迁移、跨平台一致、不会因为新增字段/枚举值/格式差异导致客户端崩溃。
 

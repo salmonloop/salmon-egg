@@ -81,15 +81,15 @@ SalmonEgg.sln
 
 平台能力由统一的能力事实源（`IPlatformCapabilityService`）提供，禁止在 ViewModel 或业务层散落平台判断。
 
-| 能力 | MSIX (Windows) | WASM | Desktop (Skia) |
-|------|:--------------:|:----:|:--------------:|
-| 本地文件系统访问 | ✅ | ❌ | ✅ |
-| Stdio 子进程 | ✅ | ❌ | ✅ |
-| 安全凭据存储 | DPAPI（当前用户） | Volatile（内存） | Keychain / Secret Service |
-| WebSocket (`ws://`) | ✅ | 仅 `http://` 来源下允许 | ✅ |
-| WebSocket (`wss://`) | ✅ | ✅ | ✅ |
-| ACP `clientCapabilities.fs` | ✅ | ❌（不声明） | ✅ |
-| ACP `terminal` | ✅ | ❌（不声明） | ✅ |
+| 能力 | Windows | Linux Desktop | macOS Desktop | Android | iOS | WASM |
+|------|:-------:|:-------------:|:-------------:|:-------:|:---:|:----:|
+| 本地文件系统访问 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Stdio 子进程 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 安全凭据存储 | DPAPI | Secret Service | Keychain | AndroidKeyStore | Keychain | Volatile（内存） |
+| WebSocket (`ws://`) | ✅ | ✅ | ✅ | ✅ | ✅ | 仅 `http://` 来源下允许 |
+| WebSocket (`wss://`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ACP `clientCapabilities.fs` | ✅ | ✅ | ✅ | ❌（不声明） | ❌（不声明） | ❌（不声明） |
+| ACP `terminal` | ✅ | ✅ | ✅ | ❌（不声明） | ❌（不声明） | ❌（不声明） |
 
 ## 配置持久化
 

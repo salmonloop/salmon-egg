@@ -11,11 +11,14 @@ public sealed class SecureStorageRegistrationContractTests
         var source = LoadText("SalmonEgg/SalmonEgg/DependencyInjection.cs");
 
         Assert.DoesNotContain("AddSingleton<ISecureStorage>(sp =>", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("new AppFileStoreSecureStorage", source, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(FindRepoRoot(), "src/SalmonEgg.Infrastructure/Storage/AppFileStoreSecureStorage.cs")));
         Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Linux)", source, StringComparison.Ordinal);
         Assert.Contains("new LinuxSecretServiceSecureStorage()", source, StringComparison.Ordinal);
         Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.OSX)", source, StringComparison.Ordinal);
         Assert.Contains("new MacOSKeychainSecureStorage()", source, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", source, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("#elif __WASM__ || __ANDROID__ || __IOS__", source, StringComparison.Ordinal);
         Assert.Contains("AddSingleton<ISecureStorage, VolatileSecureStorage>();", source, StringComparison.Ordinal);
     }
 

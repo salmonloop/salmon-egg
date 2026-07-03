@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,9 +23,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         Directory.CreateDirectory(_testDirectory);
         Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", Path.Combine(_testDirectory, "SalmonEgg"), EnvironmentVariableTarget.Process);
 
-        _secureStorage = new AppFileStoreSecureStorage(
-            new FileSystemAppFileStore(),
-            System.IO.Path.Combine(_testDirectory, "SalmonEgg", "SecureStorage"));
+        _secureStorage = new RecordingSecureStorage();
         _configManager = new ConfigurationManager(_secureStorage, new FileSystemAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
     }
 
@@ -411,5 +410,40 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         public Task DeleteAsync(string key)
             => Task.CompletedTask;
+    }
+
+    private sealed class RecordingSecureStorage : ISecureStorage
+    {
+        private readonly ConcurrentDictionary<string, string> _values = new(StringComparer.Ordinal);
+
+        public Task SaveAsync(string key, string value)
+        {
+            ValidateKey(key);
+            ArgumentNullException.ThrowIfNull(value);
+            _values[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> LoadAsync(string key)
+        {
+            ValidateKey(key);
+            _values.TryGetValue(key, out var value);
+            return Task.FromResult<string?>(value);
+        }
+
+        public Task DeleteAsync(string key)
+        {
+            ValidateKey(key);
+            _values.TryRemove(key, out _);
+            return Task.CompletedTask;
+        }
+
+        private static void ValidateKey(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                throw new ArgumentNullException(nameof(key));
+            }
+        }
     }
 }

@@ -9,20 +9,15 @@
 Windows: WindowsDpapiSecureStorage (DPAPI 加密，用户账户绑定)
 Linux Desktop: LinuxSecretServiceSecureStorage (Secret Service / secret-tool)
 macOS Desktop: MacOSKeychainSecureStorage (Security.framework Keychain)
+Android: AndroidKeyStoreSecureStorage (AndroidKeyStore AES-GCM + 私有 SharedPreferences 密文)
+iOS: IosKeychainSecureStorage (Keychain generic password)
 受限平台: VolatileSecureStorage (进程内、不持久化)
-
-### AppFileStoreSecureStorage
-
-- key 经 SHA-256 哈希后作为文件名（key 不落盘）
-- value 以 Base64 编码写入文件内容；这不是加密
-- 写入路径：IAppFileStore.WriteAllTextAsync → AtomicFile → IFileSystemPersistence.FlushAsync
-- 当前仅用于测试/兼容场景，不作为生产平台 ISecureStorage 注册
 
 ### WindowsDpapiSecureStorage
 
 - ProtectedData.Protect/Unprotect（DPAPI，DataProtectionScope.CurrentUser）
 - 存储路径：SalmonEggPaths.GetAppDataRootPath() + /SecureStorage/
-- 支持旧明文格式迁移（TryDecodeLegacyPlainText）
+- 无明文兼容 fallback；无法由 DPAPI 解密的数据直接视为损坏
 
 ### LinuxSecretServiceSecureStorage
 
@@ -34,6 +29,18 @@ macOS Desktop: MacOSKeychainSecureStorage (Security.framework Keychain)
 
 - 通过 Security.framework Keychain generic password API 保存敏感凭据
 - secret 作为 Keychain item data 写入，不经过命令行参数
+- Keychain 不可用时，保存敏感凭据失败，读取 missing item 返回 null
+
+### AndroidKeyStoreSecureStorage
+
+- 通过 AndroidKeyStore 生成不可导出的 AES-GCM 密钥
+- 私有 SharedPreferences 只保存 IV + ciphertext，不保存明文 secret
+- Android 6.0 / API 23 以下或 AndroidKeyStore 不可用时，保存敏感凭据失败
+
+### IosKeychainSecureStorage
+
+- 通过 iOS Keychain generic password item 保存敏感凭据
+- secret 作为 Keychain item data 写入，不经过普通文件系统
 - Keychain 不可用时，保存敏感凭据失败，读取 missing item 返回 null
 
 ### VolatileSecureStorage

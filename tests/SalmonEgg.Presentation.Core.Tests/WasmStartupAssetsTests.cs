@@ -193,7 +193,7 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void DependencyInjection_RegistersBrowserWasmFilePersistenceAndVolatileSecureStorage()
+    public void DependencyInjection_RegistersPlatformSecureStorageWithoutFileFallback()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
@@ -201,7 +201,10 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, VolatileSecureStorage>();", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("new AppFileStoreSecureStorage(", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("#elif __WASM__ || __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
+        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Storage\AppFileStoreSecureStorage.cs")));
     }
 
     [Fact]

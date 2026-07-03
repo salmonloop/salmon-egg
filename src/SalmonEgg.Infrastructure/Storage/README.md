@@ -22,7 +22,7 @@
 - **特点**:
   - 使用 DPAPI (`ProtectedData`) 加密，与 Windows 当前用户账户绑定
   - 构造函数不触盘，首次写入时创建目录
-  - 支持从旧明文格式迁移（TryDecodeLegacyPlainText）
+  - 无明文兼容 fallback；无法由 DPAPI 解密的数据直接视为损坏
 - **DI 注册**: 见 `DependencyInjection.cs` 的 `#if WINDOWS` 分支
 
 ### LinuxSecretServiceSecureStorage（Linux Desktop）
@@ -45,26 +45,39 @@
   - Keychain 不可用时写入凭据 fail-closed
 - **DI 注册**: 见 `DependencyInjection.cs` 的 macOS desktop 分支
 
+### AndroidKeyStoreSecureStorage（Android）
+
+- **文件**: `SalmonEgg/Platforms/Android/AndroidKeyStoreSecureStorage.cs`
+- **平台**: Android 6.0 / API 23+
+- **特点**:
+  - 使用 AndroidKeyStore 生成 AES-GCM 密钥
+  - 密文和 IV 存入 app 私有 SharedPreferences
+  - AndroidKeyStore 不可用或系统版本过低时写入凭据 fail-closed
+- **DI 注册**: 见 `DependencyInjection.cs` 的 `__ANDROID__` 分支
+
+### IosKeychainSecureStorage（iOS）
+
+- **文件**: `SalmonEgg/Platforms/iOS/IosKeychainSecureStorage.cs`
+- **平台**: iOS
+- **特点**:
+  - 使用 Keychain generic password item
+  - secret 写入 Keychain item data，不进入普通文件
+  - Keychain 不可用时写入凭据 fail-closed
+- **DI 注册**: 见 `DependencyInjection.cs` 的 `__IOS__` 分支
+
 ### VolatileSecureStorage（受限平台）
 
 - **文件**: `VolatileSecureStorage.cs`
-- **平台**: WASM、Android、iOS、未知 desktop 平台
+- **平台**: WASM、未知 desktop 平台
 - **特点**:
   - 仅进程内保存，不持久化到普通文件
   - 防止把敏感凭据降级写入非安全存储
-
-### AppFileStoreSecureStorage（测试/兼容实现）
-
-- **文件**: `AppFileStoreSecureStorage.cs`
-- **特点**:
-  - 通过 `IAppFileStore` 读写
-  - 文件名为 key 的 SHA-256 哈希（不暴露 key 明文）
-  - 文件内容为 value 的 Base64 编码；这不是加密
-  - 当前不作为生产平台 `ISecureStorage` 注册
 
 ## 安全说明
 
 - Windows：DPAPI 提供系统级加密，只有创建数据的用户可以解密。
 - Linux：Secret Service provider 是持久敏感凭据的事实源。
 - macOS：Keychain 是持久敏感凭据的事实源。
+- Android：AndroidKeyStore 是密钥事实源，SharedPreferences 只保存密文。
+- iOS：Keychain 是持久敏感凭据的事实源。
 - 受限平台：没有 OS-backed secure store 时只允许 volatile 语义，不得降级到普通文件。

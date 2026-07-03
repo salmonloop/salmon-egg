@@ -56,15 +56,9 @@ public sealed class WindowsDpapiSecureStorage : ISecureStorage
             var unprotectedBytes = ProtectedData.Unprotect(bytes, optionalEntropy: null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(unprotectedBytes);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
-            if (TryDecodeLegacyPlainText(bytes, out var legacyValue))
-            {
-                await SaveAsync(key, legacyValue).ConfigureAwait(false);
-                return legacyValue;
-            }
-
-            throw new InvalidOperationException($"Stored secure data for key '{key}' could not be decrypted.");
+            throw new InvalidOperationException($"Stored secure data for key '{key}' could not be decrypted.", ex);
         }
     }
 
@@ -95,43 +89,6 @@ public sealed class WindowsDpapiSecureStorage : ISecureStorage
         {
             throw new ArgumentNullException(nameof(key));
         }
-    }
-
-    private static bool TryDecodeLegacyPlainText(byte[] bytes, out string value)
-    {
-        value = string.Empty;
-        try
-        {
-            var decoder = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-            var decoded = decoder.GetString(bytes);
-            if (!IsPlausibleLegacySecret(decoded))
-            {
-                return false;
-            }
-
-            value = decoded;
-            return true;
-        }
-        catch (DecoderFallbackException)
-        {
-            return false;
-        }
-    }
-
-    private static bool IsPlausibleLegacySecret(string value)
-    {
-        foreach (var character in value)
-        {
-            if (char.IsControl(character)
-                && character is not '\r'
-                && character is not '\n'
-                && character is not '\t')
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 }
 #endif

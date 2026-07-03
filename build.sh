@@ -14,6 +14,14 @@ desktop_publish_dir() {
   esac
 }
 
+run_test_gates() {
+  dotnet test tests/SalmonEgg.Domain.Tests --configuration Release --no-build || return 1
+  dotnet test tests/SalmonEgg.Application.Tests --configuration Release --no-build || return 1
+  dotnet test tests/SalmonEgg.Infrastructure.Tests --configuration Release --no-build || return 1
+  # Presentation tests exercise global UI/testhost state; keep the release gate deterministic.
+  dotnet test tests/SalmonEgg.Presentation.Core.Tests --configuration Release --no-build -- RunConfiguration.DisableParallelization=true || return 1
+}
+
 case "$1" in
   ""|desktop )
     output_dir="$(desktop_publish_dir)"
@@ -32,7 +40,7 @@ case "$1" in
 
     echo
     echo "[3/4] Running tests..."
-    dotnet test SalmonEgg.sln --configuration Release --no-build || exit 1
+    run_test_gates || exit 1
 
     echo
     echo "[4/4] Publishing application..."

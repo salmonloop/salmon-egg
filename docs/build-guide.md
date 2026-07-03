@@ -165,7 +165,7 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 # 安装 Android 工作负载（首次需要）
 dotnet workload install android
 
-# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.202）
+# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.109）
 
 # 运行在 Android 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \

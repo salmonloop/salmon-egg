@@ -229,11 +229,17 @@ public static class DependencyInjection
         // Windows: DPAPI (hardware-bound, user-scoped encryption).
         // Linux desktop: Secret Service via libsecret's secret-tool.
         // macOS desktop: Keychain via Security.framework.
+        // Android: AndroidKeyStore-backed AES-GCM with private SharedPreferences ciphertext.
+        // iOS: Keychain generic password item.
         // Restricted platforms: volatile fail-closed storage; sensitive values are not persisted
         // unless an OS-backed secure store exists.
 #if WINDOWS
         services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
-#elif __WASM__ || __ANDROID__ || __IOS__
+#elif __ANDROID__
+        services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();
+#elif __IOS__
+        services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();
+#elif __WASM__
         services.AddSingleton<ISecureStorage, VolatileSecureStorage>();
 #else
         services.AddSingleton<ISecureStorage>(_ =>

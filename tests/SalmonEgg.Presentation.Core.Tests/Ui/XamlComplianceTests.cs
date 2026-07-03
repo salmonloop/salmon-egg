@@ -2686,14 +2686,14 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WindowsDpapiSecureStorage_DoesNotOverwriteUndecryptableCiphertextAsLegacyText()
+    public void WindowsDpapiSecureStorage_DoesNotDecodeLegacyPlainTextSecrets()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsDpapiSecureStorage.cs");
 
-        Assert.Contains("TryDecodeLegacyPlainText", code, StringComparison.Ordinal);
-        Assert.Contains("throwOnInvalidBytes: true", code, StringComparison.Ordinal);
-        Assert.Contains("IsPlausibleLegacySecret", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("var legacyValue = Encoding.UTF8.GetString(bytes);", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDecodeLegacyPlainText", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsPlausibleLegacySecret", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("SaveAsync(key,", code, StringComparison.Ordinal);
+        Assert.Contains("Stored secure data for key '{key}' could not be decrypted", code, StringComparison.Ordinal);
     }
 
     [Fact]
