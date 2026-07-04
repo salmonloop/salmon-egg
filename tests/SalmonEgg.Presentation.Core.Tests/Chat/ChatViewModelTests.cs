@@ -3005,7 +3005,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task CurrentAgentDisplayText_PrefersProtocolAgentName_ThenProfileName_ThenDash()
+    public async Task CurrentAgentDisplayText_PrefersProfileName_ThenProtocolAgentName_ThenDash()
     {
         await using var fixture = CreateViewModel();
 
@@ -3024,8 +3024,12 @@ public partial class ChatViewModelTests
             AgentName = "Protocol Agent"
         });
         await WaitForConditionAsync(() =>
-            Task.FromResult(string.Equals(fixture.ViewModel.CurrentAgentDisplayText, "Protocol Agent", StringComparison.Ordinal)));
+            Task.FromResult(string.Equals(fixture.ViewModel.CurrentAgentDisplayText, "Configured Agent", StringComparison.Ordinal)));
 
+        Assert.Equal("Configured Agent", fixture.ViewModel.CurrentAgentDisplayText);
+
+        profile.Name = " ";
+        fixture.ViewModel.SelectedAcpProfile = profile;
         Assert.Equal("Protocol Agent", fixture.ViewModel.CurrentAgentDisplayText);
     }
 

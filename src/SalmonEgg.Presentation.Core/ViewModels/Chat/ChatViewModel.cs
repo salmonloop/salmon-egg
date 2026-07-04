@@ -1038,16 +1038,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         get
         {
-            var agentName = AgentName?.Trim();
-            if (!string.IsNullOrWhiteSpace(agentName))
-            {
-                return agentName;
-            }
-
             var profileName = SelectedAcpProfile?.Name?.Trim();
             if (!string.IsNullOrWhiteSpace(profileName))
             {
                 return profileName;
+            }
+
+            var agentName = AgentName?.Trim();
+            if (!string.IsNullOrWhiteSpace(agentName))
+            {
+                return agentName;
             }
 
             return "—";
