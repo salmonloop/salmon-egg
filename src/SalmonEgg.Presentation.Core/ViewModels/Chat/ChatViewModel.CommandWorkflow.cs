@@ -684,7 +684,6 @@ public partial class ChatViewModel
             {
                 IsVoiceInputListening = false;
                 _activeVoiceInputRequestId = null;
-                ResetVoiceInputDiagnosticsState(requestId);
             }
 
             if (requestId is not null
@@ -733,7 +732,6 @@ public partial class ChatViewModel
                 IsVoiceInputListening = false;
                 _activeVoiceInputRequestId = null;
                 _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
-                ResetVoiceInputDiagnosticsState(requestId);
             }
 
             if (requestId is not null
@@ -899,7 +897,6 @@ public partial class ChatViewModel
             {
                 IsVoiceInputListening = false;
                 _activeVoiceInputRequestId = null;
-                ResetVoiceInputDiagnosticsState(requestId);
                 TryDisposeVoiceInputCts();
             }
 
@@ -912,7 +909,6 @@ public partial class ChatViewModel
                 IsVoiceInputListening = false;
                 _activeVoiceInputRequestId = null;
                 _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
-                ResetVoiceInputDiagnosticsState(requestId);
             }
 
             ClearVoiceInputTransport(requestId, disposeCts: true);
@@ -924,7 +920,6 @@ public partial class ChatViewModel
             {
                 IsVoiceInputListening = false;
                 _activeVoiceInputRequestId = null;
-                ResetVoiceInputDiagnosticsState(requestId);
             }
 
             if (IsCurrentVoiceTransportRequest(requestId))
@@ -1028,7 +1023,6 @@ public partial class ChatViewModel
             IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
             _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
-            ResetVoiceInputDiagnosticsState(result.RequestId);
         }).ConfigureAwait(false);
     }
 
@@ -1072,7 +1066,6 @@ public partial class ChatViewModel
             IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
             _voiceInputBasePrompt = CurrentPrompt ?? string.Empty;
-            ResetVoiceInputDiagnosticsState(result.RequestId);
             ShowTransientNotificationToast(message);
         }).ConfigureAwait(false);
 
@@ -1124,10 +1117,6 @@ public partial class ChatViewModel
         {
             TryDisposeVoiceInputCts();
         }
-    }
-
-    private void ResetVoiceInputDiagnosticsState(string requestId)
-    {
     }
 
     private void SetVoiceInputTransportState(VoiceInputTransportState state)
