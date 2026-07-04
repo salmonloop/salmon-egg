@@ -19,12 +19,12 @@ public interface IAcpConnectionPoolManager
         AcpConnectionReuseKey reuseKey,
         out AcpConnectionSession session);
 
-    void RecordSession(
+    AcpConnectionSession? RecordSession(
         string profileId,
         AcpChatServiceAdapter service,
         InitializeResponse initializeResponse,
         AcpConnectionReuseKey reuseKey,
-        string? connectionInstanceId);
+        string connectionInstanceId);
 
     bool RemoveByService(IChatService service, out string profileId);
 
@@ -117,18 +117,20 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
         return true;
     }
 
-    public void RecordSession(
+    public AcpConnectionSession? RecordSession(
         string profileId,
         AcpChatServiceAdapter service,
         InitializeResponse initializeResponse,
         AcpConnectionReuseKey reuseKey,
-        string? connectionInstanceId)
+        string connectionInstanceId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(initializeResponse);
 
-        _sessionRegistry.Upsert(new AcpConnectionSession(
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionInstanceId);
+
+        var replacedSession = _sessionRegistry.Upsert(new AcpConnectionSession(
             profileId,
             service,
             initializeResponse,
@@ -143,6 +145,8 @@ public sealed class AcpConnectionPoolManager : IAcpConnectionPoolManager
             "ACP connection pool upsert. profileId={ProfileId} totalUpserts={TotalUpserts}",
             profileId,
             upserts);
+
+        return replacedSession;
     }
 
     public bool RemoveByService(IChatService service, out string profileId)

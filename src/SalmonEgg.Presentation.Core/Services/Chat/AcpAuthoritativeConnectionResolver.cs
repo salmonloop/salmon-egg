@@ -92,7 +92,7 @@ internal sealed class AcpAuthoritativeConnectionResolver
         snapshot = new(
             session.Service,
             requiredProfileId,
-            session.ConnectionInstanceId ?? connectionState.ConnectionInstanceId);
+            session.ConnectionInstanceId);
         return true;
     }
 

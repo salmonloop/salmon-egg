@@ -2595,6 +2595,52 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task ConnectProfileInPoolAsync_WhenProfileReuseKeyChanges_ReplacesAndDisposesPreviousWarmSession()
+    {
+        var firstService = CreateChatService();
+        var secondService = CreateChatService();
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            sessionRegistry: registry,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+        var firstProfile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve").ToList()
+        };
+        var secondProfile = new ServerConfiguration
+        {
+            Id = "profile-1",
+            Name = "Agent",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent.exe",
+            StdioArguments = StdioCommandLine.ParseArgumentsText("--serve --mode strict").ToList()
+        };
+        var transport = new FakeTransportConfiguration();
+
+        SetupProfileChatService(factory, firstProfile, firstService.Object);
+        SetupProfileChatService(factory, secondProfile, secondService.Object);
+
+        var first = await sut.ConnectProfileInPoolAsync(firstProfile, transport);
+        var second = await sut.ConnectProfileInPoolAsync(secondProfile, transport);
+
+        Assert.NotSame(first.ChatService, second.ChatService);
+        Assert.True(registry.TryGetByProfile("profile-1", out var session));
+        Assert.Same(second.ChatService, session.Service);
+        firstService.Verify(x => x.DisconnectAsync(), Times.Once);
+        secondService.Verify(x => x.DisconnectAsync(), Times.Never);
+    }
+
+    [Fact]
     public async Task ConnectProfileInPoolAsync_WhenCalledConcurrentlyForSameProfile_ReusesSingleInFlightSession()
     {
         var initializeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -2898,13 +2944,14 @@ public sealed class AcpChatCoordinatorTests
             return false;
         }
 
-        public void RecordSession(
+        public AcpConnectionSession? RecordSession(
             string profileId,
             AcpChatServiceAdapter service,
             InitializeResponse initializeResponse,
             AcpConnectionReuseKey reuseKey,
-            string? connectionInstanceId)
+            string connectionInstanceId)
         {
+            return null;
         }
 
         public bool RemoveByService(IChatService service, out string profileId)

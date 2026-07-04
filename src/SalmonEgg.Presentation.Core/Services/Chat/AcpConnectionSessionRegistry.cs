@@ -36,7 +36,7 @@ public interface IAcpConnectionSessionRegistry
 
     bool TryGetProfileId(IChatService service, out string profileId);
 
-    void Upsert(AcpConnectionSession session);
+    AcpConnectionSession? Upsert(AcpConnectionSession session);
 
     bool RemoveByProfile(string profileId);
 
@@ -84,11 +84,13 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
         return false;
     }
 
-    public void Upsert(AcpConnectionSession session)
+    public AcpConnectionSession? Upsert(AcpConnectionSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
+        AcpConnectionSession? replaced;
         lock (_gate)
         {
+            _sessionsByProfile.TryGetValue(session.ProfileId, out replaced);
             _sessionsByProfile[session.ProfileId] = session with
             {
                 LastUsedUtc = session.LastUsedUtc == default ? DateTime.UtcNow : session.LastUsedUtc
@@ -97,6 +99,7 @@ public sealed class InMemoryAcpConnectionSessionRegistry : IAcpConnectionSession
 
         // Raise outside the lock to avoid potential deadlocks from re-entrant subscribers.
         ProfileConnectionChanged?.Invoke(session.ProfileId, true);
+        return replaced;
     }
 
     public bool RemoveByProfile(string profileId)

@@ -2744,9 +2744,7 @@ public partial class ChatViewModel
     private async Task<string?> ResolveProjectionRestoreConnectionInstanceIdAsync()
     {
         var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        return ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
-            connectionState,
-            ConnectionInstanceId);
+        return ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(connectionState);
     }
 
     private async Task<bool> WaitForRemoteConnectionReadyAsync(
@@ -2816,10 +2814,17 @@ public partial class ChatViewModel
         var preserveExistingConnectionInstanceId =
             connectionInstanceId is null
             && phase is ConversationRuntimePhase.Selecting or ConversationRuntimePhase.Selected;
+        var preservedConnectionInstanceId = preserveExistingConnectionInstanceId
+            ? existingRuntime?.ConnectionInstanceId
+            : null;
+        var currentConnectionInstanceId = connectionInstanceId is null
+                && string.IsNullOrWhiteSpace(preservedConnectionInstanceId)
+            ? (await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false)).ConnectionInstanceId
+            : null;
         var effectiveConnectionInstanceId =
             connectionInstanceId
-            ?? (preserveExistingConnectionInstanceId ? existingRuntime?.ConnectionInstanceId : null)
-            ?? ConnectionInstanceId;
+            ?? preservedConnectionInstanceId
+            ?? currentConnectionInstanceId;
         var remoteSessionId = binding?.RemoteSessionId;
         var profileId = binding?.ProfileId;
         if (string.IsNullOrWhiteSpace(remoteSessionId) || string.IsNullOrWhiteSpace(profileId))
@@ -2998,9 +3003,7 @@ public partial class ChatViewModel
         }
 
         var currentConnectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
-        var currentConnectionInstanceId = !string.IsNullOrWhiteSpace(currentConnectionState.ConnectionInstanceId)
-            ? currentConnectionState.ConnectionInstanceId
-            : ConnectionInstanceId;
+        var currentConnectionInstanceId = currentConnectionState.ConnectionInstanceId;
         if (expectedChatServiceGeneration != _foregroundChatServiceGeneration
             || !string.Equals(currentConnectionInstanceId, expectedConnectionInstanceId, StringComparison.Ordinal))
         {

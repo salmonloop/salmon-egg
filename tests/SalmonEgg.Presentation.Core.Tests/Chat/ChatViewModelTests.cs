@@ -4437,6 +4437,7 @@ public partial class ChatViewModelTests
     private static async Task DispatchConnectedAsync(ViewModelFixture fixture, string profileId)
     {
         await fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction(profileId));
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
     }
 

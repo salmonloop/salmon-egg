@@ -300,12 +300,13 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             await _connectionCoordinator.SetConnectionInstanceIdAsync(connectionInstanceId, applyToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(selectedProfileId))
             {
-                _connectionPoolManager.RecordSession(
+                var replacedSession = _connectionPoolManager.RecordSession(
                     selectedProfileId!,
                     wrappedService,
                     initializeResponse,
                     currentConnectionReuseKey,
                     connectionInstanceId);
+                await DisposeReplacedSessionAsync(replacedSession, wrappedService).ConfigureAwait(false);
             }
             await _connectionCoordinator.SetConnectedAsync(selectedProfileId, applyToken).ConfigureAwait(false);
             await _connectionCoordinator.ClearAuthenticationRequiredAsync(applyToken).ConfigureAwait(false);
@@ -568,7 +569,13 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
                 .ConfigureAwait(false);
             ThrowIfPoolProfileRequestSuperseded(profile.Id, requestGeneration, attempt.Token);
             var connectionInstanceId = CreateConnectionInstanceId();
-            _connectionPoolManager.RecordSession(profile.Id, wrapped, initializeResponse, reuseKey, connectionInstanceId);
+            var replacedSession = _connectionPoolManager.RecordSession(
+                profile.Id,
+                wrapped,
+                initializeResponse,
+                reuseKey,
+                connectionInstanceId);
+            await DisposeReplacedSessionAsync(replacedSession, wrapped).ConfigureAwait(false);
             return new AcpTransportApplyResult(wrapped, initializeResponse);
         }
         catch
@@ -908,6 +915,29 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Failed to disconnect previous ACP service during transport replacement");
+        }
+    }
+
+    private async Task DisposeReplacedSessionAsync(
+        AcpConnectionSession? replacedSession,
+        AcpChatServiceAdapter replacementService)
+    {
+        if (replacedSession is null
+            || ReferenceEquals(replacedSession.Service, replacementService))
+        {
+            return;
+        }
+
+        try
+        {
+            await DisposeServiceAsync(replacedSession.Service).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Failed to dispose replaced ACP connection pool session. profileId={ProfileId}",
+                replacedSession.ProfileId);
         }
     }
 

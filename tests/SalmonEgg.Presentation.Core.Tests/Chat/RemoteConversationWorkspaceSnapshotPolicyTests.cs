@@ -167,15 +167,13 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             ForegroundTransportProfileId = "profile-other"
         };
 
-        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
-            connectionState,
-            fallbackConnectionInstanceId: "conn-viewmodel");
+        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(connectionState);
 
         Assert.Equal("conn-foreground", result);
     }
 
     [Fact]
-    public void ResolveCurrentConnectionInstanceId_WhenStoreIdentityIsMissing_ReturnsFallbackIdentity()
+    public void ResolveCurrentConnectionInstanceId_WhenStoreIdentityIsMissing_ReturnsNull()
     {
         var connectionState = ChatConnectionState.Empty with
         {
@@ -183,11 +181,9 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             ForegroundTransportProfileId = "profile-other"
         };
 
-        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(
-            connectionState,
-            fallbackConnectionInstanceId: "conn-viewmodel");
+        var result = ConversationProjectionRestoreConnectionPolicy.ResolveCurrentConnectionInstanceId(connectionState);
 
-        Assert.Equal("conn-viewmodel", result);
+        Assert.Null(result);
     }
 
     private static ConversationWorkspaceSnapshot CreateSnapshot()

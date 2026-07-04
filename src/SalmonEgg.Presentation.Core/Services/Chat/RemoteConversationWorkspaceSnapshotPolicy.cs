@@ -73,10 +73,8 @@ internal static class RemoteConversationWorkspaceSnapshotPolicy
 
 internal static class ConversationProjectionRestoreConnectionPolicy
 {
-    public static string? ResolveCurrentConnectionInstanceId(
-        ChatConnectionState? connectionState,
-        string? fallbackConnectionInstanceId)
+    public static string? ResolveCurrentConnectionInstanceId(ChatConnectionState? connectionState)
         => !string.IsNullOrWhiteSpace(connectionState?.ConnectionInstanceId)
             ? connectionState.ConnectionInstanceId
-            : fallbackConnectionInstanceId;
+            : null;
 }

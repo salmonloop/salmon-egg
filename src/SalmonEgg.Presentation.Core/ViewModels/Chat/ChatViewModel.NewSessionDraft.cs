@@ -49,7 +49,7 @@ public partial class ChatViewModel
             var projectedProfileId = ResolveProjectedProfileId(connectionState);
             var foregroundProfileId = connectionState.ForegroundTransportProfileId;
             var profileId = normalizedRequiredProfileId ?? projectedProfileId ?? SelectedProfileId;
-            var connectionInstanceId = connectionState.ConnectionInstanceId ?? ConnectionInstanceId;
+            var connectionInstanceId = connectionState.ConnectionInstanceId;
 
             if (!string.IsNullOrWhiteSpace(normalizedRequiredProfileId)
                 && !string.Equals(foregroundProfileId, normalizedRequiredProfileId, StringComparison.Ordinal))
@@ -84,7 +84,7 @@ public partial class ChatViewModel
                 connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
                 chatService = _chatService;
                 profileId = normalizedRequiredProfileId;
-                connectionInstanceId = connectionState.ConnectionInstanceId ?? ConnectionInstanceId;
+                connectionInstanceId = connectionState.ConnectionInstanceId;
                 if (chatService is null
                     || string.IsNullOrWhiteSpace(profileId)
                     || string.IsNullOrWhiteSpace(connectionInstanceId))
