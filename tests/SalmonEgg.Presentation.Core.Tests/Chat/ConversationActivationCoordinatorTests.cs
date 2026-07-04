@@ -225,7 +225,8 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             ShowPlanPanel: true,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
         var state = State.Value(new object(), () => ChatState.Empty with
         {
@@ -309,7 +310,8 @@ public sealed class ConversationActivationCoordinatorTests
             ],
             ShowPlanPanel: true,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
         var state = State.Value(new object(), () => ChatState.Empty);
@@ -359,7 +361,8 @@ public sealed class ConversationActivationCoordinatorTests
             {
                 Title = "workspace title"
             },
-            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25m, "USD"))));
+            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25m, "USD"))),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
         var state = State.Value(new object(), () => ChatState.Empty with
@@ -530,7 +533,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         Assert.True(result.Succeeded);
         var currentState = await WaitForStateAsync(
-            state,
+            chatStore,
             current => string.Equals(current?.HydratedConversationId, "session-1", StringComparison.Ordinal));
         Assert.Equal("session-1", currentState.HydratedConversationId);
         Assert.Null(currentState.Transcript);
@@ -616,7 +619,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         Assert.True(result.Succeeded);
         var currentState = await WaitForStateAsync(
-            state,
+            chatStore,
             current => string.Equals(current?.HydratedConversationId, "session-1", StringComparison.Ordinal));
         Assert.Equal("session-1", currentState.HydratedConversationId);
         Assert.Null(currentState.Transcript);
@@ -865,7 +868,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
-        var currentState = await WaitForStateAsync(state, current => current?.HydratedConversationId is null);
+        var currentState = await WaitForStateAsync(chatStore, current => current?.HydratedConversationId is null);
         Assert.Null(currentState.HydratedConversationId);
     }
 
@@ -942,7 +945,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
-        var currentState = await WaitForStateAsync(state, current => current?.HydratedConversationId is null);
+        var currentState = await WaitForStateAsync(chatStore, current => current?.HydratedConversationId is null);
         Assert.Null(currentState.HydratedConversationId);
     }
 
@@ -1173,14 +1176,14 @@ public sealed class ConversationActivationCoordinatorTests
         };
 
     private static async Task<ChatState> WaitForStateAsync(
-        IState<ChatState> state,
+        IChatStore chatStore,
         Func<ChatState?, bool> predicate,
         int maxAttempts = 20,
         int delayMs = 10)
     {
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            var current = await state ?? ChatState.Empty;
+            var current = await chatStore.GetCurrentStateAsync();
             if (predicate(current))
             {
                 return current;
@@ -1189,7 +1192,7 @@ public sealed class ConversationActivationCoordinatorTests
             await Task.Delay(delayMs);
         }
 
-        return await state ?? ChatState.Empty;
+        return await chatStore.GetCurrentStateAsync();
     }
 
     private sealed class ImmediateSynchronizationContext : SynchronizationContext

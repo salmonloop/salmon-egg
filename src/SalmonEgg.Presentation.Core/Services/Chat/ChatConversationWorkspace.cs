@@ -391,32 +391,30 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 clearTombstone: false,
                 out var registeredConversationListChanged);
             conversationListChanged |= registeredConversationListChanged;
-            binding.Transcript.Clear();
-            binding.Transcript.AddRange(CloneMessages(snapshot.Transcript));
-            binding.Plan.Clear();
-            binding.Plan.AddRange(snapshot.Plan.Select(ClonePlanEntry));
-            binding.AvailableModes.Clear();
-            binding.AvailableModes.AddRange((snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>()).Select(CloneModeOption));
-            binding.SelectedModeId = snapshot.SelectedModeId;
-            binding.ConfigOptions.Clear();
-            binding.ConfigOptions.AddRange((snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>()).Select(CloneConfigOption));
-            binding.ShowConfigOptionsPanel = snapshot.ShowConfigOptionsPanel;
-            binding.AvailableCommands.Clear();
-            binding.AvailableCommands.AddRange((snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).Select(CloneAvailableCommand));
+            var canApplyRuntimeContent = CanApplySnapshotRuntimeContent(binding, origin);
+            var preserveAuthoritativeRuntimeProjection = ShouldPreserveAuthoritativeRuntimeProjection(
+                binding,
+                canApplyRuntimeContent);
+            if (!preserveAuthoritativeRuntimeProjection)
+            {
+                ClearRuntimeContentCore(binding, preserveSessionInfo: true);
+            }
+
+            if (canApplyRuntimeContent)
+            {
+                ApplySnapshotRuntimeContentCore(binding, snapshot);
+            }
+
             var mergedSessionInfo = snapshot.SessionInfo is null
                 ? ConversationSessionInfoSnapshots.Clone(binding.SessionInfo)
                 : ConversationSessionInfoSnapshots.Merge(binding.SessionInfo, snapshot.SessionInfo);
             binding.SessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
                 mergedSessionInfo,
                 ResolveEstablishedConversationCwd(binding));
-            binding.Usage = CloneUsage(snapshot.Usage);
-            binding.ShowPlanPanel = snapshot.ShowPlanPanel;
-            binding.SnapshotOrigin = origin;
-            binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
-                ? snapshot.ConnectionInstanceId
-                : null;
-            binding.RestoreProjectionItemKey = snapshot.RestoreProjectionItemKey;
-            binding.RestoreProjectionEpoch = snapshot.RestoreProjectionEpoch;
+            if (!preserveAuthoritativeRuntimeProjection)
+            {
+                ApplySnapshotIdentityCore(binding, snapshot, origin);
+            }
         }
 
         if (conversationListChanged)
@@ -459,6 +457,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
             binding.RemoteSessionId = remoteSessionId;
             binding.BoundProfileId = boundProfileId;
+            if (RemoteConversationPersistencePolicy.IsRemoteBacked(remoteSessionId, boundProfileId)
+                && binding.SnapshotOrigin is not ConversationWorkspaceSnapshotOrigin.RuntimeProjection)
+            {
+                ClearRuntimeContentCore(binding, preserveSessionInfo: true);
+            }
         }
 
         if (conversationListChanged)
@@ -506,6 +509,56 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         binding.SnapshotConnectionInstanceId = null;
         binding.RestoreProjectionItemKey = null;
         binding.RestoreProjectionEpoch = null;
+    }
+
+    private static bool CanApplySnapshotRuntimeContent(
+        ConversationBinding binding,
+        ConversationWorkspaceSnapshotOrigin origin)
+    {
+        if (origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection)
+        {
+            return true;
+        }
+
+        return !RemoteConversationPersistencePolicy.IsRemoteBacked(
+            binding.RemoteSessionId,
+            binding.BoundProfileId);
+    }
+
+    private static bool ShouldPreserveAuthoritativeRuntimeProjection(
+        ConversationBinding binding,
+        bool canApplyRuntimeContent)
+    {
+        return !canApplyRuntimeContent
+            && binding.SnapshotOrigin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection;
+    }
+
+    private static void ApplySnapshotRuntimeContentCore(
+        ConversationBinding binding,
+        ConversationWorkspaceSnapshot snapshot)
+    {
+        binding.Transcript.AddRange(CloneMessages(snapshot.Transcript));
+        binding.Plan.AddRange(snapshot.Plan.Select(ClonePlanEntry));
+        binding.AvailableModes.AddRange((snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>()).Select(CloneModeOption));
+        binding.SelectedModeId = snapshot.SelectedModeId;
+        binding.ConfigOptions.AddRange((snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>()).Select(CloneConfigOption));
+        binding.ShowConfigOptionsPanel = snapshot.ShowConfigOptionsPanel;
+        binding.AvailableCommands.AddRange((snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>()).Select(CloneAvailableCommand));
+        binding.Usage = CloneUsage(snapshot.Usage);
+        binding.ShowPlanPanel = snapshot.ShowPlanPanel;
+    }
+
+    private static void ApplySnapshotIdentityCore(
+        ConversationBinding binding,
+        ConversationWorkspaceSnapshot snapshot,
+        ConversationWorkspaceSnapshotOrigin origin)
+    {
+        binding.SnapshotOrigin = origin;
+        binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
+            ? snapshot.ConnectionInstanceId
+            : null;
+        binding.RestoreProjectionItemKey = snapshot.RestoreProjectionItemKey;
+        binding.RestoreProjectionEpoch = snapshot.RestoreProjectionEpoch;
     }
 
     public async Task ApplySessionInfoUpdateAsync(

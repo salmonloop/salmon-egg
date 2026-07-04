@@ -562,7 +562,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task TryPrepareConversationActivationAsync_ProfileMismatch_KeepsRemoteBindingAndLocalTranscript()
+    public async Task TryPrepareConversationActivationAsync_ProfileMismatch_KeepsRemoteBindingWithoutRestoredTranscript()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -602,11 +602,9 @@ public sealed class ChatConversationWorkspaceTests
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
-        Assert.Single(snapshot!.Transcript);
-        Assert.Equal("hello", snapshot.Transcript[0].TextContent);
-        Assert.Single(snapshot.Plan);
-        Assert.Equal("step-1", snapshot.Plan[0].Content);
-        Assert.True(snapshot.ShowPlanPanel);
+        Assert.Empty(snapshot!.Transcript);
+        Assert.Empty(snapshot.Plan);
+        Assert.False(snapshot.ShowPlanPanel);
 
         var remoteBinding = workspace.GetRemoteBinding("session-1");
         Assert.NotNull(remoteBinding);
@@ -2300,6 +2298,168 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(binding);
         Assert.Null(binding!.RemoteSessionId);
         Assert.Equal("profile-1", binding.BoundProfileId);
+    }
+
+    [Fact]
+    public void UpsertConversationSnapshot_RestoredSnapshotForRemoteBackedConversation_DropsRuntimeContent()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-stale", "stale restored transcript")],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "stale restored plan"
+                }
+            ],
+            ShowPlanPanel: true,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            AvailableModes:
+            [
+                new ConversationModeOptionSnapshot
+                {
+                    ModeId = "agent",
+                    ModeName = "Agent"
+                }
+            ],
+            SelectedModeId: "agent",
+            ConfigOptions:
+            [
+                new ConversationConfigOptionSnapshot
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    SelectedValue = "agent"
+                }
+            ],
+            ShowConfigOptionsPanel: true,
+            AvailableCommands:
+            [
+                new ConversationAvailableCommandSnapshot("plan", "Plan", null)
+            ],
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Remote metadata title"
+            },
+            Usage: new ConversationUsageSnapshot(1, 2, null)));
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Empty(snapshot!.Transcript);
+        Assert.Empty(snapshot.Plan);
+        Assert.Empty(snapshot.AvailableModes ?? Array.Empty<ConversationModeOptionSnapshot>());
+        Assert.Empty(snapshot.ConfigOptions ?? Array.Empty<ConversationConfigOptionSnapshot>());
+        Assert.Empty(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
+        Assert.Null(snapshot.SelectedModeId);
+        Assert.False(snapshot.ShowPlanPanel);
+        Assert.False(snapshot.ShowConfigOptionsPanel);
+        Assert.Null(snapshot.Usage);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Remote metadata title", snapshot.SessionInfo!.Title);
+        Assert.Equal(ConversationWorkspaceSnapshotOrigin.Restored, workspace.GetConversationSnapshotOrigin("session-1"));
+    }
+
+    [Fact]
+    public void UpdateRemoteBinding_WhenRestoredConversationBecomesRemoteBacked_DropsRuntimeContent()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-restored", "restored transcript")],
+            Plan:
+            [
+                new ConversationPlanEntrySnapshot
+                {
+                    Content = "restored plan"
+                }
+            ],
+            ShowPlanPanel: true,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Restored title"
+            },
+            Usage: new ConversationUsageSnapshot(1, 2, null)));
+
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Empty(snapshot!.Transcript);
+        Assert.Empty(snapshot.Plan);
+        Assert.False(snapshot.ShowPlanPanel);
+        Assert.Null(snapshot.Usage);
+        Assert.NotNull(snapshot.SessionInfo);
+        Assert.Equal("Restored title", snapshot.SessionInfo!.Title);
+        Assert.Equal(ConversationWorkspaceSnapshotOrigin.Restored, workspace.GetConversationSnapshotOrigin("session-1"));
+    }
+
+    [Fact]
+    public void UpsertConversationSnapshot_RestoredSnapshotForWarmRemoteProjection_PreservesRuntimeProjection()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-runtime", "runtime transcript")],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Runtime title"
+            },
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-restored", "restored transcript")],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Title = "Restored metadata title"
+            }));
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        var message = Assert.Single(snapshot!.Transcript);
+        Assert.Equal("runtime transcript", message.TextContent);
+        Assert.Equal("Restored metadata title", snapshot.SessionInfo?.Title);
+        Assert.Equal("conn-1", snapshot.ConnectionInstanceId);
+        Assert.Equal(ConversationWorkspaceSnapshotOrigin.RuntimeProjection, workspace.GetConversationSnapshotOrigin("session-1"));
     }
 
     [Fact]

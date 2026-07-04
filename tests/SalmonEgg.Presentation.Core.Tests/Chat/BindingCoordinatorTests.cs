@@ -481,7 +481,8 @@ public sealed class BindingCoordinatorTests
             ],
             ShowPlanPanel: true,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-2",
             Transcript: [],

@@ -16511,7 +16511,7 @@ public partial class ChatViewModelTests
         Assert.Equal("profile-1", workspaceBinding.BoundProfileId);
         var workspaceSnapshot = fixture.Workspace.GetConversationSnapshot("conv-2");
         Assert.NotNull(workspaceSnapshot);
-        Assert.Single(workspaceSnapshot!.Transcript);
+        Assert.Empty(workspaceSnapshot!.Transcript);
 
         var state = await fixture.GetStateAsync();
         Assert.Equal(new ConversationBindingSlice("conv-2", "remote-2", "profile-1"), state.ResolveBinding("conv-2"));
