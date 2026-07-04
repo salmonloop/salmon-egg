@@ -54,6 +54,12 @@ public class ShellLayoutMetricsSinkTests
         public ShellLayoutState CurrentState { get; } = ShellLayoutState.Default;
         public ShellLayoutSnapshot CurrentSnapshot { get; } = ShellLayoutPolicy.Compute(ShellLayoutState.Default);
         public ShellLayoutAction? LastAction { get; private set; }
+        public event EventHandler<ShellLayoutChangedEventArgs>? Changed
+        {
+            add { }
+            remove { }
+        }
+
         public ValueTask Dispatch(ShellLayoutAction action) { LastAction = action; return ValueTask.CompletedTask; }
 
         public async ValueTask DisposeAsync()

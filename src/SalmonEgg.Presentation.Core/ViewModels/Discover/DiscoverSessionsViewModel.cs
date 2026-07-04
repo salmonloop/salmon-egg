@@ -31,10 +31,9 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
-    private readonly IState<ShellLayoutState>? _layoutState;
+    private readonly IShellLayoutStore? _shellLayoutStore;
     private CancellationTokenSource? _refreshSessionsCts;
     private readonly CancellationTokenSource _layoutProjectionCts = new();
-    private IDisposable? _layoutSubscription;
     private int _refreshGeneration;
     private int _loadSessionGeneration;
     private bool _disposed;
@@ -157,34 +156,36 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         _localizer = localizer;
         if (shellLayoutStore is not null)
         {
-            SetLayoutMode(ResolveLayoutMode(shellLayoutStore.CurrentState.WindowMetrics));
-            _layoutState = State.FromFeed(this, shellLayoutStore.State);
-            _layoutState.ForEach(async (state, ct) =>
+            _shellLayoutStore = shellLayoutStore;
+            SetLayoutMode(ResolveLayoutMode(_shellLayoutStore.CurrentState.WindowMetrics));
+            _shellLayoutStore.Changed += OnShellLayoutChanged;
+        }
+
+        _selectedProfile = ResolvePreferredSelectedProfile();
+    }
+
+    private async void OnShellLayoutChanged(object? sender, ShellLayoutChangedEventArgs e)
+    {
+        if (_disposed || _layoutProjectionCts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
+            await PostToUiAsync(() =>
             {
-                if (state is null || _disposed || _layoutProjectionCts.IsCancellationRequested || ct.IsCancellationRequested)
+                if (_disposed || _layoutProjectionCts.IsCancellationRequested)
                 {
                     return;
                 }
 
-                try
-                {
-                    await PostToUiAsync(() =>
-                    {
-                        if (_disposed || _layoutProjectionCts.IsCancellationRequested)
-                        {
-                            return;
-                        }
-
-                        SetLayoutMode(ResolveLayoutMode(state.WindowMetrics));
-                    }).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (_layoutProjectionCts.IsCancellationRequested || ct.IsCancellationRequested)
-                {
-                }
-            }, out _layoutSubscription);
+                SetLayoutMode(ResolveLayoutMode(e.State.WindowMetrics));
+            }).ConfigureAwait(false);
         }
-
-        _selectedProfile = ResolvePreferredSelectedProfile();
+        catch (OperationCanceledException) when (_layoutProjectionCts.IsCancellationRequested)
+        {
+        }
     }
 
     public void SetLayoutMode(DiscoverLayoutMode mode)
@@ -501,7 +502,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
         _disposed = true;
         _layoutProjectionCts.Cancel();
-        _layoutSubscription?.Dispose();
+        if (_shellLayoutStore is not null)
+        {
+            _shellLayoutStore.Changed -= OnShellLayoutChanged;
+        }
+
         _layoutProjectionCts.Dispose();
         _refreshSessionsCts?.Cancel();
         _refreshSessionsCts?.Dispose();

@@ -1,15 +1,12 @@
 using System;
-using System.Threading;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
-using Uno.Extensions.Reactive;
 
 namespace SalmonEgg.Presentation.Services;
 
 public sealed class NavigationStateService : INavigationStateService, IDisposable
 {
-    private readonly IDisposable? _subscription;
-    private readonly IState<ShellLayoutSnapshot>? _snapshotState;
+    private readonly IShellLayoutStore _store;
     private readonly IUiDispatcher _uiDispatcher;
     private bool _isPaneOpen;
 
@@ -19,22 +16,26 @@ public sealed class NavigationStateService : INavigationStateService, IDisposabl
 
     public NavigationStateService(IShellLayoutStore store, IUiDispatcher uiDispatcher)
     {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _isPaneOpen = store.CurrentSnapshot.IsNavPaneOpen;
-        _snapshotState = State.FromFeed(this, store.Snapshot);
-        _snapshotState.ForEach(async (snapshot, ct) =>
-        {
-            if (snapshot is null) return;
-            if (_isPaneOpen == snapshot.IsNavPaneOpen) return;
-
-            _isPaneOpen = snapshot.IsNavPaneOpen;
-            RaisePaneStateChanged();
-        }, out _subscription);
+        _store.Changed += OnShellLayoutChanged;
     }
 
     public void Dispose()
     {
-        _subscription?.Dispose();
+        _store.Changed -= OnShellLayoutChanged;
+    }
+
+    private void OnShellLayoutChanged(object? sender, ShellLayoutChangedEventArgs e)
+    {
+        if (_isPaneOpen == e.Snapshot.IsNavPaneOpen)
+        {
+            return;
+        }
+
+        _isPaneOpen = e.Snapshot.IsNavPaneOpen;
+        RaisePaneStateChanged();
     }
 
     private void RaisePaneStateChanged()

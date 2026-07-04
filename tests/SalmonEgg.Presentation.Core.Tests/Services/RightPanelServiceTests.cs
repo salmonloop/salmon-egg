@@ -97,6 +97,7 @@ public class RightPanelServiceTests
         public IFeed<ShellLayoutSnapshot> Snapshot => _snapshot;
         public ShellLayoutState CurrentState { get; private set; }
         public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
+        public event EventHandler<ShellLayoutChangedEventArgs>? Changed;
 
         public async ValueTask Dispatch(ShellLayoutAction action)
         {
@@ -116,6 +117,7 @@ public class RightPanelServiceTests
             CurrentState = reduced.State;
             CurrentSnapshot = reduced.Snapshot;
             await _snapshot.Update(_ => reduced.Snapshot, default);
+            Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
 
         public void Dispose()

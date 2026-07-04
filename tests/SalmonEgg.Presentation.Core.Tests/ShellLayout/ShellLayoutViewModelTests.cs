@@ -46,10 +46,10 @@ public class ShellLayoutViewModelTests
         await using var store = new FakeShellLayoutStore();
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+        await store.SetSnapshotAsync(new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
-            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0), default);
+            false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0));
 
         await WaitForConditionAsync(
             () => vm.NavPaneDisplayMode == NavigationPaneDisplayMode.Compact
@@ -188,11 +188,11 @@ public class ShellLayoutViewModelTests
         await using var store = new FakeShellLayoutStore();
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+        await store.SetSnapshotAsync(new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
             false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
-            false, false, false), default);
+            false, false, false));
 
         await WaitForConditionAsync(
             () => !vm.CanToggleTaskOverviewPanel
@@ -208,13 +208,13 @@ public class ShellLayoutViewModelTests
         await using var store = new FakeShellLayoutStore();
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+        await store.SetSnapshotAsync(new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
             false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
             false, false,
             true,
-            42), default);
+            42));
 
         await WaitForConditionAsync(() => vm.ShowAuxiliaryTitleBarButtons);
 
@@ -228,11 +228,11 @@ public class ShellLayoutViewModelTests
         await using var store = new FakeShellLayoutStore();
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
-        await store.SnapshotState.Update(_ => new ShellLayoutSnapshot(
+        await store.SetSnapshotAsync(new ShellLayoutSnapshot(
             NavigationPaneDisplayMode.Compact, false, 300, 72,
             false, 0, 0, new LayoutPadding(4, 0, 4, 0), new LayoutPadding(0, 0, 0, 0), 60,
             false, false, 0, 0, RightPanelMode.None, false, 0, BottomPanelMode.None, false, 0,
-            false, false, false), default);
+            false, false, false));
 
         await WaitForConditionAsync(
             () => !vm.CanToggleTaskOverviewPanel
@@ -279,6 +279,15 @@ public class ShellLayoutViewModelTests
         public IState<ShellLayoutState> StateState => _state;
         public ShellLayoutState CurrentState { get; private set; }
         public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
+        public event EventHandler<ShellLayoutChangedEventArgs>? Changed;
+
+        public async ValueTask SetSnapshotAsync(ShellLayoutSnapshot snapshot)
+        {
+            CurrentSnapshot = snapshot;
+            await SnapshotState.Update(_ => CurrentSnapshot, default);
+            Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
+        }
+
         public async ValueTask Dispatch(ShellLayoutAction action)
         {
             DispatchedActions.Add(action);
@@ -287,6 +296,7 @@ public class ShellLayoutViewModelTests
             CurrentSnapshot = reduced.Snapshot;
             await _state.Update(_ => CurrentState, default);
             await SnapshotState.Update(_ => CurrentSnapshot, default);
+            Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
 
         public async ValueTask DisposeAsync()

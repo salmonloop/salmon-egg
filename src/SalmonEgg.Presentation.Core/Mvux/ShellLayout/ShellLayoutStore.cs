@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Uno.Extensions.Reactive;
 
@@ -9,7 +10,21 @@ public interface IShellLayoutStore
     IFeed<ShellLayoutSnapshot> Snapshot { get; }
     ShellLayoutState CurrentState { get; }
     ShellLayoutSnapshot CurrentSnapshot { get; }
+    event EventHandler<ShellLayoutChangedEventArgs>? Changed;
     ValueTask Dispatch(ShellLayoutAction action);
+}
+
+public sealed class ShellLayoutChangedEventArgs : EventArgs
+{
+    public ShellLayoutChangedEventArgs(ShellLayoutState state, ShellLayoutSnapshot snapshot)
+    {
+        State = state ?? throw new ArgumentNullException(nameof(state));
+        Snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+    }
+
+    public ShellLayoutState State { get; }
+
+    public ShellLayoutSnapshot Snapshot { get; }
 }
 
 public sealed class ShellLayoutStore : IShellLayoutStore
@@ -20,6 +35,7 @@ public sealed class ShellLayoutStore : IShellLayoutStore
     public IFeed<ShellLayoutSnapshot> Snapshot => _snapshotState;
     public ShellLayoutState CurrentState { get; private set; }
     public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
+    public event EventHandler<ShellLayoutChangedEventArgs>? Changed;
 
     public ShellLayoutStore(
         IState<ShellLayoutState> state,
@@ -51,5 +67,6 @@ public sealed class ShellLayoutStore : IShellLayoutStore
         CurrentState = reduced.State;
         CurrentSnapshot = reduced.Snapshot;
         await _snapshotState.Update(_ => reduced.Snapshot, default);
+        Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
     }
 }

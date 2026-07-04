@@ -6,19 +6,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Services;
-using Uno.Extensions.Reactive;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 
 public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
 {
     private readonly IShellLayoutStore _store;
-    private readonly IState<ShellLayoutSnapshot>? _snapshotState;
-    private readonly IState<ShellLayoutState>? _desiredState;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly CancellationTokenSource _projectionCts = new();
-    private IDisposable? _subscription;
-    private IDisposable? _desiredSubscription;
     private bool _disposed;
 
     [ObservableProperty] private NavigationPaneDisplayMode _navPaneDisplayMode;
@@ -51,63 +46,36 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
 
     public ShellLayoutViewModel(IShellLayoutStore store, IUiDispatcher uiDispatcher)
     {
-        _store = store;
+        _store = store ?? throw new ArgumentNullException(nameof(store));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
-        ApplySnapshot(store.CurrentSnapshot);
-        ApplyDesiredState(store.CurrentState);
-        _desiredState = State.FromFeed(this, store.State);
-        _snapshotState = State.FromFeed(this, store.Snapshot);
-        _snapshotState.ForEach(async (snapshot, ct) =>
+        ApplySnapshot(_store.CurrentSnapshot);
+        ApplyDesiredState(_store.CurrentState);
+        _store.Changed += OnShellLayoutChanged;
+    }
+
+    private async void OnShellLayoutChanged(object? sender, ShellLayoutChangedEventArgs e)
+    {
+        if (_disposed || _projectionCts.IsCancellationRequested)
         {
-            if (snapshot is null || _disposed || _projectionCts.IsCancellationRequested || ct.IsCancellationRequested)
-            {
-                return;
-            }
+            return;
+        }
 
-            try
-            {
-                await PostToUiAsync(() =>
-                {
-                    if (_disposed || _projectionCts.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
-                    ApplySnapshot(snapshot);
-                }).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (_projectionCts.IsCancellationRequested || ct.IsCancellationRequested)
-            {
-                // Expected during disposal.
-            }
-        }, out _subscription);
-
-        if (_desiredState is not null)
+        try
         {
-            _desiredState.ForEach(async (state, ct) =>
+            await PostToUiAsync(() =>
             {
-                if (state is null || _disposed || _projectionCts.IsCancellationRequested || ct.IsCancellationRequested)
+                if (_disposed || _projectionCts.IsCancellationRequested)
                 {
                     return;
                 }
 
-                try
-                {
-                    await PostToUiAsync(() =>
-                    {
-                        if (_disposed || _projectionCts.IsCancellationRequested)
-                        {
-                            return;
-                        }
-
-                        ApplyDesiredState(state);
-                    }).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (_projectionCts.IsCancellationRequested || ct.IsCancellationRequested)
-                {
-                    // Expected during disposal.
-                }
-            }, out _desiredSubscription);
+                ApplySnapshot(e.Snapshot);
+                ApplyDesiredState(e.State);
+            }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_projectionCts.IsCancellationRequested)
+        {
+            // Expected during disposal.
         }
     }
 
@@ -180,8 +148,7 @@ public sealed partial class ShellLayoutViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _projectionCts.Cancel();
-        _subscription?.Dispose();
-        _desiredSubscription?.Dispose();
+        _store.Changed -= OnShellLayoutChanged;
         _projectionCts.Dispose();
     }
 

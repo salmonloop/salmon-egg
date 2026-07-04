@@ -70,6 +70,7 @@ public class ShellLayoutNavigationStateAdapterTests
         public IFeed<ShellLayoutSnapshot> Snapshot => SnapshotState;
         public ShellLayoutState CurrentState { get; private set; }
         public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
+        public event EventHandler<ShellLayoutChangedEventArgs>? Changed;
 
         public ValueTask Dispatch(ShellLayoutAction action) => ValueTask.CompletedTask;
 
@@ -83,6 +84,7 @@ public class ShellLayoutNavigationStateAdapterTests
             };
             CurrentSnapshot = ShellLayoutPolicy.Compute(CurrentState);
             await SnapshotState.Update(_ => CurrentSnapshot, default);
+            Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
 
         public async ValueTask DisposeAsync()

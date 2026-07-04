@@ -23,7 +23,6 @@ public class NavigationStateServiceTests
         service.PaneStateChanged += (_, _) => signal.Set();
         var initialIsPaneOpen = service.IsPaneOpen;
 
-        await AllowReactiveSubscriptionToAttachAsync();
         await store.Dispatch(new NavToggleRequested("test"));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
 
@@ -39,7 +38,6 @@ public class NavigationStateServiceTests
         using var signal = new ManualResetEventSlim(false);
         service.PaneStateChanged += (_, _) => signal.Set();
 
-        await AllowReactiveSubscriptionToAttachAsync();
         await store.Dispatch(new NavToggleRequested("test"));
         Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
         var stabilizedIsPaneOpen = service.IsPaneOpen;
@@ -89,9 +87,6 @@ public class NavigationStateServiceTests
         await disposeTask;
     }
 
-    private static async Task AllowReactiveSubscriptionToAttachAsync()
-        => await Task.Yield();
-
     private sealed class TestShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state;
@@ -109,6 +104,7 @@ public class NavigationStateServiceTests
         public IFeed<ShellLayoutSnapshot> Snapshot => _snapshot;
         public ShellLayoutState CurrentState { get; private set; }
         public ShellLayoutSnapshot CurrentSnapshot { get; private set; }
+        public event EventHandler<ShellLayoutChangedEventArgs>? Changed;
 
         public async ValueTask Dispatch(ShellLayoutAction action)
         {
@@ -128,6 +124,7 @@ public class NavigationStateServiceTests
             CurrentState = reduced.State;
             CurrentSnapshot = reduced.Snapshot;
             await _snapshot.Update(_ => reduced.Snapshot, default);
+            Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
 
         public async ValueTask DisposeAsync()

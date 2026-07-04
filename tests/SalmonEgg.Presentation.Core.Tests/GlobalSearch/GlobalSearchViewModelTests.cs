@@ -118,10 +118,10 @@ public sealed class GlobalSearchViewModelTests
             new ProjectAffinityResolver(),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
-                Mock.Of<ILogger<GlobalSearchViewModel>>());
+        Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
-        await Task.Delay(350);
+        await WaitForConditionAsync(() => viewModel.SuggestionEntries.Any(entry => entry.Kind == SearchSuggestionEntryKind.Result));
 
         await viewModel.SubmitQueryAsync("acp");
 
@@ -175,10 +175,10 @@ public sealed class GlobalSearchViewModelTests
             new ProjectAffinityResolver(),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
-                Mock.Of<ILogger<GlobalSearchViewModel>>());
+        Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
-        await Task.Delay(350);
+        await WaitForConditionAsync(() => viewModel.SuggestionEntries.Any(entry => entry.Kind == SearchSuggestionEntryKind.Result));
 
         var suggestion = Assert.Single(viewModel.SuggestionEntries, entry => entry.Kind == SearchSuggestionEntryKind.Result);
 
@@ -206,10 +206,10 @@ public sealed class GlobalSearchViewModelTests
             new ProjectAffinityResolver(),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
-                Mock.Of<ILogger<GlobalSearchViewModel>>());
+        Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "acp";
-        await Task.Delay(350);
+        await WaitForConditionAsync(() => viewModel.SuggestionEntries.Any(entry => entry.Kind == SearchSuggestionEntryKind.Result));
         await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
         {
             Id = SettingsSectionCatalog.AgentAcpKey,
@@ -270,7 +270,7 @@ public sealed class GlobalSearchViewModelTests
         viewModel.Query = "alpha";
         await Task.Delay(40);
         viewModel.Query = "beta";
-        await Task.Delay(700);
+        await WaitForConditionAsync(() => viewModel.ViewState == GlobalSearchViewState.Results);
 
         Assert.Equal(GlobalSearchViewState.Results, viewModel.ViewState);
         Assert.False(viewModel.IsError);
@@ -346,15 +346,34 @@ public sealed class GlobalSearchViewModelTests
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "boom";
-        await Task.Delay(400);
+        await WaitForConditionAsync(() => viewModel.ViewState == GlobalSearchViewState.Error);
         Assert.Equal(GlobalSearchViewState.Error, viewModel.ViewState);
         Assert.True(viewModel.IsError);
 
         viewModel.Query = "ok";
-        await Task.Delay(400);
+        await WaitForConditionAsync(() => viewModel.ViewState == GlobalSearchViewState.Results);
         Assert.Equal(GlobalSearchViewState.Results, viewModel.ViewState);
         Assert.False(viewModel.IsError);
         Assert.True(viewModel.HasResults);
+    }
+
+    private static async Task WaitForConditionAsync(
+        Func<bool> predicate,
+        int timeoutMilliseconds = 5000,
+        int delayMilliseconds = 10)
+    {
+        var timeoutAt = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        while (DateTime.UtcNow < timeoutAt)
+        {
+            if (predicate())
+            {
+                return;
+            }
+
+            await Task.Delay(delayMilliseconds);
+        }
+
+        Assert.True(predicate(), "Timed out waiting for expected asynchronous search state.");
     }
 
     private static MainNavigationViewModel CreateNavigationViewModel(
