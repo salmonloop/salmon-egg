@@ -167,16 +167,16 @@ public sealed class TranscriptViewportOrchestratorTests
     }
 
     [Fact]
-    public void ScrollToBottomScheduleTokens_AreOpaqueAndInvalidatedByInteractionReset()
+    public void ScrollToEndScheduleTokens_AreOpaqueAndInvalidatedByInteractionReset()
     {
         var sut = new TranscriptViewportOrchestrator();
         sut.Activate("conv-1", TranscriptViewportActivationKind.ColdEnter);
 
-        Assert.True(sut.TryBeginScrollToBottomSchedule("conv-1", out var token));
-        Assert.True(sut.CanExecuteScrollToBottomSchedule(token, "conv-1"));
+        Assert.True(sut.TryBeginScrollToEndSchedule("conv-1", out var token));
+        Assert.True(sut.CanExecuteScrollToEndSchedule(token, "conv-1"));
 
         sut.StopInitialScrollForManualInteraction();
 
-        Assert.False(sut.CanExecuteScrollToBottomSchedule(token, "conv-1"));
+        Assert.False(sut.CanExecuteScrollToEndSchedule(token, "conv-1"));
     }
 }

@@ -26,7 +26,7 @@ public interface ITranscriptViewportHost : IDisposable
 
     bool TryFocusViewport(FocusState focusState);
 
-    bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance);
+    void ScrollToEnd();
 
-    bool IsLastItemVisiblyAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance);
+    bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance);
 }

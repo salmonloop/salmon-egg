@@ -9,7 +9,7 @@ public readonly record struct TranscriptViewportOrchestratorSnapshot(
     bool AttachToBottomIntentPending,
     bool UserScrollIntentPending,
     bool UserScrollIntentCompleted,
-    bool ScrollToBottomScheduled,
+    bool ScrollToEndScheduled,
     int Generation,
     int ScheduledScrollRequestVersion,
     int ActiveScrollGeneration);
@@ -29,7 +29,7 @@ public sealed class TranscriptViewportOrchestrator
     private bool _userScrollIntentPending;
     private bool _userScrollIntentCompleted;
     private bool _suspendAutoScrollTracking;
-    private bool _scrollToBottomScheduled;
+    private bool _scrollToEndScheduled;
     private int _scrollScheduleGeneration;
     private int _scheduledScrollRequestVersion;
     private int _activeTranscriptScrollGeneration = -1;
@@ -43,7 +43,7 @@ public sealed class TranscriptViewportOrchestrator
         _attachToBottomIntentPending,
         _userScrollIntentPending,
         _userScrollIntentCompleted,
-        _scrollToBottomScheduled,
+        _scrollToEndScheduled,
         _scrollScheduleGeneration,
         _scheduledScrollRequestVersion,
         _activeTranscriptScrollGeneration);
@@ -63,7 +63,7 @@ public sealed class TranscriptViewportOrchestrator
 
     public int Generation => _scrollScheduleGeneration;
 
-    public bool IsScrollToBottomScheduled => _scrollToBottomScheduled;
+    public bool IsScrollToEndScheduled => _scrollToEndScheduled;
 
     public bool AttachToBottomIntentPending => _attachToBottomIntentPending;
 
@@ -73,7 +73,7 @@ public sealed class TranscriptViewportOrchestrator
 
     public bool IsProgrammaticScrollInFlight
         => _suspendAutoScrollTracking
-            || _scrollToBottomScheduled
+            || _scrollToEndScheduled
             || _activeTranscriptScrollGeneration >= 0;
 
     public TranscriptViewportTransition? LastTransition => _viewportCoordinator.LastTransition;
@@ -95,14 +95,14 @@ public sealed class TranscriptViewportOrchestrator
 
     public void ResetScheduledScrollState()
     {
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
         _activeTranscriptScrollGeneration = -1;
     }
 
     public void StopProgrammaticScroll()
     {
         unchecked { _scrollScheduleGeneration++; }
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
         _activeTranscriptScrollGeneration = -1;
         _suspendAutoScrollTracking = false;
     }
@@ -112,7 +112,7 @@ public sealed class TranscriptViewportOrchestrator
         unchecked { _scrollScheduleGeneration++; }
         _activeTranscriptScrollGeneration = -1;
         _suspendAutoScrollTracking = false;
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
         unchecked { _scheduledScrollRequestVersion++; }
         ResetInteractionState();
     }
@@ -251,7 +251,7 @@ public sealed class TranscriptViewportOrchestrator
     public void StopInitialScrollForManualInteraction()
     {
         _suspendAutoScrollTracking = false;
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
         unchecked { _scheduledScrollRequestVersion++; }
     }
 
@@ -260,43 +260,43 @@ public sealed class TranscriptViewportOrchestrator
         _suspendAutoScrollTracking = false;
     }
 
-    public void MarkScrollToBottomScheduled()
+    public void MarkScrollToEndScheduled()
     {
-        _scrollToBottomScheduled = true;
+        _scrollToEndScheduled = true;
     }
 
-    public bool TryBeginScrollToBottomSchedule(string? conversationId, out TranscriptScrollScheduleToken token)
+    public bool TryBeginScrollToEndSchedule(string? conversationId, out TranscriptScrollScheduleToken token)
     {
-        if (_scrollToBottomScheduled || string.IsNullOrWhiteSpace(conversationId))
+        if (_scrollToEndScheduled || string.IsNullOrWhiteSpace(conversationId))
         {
             token = default;
             return false;
         }
 
-        _scrollToBottomScheduled = true;
+        _scrollToEndScheduled = true;
         token = new TranscriptScrollScheduleToken(_scrollScheduleGeneration, _scheduledScrollRequestVersion, conversationId);
         return true;
     }
 
-    public void ClearScrollToBottomScheduled()
+    public void ClearScrollToEndScheduled()
     {
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
     }
 
-    public void ReleaseScrollToBottomSchedule(TranscriptScrollScheduleToken token)
+    public void ReleaseScrollToEndSchedule(TranscriptScrollScheduleToken token)
     {
         if (_scrollScheduleGeneration == token.Generation
             && _scheduledScrollRequestVersion == token.RequestVersion
-            && _scrollToBottomScheduled)
+            && _scrollToEndScheduled)
         {
-            _scrollToBottomScheduled = false;
+            _scrollToEndScheduled = false;
         }
     }
 
-    public bool CanExecuteScrollToBottomSchedule(TranscriptScrollScheduleToken token, string? conversationId)
+    public bool CanExecuteScrollToEndSchedule(TranscriptScrollScheduleToken token, string? conversationId)
         => _scrollScheduleGeneration == token.Generation
             && _scheduledScrollRequestVersion == token.RequestVersion
-            && _scrollToBottomScheduled
+            && _scrollToEndScheduled
             && IsAutoFollowAttached
             && !string.IsNullOrWhiteSpace(conversationId)
             && string.Equals(token.ConversationId, conversationId, StringComparison.Ordinal);
@@ -304,7 +304,7 @@ public sealed class TranscriptViewportOrchestrator
     public void MarkProjectionRestoreQueued()
     {
         _suspendAutoScrollTracking = true;
-        _scrollToBottomScheduled = false;
+        _scrollToEndScheduled = false;
     }
 
     public void MarkAttachToBottomIntent()

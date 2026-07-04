@@ -337,12 +337,14 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("bool TryScrollByItems(int itemDelta);", hostInterface, StringComparison.Ordinal);
         Assert.Contains("bool TryScrollByPages(int pageDelta);", hostInterface, StringComparison.Ordinal);
+        Assert.Contains("void ScrollToEnd();", hostInterface, StringComparison.Ordinal);
         Assert.Contains("public bool TryScrollByItems(int itemDelta)", hostCode, StringComparison.Ordinal);
         Assert.Contains("public bool TryScrollByPages(int pageDelta)", hostCode, StringComparison.Ordinal);
+        Assert.Contains("public void ScrollToEnd()", hostCode, StringComparison.Ordinal);
         Assert.Contains("TryGetFirstVisibleIndex(_listView.Items.Count, out var firstVisibleIndex)", hostCode, StringComparison.Ordinal);
         Assert.Contains("TryGetVisibleIndexBounds(_listView.Items.Count, out var firstVisibleIndex, out var lastVisibleIndex)", hostCode, StringComparison.Ordinal);
         Assert.Contains("ScrollItemIntoView(targetIndex, TranscriptItemScrollAlignment.Leading);", hostCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ChangeView", hostCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLastItemVisiblyAtBottom", hostCode, StringComparison.Ordinal);
     }
 
     [Fact]

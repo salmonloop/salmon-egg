@@ -217,7 +217,7 @@ public sealed class TranscriptViewportCoordinator
                     LastActivationGeneration = evt.Generation,
                 },
                 isAutoFollowAttached: true,
-                TranscriptViewportCommandKind.IssueScrollToBottom,
+                TranscriptViewportCommandKind.IssueScrollToEnd,
                 "AttachedAppendNeedsRecovery");
         }
 
@@ -294,7 +294,7 @@ public sealed class TranscriptViewportCoordinator
                 Mode = TranscriptViewportState.Settling,
             },
             isAutoFollowAttached: true,
-            TranscriptViewportCommandKind.IssueScrollToBottom,
+            TranscriptViewportCommandKind.IssueScrollToEnd,
             "RecoverBottomWithoutUserDetach");
     }
 

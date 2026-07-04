@@ -15,8 +15,7 @@ public sealed class TranscriptViewportControllerTests
             IsViewReady: true,
             IsViewportReady: false,
             HasMessages: false,
-            IsAtBottom: true,
-            IsLastItemVisibleAtBottom: false));
+            IsAtBottom: true));
 
         Assert.Empty(actions);
         Assert.Equal(TranscriptViewportState.Idle, sut.State);
@@ -33,10 +32,9 @@ public sealed class TranscriptViewportControllerTests
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: true,
-            IsAtBottom: false,
-            IsLastItemVisibleAtBottom: false));
+            IsAtBottom: false));
 
-        Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollLastMessageIntoView);
+        Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
         Assert.True(sut.IsAutoFollowAttached);
         Assert.False(sut.IsViewportDetached);
     }
@@ -52,18 +50,16 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: false,
-                IsLastItemVisibleAtBottom: false),
+                IsAtBottom: false),
             new TranscriptProjectionRestoreToken("conv-1", 7, "item-3"));
         var append = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: true,
-            IsAtBottom: false,
-            IsLastItemVisibleAtBottom: false));
+            IsAtBottom: false));
 
         Assert.Contains(detached, action => action.Kind == TranscriptViewportControllerActionKind.AutoFollowDetached);
-        Assert.DoesNotContain(append, action => action.Kind == TranscriptViewportControllerActionKind.ScrollLastMessageIntoView);
+        Assert.DoesNotContain(append, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
         Assert.True(sut.IsViewportDetached);
         Assert.False(sut.IsAutoFollowAttached);
     }
@@ -79,8 +75,7 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: true,
-                IsLastItemVisibleAtBottom: true),
+                IsAtBottom: true),
             new TranscriptProjectionRestoreToken("conv-1", 7, "item-9"));
 
         Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.AutoFollowDetached);
@@ -101,8 +96,7 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: true,
-                IsLastItemVisibleAtBottom: true),
+                IsAtBottom: true),
             preMoveToken);
 
         Assert.Null(sut.GetConversationState("conv-1")?.RestoreToken);
@@ -112,8 +106,7 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: false,
-                IsLastItemVisibleAtBottom: false),
+                IsAtBottom: false),
             postMoveToken);
 
         Assert.Equal(postMoveToken, sut.GetConversationState("conv-1")?.RestoreToken);
@@ -129,8 +122,7 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: false,
-                IsLastItemVisibleAtBottom: false),
+                IsAtBottom: false),
             new TranscriptProjectionRestoreToken("conv-a", 7, "item-3"));
 
         _ = sut.Unload();
@@ -152,25 +144,22 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: false,
-                IsLastItemVisibleAtBottom: false),
+                IsAtBottom: false),
             new TranscriptProjectionRestoreToken("conv-1", 7, "item-3"));
 
         var attached = sut.OnUserViewportIntent(new TranscriptViewportViewState(
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: true,
-            IsAtBottom: true,
-            IsLastItemVisibleAtBottom: true));
+            IsAtBottom: true));
         var append = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: true,
-            IsAtBottom: false,
-            IsLastItemVisibleAtBottom: false));
+            IsAtBottom: false));
 
         Assert.Contains(attached, action => action.Kind == TranscriptViewportControllerActionKind.AutoFollowAttached);
-        Assert.Contains(append, action => action.Kind == TranscriptViewportControllerActionKind.ScrollLastMessageIntoView);
+        Assert.Contains(append, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
         Assert.False(sut.IsViewportDetached);
         Assert.True(sut.IsAutoFollowAttached);
     }
@@ -184,8 +173,7 @@ public sealed class TranscriptViewportControllerTests
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: true,
-            IsAtBottom: false,
-            IsLastItemVisibleAtBottom: false));
+            IsAtBottom: false));
         Assert.True(sut.TryCaptureActiveScrollRequest(out var staleRequest));
 
         sut.OnConversationChanged("conv-2", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
@@ -196,8 +184,7 @@ public sealed class TranscriptViewportControllerTests
                 IsViewReady: true,
                 IsViewportReady: true,
                 HasMessages: true,
-                IsAtBottom: true,
-                IsLastItemVisibleAtBottom: true));
+                IsAtBottom: true));
 
         Assert.Empty(actions);
         Assert.False(sut.MatchesActiveScrollRequest(staleRequest));

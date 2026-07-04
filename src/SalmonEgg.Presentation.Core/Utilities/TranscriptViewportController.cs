@@ -4,13 +4,12 @@ public readonly record struct TranscriptViewportViewState(
     bool IsViewReady,
     bool IsViewportReady,
     bool HasMessages,
-    bool IsAtBottom,
-    bool IsLastItemVisibleAtBottom);
+    bool IsAtBottom);
 
 public enum TranscriptViewportControllerActionKind
 {
     None = 0,
-    ScrollLastMessageIntoView = 1,
+    ScrollTranscriptToEnd = 1,
     StopProgrammaticScroll = 2,
     AutoFollowAttached = 3,
     AutoFollowDetached = 4,
@@ -432,7 +431,7 @@ public sealed class TranscriptViewportController
                 }
 
                 return [new TranscriptViewportControllerAction(
-                    TranscriptViewportControllerActionKind.ScrollLastMessageIntoView,
+                    TranscriptViewportControllerActionKind.ScrollTranscriptToEnd,
                     requestToken,
                     Generation: decision.Generation)];
 
@@ -464,12 +463,12 @@ public sealed class TranscriptViewportController
     {
         switch (command.Kind)
         {
-            case TranscriptViewportCommandKind.IssueScrollToBottom:
-                if (_orchestrator.TryBeginScrollToBottomSchedule(_conversationId, out var scheduleToken)
-                    && _orchestrator.CanExecuteScrollToBottomSchedule(scheduleToken, _conversationId))
+            case TranscriptViewportCommandKind.IssueScrollToEnd:
+                if (_orchestrator.TryBeginScrollToEndSchedule(_conversationId, out var scheduleToken)
+                    && _orchestrator.CanExecuteScrollToEndSchedule(scheduleToken, _conversationId))
                 {
-                    _orchestrator.ReleaseScrollToBottomSchedule(scheduleToken);
-                    return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.ScrollLastMessageIntoView)];
+                    _orchestrator.ReleaseScrollToEndSchedule(scheduleToken);
+                    return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.ScrollTranscriptToEnd)];
                 }
 
                 return [];
@@ -497,7 +496,7 @@ public sealed class TranscriptViewportController
 
             case TranscriptViewportCommandKind.MarkAutoFollowDetached:
                 _orchestrator.ClearAttachIntentOnly();
-                _orchestrator.ClearScrollToBottomScheduled();
+                _orchestrator.ClearScrollToEndScheduled();
                 return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.AutoFollowDetached)];
 
             case TranscriptViewportCommandKind.MarkAutoFollowAttached:
@@ -542,7 +541,7 @@ public sealed class TranscriptViewportController
             return TranscriptScrollSettleObservation.NotReadyYet;
         }
 
-        return viewState.IsAtBottom && viewState.IsLastItemVisibleAtBottom
+        return viewState.IsAtBottom
             ? TranscriptScrollSettleObservation.AtBottom
             : TranscriptScrollSettleObservation.ReadyButNotAtBottom;
     }
@@ -568,6 +567,5 @@ public sealed class TranscriptViewportController
             IsViewReady: true,
             IsViewportReady: true,
             HasMessages: hasMessages,
-            IsAtBottom: false,
-            IsLastItemVisibleAtBottom: false);
+            IsAtBottom: false);
 }

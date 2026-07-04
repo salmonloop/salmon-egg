@@ -812,8 +812,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                     && !string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId),
                 IsViewportReady: hasMessages && (lastItemContainerGenerated ?? HasLastItemContainerGenerated(messageCount)),
                 HasMessages: hasMessages,
-                IsAtBottom: IsListViewportAtBottom(),
-                IsLastItemVisibleAtBottom: hasMessages && IsLastItemVisiblyAtBottom(messageCount));
+                IsAtBottom: IsListViewportAtBottom());
         }
 
         private void ApplyViewportActions(IReadOnlyList<TranscriptViewportControllerAction> actions)
@@ -828,14 +827,14 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         {
             switch (action.Kind)
             {
-                case TranscriptViewportControllerActionKind.ScrollLastMessageIntoView:
+                case TranscriptViewportControllerActionKind.ScrollTranscriptToEnd:
                     if (action.ScrollRequestToken.Generation >= 0)
                     {
                         IssueNativeTranscriptScrollRequest(action.ScrollRequestToken);
                     }
                     else
                     {
-                        RequestScrollToBottom();
+                        RequestScrollToEnd();
                     }
                     break;
 
@@ -942,13 +941,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             }
         }
 
-        private void RequestScrollToBottom()
+        private void RequestScrollToEnd()
         {
             if (_transcriptViewportHost is not null && ViewModel.MessageHistory.Count > 0)
             {
-                _transcriptViewportHost.ScrollItemIntoView(
-                    ViewModel.MessageHistory.Count - 1,
-                    TranscriptItemScrollAlignment.Leading);
+                _transcriptViewportHost.ScrollToEnd();
             }
         }
 
@@ -1061,7 +1058,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return;
             }
 
-            RequestScrollToBottom();
+            RequestScrollToEnd();
 
             _ = DispatcherQueue.TryEnqueue(() =>
             {
@@ -1073,7 +1070,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                     return;
                 }
 
-                RequestScrollToBottom();
+                RequestScrollToEnd();
                 ScheduleTranscriptScrollRequestObservation(requestToken);
             });
         }
@@ -1131,15 +1128,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             return actions.Count > 0;
         }
 
-        private bool IsLastItemVisiblyAtBottom(int itemCount)
-        {
-            if (_transcriptViewportHost is null || itemCount <= 0)
-            {
-                return false;
-            }
-
-            return _transcriptViewportHost.IsLastItemVisiblyAtBottom(itemCount, BottomThreshold, BottomGeometryTolerance);
-        }
 
         private void ResetAutoScrollStateForConversationChange()
         {

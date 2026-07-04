@@ -839,8 +839,8 @@ public sealed class NavigationCoreTests
 
         Assert.Contains("case TranscriptViewportControllerActionKind.RequestRestore:", code, StringComparison.Ordinal);
         Assert.Contains("QueueProjectionOwnedRestore(restoreToken, action.Generation);", restoreSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScheduleScrollToBottom();", restoreSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("RequestScrollToBottom();", restoreSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScheduleScrollToEnd();", restoreSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestScrollToEnd();", restoreSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -896,15 +896,16 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void ViewportController_TranscriptSettleRequiresNativeViewportAndLastItemAtBottom()
+    public void ViewportController_TranscriptSettleUsesNativeViewportAtBottomState()
     {
         var code = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
         var observationSection = ExtractSection(
             code,
             "private static TranscriptScrollSettleObservation ResolveSettleObservation",
-            "private static string ResolveConversationId");
+            "private TranscriptViewportActivationKind ResolveInitialActivationKind");
 
-        Assert.Contains("viewState.IsAtBottom && viewState.IsLastItemVisibleAtBottom", observationSection, StringComparison.Ordinal);
+        Assert.Contains("viewState.IsAtBottom", observationSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLastItemVisibleAtBottom", observationSection, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1029,8 +1030,8 @@ public sealed class NavigationCoreTests
             Assert.Contains("MatchesActiveScrollRequest(", code, StringComparison.Ordinal);
             Assert.Contains("OnActiveScrollObservation(", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TryCaptureActiveScrollRequestToken(", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("TryBeginScrollToBottomSchedule(", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("CanExecuteScrollToBottomSchedule(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("TryBeginScrollToEndSchedule(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("CanExecuteScrollToEndSchedule(", code, StringComparison.Ordinal);
             Assert.DoesNotContain(".ActiveScrollGeneration", code, StringComparison.Ordinal);
             Assert.DoesNotContain(".ScheduledScrollRequestVersion", code, StringComparison.Ordinal);
         }

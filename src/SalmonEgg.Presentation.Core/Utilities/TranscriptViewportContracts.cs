@@ -117,7 +117,7 @@ public abstract record TranscriptViewportEvent(string ConversationId, int Genera
 public enum TranscriptViewportCommandKind
 {
     None = 0,
-    IssueScrollToBottom = 1,
+    IssueScrollToEnd = 1,
     StopProgrammaticScroll = 2,
     MarkAutoFollowAttached = 3,
     MarkAutoFollowDetached = 4,

@@ -1311,13 +1311,13 @@ public sealed class XamlComplianceTests
         Assert.Contains("_listView.ScrollIntoView", host, StringComparison.Ordinal);
         Assert.Contains("_listView.ContainerFromIndex(index)", host, StringComparison.Ordinal);
         Assert.Contains("TransformToVisual(_listView).TransformPoint(default)", host, StringComparison.Ordinal);
-        Assert.Contains("itemBottom <= viewportBottom + bottomGeometryTolerance", host, StringComparison.Ordinal);
-        Assert.Contains("anchor.ActualHeight <= availableViewportHeight + bottomGeometryTolerance", host, StringComparison.Ordinal);
+        Assert.Contains("public void ScrollToEnd()", host, StringComparison.Ordinal);
+        Assert.Contains("scrollViewer.VerticalOffset >= Math.Max(0, scrollViewer.ScrollableHeight - threshold)", host, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsLastItemVisiblyAtBottom", host, StringComparison.Ordinal);
         Assert.DoesNotContain("ItemsRepeater", host, StringComparison.Ordinal);
         Assert.DoesNotContain("GetOrCreateElement", host, StringComparison.Ordinal);
         Assert.DoesNotContain("UpdateLayout()", host, StringComparison.Ordinal);
         Assert.DoesNotContain("BringIntoViewOptions", host, StringComparison.Ordinal);
-        Assert.DoesNotContain("ChangeView", host, StringComparison.Ordinal);
         Assert.DoesNotContain("ScrollViewerViewportMonitor", host, StringComparison.Ordinal);
     }
 

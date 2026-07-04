@@ -11,6 +11,7 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 {
     private readonly ListViewBase _listView;
     private readonly Func<TranscriptVirtualizationRange?>? _visibleRangeProvider;
+    private readonly Dictionary<ListViewItem, FrameworkElement> _observedItemAnchors = new();
     private ScrollViewer? _scrollViewer;
     private bool _viewportChangedQueued;
 
@@ -203,6 +204,27 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
         return _listView.Focus(focusState);
     }
 
+    public void ScrollToEnd()
+    {
+        if (_listView.Items.Count <= 0)
+        {
+            return;
+        }
+
+        var lastIndex = _listView.Items.Count - 1;
+        ScrollItemIntoView(lastIndex, TranscriptItemScrollAlignment.Leading);
+
+        AttachScrollViewer();
+        if (_scrollViewer is { } scrollViewer)
+        {
+            var verticalOffset = Math.Max(0, scrollViewer.ScrollableHeight);
+            if (!scrollViewer.ChangeView(null, verticalOffset, null, true))
+            {
+                ScrollItemIntoView(lastIndex, TranscriptItemScrollAlignment.Leading);
+            }
+        }
+    }
+
     public bool IsAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance)
     {
         if (itemCount <= 0)
@@ -210,34 +232,19 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
             return true;
         }
 
-        return IsLastItemVisiblyAtBottom(itemCount, bottomThreshold, bottomGeometryTolerance);
-    }
-
-    public bool IsLastItemVisiblyAtBottom(int itemCount, double bottomThreshold, double bottomGeometryTolerance)
-    {
-        if (itemCount <= 0 || !TryGetContainerAnchor(itemCount - 1, out var anchor))
+        AttachScrollViewer();
+        if (_scrollViewer is not { } scrollViewer)
         {
             return false;
         }
 
-        Point relativeOrigin = anchor.TransformToVisual(_listView).TransformPoint(default);
-        var itemTop = relativeOrigin.Y;
-        var itemBottom = itemTop + anchor.ActualHeight;
-        var viewportTop = _listView.Padding.Top;
-        var viewportBottom = _listView.ActualHeight - bottomThreshold - _listView.Padding.Bottom;
-        if (itemBottom <= viewportBottom + bottomGeometryTolerance)
-        {
-            return true;
-        }
-
-        var availableViewportHeight = viewportBottom - viewportTop;
-        return anchor.ActualHeight <= availableViewportHeight + bottomGeometryTolerance
-            && itemTop >= viewportTop - bottomGeometryTolerance
-            && itemTop < viewportBottom;
+        var threshold = bottomThreshold + bottomGeometryTolerance;
+        return scrollViewer.VerticalOffset >= Math.Max(0, scrollViewer.ScrollableHeight - threshold);
     }
 
     public void Dispose()
     {
+        DetachObservedItemAnchors();
         DetachScrollViewer();
         _listView.Loaded -= OnListViewLoaded;
         _listView.Unloaded -= OnListViewUnloaded;
@@ -254,6 +261,11 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
             return false;
         }
 
+        return TryGetContainerAnchor(container, out anchor);
+    }
+
+    private static bool TryGetContainerAnchor(ListViewItem container, out FrameworkElement anchor)
+    {
         anchor = container.ContentTemplateRoot as FrameworkElement ?? container;
         return true;
     }
@@ -277,6 +289,18 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
+        if (args.ItemContainer is ListViewItem container)
+        {
+            if (args.InRecycleQueue)
+            {
+                DetachObservedItemAnchor(container);
+            }
+            else
+            {
+                ObserveItemAnchorSize(container);
+            }
+        }
+
         QueueViewportChanged();
     }
 
@@ -293,6 +317,7 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 
     private void OnListViewUnloaded(object sender, RoutedEventArgs e)
     {
+        DetachObservedItemAnchors();
         DetachScrollViewer();
     }
 
@@ -324,6 +349,51 @@ public sealed class ListViewTranscriptViewportHost : ITranscriptViewportHost
 
         _scrollViewer.ViewChanged -= OnScrollViewerViewChanged;
         _scrollViewer = null;
+    }
+
+    private void ObserveItemAnchorSize(ListViewItem container)
+    {
+        if (!TryGetContainerAnchor(container, out var anchor))
+        {
+            return;
+        }
+
+        if (_observedItemAnchors.TryGetValue(container, out var observedAnchor)
+            && ReferenceEquals(observedAnchor, anchor))
+        {
+            return;
+        }
+
+        if (observedAnchor is not null)
+        {
+            observedAnchor.SizeChanged -= OnObservedItemAnchorSizeChanged;
+        }
+
+        _observedItemAnchors[container] = anchor;
+        anchor.SizeChanged += OnObservedItemAnchorSizeChanged;
+    }
+
+    private void DetachObservedItemAnchor(ListViewItem container)
+    {
+        if (_observedItemAnchors.Remove(container, out var anchor))
+        {
+            anchor.SizeChanged -= OnObservedItemAnchorSizeChanged;
+        }
+    }
+
+    private void DetachObservedItemAnchors()
+    {
+        foreach (var anchor in _observedItemAnchors.Values)
+        {
+            anchor.SizeChanged -= OnObservedItemAnchorSizeChanged;
+        }
+
+        _observedItemAnchors.Clear();
+    }
+
+    private void OnObservedItemAnchorSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        QueueViewportChanged();
     }
 
     private static T? FindDescendant<T>(DependencyObject? root)

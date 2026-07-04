@@ -493,8 +493,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
                 && !string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId),
             IsViewportReady: hasMessages && (lastItemContainerGenerated ?? HasLastItemContainerGenerated(messageCount)),
             HasMessages: hasMessages,
-            IsAtBottom: IsListViewportAtBottom(),
-            IsLastItemVisibleAtBottom: hasMessages && IsLastItemVisiblyAtBottom(messageCount));
+            IsAtBottom: IsListViewportAtBottom());
     }
 
     private void ApplyViewportActions(IReadOnlyList<TranscriptViewportControllerAction> actions)
@@ -509,14 +508,14 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     {
         switch (action.Kind)
         {
-            case TranscriptViewportControllerActionKind.ScrollLastMessageIntoView:
+            case TranscriptViewportControllerActionKind.ScrollTranscriptToEnd:
                 if (action.ScrollRequestToken.Generation >= 0)
                 {
                     IssueNativeTranscriptScrollRequest(action.ScrollRequestToken);
                 }
                 else
                 {
-                    RequestScrollToBottom();
+                    RequestScrollToEnd();
                 }
                 break;
 
@@ -641,9 +640,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             return;
         }
 
-        _transcriptViewportHost.ScrollItemIntoView(
-            ViewModel.MessageHistory.Count - 1,
-            TranscriptItemScrollAlignment.Leading);
+        RequestScrollToEnd();
         ScheduleTranscriptScrollRequestObservation(requestToken);
     }
 
@@ -667,13 +664,11 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         });
     }
 
-    private void RequestScrollToBottom()
+    private void RequestScrollToEnd()
     {
         if (_transcriptViewportHost is not null && ViewModel.MessageHistory.Count > 0)
         {
-            _transcriptViewportHost.ScrollItemIntoView(
-                ViewModel.MessageHistory.Count - 1,
-                TranscriptItemScrollAlignment.Leading);
+            _transcriptViewportHost.ScrollToEnd();
         }
     }
 
@@ -704,15 +699,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         return _transcriptViewportHost.IsAtBottom(itemCount, BottomThreshold, BottomGeometryTolerance);
     }
 
-    private bool IsLastItemVisiblyAtBottom(int itemCount)
-    {
-        if (!_isMessagesListLoaded || _transcriptViewportHost is null || itemCount <= 0)
-        {
-            return false;
-        }
-
-        return _transcriptViewportHost.IsLastItemVisiblyAtBottom(itemCount, BottomThreshold, BottomGeometryTolerance);
-    }
 
     private bool ObserveActiveTranscriptScrollFromLayout(bool? lastItemContainerGenerated = null)
     {
