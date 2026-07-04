@@ -1,30 +1,31 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Controls;
+using System;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using SalmonEgg.Presentation.Core.Services.Input;
-using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class MainShellGamepadContextIntentDispatcher : IGamepadContextIntentDispatcher
 {
     private readonly ILogger<MainShellGamepadContextIntentDispatcher> _logger;
+    private readonly IShellFocusScope _focusScope;
 
-    public MainShellGamepadContextIntentDispatcher(ILogger<MainShellGamepadContextIntentDispatcher> logger)
+    public MainShellGamepadContextIntentDispatcher(
+        ILogger<MainShellGamepadContextIntentDispatcher> logger,
+        IShellFocusScope focusScope)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _focusScope = focusScope ?? throw new ArgumentNullException(nameof(focusScope));
     }
 
     public bool TryDispatch(GamepadContextIntent intent)
     {
-        var focused = GetFocusedElement();
-        if (TryDispatchFromRoot(focused, intent))
+        if (TryDispatchFromRoot(_focusScope.GetFocusedElement(), intent))
         {
             return true;
         }
 
-        if (TryDispatchFromRoot(GetCurrentRootContent(), intent))
+        if (TryDispatchFromRoot(_focusScope.GetCurrentRootContent(), intent))
         {
             _logger.LogDebug(
                 "Main shell gamepad context intent was retried from current root content after focused dispatch miss. Intent={Intent}.",
@@ -36,11 +37,11 @@ public sealed class MainShellGamepadContextIntentDispatcher : IGamepadContextInt
         return false;
     }
 
-    private bool TryDispatchFromRoot(DependencyObject? current, GamepadContextIntent intent)
+    private bool TryDispatchFromRoot(DependencyObject? root, GamepadContextIntent intent)
     {
-        while (current is not null)
+        foreach (var ancestor in _focusScope.EnumerateAncestors(root))
         {
-            if (current is IGamepadContextIntentConsumer consumer
+            if (ancestor is IGamepadContextIntentConsumer consumer
                 && consumer.TryConsumeContextIntent(intent))
             {
                 _logger.LogDebug(
@@ -49,33 +50,8 @@ public sealed class MainShellGamepadContextIntentDispatcher : IGamepadContextInt
                     consumer.GetType().FullName);
                 return true;
             }
-
-            current = VisualTreeHelper.GetParent(current);
         }
 
         return false;
-    }
-
-    private static DependencyObject? GetFocusedElement()
-    {
-        var root = App.MainWindowInstance?.Content as FrameworkElement;
-        return root?.XamlRoot is null
-            ? null
-            : XamlFocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
-    }
-
-    private static DependencyObject? GetCurrentRootContent()
-    {
-        if (App.MainWindowInstance?.Content is not FrameworkElement { XamlRoot: not null } rootContent)
-        {
-            return null;
-        }
-
-        if (rootContent is Frame rootFrame && rootFrame.Content is DependencyObject frameContent)
-        {
-            return frameContent;
-        }
-
-        return rootContent;
     }
 }

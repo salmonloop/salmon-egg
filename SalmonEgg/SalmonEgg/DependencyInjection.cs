@@ -204,6 +204,7 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<IVoiceInputDiagnosticsService, VoiceInputDiagnosticsService>();
         services.AddSingleton<IShellBackNavigationService, ShellBackNavigationService>();
+        services.AddSingleton<IShellFocusScope, MainShellFocusScope>();
         services.AddSingleton<IGamepadNavigationDispatcher, MainShellGamepadNavigationDispatcher>();
         services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
         services.AddSingleton<IGamepadContextIntentDispatcher, MainShellGamepadContextIntentDispatcher>();

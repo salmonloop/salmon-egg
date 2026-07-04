@@ -1,26 +1,27 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
+using System;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Services.Input;
-using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class MainShellGamepadShortcutDispatcher : IGamepadShortcutDispatcher
 {
     private readonly ILogger<MainShellGamepadShortcutDispatcher> _logger;
+    private readonly IShellFocusScope _focusScope;
 
-    public MainShellGamepadShortcutDispatcher(ILogger<MainShellGamepadShortcutDispatcher> logger)
+    public MainShellGamepadShortcutDispatcher(
+        ILogger<MainShellGamepadShortcutDispatcher> logger,
+        IShellFocusScope focusScope)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _focusScope = focusScope ?? throw new ArgumentNullException(nameof(focusScope));
     }
 
     public bool TryDispatch(GamepadShortcutIntent intent)
     {
-        var current = GetFocusedElement();
-        while (current is not null)
+        foreach (var ancestor in _focusScope.EnumerateAncestors(_focusScope.GetFocusedElement()))
         {
-            if (current is IGamepadShortcutConsumer consumer
+            if (ancestor is IGamepadShortcutConsumer consumer
                 && consumer.TryConsumeShortcutIntent(intent))
             {
                 _logger.LogDebug(
@@ -29,19 +30,9 @@ public sealed class MainShellGamepadShortcutDispatcher : IGamepadShortcutDispatc
                     consumer.GetType().FullName);
                 return true;
             }
-
-            current = VisualTreeHelper.GetParent(current);
         }
 
         _logger.LogDebug("Main shell gamepad shortcut intent not consumed. Intent={Intent}.", intent);
         return false;
-    }
-
-    private static DependencyObject? GetFocusedElement()
-    {
-        var root = App.MainWindowInstance?.Content as FrameworkElement;
-        return root?.XamlRoot is null
-            ? null
-            : XamlFocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
     }
 }

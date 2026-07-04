@@ -1,9 +1,7 @@
 using System;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Navigation;
-using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
@@ -11,13 +9,16 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
 {
     private readonly IShellBackNavigationService _shellBackNavigation;
     private readonly IGamepadNativeInputBridge _nativeInputBridge;
+    private readonly IShellFocusScope _focusScope;
 
     public MainShellGamepadNavigationDispatcher(
         IShellBackNavigationService shellBackNavigation,
-        IGamepadNativeInputBridge nativeInputBridge)
+        IGamepadNativeInputBridge nativeInputBridge,
+        IShellFocusScope focusScope)
     {
         _shellBackNavigation = shellBackNavigation ?? throw new ArgumentNullException(nameof(shellBackNavigation));
         _nativeInputBridge = nativeInputBridge ?? throw new ArgumentNullException(nameof(nativeInputBridge));
+        _focusScope = focusScope ?? throw new ArgumentNullException(nameof(focusScope));
     }
 
     public bool TryDispatch(GamepadNavigationIntent intent)
@@ -46,37 +47,17 @@ public sealed class MainShellGamepadNavigationDispatcher : IGamepadNavigationDis
         return _shellBackNavigation.TryGoBack();
     }
 
-    private static bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
+    private bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)
     {
-        var current = GetFocusedElement();
-        while (current != null)
+        foreach (var ancestor in _focusScope.EnumerateAncestors(_focusScope.GetFocusedElement()))
         {
-            if (current is INavigationIntentConsumer consumer
+            if (ancestor is INavigationIntentConsumer consumer
                 && consumer.TryConsumeNavigationIntent(intent))
             {
                 return true;
             }
-
-            current = VisualTreeHelper.GetParent(current);
         }
 
         return false;
     }
-
-    private static DependencyObject? GetFocusedElement()
-    {
-        var root = GetRootElement();
-        if (root?.XamlRoot is null)
-        {
-            return null;
-        }
-
-        return XamlFocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
-    }
-
-    private static FrameworkElement? GetRootElement()
-    {
-        return App.MainWindowInstance?.Content as FrameworkElement;
-    }
-
 }

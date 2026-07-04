@@ -62,11 +62,50 @@ public sealed class GamepadContextIntentDispatcherSourceTests
         var code = TestSourceFiles.ReadAllText(
             @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadContextIntentDispatcher.cs");
 
-        Assert.Contains("TryDispatchFromRoot(focused, intent)", code, System.StringComparison.Ordinal);
-        Assert.Contains("TryDispatchFromRoot(GetCurrentRootContent(), intent)", code, System.StringComparison.Ordinal);
+        Assert.Contains("TryDispatchFromRoot(_focusScope.GetFocusedElement(), intent)", code, System.StringComparison.Ordinal);
+        Assert.Contains("TryDispatchFromRoot(_focusScope.GetCurrentRootContent(), intent)", code, System.StringComparison.Ordinal);
         Assert.Contains(
             "Main shell gamepad context intent was retried from current root content after focused dispatch miss",
             code,
             System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GamepadContextIntentDispatcher_DelegatesToShellFocusScope()
+    {
+        var code = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadContextIntentDispatcher.cs");
+
+        Assert.Contains("IShellFocusScope", code, System.StringComparison.Ordinal);
+        Assert.Contains("_focusScope.GetFocusedElement()", code, System.StringComparison.Ordinal);
+        Assert.Contains("_focusScope.GetCurrentRootContent()", code, System.StringComparison.Ordinal);
+        Assert.Contains("_focusScope.EnumerateAncestors(", code, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("App.MainWindowInstance", code, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("XamlFocusManager.GetFocusedElement", code, System.StringComparison.Ordinal);
+        Assert.DoesNotContain("VisualTreeHelper.GetParent", code, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShellFocusScope_IsTheSoleOwnerOfWindowFocusPlumbing()
+    {
+        var scope = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellFocusScope.cs");
+        var navDispatcher = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
+        var ctxDispatcher = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadContextIntentDispatcher.cs");
+        var scDispatcher = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadShortcutDispatcher.cs");
+
+        Assert.Contains("App.MainWindowInstance", scope, System.StringComparison.Ordinal);
+        Assert.Contains("XamlFocusManager.GetFocusedElement", scope, System.StringComparison.Ordinal);
+        Assert.Contains("VisualTreeHelper.GetParent", scope, System.StringComparison.Ordinal);
+
+        foreach (var dispatcher in new[] { navDispatcher, ctxDispatcher, scDispatcher })
+        {
+            Assert.DoesNotContain("App.MainWindowInstance", dispatcher, System.StringComparison.Ordinal);
+            Assert.DoesNotContain("XamlFocusManager.GetFocusedElement", dispatcher, System.StringComparison.Ordinal);
+            Assert.DoesNotContain("VisualTreeHelper.GetParent", dispatcher, System.StringComparison.Ordinal);
+        }
     }
 }
