@@ -557,6 +557,33 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void TitleBarRightButtons_ScopeNativeCheckedStateResources()
+    {
+        var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+        var toggleStyleXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarToggleButtonStyle.xaml");
+        var toggleStyles = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Styles\TitleBarToggleButtonStyle.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+        var style = toggleStyles.Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "Style", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "TitleBarToggleButtonStyle", StringComparison.Ordinal));
+
+        Assert.NotNull(style);
+        Assert.Equal("{StaticResource DefaultToggleButtonStyle}", style!.Attribute("BasedOn")?.Value);
+        Assert.Contains(style.Descendants().Where(element => string.Equals(element.Name.LocalName, "Setter", StringComparison.Ordinal)),
+            setter => string.Equals(setter.Attribute("Property")?.Value, "Background", StringComparison.Ordinal)
+                && string.Equals(setter.Attribute("Value")?.Value, "Transparent", StringComparison.Ordinal));
+        Assert.DoesNotContain("ToggleButtonBackgroundChecked", toggleStyleXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TitleBarRightButtons\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ToggleButtonBackgroundChecked\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("ResourceKey=\"ButtonBackground\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ToggleButtonBackgroundCheckedPointerOver\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("ResourceKey=\"ButtonBackgroundPointerOver\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"ToggleButtonBackgroundCheckedPressed\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("ResourceKey=\"ButtonBackgroundPressed\"", mainPageXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MiniChatView_RootSurfaceKeepsWindowBackdropVisible()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");

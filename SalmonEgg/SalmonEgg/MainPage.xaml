@@ -406,6 +406,20 @@
                                 Spacing="8"
                                 VerticalAlignment="Center"
                                 Margin="0">
+                        <StackPanel.Resources>
+                            <StaticResource x:Key="ToggleButtonBackgroundChecked"
+                                            ResourceKey="ButtonBackground" />
+                            <StaticResource x:Key="ToggleButtonBackgroundCheckedPointerOver"
+                                            ResourceKey="ButtonBackgroundPointerOver" />
+                            <StaticResource x:Key="ToggleButtonBackgroundCheckedPressed"
+                                            ResourceKey="ButtonBackgroundPressed" />
+                            <StaticResource x:Key="ToggleButtonForegroundChecked"
+                                            ResourceKey="ButtonForeground" />
+                            <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver"
+                                            ResourceKey="ButtonForegroundPointerOver" />
+                            <StaticResource x:Key="ToggleButtonForegroundCheckedPressed"
+                                            ResourceKey="ButtonForegroundPressed" />
+                        </StackPanel.Resources>
                         <ToggleButton x:Name="BottomPanelButton"
                                        x:Uid="BottomPanelButton"
                                        AutomationProperties.AutomationId="TitleBar.BottomPanel"
