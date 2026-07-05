@@ -1,396 +1,4 @@
-import { createHash } from "node:crypto";
-import { createServer } from "node:http";
-import { chromium } from "playwright";
-
-const baseUrl = normalizeBaseUrl(process.argv[2]);
-const fatalConsolePattern =
-  /ArgumentOutOfRange|NativeDispatcher unhandled exception|NavigationView\.GetItemFromIndex|System\.ArgumentOutOfRangeException|Unhandled exception/i;
-const dataStorageCacheRetentionAutomationId = "DataStorage.CacheRetention";
-const dataStorageCacheRetentionControl = {
-  labels: ["缓存保留天数", "Cache retention"],
-  automationIds: [dataStorageCacheRetentionAutomationId]
-};
-const dataStorageOpenCacheFolderAutomationId = "DataStorage.OpenCacheFolder";
-const dataStorageOpenExportsAutomationId = "DataStorage.OpenExports";
-const localAppSettingsPath = "/local/SalmonEgg/config/app.yaml";
-const remoteDirectoryName = `WASM remote project ${Date.now()}`;
-const remoteDirectoryPath = `/remote/wasm-full-chain-${Date.now()}`;
-const fullChainPromptText = `WASM full chain prompt ${Date.now()}`;
-const fullChainAgentReplyText = `WASM full chain agent reply ${Date.now()}`;
-const domHelperScript = `
-(() => {
-  window.__salmoneggSmoke = {
-    resolveToggleClickPoint(toggleElement) {
-      const interactiveDescendants = [toggleElement, ...toggleElement.querySelectorAll("*")]
-        .map(element => {
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          return {
-            rect,
-            pointerEvents: style.pointerEvents,
-            element
-          };
-        })
-        .filter(candidate =>
-          candidate.pointerEvents !== "none"
-          && candidate.rect.width > 0
-          && candidate.rect.height > 0
-          && candidate.rect.left >= 0
-          && candidate.rect.top >= 0
-          && candidate.rect.left <= innerWidth
-          && candidate.rect.top <= innerHeight)
-        .sort((left, right) => {
-          const leftArea = left.rect.width * left.rect.height;
-          const rightArea = right.rect.width * right.rect.height;
-          return rightArea - leftArea;
-        });
-
-      const target = interactiveDescendants[0];
-      if (!target) {
-        const rect = toggleElement.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0
-          ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-          : null;
-      }
-
-      return {
-        x: target.rect.left + target.rect.width / 2,
-        y: target.rect.top + target.rect.height / 2
-      };
-    },
-
-    findVisibleControl(input, labels, automationIds) {
-      const normalize = value => (value ?? "").trim().toLowerCase();
-      const normalizedLabels = labels.map(normalize).filter(Boolean);
-      const normalizedAutomationIds = automationIds.map(normalize).filter(Boolean);
-      const nodes = Array.from(document.querySelectorAll("body *"))
-        .map(element => {
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          const text = (element.textContent ?? "").trim();
-          const aria = element.getAttribute("aria-label") ?? "";
-          const automationId =
-            element.getAttribute("data-automation-id")
-            ?? element.getAttribute("data-automationid")
-            ?? element.getAttribute("automationid")
-            ?? "";
-
-          return {
-            element,
-            rect,
-            text,
-            aria,
-            automationId,
-            display: style.display,
-            visibility: style.visibility,
-            automationMatch:
-              normalizedAutomationIds.includes(normalize(aria))
-              || normalizedAutomationIds.includes(normalize(automationId)),
-            textMatch:
-              normalizedLabels.some(label => normalize(text).includes(label))
-              || normalizedLabels.some(label => normalize(aria).includes(label))
-          };
-        })
-        .filter(candidate =>
-          (candidate.automationMatch || candidate.textMatch)
-          && candidate.rect.width > 0
-          && candidate.rect.height > 0
-          && candidate.display !== "none"
-          && candidate.visibility !== "hidden"
-          && candidate.rect.left >= -1
-          && candidate.rect.top >= -1
-          && candidate.rect.left <= innerWidth
-          && candidate.rect.top <= innerHeight);
-
-      nodes.sort((left, right) => {
-        if (left.automationMatch !== right.automationMatch) {
-          return left.automationMatch ? -1 : 1;
-        }
-
-        return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
-      });
-
-      return nodes[0]?.element ?? null;
-    },
-
-    collectTopNavigationButtonCandidates() {
-      return Array.from(document.querySelectorAll("body *"))
-        .map(element => {
-          const rect = element.getBoundingClientRect();
-          return {
-            element,
-            rect: {
-              left: rect.left,
-              top: rect.top,
-              right: rect.right,
-              bottom: rect.bottom,
-              width: rect.width,
-              height: rect.height
-            },
-            text: (element.textContent ?? "").trim(),
-            aria: element.getAttribute("aria-label") ?? "",
-            title: element.getAttribute("title") ?? "",
-            role: element.getAttribute("role") ?? "",
-            className: element.className?.toString?.() ?? ""
-          };
-        })
-        .filter(candidate =>
-          candidate.rect.width > 0
-          && candidate.rect.height > 0
-          && candidate.rect.left >= 0
-          && candidate.rect.top >= 16
-          && candidate.rect.top <= 96
-          && candidate.rect.right <= innerWidth + 1
-          && candidate.rect.width <= 80
-          && candidate.rect.height <= 80
-          && (
-            candidate.role === "button"
-            || candidate.className.includes("uno-button")
-            || candidate.text === "\\uE10C"
-            || candidate.text === "\\uE712"
-            || /more|overflow|ellipsis|更多|溢出|展开/i.test(candidate.aria)
-            || /more|overflow|ellipsis|更多|溢出|展开/i.test(candidate.title)))
-        .sort((left, right) => right.rect.right - left.rect.right);
-    }
-  };
-})();
-`;
-
-const acpServer = await startAcpWebSocketServer();
-const browser = await chromium.launch({ headless: true });
-
-try {
-  await clearBrowserOriginStorage(browser, baseUrl);
-
-  const fatalConsoleMessages = [];
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
-    deviceScaleFactor: 1
-  });
-  await context.addInitScript({ content: domHelperScript });
-  const page = await context.newPage();
-
-  page.on("console", message => {
-    const text = message.text();
-    if (fatalConsolePattern.test(text)) {
-      fatalConsoleMessages.push({ type: message.type(), text });
-    }
-  });
-
-  page.on("pageerror", error => {
-    const text = error.stack ?? error.message;
-    if (fatalConsolePattern.test(text)) {
-      fatalConsoleMessages.push({ type: "pageerror", text });
-    }
-  });
-
-  await openApp(page);
-  await navigateToSettingsSection(
-    page,
-    { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
-    /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
-    "data storage settings page");
-  await expectAppSettingsPersistenceAfterReload(page);
-
-  await navigateToSettingsSection(
-    page,
-    { labels: ["ACP Agent", "ACP / Agent"], automationIds: ["SettingsNav.AgentAcp"] },
-    /ACP Agent|ACP 连接配置|ACP connection profiles/,
-    "ACP Agent settings page");
-
-  const profileName = `WASM smoke ${Date.now()}`;
-  await createWebSocketProfile(page, profileName, acpServer.url);
-  await expectProfilePresence(page, profileName, "saved ACP profile");
-  await createRemoteDirectory(page, remoteDirectoryName, remoteDirectoryPath);
-
-  await page.waitForTimeout(1_500);
-  await expectPersistedProfileAfterReload(page, profileName);
-  await expectRemoteDirectoryPresence(page, remoteDirectoryName, remoteDirectoryPath, "persisted remote directory");
-
-  await ensureGlobalAcpEnabled(page);
-  await clickProfileConnectionToggle(page, profileName);
-  const initializeRequest = await waitForInitializeWithDiagnostics(acpServer, page, profileName);
-  expectNoAdvertisedFileSystemCapability(initializeRequest);
-  await createSessionAndSendPromptFromStart(
-    page,
-    acpServer,
-    profileName,
-    remoteDirectoryName,
-    remoteDirectoryPath,
-    fullChainPromptText,
-    fullChainAgentReplyText);
-
-  if (fatalConsoleMessages.length > 0) {
-    throw new Error(`Fatal console errors detected: ${JSON.stringify(fatalConsoleMessages, null, 2)}`);
-  }
-
-  console.log("WASM file system availability and ACP chat full-chain smoke passed");
-} finally {
-  await browser.close();
-  await acpServer.close();
-}
-
-async function expectAppSettingsPersistenceAfterReload(page) {
-  const initialValue = await readNumericControlValue(
-    page,
-    dataStorageCacheRetentionControl,
-    "cache retention before edit");
-  const updatedValue = selectAlternateCacheRetentionValue(initialValue);
-
-  await setNumericControlValue(
-    page,
-    dataStorageCacheRetentionControl,
-    updatedValue,
-    "cache retention");
-  await waitForPersistedAppSettingValue(page, updatedValue);
-
-  await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
-  await navigateToSettingsSection(
-    page,
-    { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
-    /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
-    "data storage settings page after reload");
-
-  const persistedValue = await readNumericControlValue(
-    page,
-    dataStorageCacheRetentionControl,
-    "cache retention after reload");
-  if (persistedValue === updatedValue) {
-    return;
-  }
-
-  const storageDebug = await page.evaluate(readAppSettingsPersistenceDebug, {
-    controlOptions: dataStorageCacheRetentionControl,
-    path: localAppSettingsPath
-  });
-  throw new Error(
-    `App settings did not persist across reload. `
-    + `Expected ${updatedValue}, got ${persistedValue}. `
-    + `StorageDebug=${JSON.stringify(storageDebug)}`);
-}
-
-function normalizeBaseUrl(value) {
-  if (!value || !value.trim()) {
-    throw new Error("usage: wasm-file-system-availability-smoke.mjs <base-url>");
-  }
-
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
-async function openApp(page) {
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
-}
-
-async function readNumericControlValue(page, controlOptions, label) {
-  const deadline = Date.now() + 30_000;
-  let lastRawValue = null;
-
-  while (Date.now() < deadline) {
-    lastRawValue = await page.evaluate(readControlValue, controlOptions);
-    const parsedValue = tryParseInteger(lastRawValue);
-    if (parsedValue != null) {
-      return parsedValue;
-    }
-
-    await page.waitForTimeout(100);
-  }
-
-  throw new Error(`Timed out reading ${label}. LastRawValue=${JSON.stringify(lastRawValue)}`);
-}
-
-async function setNumericControlValue(page, controlOptions, value, label) {
-  const state = await page.evaluate(readEditableControlState, controlOptions);
-  if (!state?.found || !state?.enabled || !Number.isFinite(state.x) || !Number.isFinite(state.y)) {
-    throw new Error(`Expected editable numeric control for ${label}. State=${JSON.stringify(state)}`);
-  }
-
-  await page.mouse.click(state.x, state.y);
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
-  await page.keyboard.type(String(value));
-  await page.keyboard.press("Tab");
-
-  const observedValue = await readNumericControlValue(page, controlOptions, `${label} after edit`);
-  if (observedValue !== value) {
-    throw new Error(`Failed to set ${label}. Expected ${value}, got ${observedValue}.`);
-  }
-}
-
-async function waitForPersistedAppSettingValue(page, expectedValue) {
-  const deadline = Date.now() + 30_000;
-  let lastDebug = null;
-
-  while (Date.now() < deadline) {
-    lastDebug = await page.evaluate(readAppSettingsPersistenceDebug, {
-      controlOptions: dataStorageCacheRetentionControl,
-      path: localAppSettingsPath
-    });
-    if (new RegExp(`cache_retention_days:\\s*${expectedValue}(?:\\D|$)`).test(lastDebug.appYaml ?? "")) {
-      return;
-    }
-
-    await page.waitForTimeout(100);
-  }
-
-  throw new Error(
-    `Timed out waiting for persisted app settings value ${expectedValue}. `
-    + `LastDebug=${JSON.stringify(lastDebug)}`);
-}
-
-function selectAlternateCacheRetentionValue(currentValue) {
-  if (!Number.isFinite(currentValue)) {
-    return 7;
-  }
-
-  if (currentValue >= 60) {
-    return 59;
-  }
-
-  if (currentValue <= 1) {
-    return 2;
-  }
-
-  return currentValue + 1;
-}
-
-function tryParseInteger(value) {
-  const match = String(value ?? "").match(/-?\d+/);
-  return match ? Number.parseInt(match[0], 10) : null;
-}
-
-async function clearBrowserOriginStorage(browser, targetUrl) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const origin = new URL(targetUrl).origin;
-
-  await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  const cdp = await context.newCDPSession(page);
-  await cdp.send("Storage.clearDataForOrigin", {
-    origin,
-    storageTypes: "indexeddb,local_storage,cache_storage,websql,service_workers"
-  });
-  await page.evaluate(async () => {
-    if (!indexedDB.databases) {
-      return;
-    }
-
-    const databases = await indexedDB.databases();
-    await Promise.all(databases
-      .map(database => database.name)
-      .filter(Boolean)
-      .map(name => new Promise((resolve, reject) => {
-        const request = indexedDB.deleteDatabase(name);
-        request.onsuccess = () => resolve();
-        request.onblocked = () => resolve();
-        request.onerror = () => reject(request.error);
-      })));
-  });
-
-  await context.close();
-}
-
-async function navigateToSettingsSection(page, sectionTarget, bodyPattern, label) {
+export async function navigateToSettingsSection(page, sectionTarget, bodyPattern, label) {
   const settingsNavigationTarget = {
     labels: ["设置", "Settings"],
     automationIds: ["SettingsItem"]
@@ -418,7 +26,150 @@ async function navigateToSettingsSection(page, sectionTarget, bodyPattern, label
   await page.setViewportSize({ width: 1280, height: 900 });
 }
 
-async function createWebSocketProfile(page, profileName, serverUrl) {
+export async function clickTopNavigationOverflowTargetUntilBodyText(page, targetOptions, pattern, label) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      await clickTopNavigationOverflow(page);
+      await page.waitForFunction(
+        findVisibleNavigationTargetPoint,
+        targetOptions,
+        { timeout: Math.min(1_500, Math.max(250, deadline - Date.now())) });
+      const point = await page.evaluate(findVisibleNavigationTargetPoint, targetOptions);
+      if (!point) {
+        throw new Error(`Target disappeared before click: ${JSON.stringify(targetOptions)}`);
+      }
+
+      await page.mouse.click(point.x, point.y);
+      await waitForBodyText(page, pattern, label, Math.min(3_000, Math.max(250, deadline - Date.now())));
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(250);
+    }
+  }
+
+  const candidates = await page.evaluate(collectVisibleNavigationTargetDebug);
+  throw new Error(
+    `Settings overflow menu did not activate target ${JSON.stringify(targetOptions)}. `
+    + `Last error: ${lastError?.message ?? lastError}. Candidates=${JSON.stringify(candidates)}`);
+}
+
+export async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
+  await page.waitForFunction(
+    source => new RegExp(source).test(document.body?.innerText ?? ""),
+    pattern.source,
+    { timeout: timeoutMs });
+
+  const bodyText = await page.locator("body").innerText();
+  if (!pattern.test(bodyText)) {
+    throw new Error(`Expected ${label} text was not visible.`);
+  }
+}
+
+export async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      await clickVisibleNavigationTarget(page, options);
+      await waitForBodyText(page, pattern, label, Math.min(1_500, Math.max(250, deadline - Date.now())));
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(250);
+    }
+  }
+
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  throw new Error(
+    `Expected ${label} text was not visible after clicking navigation target. `
+    + `Last error: ${lastError?.message ?? lastError}. Body: ${bodyText.slice(0, 1_000)}`);
+}
+
+export async function clickVisibleNavigationTarget(page, options) {
+  const point = await page.evaluate(findVisibleNavigationTargetPoint, options);
+
+  if (!point) {
+    const candidates = await page.evaluate(collectVisibleNavigationTargetDebug);
+    const labels = options.labels ?? [];
+    const automationIds = options.automationIds ?? [];
+    throw new Error(
+      `No visible navigation item found for labels: ${labels.join(", ")} automationIds: ${automationIds.join(", ")}. `
+      + `Candidates: ${JSON.stringify(candidates)}`);
+  }
+
+  await page.mouse.click(point.x, point.y);
+}
+
+export async function ensureVisibleNavigationTarget(page, targetOptions, openerOptions) {
+  if (await page.evaluate(findVisibleNavigationTargetPoint, targetOptions)) {
+    return;
+  }
+
+  await clickVisibleNavigationTarget(page, openerOptions);
+  await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 30_000 });
+}
+
+export async function readNumericControlValue(page, controlOptions, label) {
+  const deadline = Date.now() + 30_000;
+  let lastRawValue = null;
+
+  while (Date.now() < deadline) {
+    lastRawValue = await page.evaluate(readControlValue, controlOptions);
+    const parsedValue = tryParseInteger(lastRawValue);
+    if (parsedValue != null) {
+      return parsedValue;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out reading ${label}. LastRawValue=${JSON.stringify(lastRawValue)}`);
+}
+
+export async function setNumericControlValue(page, controlOptions, value, label) {
+  const state = await page.evaluate(readEditableControlState, controlOptions);
+  if (!state?.found || !state?.enabled || !Number.isFinite(state.x) || !Number.isFinite(state.y)) {
+    throw new Error(`Expected editable numeric control for ${label}. State=${JSON.stringify(state)}`);
+  }
+
+  await page.mouse.click(state.x, state.y);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type(String(value));
+  await page.keyboard.press("Tab");
+
+  const observedValue = await readNumericControlValue(page, controlOptions, `${label} after edit`);
+  if (observedValue !== value) {
+    throw new Error(`Failed to set ${label}. Expected ${value}, got ${observedValue}.`);
+  }
+}
+
+export function selectAlternateCacheRetentionValue(currentValue) {
+  if (!Number.isFinite(currentValue)) {
+    return 7;
+  }
+
+  if (currentValue >= 60) {
+    return 59;
+  }
+
+  if (currentValue <= 1) {
+    return 2;
+  }
+
+  return currentValue + 1;
+}
+
+export async function readAppSettingsPersistenceDebug(page, options) {
+  return await page.evaluate(readAppSettingsPersistenceDebugInPage, options);
+}
+
+export async function createWebSocketProfile(page, profileName, serverUrl) {
   await clickVisibleNavigationTargetUntilBodyText(
     page,
     { labels: ["新建配置", "New profile"], automationIds: ["Acp.Profiles.Add"] },
@@ -492,38 +243,41 @@ async function createWebSocketProfile(page, profileName, serverUrl) {
   }
 }
 
-async function expectProfilePresence(page, profileName, label) {
+export async function expectProfilePresence(page, profileName, label) {
   await waitForBodyText(page, new RegExp(escapeRegExp(profileName)), label);
 }
 
-async function createRemoteDirectory(page, displayName, remotePath) {
+export async function createRemoteDirectory(page, displayName, remotePath) {
   await scrollToVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
   await clickVisibleNavigationTarget(page, { labels: ["新增远程项目", "Add remote project"], automationIds: ["Acp.RemoteDirectories.Add"] });
   await waitForBodyText(page, /显示名称|Project name|ACP 工作路径|ACP working path/, "remote directory editor");
 
-  const fields = await page.evaluate(collectVisibleTextInputPoints);
-  const editableFields = fields.filter(field => field.top >= 120);
-  if (editableFields.length < 2) {
-    throw new Error(`Expected two remote directory editor fields. Fields=${JSON.stringify(fields)}`);
-  }
-
-  await typeIntoField(page, editableFields[0], displayName);
-  await typeIntoField(page, editableFields[1], remotePath);
+  await typeIntoVisibleTextField(
+    page,
+    { labels: ["项目名称", "Project name"], automationIds: ["Acp.RemoteDirectories.DisplayName"] },
+    displayName,
+    "remote directory display name");
+  await typeIntoVisibleTextField(
+    page,
+    { labels: ["ACP 工作路径", "ACP working path"], automationIds: ["Acp.RemoteDirectories.RemotePath"] },
+    remotePath,
+    "remote directory path");
   await clickVisibleNavigationTarget(page, { labels: ["保存", "Save"], automationIds: ["Acp.RemoteDirectories.Save"] });
   await expectRemoteDirectoryPresence(page, displayName, remotePath, "saved remote directory");
 }
 
-async function expectRemoteDirectoryPresence(page, displayName, remotePath, label) {
+export async function expectRemoteDirectoryPresence(page, displayName, remotePath, label) {
   await waitForBodyText(page, new RegExp(escapeRegExp(displayName)), `${label} name`);
   await waitForBodyText(page, new RegExp(escapeRegExp(remotePath)), `${label} path`);
 }
 
-async function expectPersistedProfileAfterReload(page, profileName) {
+export async function expectPersistedProfileAfterReload(page, baseUrl, profileName) {
   let lastError;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
       await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
       await navigateToSettingsSection(
         page,
@@ -586,48 +340,7 @@ async function expectPersistedProfileAfterReload(page, profileName) {
     + `Cause=${lastError?.message ?? lastError}`);
 }
 
-async function fillProfileEditorTextBoxes(page, profileName, serverUrl) {
-  const fields = await page.evaluate(() =>
-    Array.from(document.querySelectorAll("textarea"))
-      .map(element => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-          value: element.value ?? "",
-          visible: rect.width > 0
-            && rect.height > 0
-            && style.display !== "none"
-            && style.visibility !== "hidden"
-            && rect.left >= -1
-            && rect.top >= 120
-            && rect.left <= innerWidth
-            && rect.top <= innerHeight
-        };
-      })
-      .filter(candidate => candidate.visible)
-      .sort((left, right) => (left.top - right.top) || (left.left - right.left)));
-
-  if (fields.length < 2) {
-    throw new Error(`Expected at least two profile editor text boxes. Fields: ${JSON.stringify(fields)}`);
-  }
-
-  await typeIntoField(page, fields[0], profileName);
-  await typeIntoField(page, fields[1], serverUrl);
-}
-
-async function typeIntoField(page, field, value) {
-  await page.mouse.click(field.left + (field.width / 2), field.top + (field.height / 2));
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
-  await page.keyboard.type(value);
-  await page.keyboard.press("Tab");
-  await page.waitForTimeout(150);
-}
-
-async function clickProfileConnectionToggle(page, profileName) {
+export async function clickProfileConnectionToggle(page, profileName) {
   await page.waitForFunction(
     name => (document.body?.innerText ?? "").includes(name),
     profileName,
@@ -643,7 +356,7 @@ async function clickProfileConnectionToggle(page, profileName) {
   await page.waitForTimeout(500);
 }
 
-async function ensureGlobalAcpEnabled(page) {
+export async function ensureGlobalAcpEnabled(page) {
   const state = await page.evaluate(readControlEnabledState, {
     labels: ["启用 ACP Agent", "Enable ACP Agent"],
     automationIds: ["Acp.Global.Enabled"]
@@ -673,7 +386,7 @@ async function ensureGlobalAcpEnabled(page) {
   }
 }
 
-async function waitForInitializeWithDiagnostics(acpServer, page, profileName) {
+export async function waitForInitializeWithDiagnostics(acpServer, page, profileName) {
   try {
     return await acpServer.waitForInitialize();
   } catch (error) {
@@ -689,7 +402,7 @@ async function waitForInitializeWithDiagnostics(acpServer, page, profileName) {
   }
 }
 
-async function createSessionAndSendPromptFromStart(
+export async function createSessionAndSendPromptFromStart(
   page,
   acpServer,
   profileName,
@@ -734,39 +447,17 @@ async function createSessionAndSendPromptFromStart(
   await waitForBodyText(page, new RegExp(escapeRegExp(expectedAgentReply)), "agent reply projected into chat UI", 30_000);
 }
 
-async function waitForSessionNewWithDiagnostics(acpServer, page) {
-  try {
-    return await acpServer.waitForSessionNew();
-  } catch (error) {
-    const debug = {
-      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
-      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
-      navigation: await page.evaluate(collectVisibleNavigationTargetDebug)
-    };
-    throw new Error(
-      `Timed out waiting for ACP session/new request. PageDebug=${JSON.stringify(debug)} `
-      + `Cause=${error?.message ?? error}`);
-  }
-}
-
-async function waitForSessionPromptWithDiagnostics(acpServer, page) {
-  try {
-    return await acpServer.waitForSessionPrompt();
-  } catch (error) {
-    const debug = {
-      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
-      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
-      interactive: await page.evaluate(collectVisibleInteractiveDebug)
-    };
-    throw new Error(
-      `Timed out waiting for ACP session/prompt request. PageDebug=${JSON.stringify(debug)} `
-      + `Cause=${error?.message ?? error}`);
-  }
-}
-
-async function expectControlDoesNotEscapePage(page, options, stayOnPagePattern) {
+export async function expectControlDoesNotEscapePage(page, options, stayOnPagePattern) {
   const beforeUrl = page.url();
   const state = await page.evaluate(readControlEnabledState, options);
+  if (!state.found) {
+    return;
+  }
+
+  if (!state.enabled) {
+    return;
+  }
+
   const point = state.found && Number.isFinite(state.x) && Number.isFinite(state.y)
     ? { x: state.x, y: state.y }
     : null;
@@ -793,7 +484,62 @@ async function expectControlDoesNotEscapePage(page, options, stayOnPagePattern) 
   await waitForBodyText(page, stayOnPagePattern, "data storage page after external open attempt", 5_000);
 }
 
-function expectNoAdvertisedFileSystemCapability(initializeRequest) {
+export async function readControlState(page, options) {
+  return await page.evaluate(readControlEnabledState, options);
+}
+
+export async function waitForControlState(page, options, label, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+
+  while (Date.now() < deadline) {
+    lastState = await readControlState(page, options);
+    if (lastState?.found) {
+      return lastState;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out waiting for ${label}. State=${JSON.stringify(lastState)}`);
+}
+
+export async function scrollToVisibleControl(page, options) {
+  if (await page.evaluate(findVisibleControlPoint, options)) {
+    return;
+  }
+
+  const scrolled = await page.evaluate(input => {
+    const labels = input.labels ?? [];
+    const automationIds = input.automationIds ?? [];
+    const normalize = value => (value ?? "").trim().toLowerCase();
+    const target = Array.from(document.querySelectorAll("body *"))
+      .find(element => {
+        const text = (element.textContent ?? "").trim();
+        const aria = element.getAttribute("aria-label") ?? "";
+        const automationId =
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "";
+        return automationIds.includes(aria)
+          || automationIds.includes(automationId)
+          || labels.map(normalize).includes(normalize(text))
+          || labels.map(normalize).includes(normalize(aria));
+      });
+
+    target?.scrollIntoView({ block: "center", inline: "nearest" });
+    return Boolean(target);
+  }, options);
+
+  if (!scrolled) {
+    return;
+  }
+
+  await page.waitForTimeout(250);
+}
+
+export function expectNoAdvertisedFileSystemCapability(initializeRequest) {
   const clientCapabilities = initializeRequest?.params?.clientCapabilities;
   if (!clientCapabilities || typeof clientCapabilities !== "object") {
     throw new Error(`Initialize request did not include clientCapabilities: ${JSON.stringify(initializeRequest)}`);
@@ -806,6 +552,11 @@ function expectNoAdvertisedFileSystemCapability(initializeRequest) {
   if (clientCapabilities.terminal === true) {
     throw new Error(`WASM client must not advertise ACP terminal capability: ${JSON.stringify(clientCapabilities)}`);
   }
+}
+
+function tryParseInteger(value) {
+  const match = String(value ?? "").match(/-?\d+/);
+  return match ? Number.parseInt(match[0], 10) : null;
 }
 
 async function clickTopNavigationOverflow(page) {
@@ -853,6 +604,59 @@ async function scrollToVisibleNavigationTarget(page, options) {
   }
 
   await page.waitForFunction(findVisibleNavigationTargetPoint, options, { timeout: 5_000 });
+}
+
+async function fillProfileEditorTextBoxes(page, profileName, serverUrl) {
+  await typeIntoVisibleTextField(
+    page,
+    { labels: ["名称", "Name"], automationIds: ["Acp.ProfileEditor.Name"] },
+    profileName,
+    "ACP profile name");
+  await typeIntoVisibleTextField(
+    page,
+    { labels: ["服务器地址", "Server URL"], automationIds: ["Acp.ProfileEditor.ServerUrl"] },
+    serverUrl,
+    "ACP profile server url");
+}
+
+async function typeIntoField(page, field, value) {
+  const clickX = Number.isFinite(field.x) ? field.x : field.left + (field.width / 2);
+  const clickY = Number.isFinite(field.y) ? field.y : field.top + (field.height / 2);
+  await page.mouse.click(clickX, clickY);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type(value);
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(150);
+}
+
+async function waitForSessionNewWithDiagnostics(acpServer, page) {
+  try {
+    return await acpServer.waitForSessionNew();
+  } catch (error) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      navigation: await page.evaluate(collectVisibleNavigationTargetDebug)
+    };
+    throw new Error(
+      `Timed out waiting for ACP session/new request. PageDebug=${JSON.stringify(debug)} `
+      + `Cause=${error?.message ?? error}`);
+  }
+}
+
+async function waitForSessionPromptWithDiagnostics(acpServer, page) {
+  try {
+    return await acpServer.waitForSessionPrompt();
+  } catch (error) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      interactive: await page.evaluate(collectVisibleInteractiveDebug)
+    };
+    throw new Error(
+      `Timed out waiting for ACP session/prompt request. PageDebug=${JSON.stringify(debug)} `
+      + `Cause=${error?.message ?? error}`);
+  }
 }
 
 async function selectComboBoxItem(page, selectorAutomationId, expectedVisibleName, options = {}) {
@@ -953,36 +757,6 @@ async function selectComboBoxItem(page, selectorAutomationId, expectedVisibleNam
     { timeout: 10_000 });
 }
 
-function findVisibleComboBoxItemIndex(expectedVisibleName) {
-  const items = Array.from(document.querySelectorAll("body *"))
-    .map(element => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      const className = element.className?.toString?.() ?? "";
-      return {
-        text: (element.textContent ?? "").trim(),
-        rect,
-        className,
-        role: element.getAttribute("role") ?? "",
-        display: style.display,
-        visibility: style.visibility
-      };
-    })
-    .filter(candidate =>
-      (candidate.role === "option" || candidate.className.toLowerCase().includes("comboboxitem"))
-      && candidate.rect.width > 0
-      && candidate.rect.height > 0
-      && candidate.display !== "none"
-      && candidate.visibility !== "hidden"
-      && candidate.rect.left >= -1
-      && candidate.rect.top >= -1
-      && candidate.rect.left <= innerWidth
-      && candidate.rect.top <= innerHeight)
-    .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
-
-  return items.findIndex(item => item.text === expectedVisibleName);
-}
-
 async function clickVisibleControl(page, options) {
   const point = await page.evaluate(findVisibleControlPoint, options)
     ?? await page.evaluate(findStartComposerSelectorFallbackPoint, options);
@@ -1008,6 +782,17 @@ async function typeIntoAutomationTextBox(page, automationId, value) {
   await page.mouse.click(point.x, point.y);
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   await page.keyboard.type(value);
+}
+
+async function typeIntoVisibleTextField(page, options, value, label) {
+  const point = await page.evaluate(findVisibleControlPoint, options)
+    ?? await page.evaluate(findVisibleTextInputPoint, options);
+  if (!point) {
+    const inputs = await page.evaluate(collectVisibleTextInputPoints);
+    throw new Error(`No visible text field found for ${label}. Options=${JSON.stringify(options)} Inputs=${JSON.stringify(inputs)}`);
+  }
+
+  await typeIntoField(page, point, value);
 }
 
 async function clickStartComposerSendButton(page) {
@@ -1062,54 +847,6 @@ async function clickStartComposerSendButton(page) {
   await page.mouse.click(point.x, point.y);
 }
 
-async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
-  await page.waitForFunction(
-    source => new RegExp(source).test(document.body?.innerText ?? ""),
-    pattern.source,
-    { timeout: timeoutMs });
-
-  const bodyText = await page.locator("body").innerText();
-  if (!pattern.test(bodyText)) {
-    throw new Error(`Expected ${label} text was not visible.`);
-  }
-}
-
-async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label) {
-  const deadline = Date.now() + 30_000;
-  let lastError;
-
-  while (Date.now() < deadline) {
-    try {
-      await clickVisibleNavigationTarget(page, options);
-      await waitForBodyText(page, pattern, label, Math.min(1_500, Math.max(250, deadline - Date.now())));
-      return;
-    } catch (error) {
-      lastError = error;
-      await page.waitForTimeout(250);
-    }
-  }
-
-  const bodyText = await page.locator("body").innerText().catch(() => "");
-  throw new Error(
-    `Expected ${label} text was not visible after clicking navigation target. `
-    + `Last error: ${lastError?.message ?? lastError}. Body: ${bodyText.slice(0, 1_000)}`);
-}
-
-async function clickVisibleNavigationTarget(page, options) {
-  const point = await page.evaluate(findVisibleNavigationTargetPoint, options);
-
-  if (!point) {
-    const candidates = await page.evaluate(collectVisibleNavigationTargetDebug);
-    const labels = options.labels ?? [];
-    const automationIds = options.automationIds ?? [];
-    throw new Error(
-      `No visible navigation item found for labels: ${labels.join(", ")} automationIds: ${automationIds.join(", ")}. `
-      + `Candidates: ${JSON.stringify(candidates)}`);
-  }
-
-  await page.mouse.click(point.x, point.y);
-}
-
 function extractPromptText(promptRequest) {
   const prompt = promptRequest?.params?.prompt;
   if (!Array.isArray(prompt)) {
@@ -1122,16 +859,7 @@ function extractPromptText(promptRequest) {
     .join("");
 }
 
-async function ensureVisibleNavigationTarget(page, targetOptions, openerOptions) {
-  if (await page.evaluate(findVisibleNavigationTargetPoint, targetOptions)) {
-    return;
-  }
-
-  await clickVisibleNavigationTarget(page, openerOptions);
-  await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 30_000 });
-}
-
-function findVisibleNavigationTargetPoint(input) {
+export function findVisibleNavigationTargetPoint(input) {
   const labels = input.labels ?? [];
   const automationIds = input.automationIds ?? [];
   const nodes = Array.from(document.querySelectorAll("body *"))
@@ -1218,6 +946,69 @@ function findVisibleControlPoint(input) {
   };
 }
 
+function findVisibleTextInputPoint(input) {
+  const normalize = value => (value ?? "").trim().toLowerCase();
+  const labels = (input.labels ?? []).map(normalize).filter(Boolean);
+  const automationIds = (input.automationIds ?? []).map(normalize).filter(Boolean);
+  const candidates = Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const type = element.getAttribute("type")?.toLowerCase() ?? "";
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        aria: element.getAttribute("aria-label") ?? "",
+        automationId:
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "",
+        placeholder: element.getAttribute("placeholder") ?? "",
+        visible: rect.width > 0
+          && rect.height > 0
+          && style.display !== "none"
+          && style.visibility !== "hidden"
+          && !["button", "checkbox", "radio", "submit"].includes(type)
+          && rect.left >= 0
+          && rect.top >= 0
+          && rect.left <= innerWidth
+          && rect.top <= innerHeight
+      };
+    })
+    .filter(candidate => candidate.visible)
+    .map(candidate => ({
+      ...candidate,
+      automationMatch:
+        automationIds.includes(normalize(candidate.aria))
+        || automationIds.includes(normalize(candidate.automationId)),
+      textMatch:
+        labels.some(label => normalize(candidate.aria).includes(label))
+        || labels.some(label => normalize(candidate.placeholder).includes(label))
+    }))
+    .filter(candidate => candidate.automationMatch || candidate.textMatch)
+    .sort((left, right) => {
+      if (left.automationMatch !== right.automationMatch) {
+        return left.automationMatch ? -1 : 1;
+      }
+
+      return (left.top - right.top) || (left.left - right.left);
+    });
+  const target = candidates[0];
+  if (!target) {
+    return null;
+  }
+
+  return {
+    left: target.left,
+    top: target.top,
+    width: target.width,
+    height: target.height
+  };
+}
+
 function findStartComposerSelectorFallbackPoint(input) {
   const automationIds = input.automationIds ?? [];
   const selectorIndexByAutomationId = new Map([
@@ -1265,6 +1056,36 @@ function findStartComposerSelectorFallbackPoint(input) {
     x: target.rect.left + target.rect.width / 2,
     y: target.rect.top + target.rect.height / 2
   };
+}
+
+function findVisibleComboBoxItemIndex(expectedVisibleName) {
+  const items = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const className = element.className?.toString?.() ?? "";
+      return {
+        text: (element.textContent ?? "").trim(),
+        rect,
+        className,
+        role: element.getAttribute("role") ?? "",
+        display: style.display,
+        visibility: style.visibility
+      };
+    })
+    .filter(candidate =>
+      (candidate.role === "option" || candidate.className.toLowerCase().includes("comboboxitem"))
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight)
+    .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
+
+  return items.findIndex(item => item.text === expectedVisibleName);
 }
 
 function collectVisibleComboBoxDebug() {
@@ -1405,7 +1226,7 @@ function readControlValue(input) {
     return null;
   }
 
-  const resolveEditableInput = start => {
+  const resolveEditableInputInline = start => {
     if (start.matches("input,textarea,[contenteditable='true']")) {
       return start;
     }
@@ -1423,7 +1244,7 @@ function readControlValue(input) {
     return null;
   };
 
-  const editable = resolveEditableInput(control);
+  const editable = resolveEditableInputInline(control);
   return editable?.value
     ?? control.getAttribute("aria-valuenow")
     ?? editable?.getAttribute("aria-valuenow")
@@ -1438,7 +1259,7 @@ function readEditableControlState(input) {
     return { found: false, enabled: false };
   }
 
-  const resolveEditableInput = start => {
+  const resolveEditableInputInline = start => {
     if (start.matches("input,textarea,[contenteditable='true']")) {
       return start;
     }
@@ -1456,7 +1277,7 @@ function readEditableControlState(input) {
     return null;
   };
 
-  const editable = resolveEditableInput(control);
+  const editable = resolveEditableInputInline(control);
   if (!editable) {
     return { found: false, enabled: false };
   }
@@ -1476,7 +1297,7 @@ function readEditableControlState(input) {
   };
 }
 
-function readAppSettingsPersistenceDebug(input) {
+function readAppSettingsPersistenceDebugInPage(input) {
   const controlOptions = input.controlOptions;
   const path = input.path;
   const readControlValueInline = controlInput => {
@@ -1487,7 +1308,7 @@ function readAppSettingsPersistenceDebug(input) {
       return null;
     }
 
-    const resolveEditableInput = start => {
+    const resolveEditableInputInline = start => {
       if (start.matches("input,textarea,[contenteditable='true']")) {
         return start;
       }
@@ -1505,13 +1326,12 @@ function readAppSettingsPersistenceDebug(input) {
       return null;
     };
 
-    const editable = resolveEditableInput(control);
+    const editable = resolveEditableInputInline(control);
     return editable?.value
       ?? control.getAttribute("aria-valuenow")
       ?? editable?.getAttribute("aria-valuenow")
       ?? (control.textContent ?? "").trim();
   };
-
   const readLocalTextFileInline = filePath => {
     const result = {
       path: filePath,
@@ -1542,26 +1362,6 @@ function readAppSettingsPersistenceDebug(input) {
   };
 }
 
-function getFirstVisibleTextInputValue() {
-  const input = Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
-    .find(element => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      const type = element.getAttribute("type")?.toLowerCase() ?? "";
-      return rect.width > 0
-        && rect.height > 0
-        && style.display !== "none"
-        && style.visibility !== "hidden"
-        && !["button", "checkbox", "radio", "submit"].includes(type)
-        && rect.left >= 0
-        && rect.top >= 0
-        && rect.left <= innerWidth
-        && rect.top <= innerHeight;
-    });
-
-  return input?.value ?? input?.textContent ?? null;
-}
-
 function collectVisibleTextInputPoints() {
   return Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
     .map(element => {
@@ -1578,6 +1378,11 @@ function collectVisibleTextInputPoints() {
         text: (element.textContent ?? "").trim(),
         value: element.value ?? "",
         aria: element.getAttribute("aria-label") ?? "",
+        automationId:
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "",
         role: element.getAttribute("role") ?? "",
         type,
         placeholder: element.getAttribute("placeholder") ?? "",
@@ -1740,7 +1545,7 @@ function collectTopNavigationButtonCandidateDebug() {
   }));
 }
 
-function collectVisibleNavigationTargetDebug() {
+export function collectVisibleNavigationTargetDebug() {
   return Array.from(document.querySelectorAll("body *"))
     .map(element => {
       const rect = element.getBoundingClientRect();
@@ -1789,305 +1594,6 @@ function collectVisibleInteractiveDebug() {
     })
     .filter(candidate => candidate.rect.width > 0 && candidate.rect.height > 0)
     .slice(0, 120);
-}
-
-async function startAcpWebSocketServer() {
-  let initializeRequest;
-  let sessionNewRequest;
-  let sessionPromptRequest;
-  let resolveInitialize;
-  let resolveSessionNew;
-  let resolveSessionPrompt;
-  const initializePromise = new Promise(resolve => {
-    resolveInitialize = resolve;
-  });
-  const sessionNewPromise = new Promise(resolve => {
-    resolveSessionNew = resolve;
-  });
-  const sessionPromptPromise = new Promise(resolve => {
-    resolveSessionPrompt = resolve;
-  });
-  const sockets = new Set();
-  const sessionId = "wasm-full-chain-session-01";
-
-  const server = createServer();
-  server.on("upgrade", (request, socket) => {
-    const key = request.headers["sec-websocket-key"];
-    if (!key) {
-      socket.destroy();
-      return;
-    }
-
-    const accept = createHash("sha1")
-      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-      .digest("base64");
-
-    socket.write([
-      "HTTP/1.1 101 Switching Protocols",
-      "Upgrade: websocket",
-      "Connection: Upgrade",
-      `Sec-WebSocket-Accept: ${accept}`,
-      "",
-      ""
-    ].join("\r\n"));
-
-    sockets.add(socket);
-    let buffer = Buffer.alloc(0);
-    socket.on("data", chunk => {
-      buffer = Buffer.concat([buffer, chunk]);
-      const result = readWebSocketTextFrames(buffer);
-      buffer = result.remaining;
-
-      for (const text of result.messages) {
-        const message = JSON.parse(text);
-        if (message.method === "initialize") {
-          initializeRequest = message;
-          resolveInitialize(message);
-          writeJsonRpc(socket, {
-            jsonrpc: "2.0",
-            id: message.id,
-            result: {
-              protocolVersion: 1,
-              agentInfo: {
-                name: "wasm-smoke-agent",
-                title: "WASM Smoke Agent",
-                version: "1.0.0"
-              },
-              agentCapabilities: {}
-            }
-          });
-          continue;
-        }
-
-        if (message.method === "session/new") {
-          sessionNewRequest = message;
-          resolveSessionNew(message);
-          writeJsonRpc(socket, {
-            jsonrpc: "2.0",
-            id: message.id,
-            result: {
-              sessionId,
-              modes: {
-                currentModeId: "planner",
-                availableModes: [
-                  {
-                    id: "agent",
-                    name: "Agent 01",
-                    description: "General conversation mode"
-                  },
-                  {
-                    id: "planner",
-                    name: "Planner 01",
-                    description: "Structured planning mode"
-                  }
-                ]
-              },
-              configOptions: [
-                {
-                  id: "mode",
-                  name: "Mode",
-                  description: "Conversation mode",
-                  type: "select",
-                  currentValue: "planner",
-                  options: [
-                    {
-                      value: "agent",
-                      name: "Agent 01"
-                    },
-                    {
-                      value: "planner",
-                      name: "Planner 01"
-                    }
-                  ]
-                }
-              ]
-            }
-          });
-          writeSessionUpdate(socket, sessionId, {
-            sessionUpdate: "session_info_update",
-            title: "WASM full chain session"
-          });
-          continue;
-        }
-
-        if (message.method === "session/prompt") {
-          sessionPromptRequest = message;
-          resolveSessionPrompt(message);
-          writeSessionUpdate(socket, sessionId, {
-            sessionUpdate: "agent_message_chunk",
-            content: {
-              type: "text",
-              text: fullChainAgentReplyText
-            }
-          });
-          writeJsonRpc(socket, {
-            jsonrpc: "2.0",
-            id: message.id,
-            result: {
-              stopReason: "end_turn",
-              userMessageId: message.params?.messageId ?? null
-            }
-          });
-        }
-      }
-    });
-    socket.on("close", () => sockets.delete(socket));
-    socket.on("error", () => sockets.delete(socket));
-  });
-
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-
-  return {
-    url: `ws://127.0.0.1:${port}/acp`,
-    waitForInitialize: async () => {
-      if (initializeRequest) {
-        return initializeRequest;
-      }
-
-      let timeoutId;
-      const timeout = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Timed out waiting for ACP initialize request.")), 30_000);
-      });
-
-      try {
-        return await Promise.race([initializePromise, timeout]);
-      } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      }
-    },
-    waitForSessionNew: async () => {
-      if (sessionNewRequest) {
-        return sessionNewRequest;
-      }
-
-      return await waitWithTimeout(sessionNewPromise, "Timed out waiting for ACP session/new request.", 30_000);
-    },
-    waitForSessionPrompt: async () => {
-      if (sessionPromptRequest) {
-        return sessionPromptRequest;
-      }
-
-      return await waitWithTimeout(sessionPromptPromise, "Timed out waiting for ACP session/prompt request.", 30_000);
-    },
-    close: async () => {
-      for (const socket of sockets) {
-        socket.destroy();
-      }
-
-      await new Promise(resolve => server.close(resolve));
-    }
-  };
-}
-
-async function waitWithTimeout(promise, message, timeoutMs) {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  }
-}
-
-function writeSessionUpdate(socket, sessionId, update) {
-  writeJsonRpc(socket, {
-    jsonrpc: "2.0",
-    method: "session/update",
-    params: {
-      sessionId,
-      update
-    }
-  });
-}
-
-function writeJsonRpc(socket, message) {
-  socket.write(encodeWebSocketTextFrame(JSON.stringify(message)));
-}
-
-function readWebSocketTextFrames(buffer) {
-  const messages = [];
-  let offset = 0;
-
-  while (buffer.length - offset >= 2) {
-    const first = buffer[offset];
-    const second = buffer[offset + 1];
-    const opcode = first & 0x0f;
-    const masked = (second & 0x80) !== 0;
-    let payloadLength = second & 0x7f;
-    let headerLength = 2;
-
-    if (payloadLength === 126) {
-      if (buffer.length - offset < 4) {
-        break;
-      }
-
-      payloadLength = buffer.readUInt16BE(offset + 2);
-      headerLength = 4;
-    } else if (payloadLength === 127) {
-      if (buffer.length - offset < 10) {
-        break;
-      }
-
-      const high = buffer.readUInt32BE(offset + 2);
-      const low = buffer.readUInt32BE(offset + 6);
-      payloadLength = high * 2 ** 32 + low;
-      headerLength = 10;
-    }
-
-    const maskLength = masked ? 4 : 0;
-    const frameLength = headerLength + maskLength + payloadLength;
-    if (buffer.length - offset < frameLength) {
-      break;
-    }
-
-    let payload = buffer.subarray(offset + headerLength + maskLength, offset + frameLength);
-    if (masked) {
-      const mask = buffer.subarray(offset + headerLength, offset + headerLength + 4);
-      payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
-    }
-
-    if (opcode === 0x1) {
-      messages.push(payload.toString("utf8"));
-    }
-
-    offset += frameLength;
-  }
-
-  return {
-    messages,
-    remaining: buffer.subarray(offset)
-  };
-}
-
-function encodeWebSocketTextFrame(text) {
-  const payload = Buffer.from(text, "utf8");
-  if (payload.length < 126) {
-    return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
-  }
-
-  if (payload.length <= 0xffff) {
-    const header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(payload.length, 2);
-    return Buffer.concat([header, payload]);
-  }
-
-  const header = Buffer.alloc(10);
-  header[0] = 0x81;
-  header[1] = 127;
-  header.writeUInt32BE(0, 2);
-  header.writeUInt32BE(payload.length, 6);
-  return Buffer.concat([header, payload]);
 }
 
 function escapeRegExp(value) {

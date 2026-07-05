@@ -38,6 +38,7 @@
                         <StackPanel Spacing="14">
                             <TextBox x:Name="AgentProfileEditorNameBox"
                                      x:Uid="AgentProfileEditorName"
+                                     AutomationProperties.AutomationId="Acp.ProfileEditor.Name"
                                      Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
 
                             <ComboBox x:Uid="AgentProfileEditorTransport"
@@ -63,6 +64,7 @@
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBox x:Uid="AgentProfileEditorServerUrl"
+                                         AutomationProperties.AutomationId="Acp.ProfileEditor.ServerUrl"
                                          Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
                             </StackPanel>
                         </StackPanel>

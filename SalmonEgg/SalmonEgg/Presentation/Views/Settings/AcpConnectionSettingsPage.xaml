@@ -279,8 +279,10 @@
                                                         Visibility="{x:Bind IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
                                                          x:Name="AcpRemoteDirectoryDisplayNameBox"
+                                                         AutomationProperties.AutomationId="Acp.RemoteDirectories.DisplayName"
                                                          Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
+                                                         AutomationProperties.AutomationId="Acp.RemoteDirectories.RemotePath"
                                                          Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
                                                 <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"

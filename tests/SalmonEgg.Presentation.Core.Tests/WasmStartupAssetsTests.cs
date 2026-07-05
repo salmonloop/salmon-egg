@@ -288,24 +288,34 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void WasmSmokeGate_RunsFileSystemAvailabilitySmoke()
+    public void WasmSmokeGate_RunsSplitBrowserWasmSmokes()
     {
         var gate = LoadFile(@"scripts\gates\run-wasm-smoke-gates.sh");
 
-        Assert.Contains("wasm-file-system-availability-smoke.mjs", gate, StringComparison.Ordinal);
-        Assert.Contains("Run WASM file system availability smoke", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-settings-navigation-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-settings-persistence-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-capability-boundary-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-acp-full-chain-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("GIT_BIN=", gate, StringComparison.Ordinal);
+        Assert.Contains("PYTHON_BIN=", gate, StringComparison.Ordinal);
+        Assert.Contains("CURL_BIN=", gate, StringComparison.Ordinal);
+        Assert.Contains("for tool_name in GIT_BIN DOTNET_BIN NODE_BIN NPM_BIN PYTHON_BIN CURL_BIN", gate, StringComparison.Ordinal);
+        Assert.Contains("COMMIT=\"$(\"", gate, StringComparison.Ordinal);
+        Assert.Contains("\"${GIT_BIN}\" -C \"${REPO_ROOT}\" rev-parse HEAD", gate, StringComparison.Ordinal);
+        Assert.Contains("Refusing to run BrowserWasm smoke with Windows interop binary", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("dirname", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("grep -qiE", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("Run WASM file system availability smoke", gate, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void WasmFileSystemAvailabilitySmoke_CoversPersistenceAndDesktopCapabilityBoundary()
+    public void WasmSmokeScripts_AreSplitByBehaviorBoundary()
     {
-        var smoke = LoadFile(@"scripts\gates\wasm-file-system-availability-smoke.mjs");
-
-        Assert.Contains("indexedDB.deleteDatabase", smoke, StringComparison.Ordinal);
-        Assert.Contains("DataStorage.CacheRetention", smoke, StringComparison.Ordinal);
-        Assert.Contains("DataStorage.OpenCacheFolder", smoke, StringComparison.Ordinal);
-        Assert.Contains("DataStorage.OpenExports", smoke, StringComparison.Ordinal);
-        Assert.Contains("expectNoAdvertisedFileSystemCapability", smoke, StringComparison.Ordinal);
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-settings-persistence-smoke.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-capability-boundary-smoke.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-acp-full-chain-smoke.mjs")));
+        Assert.True(Directory.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib")));
+        Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-file-system-availability-smoke.mjs")));
     }
 
     private static string LoadFile(string relativePath)

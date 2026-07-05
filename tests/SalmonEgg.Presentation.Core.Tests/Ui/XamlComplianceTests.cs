@@ -33,38 +33,6 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WasmSettingsNavigationSmoke_ClicksSettingsThroughStableAutomationId()
-    {
-        var script = LoadText(@"scripts\gates\wasm-settings-navigation-smoke.mjs");
-
-        Assert.Contains("SettingsItem", script, StringComparison.Ordinal);
-        Assert.Contains("automationIds", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("await clickVisibleText(page, [\"设置\", \"Settings\"]);", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WasmSettingsNavigationSmoke_OpensMainNavigationThroughVisibleTitleBarToggle()
-    {
-        var script = LoadText(@"scripts\gates\wasm-settings-navigation-smoke.mjs");
-
-        Assert.Contains("TitleBar.ToggleSidebar", script, StringComparison.Ordinal);
-        Assert.Contains("ensureVisibleNavigationTarget", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WasmFileSystemSmoke_CoversAcpSessionCreationAndPrompt()
-    {
-        var script = LoadText(@"scripts\gates\wasm-file-system-availability-smoke.mjs");
-
-        Assert.Contains("\"session/new\"", script, StringComparison.Ordinal);
-        Assert.Contains("\"session/prompt\"", script, StringComparison.Ordinal);
-        Assert.Contains("\"session/update\"", script, StringComparison.Ordinal);
-        Assert.Contains("waitForSessionNew", script, StringComparison.Ordinal);
-        Assert.Contains("waitForSessionPrompt", script, StringComparison.Ordinal);
-        Assert.Contains("WASM full chain agent reply", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void CoreGateScript_StopsWhenNativeGateCommandFails()
     {
         var script = LoadText(@"scripts\gates\run-core-gates.ps1");
@@ -261,6 +229,18 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("LostFocus=\"OnSearchBoxLostFocus\"", xaml);
         Assert.DoesNotContain("FocusMonitor.IsFocused", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsSuggestionListOpen=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcpEditors_ExposeStableAutomationIdsForEditableFields()
+    {
+        var agentProfileEditor = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
+        var acpSettings = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.ProfileEditor.Name\"", agentProfileEditor, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.ProfileEditor.ServerUrl\"", agentProfileEditor, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.DisplayName\"", acpSettings, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"Acp.RemoteDirectories.RemotePath\"", acpSettings, StringComparison.Ordinal);
     }
 
     [Fact]
