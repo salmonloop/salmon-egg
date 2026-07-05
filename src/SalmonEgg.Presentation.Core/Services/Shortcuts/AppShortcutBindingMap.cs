@@ -13,8 +13,15 @@ public sealed class AppShortcutBindingMap
         _gestureToAction = gestureToAction;
     }
 
-    public static AppShortcutBindingMap Create(IReadOnlyDictionary<string, string>? savedBindings)
+    public static AppShortcutBindingMap Create(
+        IReadOnlyDictionary<string, string>? savedBindings,
+        bool keyboardShortcutsEnabled = true)
     {
+        if (!keyboardShortcutsEnabled)
+        {
+            return new AppShortcutBindingMap([]);
+        }
+
         var candidates = new List<(string ActionId, AppShortcutGesture Gesture)>();
 
         foreach (var definition in AppShortcutCatalog.EditableActions)

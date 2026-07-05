@@ -15,8 +15,10 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
 {
     private readonly AppPreferencesViewModel _preferences;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private bool _isApplyingPreferenceState;
 
     public ObservableCollection<ShortcutEntryViewModel> Shortcuts { get; } = new();
+    public AppPreferencesViewModel Preferences => _preferences;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasConflicts))]
@@ -63,7 +65,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
 
         PruneUnsupportedBindings();
         SeedDefaults();
-        ApplySavedOverrides();
+        ApplyShortcutStateFromPreferences();
 
         Shortcuts.CollectionChanged += OnShortcutsCollectionChanged;
         foreach (var s in Shortcuts)
@@ -102,15 +104,25 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         }
     }
 
-    private void ApplySavedOverrides()
+    private void ApplyShortcutStateFromPreferences()
     {
-        foreach (var shortcut in Shortcuts)
+        _isApplyingPreferenceState = true;
+        try
         {
-            var saved = _preferences.GetKeyBinding(shortcut.ActionId);
-            if (!string.IsNullOrWhiteSpace(saved))
+            foreach (var shortcut in Shortcuts)
             {
-                shortcut.Gesture = saved;
+                var saved = _preferences.GetKeyBinding(shortcut.ActionId);
+                shortcut.Gesture = string.IsNullOrWhiteSpace(saved)
+                    ? shortcut.DefaultGesture
+                    : saved;
             }
+
+            HasInvalid = Shortcuts.Any(shortcut => !shortcut.IsGestureValid);
+            Recompute();
+        }
+        finally
+        {
+            _isApplyingPreferenceState = false;
         }
     }
 
@@ -139,6 +151,13 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
     {
         if (e.PropertyName == nameof(ShortcutEntryViewModel.Gesture))
         {
+            if (_isApplyingPreferenceState)
+            {
+                HasInvalid = Shortcuts.Any(shortcut => !shortcut.IsGestureValid);
+                Recompute();
+                return;
+            }
+
             var shortcut = (ShortcutEntryViewModel)sender!;
             if (!shortcut.IsGestureValid)
             {
@@ -171,10 +190,8 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
     [RelayCommand]
     private void RestoreDefaults()
     {
-        foreach (var shortcut in Shortcuts)
-        {
-            shortcut.Gesture = shortcut.DefaultGesture;
-        }
+        _preferences.ClearShortcutOverrides();
+        ApplyShortcutStateFromPreferences();
     }
 }
 

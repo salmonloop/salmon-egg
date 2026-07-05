@@ -42,6 +42,31 @@
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel XYFocusKeyboardNavigation="Enabled">
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="Shortcuts_EnableTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="Shortcuts_EnableDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  x:Name="ShortcutsEnabledToggle"
+                                                  x:Uid="Shortcuts_EnableToggle"
+                                                  AutomationProperties.AutomationId="Shortcuts.Enabled"
+                                                  IsOn="{x:Bind ViewModel.Preferences.KeyboardShortcutsEnabled, Mode=TwoWay}"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
                                     <TextBlock x:Uid="Shortcuts_AppOnlyHint"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                 </Grid>
@@ -51,6 +76,7 @@
                                         Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
 
                                 <ItemsControl x:Name="ShortcutsItemsHost"
+                                              IsEnabled="{x:Bind ViewModel.Preferences.KeyboardShortcutsEnabled, Mode=OneWay}"
                                               ItemsSource="{x:Bind ViewModel.Shortcuts, Mode=OneWay}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ShortcutEntryViewModel">
@@ -103,6 +129,7 @@
                                             Grid.Column="1"
                                             x:Uid="Shortcuts_RestoreAll"
                                             AutomationProperties.AutomationId="Shortcuts.RestoreAll"
+                                            IsEnabled="{x:Bind ViewModel.Preferences.KeyboardShortcutsEnabled, Mode=OneWay}"
                                             Command="{x:Bind ViewModel.RestoreDefaultsCommand}"
                                             VerticalAlignment="Center"/>
                                 </Grid>

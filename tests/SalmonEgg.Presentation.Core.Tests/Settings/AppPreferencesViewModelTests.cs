@@ -403,7 +403,7 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
-    public async Task SetKeyBinding_ExistingBinding_RaisesShortcutBindingsChanged()
+    public async Task SetKeyBinding_ExistingBinding_RaisesShortcutConfigurationChanged()
     {
         var appSettingsService = new Mock<IAppSettingsService>();
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
@@ -439,11 +439,64 @@ public class AppPreferencesViewModelTests
         await vm.InitializeAsync();
 
         var raisedCount = 0;
-        vm.ShortcutBindingsChanged += (_, _) => raisedCount++;
+        vm.ShortcutConfigurationChanged += (_, _) => raisedCount++;
 
         vm.SetKeyBinding("search", "Alt+K");
 
         Assert.Equal("Alt+K", vm.GetKeyBinding("search"));
         Assert.Equal(1, raisedCount);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RestoresKeyboardShortcutsEnabled()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            KeyboardShortcutsEnabled = false
+        });
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync();
+
+        Assert.False(vm.KeyboardShortcutsEnabled);
+    }
+
+    [Fact]
+    public async Task KeyboardShortcutsEnabledChanged_PersistsGlobalShortcutPolicy()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            KeyboardShortcutsEnabled = true
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync();
+
+        vm.KeyboardShortcutsEnabled = false;
+
+        await Task.Delay(1200);
+
+        appSettingsService.Verify(
+            service => service.SaveAsync(It.Is<AppSettings>(settings => settings.KeyboardShortcutsEnabled == false)),
+            Times.AtLeastOnce);
     }
 }

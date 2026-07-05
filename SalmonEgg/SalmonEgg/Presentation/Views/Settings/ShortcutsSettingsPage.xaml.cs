@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Controls;
@@ -19,15 +20,14 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
         ViewModel = App.ServiceProvider.GetRequiredService<ShortcutsSettingsViewModel>();
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.ShortcutsKey);
     }
 
     protected override Control? GetSectionEntryFocusTarget()
     {
-        var (recorderButton, restoreButton, _, _) = ResolveShortcutInteractionTargets();
         return FirstAvailableSectionEntryTarget(
-            recorderButton,
-            restoreButton,
+            ShortcutsEnabledToggle,
             FindDescendantControl<Button>(button => string.Equals(
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button),
                 "Shortcuts.RestoreAll",
@@ -36,9 +36,18 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
 
     protected override IEnumerable<Control?> GetSectionFocusReturnTargets()
     {
+        yield return ShortcutsEnabledToggle;
+
         var (recorderButton, restoreButton, _, _) = ResolveShortcutInteractionTargets();
-        yield return recorderButton;
-        yield return restoreButton;
+        if (recorderButton?.IsEnabled == true || recorderButton?.AllowFocusWhenDisabled == true)
+        {
+            yield return recorderButton;
+        }
+
+        if (restoreButton?.IsEnabled == true || restoreButton?.AllowFocusWhenDisabled == true)
+        {
+            yield return restoreButton;
+        }
     }
 
     private (Button? FirstRecorderButton, Button? FirstRestoreButton, Button? LastRecorderButton, Button? LastRestoreButton) ResolveShortcutInteractionTargets()
@@ -60,21 +69,56 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
 
     private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        ApplyShortcutDirectionalTargets();
-        FindAncestor<SettingsShellPage>(this)?.RefreshCurrentSectionFocusTargetsForChildPage();
+        ViewModel.Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        ViewModel.Preferences.PropertyChanged += OnPreferencesPropertyChanged;
+        QueueRefreshShortcutDirectionalTargets();
     }
 
-    private void ApplyShortcutDirectionalTargets()
+    private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        var (_, _, lastRecorderButton, lastRestoreButton) = ResolveShortcutInteractionTargets();
-        var trailingTarget = FirstAvailableSectionEntryTarget(lastRestoreButton, lastRecorderButton);
-        if (trailingTarget is null)
+        ViewModel.Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+    }
+
+    private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(AppPreferencesViewModel.KeyboardShortcutsEnabled), StringComparison.Ordinal))
         {
-            return;
+            QueueRefreshShortcutDirectionalTargets();
+        }
+    }
+
+    private void QueueRefreshShortcutDirectionalTargets()
+    {
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            _ = DispatcherQueue.TryEnqueue(RefreshShortcutDirectionalTargets);
+        });
+    }
+
+    private void RefreshShortcutDirectionalTargets()
+    {
+        UpdateLayout();
+
+        var (firstRecorderButton, firstRestoreButton, lastRecorderButton, lastRestoreButton) = ResolveShortcutInteractionTargets();
+        ShortcutsEnabledToggle.ClearValue(Control.XYFocusDownProperty);
+        RestoreAllButton.ClearValue(Control.XYFocusUpProperty);
+        lastRecorderButton?.ClearValue(Control.XYFocusDownProperty);
+        lastRestoreButton?.ClearValue(Control.XYFocusDownProperty);
+
+        var downTarget = FirstAvailableSectionEntryTarget(firstRecorderButton, firstRestoreButton);
+        if (downTarget is not null)
+        {
+            ShortcutsEnabledToggle.XYFocusDown = downTarget;
         }
 
-        RestoreAllButton.XYFocusUp = trailingTarget;
-        trailingTarget.XYFocusDown = RestoreAllButton;
+        var trailingTarget = FirstAvailableSectionEntryTarget(lastRestoreButton, lastRecorderButton);
+        if (trailingTarget is not null)
+        {
+            RestoreAllButton.XYFocusUp = trailingTarget;
+            trailingTarget.XYFocusDown = RestoreAllButton;
+        }
+
+        FindAncestor<SettingsShellPage>(this)?.RefreshCurrentSectionFocusTargetsForChildPage();
     }
 
     private static bool IsShortcutRecorderButton(Button button)

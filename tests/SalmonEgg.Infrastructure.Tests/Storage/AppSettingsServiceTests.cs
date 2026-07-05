@@ -42,7 +42,8 @@ public sealed class AppSettingsServiceTests : IDisposable
         var settings = new AppSettings
         {
             Theme = "Dark",
-            IsAnimationEnabled = false
+            IsAnimationEnabled = false,
+            KeyboardShortcutsEnabled = false
         };
 
         await service.SaveAsync(settings);
@@ -53,6 +54,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         var loaded = await service.LoadAsync();
         Assert.Equal("Dark", loaded.Theme);
         Assert.False(loaded.IsAnimationEnabled);
+        Assert.False(loaded.KeyboardShortcutsEnabled);
     }
 
     [Fact]

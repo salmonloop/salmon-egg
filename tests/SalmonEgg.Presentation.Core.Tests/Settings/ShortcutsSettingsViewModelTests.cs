@@ -69,6 +69,46 @@ public sealed class ShortcutsSettingsViewModelTests
         Assert.Equal("Shortcuts.Record.search", searchShortcut.RecorderAutomationId);
     }
 
+    [Fact]
+    public async Task RestoreDefaults_ClearsSavedOverridesAtPreferenceOwner()
+    {
+        var preferences = await CreatePreferencesAsync(new AppSettings
+        {
+            KeyBindings = new Dictionary<string, string>
+            {
+                ["search"] = "Alt+K"
+            }
+        });
+
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+
+        viewModel.RestoreDefaultsCommand.Execute(null);
+
+        var searchShortcut = Assert.Single(viewModel.Shortcuts.Where(shortcut => shortcut.ActionId == "search"));
+        Assert.Equal("Ctrl+K", searchShortcut.Gesture);
+        Assert.Null(preferences.GetKeyBinding("search"));
+        Assert.Empty(preferences.KeyBindings);
+    }
+
+    [Fact]
+    public async Task KeyboardShortcutsEnabled_ProjectsPreferenceWithoutClearingBindings()
+    {
+        var preferences = await CreatePreferencesAsync(new AppSettings
+        {
+            KeyBindings = new Dictionary<string, string>
+            {
+                ["search"] = "Alt+K"
+            }
+        });
+
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+
+        viewModel.Preferences.KeyboardShortcutsEnabled = false;
+
+        Assert.False(preferences.KeyboardShortcutsEnabled);
+        Assert.Equal("Alt+K", preferences.GetKeyBinding("search"));
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(AppSettings settings)
     {
         var appSettingsService = new Mock<IAppSettingsService>();

@@ -6,8 +6,13 @@ const baseUrl = normalizeBaseUrl(process.argv[2]);
 const fatalConsolePattern =
   /ArgumentOutOfRange|NativeDispatcher unhandled exception|NavigationView\.GetItemFromIndex|System\.ArgumentOutOfRangeException|Unhandled exception/i;
 const dataStorageCacheRetentionAutomationId = "DataStorage.CacheRetention";
+const dataStorageCacheRetentionControl = {
+  labels: ["缓存保留天数", "Cache retention"],
+  automationIds: [dataStorageCacheRetentionAutomationId]
+};
 const dataStorageOpenCacheFolderAutomationId = "DataStorage.OpenCacheFolder";
 const dataStorageOpenExportsAutomationId = "DataStorage.OpenExports";
+const localAppSettingsPath = "/local/SalmonEgg/config/app.yaml";
 const remoteDirectoryName = `WASM remote project ${Date.now()}`;
 const remoteDirectoryPath = `/remote/wasm-full-chain-${Date.now()}`;
 const fullChainPromptText = `WASM full chain prompt ${Date.now()}`;
@@ -185,6 +190,7 @@ try {
     { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
     /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
     "data storage settings page");
+  await expectAppSettingsPersistenceAfterReload(page);
 
   await navigateToSettingsSection(
     page,
@@ -224,6 +230,46 @@ try {
   await acpServer.close();
 }
 
+async function expectAppSettingsPersistenceAfterReload(page) {
+  const initialValue = await readNumericControlValue(
+    page,
+    dataStorageCacheRetentionControl,
+    "cache retention before edit");
+  const updatedValue = selectAlternateCacheRetentionValue(initialValue);
+
+  await setNumericControlValue(
+    page,
+    dataStorageCacheRetentionControl,
+    updatedValue,
+    "cache retention");
+  await waitForPersistedAppSettingValue(page, updatedValue);
+
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
+  await navigateToSettingsSection(
+    page,
+    { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
+    /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
+    "data storage settings page after reload");
+
+  const persistedValue = await readNumericControlValue(
+    page,
+    dataStorageCacheRetentionControl,
+    "cache retention after reload");
+  if (persistedValue === updatedValue) {
+    return;
+  }
+
+  const storageDebug = await page.evaluate(readAppSettingsPersistenceDebug, {
+    controlOptions: dataStorageCacheRetentionControl,
+    path: localAppSettingsPath
+  });
+  throw new Error(
+    `App settings did not persist across reload. `
+    + `Expected ${updatedValue}, got ${persistedValue}. `
+    + `StorageDebug=${JSON.stringify(storageDebug)}`);
+}
+
 function normalizeBaseUrl(value) {
   if (!value || !value.trim()) {
     throw new Error("usage: wasm-file-system-availability-smoke.mjs <base-url>");
@@ -235,6 +281,82 @@ function normalizeBaseUrl(value) {
 async function openApp(page) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
+}
+
+async function readNumericControlValue(page, controlOptions, label) {
+  const deadline = Date.now() + 30_000;
+  let lastRawValue = null;
+
+  while (Date.now() < deadline) {
+    lastRawValue = await page.evaluate(readControlValue, controlOptions);
+    const parsedValue = tryParseInteger(lastRawValue);
+    if (parsedValue != null) {
+      return parsedValue;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out reading ${label}. LastRawValue=${JSON.stringify(lastRawValue)}`);
+}
+
+async function setNumericControlValue(page, controlOptions, value, label) {
+  const state = await page.evaluate(readEditableControlState, controlOptions);
+  if (!state?.found || !state?.enabled || !Number.isFinite(state.x) || !Number.isFinite(state.y)) {
+    throw new Error(`Expected editable numeric control for ${label}. State=${JSON.stringify(state)}`);
+  }
+
+  await page.mouse.click(state.x, state.y);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.type(String(value));
+  await page.keyboard.press("Tab");
+
+  const observedValue = await readNumericControlValue(page, controlOptions, `${label} after edit`);
+  if (observedValue !== value) {
+    throw new Error(`Failed to set ${label}. Expected ${value}, got ${observedValue}.`);
+  }
+}
+
+async function waitForPersistedAppSettingValue(page, expectedValue) {
+  const deadline = Date.now() + 30_000;
+  let lastDebug = null;
+
+  while (Date.now() < deadline) {
+    lastDebug = await page.evaluate(readAppSettingsPersistenceDebug, {
+      controlOptions: dataStorageCacheRetentionControl,
+      path: localAppSettingsPath
+    });
+    if (new RegExp(`cache_retention_days:\\s*${expectedValue}(?:\\D|$)`).test(lastDebug.appYaml ?? "")) {
+      return;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(
+    `Timed out waiting for persisted app settings value ${expectedValue}. `
+    + `LastDebug=${JSON.stringify(lastDebug)}`);
+}
+
+function selectAlternateCacheRetentionValue(currentValue) {
+  if (!Number.isFinite(currentValue)) {
+    return 7;
+  }
+
+  if (currentValue >= 60) {
+    return 59;
+  }
+
+  if (currentValue <= 1) {
+    return 2;
+  }
+
+  return currentValue + 1;
+}
+
+function tryParseInteger(value) {
+  const match = String(value ?? "").match(/-?\d+/);
+  return match ? Number.parseInt(match[0], 10) : null;
 }
 
 async function clearBrowserOriginStorage(browser, targetUrl) {
@@ -585,7 +707,8 @@ async function createSessionAndSendPromptFromStart(
   await selectComboBoxItem(
     page,
     "StartView.AgentSelector",
-    profileName);
+    profileName,
+    { verifySelectionText: false });
   await selectComboBoxItem(
     page,
     "StartView.ProjectSelector",
@@ -1274,18 +1397,149 @@ async function dismissDialogIfPresent(page) {
   await page.waitForTimeout(300);
 }
 
-function getControlValueByAutomationId(automationId) {
-  const control = window.__salmoneggSmoke.findVisibleControl({ automationIds: [automationId] }, [], [automationId]);
+function readControlValue(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const control = window.__salmoneggSmoke.findVisibleControl(input, labels, automationIds);
   if (!control) {
     return null;
   }
 
-  const input = control.matches("input,textarea")
-    ? control
-    : control.querySelector("input,textarea");
-  return input?.value
+  const resolveEditableInput = start => {
+    if (start.matches("input,textarea,[contenteditable='true']")) {
+      return start;
+    }
+
+    let current = start;
+    while (current && current !== document.body) {
+      const editableCandidate = current.querySelector("input,textarea,[contenteditable='true']");
+      if (editableCandidate) {
+        return editableCandidate;
+      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  };
+
+  const editable = resolveEditableInput(control);
+  return editable?.value
     ?? control.getAttribute("aria-valuenow")
+    ?? editable?.getAttribute("aria-valuenow")
     ?? (control.textContent ?? "").trim();
+}
+
+function readEditableControlState(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const control = window.__salmoneggSmoke.findVisibleControl(input, labels, automationIds);
+  if (!control) {
+    return { found: false, enabled: false };
+  }
+
+  const resolveEditableInput = start => {
+    if (start.matches("input,textarea,[contenteditable='true']")) {
+      return start;
+    }
+
+    let current = start;
+    while (current && current !== document.body) {
+      const editableCandidate = current.querySelector("input,textarea,[contenteditable='true']");
+      if (editableCandidate) {
+        return editableCandidate;
+      }
+
+      current = current.parentElement;
+    }
+
+    return null;
+  };
+
+  const editable = resolveEditableInput(control);
+  if (!editable) {
+    return { found: false, enabled: false };
+  }
+
+  const rect = editable.getBoundingClientRect();
+  const disabled =
+    editable.disabled === true
+    || editable.getAttribute("disabled") != null
+    || editable.getAttribute("aria-disabled") === "true";
+
+  return {
+    found: true,
+    enabled: !disabled,
+    value: editable.value ?? "",
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
+  };
+}
+
+function readAppSettingsPersistenceDebug(input) {
+  const controlOptions = input.controlOptions;
+  const path = input.path;
+  const readControlValueInline = controlInput => {
+    const labels = controlInput.labels ?? [];
+    const automationIds = controlInput.automationIds ?? [];
+    const control = window.__salmoneggSmoke.findVisibleControl(controlInput, labels, automationIds);
+    if (!control) {
+      return null;
+    }
+
+    const resolveEditableInput = start => {
+      if (start.matches("input,textarea,[contenteditable='true']")) {
+        return start;
+      }
+
+      let current = start;
+      while (current && current !== document.body) {
+        const editableCandidate = current.querySelector("input,textarea,[contenteditable='true']");
+        if (editableCandidate) {
+          return editableCandidate;
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    };
+
+    const editable = resolveEditableInput(control);
+    return editable?.value
+      ?? control.getAttribute("aria-valuenow")
+      ?? editable?.getAttribute("aria-valuenow")
+      ?? (control.textContent ?? "").trim();
+  };
+
+  const readLocalTextFileInline = filePath => {
+    const result = {
+      path: filePath,
+      content: null,
+      error: null
+    };
+
+    try {
+      const fs = globalThis.FS;
+      if (!fs) {
+        result.error = "globalThis.FS unavailable";
+        return result;
+      }
+
+      result.content = fs.readFile(filePath, { encoding: "utf8" });
+      return result;
+    } catch (error) {
+      result.error = error?.message ?? String(error);
+      return result;
+    }
+  };
+
+  const appYaml = readLocalTextFileInline(path);
+  return {
+    visibleValue: readControlValueInline(controlOptions),
+    appYaml: appYaml.content,
+    appYamlError: appYaml.error
+  };
 }
 
 function getFirstVisibleTextInputValue() {

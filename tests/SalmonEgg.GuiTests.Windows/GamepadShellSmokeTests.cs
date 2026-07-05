@@ -1310,7 +1310,11 @@ public sealed class ShellFocusedActivationSmokeTests
         var gamepad = session.CreateSyntheticGamepadInput();
         EnsureMainWindowWide(session);
 
-        _ = OpenSettingsAndWaitForSectionNavigation(session, appData, "shortcuts section return validation");
+        var settingsItem = session.FindByAutomationId("SettingsItem", TimeSpan.FromSeconds(10));
+        session.ClickElement(settingsItem);
+        Assert.True(
+            session.WaitUntilOnscreen("SettingsNav.Shortcuts", TimeSpan.FromSeconds(10)),
+            $"Settings navigation did not become visible before shortcuts section return validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         var shortcutsItem = session.FindByAutomationId("SettingsNav.Shortcuts", TimeSpan.FromSeconds(10));
         FocusAndAssert(session, shortcutsItem, "SettingsNav.Shortcuts", "shortcuts settings navigation item");
@@ -1322,8 +1326,7 @@ public sealed class ShellFocusedActivationSmokeTests
                 gamepad.PressDown,
                 () =>
                 {
-                    var recorder = session.FindFirstByAutomationIdPrefix("Shortcuts.Record.", TimeSpan.FromMilliseconds(100));
-                    return recorder is not null && session.IsFocusedElement(recorder);
+                    return session.IsFocusWithinAutomationId("Shortcuts.Enabled");
                 },
                 attempts: 6),
             $"Virtual gamepad D-pad Down did not enter the Shortcuts content from the section navigation item."
@@ -2067,19 +2070,21 @@ public sealed class ShellFocusedActivationSmokeTests
         var shortcutsItem = session.FindByAutomationId("SettingsNav.Shortcuts", TimeSpan.FromSeconds(10));
         session.ClickElement(shortcutsItem);
 
-        var firstInteractive = session.FindFirstByAutomationIdPrefix("Shortcuts.Record.", TimeSpan.FromSeconds(10))
-            ?? throw new InvalidOperationException("Unable to locate the first shortcut recorder in Shortcuts settings.");
-        FocusElementAndWait(session, firstInteractive, "shortcuts settings first interactive control");
+        var firstInteractive = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, firstInteractive, "Shortcuts.Enabled", "shortcuts first interactive control");
 
         var focusedBefore = session.DescribeFocusedElement();
         session.PressVirtualGamepadDPadDown();
 
         Assert.True(
             WaitUntil(
-                () => !string.Equals(session.DescribeFocusedElement(), focusedBefore, StringComparison.Ordinal),
+                () => session.IsFocusWithinAutomationId("Shortcuts.Record.new_session")
+                    || session.IsFocusWithinAutomationId("Shortcuts.Restore.new_session"),
                 TimeSpan.FromSeconds(3)),
-            $"Virtual gamepad D-pad Down did not move beyond the first shortcuts settings control."
+            $"Virtual gamepad D-pad Down did not land on the first shortcuts row after the shortcuts toggle."
+            + $"{Environment.NewLine}FocusedBefore={focusedBefore}"
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"
+            + $"{Environment.NewLine}DetailedFocus={session.DescribeFocusedElementDetailed()}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 

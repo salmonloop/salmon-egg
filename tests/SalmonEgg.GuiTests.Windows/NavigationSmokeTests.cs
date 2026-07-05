@@ -229,6 +229,127 @@ public sealed class NavigationSmokeTests
     }
 
     [SkippableFact]
+    public void ShortcutToggle_DisablesShortcutDispatch_WithoutClearingSavedOverride()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+
+        using (var session = WindowsGuiAppSession.LaunchFresh())
+        {
+            NavigateToShortcutsSettings(session);
+
+            var recorderButton = session.FindByAutomationId("Shortcuts.Record.search");
+            session.ClickElement(recorderButton);
+            session.FocusElement(recorderButton);
+            Thread.Sleep(150);
+            session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+            Thread.Sleep(250);
+
+            var toggle = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
+            Skip.IfNot(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
+            Assert.Equal(ToggleState.On, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
+
+            session.ClickElement(toggle);
+
+            Assert.True(
+                session.WaitUntil(
+                    () => session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromMilliseconds(250))
+                        .Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.Off,
+                    TimeSpan.FromSeconds(5)),
+                $"Expected shortcuts toggle to turn off after click.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+            session.FocusElement(toggle);
+            session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+            Thread.Sleep(150);
+
+            Assert.False(
+                session.IsFocusWithinAutomationId("TopSearchBox"),
+                $"Expected disabled shortcuts to suppress the recorded Ctrl+L binding immediately.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        }
+
+        using (var session = WindowsGuiAppSession.LaunchFresh())
+        {
+            NavigateToShortcutsSettings(session);
+
+            var toggle = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
+            Skip.IfNot(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
+            Assert.Equal(ToggleState.Off, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
+
+            session.FocusElement(toggle);
+            session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+            Thread.Sleep(150);
+
+            Assert.False(
+                session.IsFocusWithinAutomationId("TopSearchBox"),
+                $"Expected the disabled shortcuts policy to persist across restart and keep Ctrl+L inactive.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+            NavigateToShortcutsSettings(session);
+            toggle = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
+            session.ClickElement(toggle);
+
+            Assert.True(
+                session.WaitUntil(
+                    () => session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromMilliseconds(250))
+                        .Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.On,
+                    TimeSpan.FromSeconds(5)),
+                $"Expected shortcuts toggle to turn back on after click.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+            session.FocusElement(toggle);
+            session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+
+            Assert.True(
+                session.IsFocusWithinAutomationId("TopSearchBox"),
+                $"Expected re-enabling shortcuts to restore the recorded Ctrl+L binding instead of clearing it.{Environment.NewLine}{appData.ReadBootLogTail()}");
+        }
+    }
+
+    [SkippableFact]
+    public void RestoreAllShortcuts_ClearsRecordedOverride_AndRestoresDefaultBinding()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        NavigateToShortcutsSettings(session);
+
+        var recorderButton = session.FindByAutomationId("Shortcuts.Record.search");
+        session.ClickElement(recorderButton);
+        session.FocusElement(recorderButton);
+        Thread.Sleep(150);
+        session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+        Thread.Sleep(250);
+
+        var startItem = session.FindByAutomationId("MainNav.Start");
+        session.FocusElement(startItem);
+        session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+        Thread.Sleep(150);
+
+        Assert.True(
+            session.IsFocusWithinAutomationId("TopSearchBox"),
+            $"Expected the recorded Ctrl+L binding to focus TopSearchBox before restore-all.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        NavigateToShortcutsSettings(session);
+
+        var restoreAllButton = session.FindByAutomationId("Shortcuts.RestoreAll", TimeSpan.FromSeconds(10));
+        session.ClickElement(restoreAllButton);
+        Thread.Sleep(250);
+
+        startItem = session.FindByAutomationId("MainNav.Start");
+        session.FocusElement(startItem);
+        session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+        Thread.Sleep(150);
+
+        Assert.False(
+            session.IsFocusWithinAutomationId("TopSearchBox"),
+            $"Expected restore-all to clear the recorded Ctrl+L override.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.FocusElement(startItem);
+        session.PressShortcut(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_K);
+
+        Assert.True(
+            session.IsFocusWithinAutomationId("TopSearchBox"),
+            $"Expected restore-all to restore the default Ctrl+K search binding.{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
     public void TitleBarPanelButtons_Toggle_ChangesBottomPanelState()
     {
         using var _ = GuiAppDataScope.CreateDeterministicLeftNavData();

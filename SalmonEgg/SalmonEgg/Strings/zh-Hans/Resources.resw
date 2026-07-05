@@ -447,6 +447,18 @@
   <data name="Shortcuts_CustomTitle.Text" xml:space="preserve">
     <value>自定义</value>
   </data>
+  <data name="Shortcuts_EnableTitle.Text" xml:space="preserve">
+    <value>启用快捷键</value>
+  </data>
+  <data name="Shortcuts_EnableDescription.Text" xml:space="preserve">
+    <value>在不改动已保存映射的前提下，统一开启或关闭应用快捷键。</value>
+  </data>
+  <data name="Shortcuts_EnableToggle.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="Shortcuts_EnableToggle.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
   <data name="Shortcuts_AppOnlyHint.Text" xml:space="preserve">
     <value>这些快捷键仅在 SalmonEgg 窗口处于前台时生效，不会注册系统级热键，也不会覆盖输入框内的原生编辑行为。</value>
   </data>

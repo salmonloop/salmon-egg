@@ -142,7 +142,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         // 2. Listen for global preference changes (animations, theme, backdrop)
         Preferences.PropertyChanged += OnPreferencesPropertyChanged;
-        Preferences.ShortcutBindingsChanged += OnShortcutBindingsChanged;
+        Preferences.ShortcutConfigurationChanged += OnShortcutConfigurationChanged;
         NavVM.PropertyChanged += OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt += OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged += OnLayoutViewModelPropertyChanged;
@@ -220,7 +220,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         DetachPlatformGamepadDirectionalBridge();
         DetachDebugKeyLogging();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-        Preferences.ShortcutBindingsChanged -= OnShortcutBindingsChanged;
+        Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
         NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
         NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
@@ -314,7 +314,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         }
     }
 
-    private void OnShortcutBindingsChanged(object? sender, EventArgs e)
+    private void OnShortcutConfigurationChanged(object? sender, EventArgs e)
     {
         RebuildAppShortcuts();
     }
@@ -333,7 +333,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             .Where(binding => !string.IsNullOrWhiteSpace(binding.ActionId) && !string.IsNullOrWhiteSpace(binding.Gesture))
             .ToDictionary(binding => binding.ActionId, binding => binding.Gesture, StringComparer.OrdinalIgnoreCase);
 
-        var bindingMap = AppShortcutBindingMap.Create(savedBindings);
+        var bindingMap = AppShortcutBindingMap.Create(
+            savedBindings,
+            Preferences.KeyboardShortcutsEnabled);
         foreach (var binding in bindingMap.AsDictionary())
         {
             if (!WinUiAppShortcutProjector.TryProject(binding.Key, out var key, out var modifiers))

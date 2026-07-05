@@ -55,4 +55,21 @@ public sealed class AppShortcutBindingMapTests
         Assert.True(map.TryResolveActionId(defaultGesture, out var actionId));
         Assert.Equal(AppShortcutActionIds.Search, actionId);
     }
+
+    [Fact]
+    public void Create_WhenKeyboardShortcutsDisabled_ReturnsEmptyMap()
+    {
+        var bindings = new Dictionary<string, string>
+        {
+            ["search"] = "Alt+K"
+        };
+
+        var map = AppShortcutBindingMap.Create(bindings, keyboardShortcutsEnabled: false);
+
+        Assert.True(AppShortcutGesture.TryParse("Alt+K", out var overriddenGesture));
+        Assert.False(map.TryResolveActionId(overriddenGesture, out _));
+
+        Assert.True(AppShortcutGesture.TryParse("Ctrl+N", out var defaultNewSessionGesture));
+        Assert.False(map.TryResolveActionId(defaultNewSessionGesture, out _));
+    }
 }

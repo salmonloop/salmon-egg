@@ -534,6 +534,18 @@
   <data name="Shortcuts_CustomTitle.Text" xml:space="preserve">
     <value>Customize</value>
   </data>
+  <data name="Shortcuts_EnableTitle.Text" xml:space="preserve">
+    <value>Enable shortcuts</value>
+  </data>
+  <data name="Shortcuts_EnableDescription.Text" xml:space="preserve">
+    <value>Turn app shortcuts on or off without changing your saved mappings.</value>
+  </data>
+  <data name="Shortcuts_EnableToggle.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="Shortcuts_EnableToggle.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
   <data name="Shortcuts_AppOnlyHint.Text" xml:space="preserve">
     <value>These shortcuts work only while the SalmonEgg window is active. They do not register system-wide hotkeys or override native text editing behaviors.</value>
   </data>

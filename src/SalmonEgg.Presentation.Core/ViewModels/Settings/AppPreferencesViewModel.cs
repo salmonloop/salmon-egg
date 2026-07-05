@@ -88,9 +88,12 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoaded;
 
+    [ObservableProperty]
+    private bool _keyboardShortcutsEnabled = true;
+
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
     public ObservableCollection<AppLanguageOptionViewModel> LanguageOptions { get; } = CreateLanguageOptions();
-    public event EventHandler? ShortcutBindingsChanged;
+    public event EventHandler? ShortcutConfigurationChanged;
 
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
 
@@ -186,6 +189,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 AcpEnabled = settings.AcpEnabled;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
                 AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction;
                 AcpConnectionIdleTtlMinutes = settings.AcpConnectionIdleTtlMinutes;
@@ -298,6 +302,11 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnAcpEnabledChanged(bool value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnKeyboardShortcutsEnabledChanged(bool value)
+    {
+        NotifyShortcutConfigurationChanged();
+        ScheduleSave();
+    }
     partial void OnLastSelectedProjectIdChanged(string? value) => ScheduleSave();
     partial void OnAcpEnableConnectionEvictionChanged(bool value) => ScheduleSave();
     partial void OnAcpConnectionIdleTtlMinutesChanged(int? value) => ScheduleSave();
@@ -333,7 +342,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             }
         }
 
-        NotifyShortcutBindingsChanged();
+        NotifyShortcutConfigurationChanged();
         ScheduleSave();
     }
 
@@ -342,14 +351,14 @@ public partial class AppPreferencesViewModel : ObservableObject
         if (e.PropertyName == nameof(KeyBindingPairViewModel.Gesture) ||
             e.PropertyName == nameof(KeyBindingPairViewModel.ActionId))
         {
-            NotifyShortcutBindingsChanged();
+            NotifyShortcutConfigurationChanged();
             ScheduleSave();
         }
     }
 
-    private void NotifyShortcutBindingsChanged()
+    private void NotifyShortcutConfigurationChanged()
     {
-        ShortcutBindingsChanged?.Invoke(this, EventArgs.Empty);
+        ShortcutConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetKeyBinding(string actionId, string gesture)
@@ -383,6 +392,11 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
     }
 
+    public void ClearShortcutOverrides()
+    {
+        KeyBindings.Clear();
+    }
+
     public void ResetToDefaults()
     {
         _suppressSave = true;
@@ -398,6 +412,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             AcpEnabled = true;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
+            KeyboardShortcutsEnabled = true;
             AcpEnableConnectionEviction = false;
             AcpConnectionIdleTtlMinutes = null;
             AcpMaxWarmProfiles = null;
@@ -462,6 +477,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             AcpEnabled = AcpEnabled,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
+            KeyboardShortcutsEnabled = KeyboardShortcutsEnabled,
             AcpEnableConnectionEviction = AcpEnableConnectionEviction,
             AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,
             AcpMaxWarmProfiles = AcpMaxWarmProfiles,

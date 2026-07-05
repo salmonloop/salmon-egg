@@ -34,6 +34,8 @@ internal sealed class AppSettingsYamlV1
     public int CacheRetentionDays { get; set; } = 7;
 
     // Shortcuts
+    public bool KeyboardShortcutsEnabled { get; set; } = true;
+
     public Dictionary<string, string> KeyBindings { get; set; } = new();
 
     // Projects (Navigation)
