@@ -257,7 +257,11 @@ public static class DependencyInjection
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IAppSupportInfoService>(_ => new AppSupportInfoService(typeof(App).Assembly));
         services.AddSingleton<IConversationStore, ConversationStore>();
+#if __WASM__ || __ANDROID__ || __IOS__
+        services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();
+#else
         services.AddSingleton<IPlatformRuntimeCapabilityProbe, PlatformRuntimeCapabilityProbe>();
+#endif
         services.AddSingleton<IPlatformCapabilityService, PlatformCapabilityService>();
         services.AddSingleton<ITransportSupportPolicy, TransportSupportPolicy>();
 #if __WASM__

@@ -59,15 +59,12 @@ try {
       page,
       { labels: [], automationIds: ["DataStorage.OpenCacheFolder"] },
       "cache-folder affordance");
-    if (!cacheFolderState.enabled) {
-      throw new Error(
-        `BrowserWasm data storage capability boundary lost the cache-folder affordance. `
-        + `State=${JSON.stringify(cacheFolderState)}`);
+    if (cacheFolderState.enabled) {
+      await expectControlDoesNotEscapePage(
+        page,
+        { labels: [], automationIds: ["DataStorage.OpenCacheFolder"] },
+        /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/);
     }
-    await expectControlDoesNotEscapePage(
-      page,
-      { labels: [], automationIds: ["DataStorage.OpenCacheFolder"] },
-      /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/);
 
     await scrollToVisibleControl(
       page,
@@ -76,15 +73,12 @@ try {
       page,
       { labels: ["打开导出目录", "Open exports folder"], automationIds: [] },
       "exports-folder affordance");
-    if (!exportsState.enabled) {
-      throw new Error(
-        `BrowserWasm data storage capability boundary lost the exports-folder affordance. `
-        + `State=${JSON.stringify(exportsState)}`);
+    if (exportsState.enabled) {
+      await expectControlDoesNotEscapePage(
+        page,
+        { labels: ["打开导出目录", "Open exports folder"], automationIds: [] },
+        /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/);
     }
-    await expectControlDoesNotEscapePage(
-      page,
-      { labels: ["打开导出目录", "Open exports folder"], automationIds: [] },
-      /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/);
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
     console.log("WASM capability boundary smoke passed");

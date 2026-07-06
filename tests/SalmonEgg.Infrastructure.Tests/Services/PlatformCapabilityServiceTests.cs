@@ -55,25 +55,70 @@ public sealed class PlatformCapabilityServiceTests
         Assert.False(sut.SupportsExternalFileOpen);
     }
 
-    [Fact]
-    public void SupportsGamepadInput_FollowsWindowsGamingInputAvailability()
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void SupportsGamepadInput_RequiresWindowsDesktopProcessHost(bool isDesktopProcessHost, bool expected)
     {
-        var sut = new PlatformCapabilityService();
+        var sut = new PlatformCapabilityService(
+            new FakeRuntimeCapabilityProbe(
+                isDesktopProcessHost: isDesktopProcessHost,
+                hasExternalFileOpener: true,
+                hasInteractiveTerminalSurface: true),
+            platform => platform == OSPlatform.Windows);
 
-        Assert.Equal(
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
-            sut.SupportsGamepadInput);
+        Assert.Equal(expected, sut.SupportsGamepadInput);
     }
 
     [Fact]
-    public void SupportsGamepadInput_RequiresDesktopProcessHost()
+    public void WindowsDesktopCapabilities_RequireDesktopProcessHost()
     {
-        var sut = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(
-            isDesktopProcessHost: false,
-            hasExternalFileOpener: false,
-            hasInteractiveTerminalSurface: false));
+        var sut = new PlatformCapabilityService(
+            new FakeRuntimeCapabilityProbe(
+                isDesktopProcessHost: false,
+                hasExternalFileOpener: false,
+                hasInteractiveTerminalSurface: false),
+            platform => platform == OSPlatform.Windows);
 
+        Assert.False(sut.SupportsLaunchOnStartup);
+        Assert.False(sut.SupportsTray);
+        Assert.False(sut.SupportsLanguageOverride);
+        Assert.False(sut.SupportsMiniWindow);
         Assert.False(sut.SupportsGamepadInput);
+    }
+
+    [Fact]
+    public void WindowsDesktopCapabilities_RequireWindows()
+    {
+        var sut = new PlatformCapabilityService(
+            new FakeRuntimeCapabilityProbe(
+                isDesktopProcessHost: true,
+                hasExternalFileOpener: true,
+                hasInteractiveTerminalSurface: true),
+            _ => false);
+
+        Assert.False(sut.SupportsLaunchOnStartup);
+        Assert.False(sut.SupportsTray);
+        Assert.False(sut.SupportsLanguageOverride);
+        Assert.False(sut.SupportsMiniWindow);
+        Assert.False(sut.SupportsGamepadInput);
+    }
+
+    [Fact]
+    public void WindowsDesktopCapabilities_AreExposedOnWindowsDesktopProcessHost()
+    {
+        var sut = new PlatformCapabilityService(
+            new FakeRuntimeCapabilityProbe(
+                isDesktopProcessHost: true,
+                hasExternalFileOpener: true,
+                hasInteractiveTerminalSurface: true),
+            platform => platform == OSPlatform.Windows);
+
+        Assert.True(sut.SupportsLaunchOnStartup);
+        Assert.True(sut.SupportsTray);
+        Assert.True(sut.SupportsLanguageOverride);
+        Assert.True(sut.SupportsMiniWindow);
+        Assert.True(sut.SupportsGamepadInput);
     }
 
     private sealed class FakeRuntimeCapabilityProbe : IPlatformRuntimeCapabilityProbe

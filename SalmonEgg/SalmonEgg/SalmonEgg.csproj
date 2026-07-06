@@ -2,6 +2,7 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <SalmonEggPlatform>BrowserWasm</SalmonEggPlatform>
     <SalmonEggSupportsDesktopProcessHost>false</SalmonEggSupportsDesktopProcessHost>
+    <DefineConstants>$(DefineConstants);__WASM__</DefineConstants>
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <PlatformTarget></PlatformTarget>
     <!-- Override Uno's net10 default (10.0.2) to the latest patched Windows compatibility stack. -->

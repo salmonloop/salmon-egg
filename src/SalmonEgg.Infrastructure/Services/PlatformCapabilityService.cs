@@ -7,6 +7,7 @@ namespace SalmonEgg.Infrastructure.Services;
 public sealed class PlatformCapabilityService : IPlatformCapabilityService
 {
     private readonly IPlatformRuntimeCapabilityProbe _runtimeProbe;
+    private readonly Func<OSPlatform, bool> _isOSPlatform;
 
     public PlatformCapabilityService()
         : this(new PlatformRuntimeCapabilityProbe())
@@ -14,17 +15,25 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
     }
 
     public PlatformCapabilityService(IPlatformRuntimeCapabilityProbe runtimeProbe)
+        : this(runtimeProbe, RuntimeInformation.IsOSPlatform)
     {
-        _runtimeProbe = runtimeProbe ?? throw new ArgumentNullException(nameof(runtimeProbe));
     }
 
-    public bool SupportsLaunchOnStartup => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    internal PlatformCapabilityService(
+        IPlatformRuntimeCapabilityProbe runtimeProbe,
+        Func<OSPlatform, bool> isOSPlatform)
+    {
+        _runtimeProbe = runtimeProbe ?? throw new ArgumentNullException(nameof(runtimeProbe));
+        _isOSPlatform = isOSPlatform ?? throw new ArgumentNullException(nameof(isOSPlatform));
+    }
 
-    public bool SupportsTray => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    public bool SupportsLaunchOnStartup => IsWindowsDesktopProcessHost;
 
-    public bool SupportsLanguageOverride => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    public bool SupportsTray => IsWindowsDesktopProcessHost;
 
-    public bool SupportsMiniWindow => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    public bool SupportsLanguageOverride => IsWindowsDesktopProcessHost;
+
+    public bool SupportsMiniWindow => IsWindowsDesktopProcessHost;
 
     public bool SupportsExternalFileOpen => _runtimeProbe.HasExternalFileOpener;
 
@@ -36,5 +45,7 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
-    public bool SupportsGamepadInput => _runtimeProbe.IsDesktopProcessHost && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    public bool SupportsGamepadInput => IsWindowsDesktopProcessHost;
+
+    private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);
 }

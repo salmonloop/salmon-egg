@@ -159,12 +159,18 @@ public sealed class WasmStartupAssetsTests
 
         Assert.Equal("BrowserWasm", browserWasmPropertyGroup.Element("SalmonEggPlatform")?.Value);
         Assert.Equal("false", browserWasmPropertyGroup.Element("SalmonEggSupportsDesktopProcessHost")?.Value);
+        Assert.Contains("__WASM__", browserWasmPropertyGroup.Element("DefineConstants")?.Value, StringComparison.Ordinal);
         Assert.Null(infrastructureReference.Attribute("AdditionalProperties"));
         Assert.DoesNotContain(infrastructureProject.Descendants("PackageReference"), element => (string?)element.Attribute("Include") == "Porta.Pty");
         var desktopReference = Assert.Single(desktopInfrastructureReferences);
         Assert.Equal("'$(SalmonEggSupportsDesktopProcessHost)' != 'false'", (string?)desktopReference.Attribute("Condition"));
         Assert.Contains("OperatingSystem.IsBrowser()", runtimeProbe, StringComparison.Ordinal);
-        Assert.Contains("public bool SupportsGamepadInput => _runtimeProbe.IsDesktopProcessHost && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsLaunchOnStartup => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsTray => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsLanguageOverride => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsMiniWindow => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsGamepadInput => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);", capabilityService, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -216,10 +222,17 @@ public sealed class WasmStartupAssetsTests
 
         Assert.Contains("#if __WASM__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformShellService, WasmPlatformShellService>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();", code, StringComparison.Ordinal);
         Assert.Contains("#elif __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformShellService, UnsupportedPlatformShellService>();", code, StringComparison.Ordinal);
+
+        var restrictedProbe = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\RestrictedRuntimeCapabilityProbe.cs");
+        Assert.Contains("#if __WASM__ || __ANDROID__ || __IOS__", restrictedProbe, StringComparison.Ordinal);
+        Assert.Contains("public bool IsDesktopProcessHost => false;", restrictedProbe, StringComparison.Ordinal);
+        Assert.Contains("public bool HasExternalFileOpener => false;", restrictedProbe, StringComparison.Ordinal);
+        Assert.Contains("public bool HasInteractiveTerminalSurface => false;", restrictedProbe, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -53,6 +53,8 @@ export const domHelperScript = `
           const style = getComputedStyle(element);
           const text = (element.textContent ?? "").trim();
           const aria = element.getAttribute("aria-label") ?? "";
+          const normalizedText = normalize(text);
+          const normalizedAria = normalize(aria);
           const automationId =
             element.getAttribute("data-automation-id")
             ?? element.getAttribute("data-automationid")
@@ -67,12 +69,27 @@ export const domHelperScript = `
             automationId,
             display: style.display,
             visibility: style.visibility,
+            interactive:
+              element.matches("button,input,textarea,[role='button'],[role='switch'],[role='combobox']")
+              || element.className?.toString?.().toLowerCase().includes("button")
+              || element.className?.toString?.().toLowerCase().includes("toggleswitch")
+              || element.className?.toString?.().toLowerCase().includes("combobox"),
             automationMatch:
-              normalizedAutomationIds.includes(normalize(aria))
+              normalizedAutomationIds.includes(normalizedAria)
               || normalizedAutomationIds.includes(normalize(automationId)),
+            exactTextMatch:
+              normalizedLabels.includes(normalizedText)
+              || normalizedLabels.includes(normalizedAria),
             textMatch:
-              normalizedLabels.some(label => normalize(text).includes(label))
-              || normalizedLabels.some(label => normalize(aria).includes(label))
+              normalizedLabels.includes(normalizedText)
+              || (normalizedText.length <= 160
+                && (
+                  element.matches("button,input,textarea,[role='button'],[role='switch'],[role='combobox']")
+                  || element.className?.toString?.().toLowerCase().includes("button")
+                  || element.className?.toString?.().toLowerCase().includes("toggleswitch")
+                  || element.className?.toString?.().toLowerCase().includes("combobox"))
+                && normalizedLabels.some(label => normalizedText.includes(label)))
+              || normalizedLabels.some(label => normalizedAria.includes(label))
           };
         })
         .filter(candidate =>
@@ -89,6 +106,14 @@ export const domHelperScript = `
       nodes.sort((left, right) => {
         if (left.automationMatch !== right.automationMatch) {
           return left.automationMatch ? -1 : 1;
+        }
+
+        if (left.interactive !== right.interactive) {
+          return left.interactive ? -1 : 1;
+        }
+
+        if (left.exactTextMatch !== right.exactTextMatch) {
+          return left.exactTextMatch ? -1 : 1;
         }
 
         return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
@@ -135,6 +160,63 @@ export const domHelperScript = `
             || /more|overflow|ellipsis|更多|溢出|展开/i.test(candidate.aria)
             || /more|overflow|ellipsis|更多|溢出|展开/i.test(candidate.title)))
         .sort((left, right) => right.rect.right - left.rect.right);
+    },
+
+    collectVisibleComboBoxItems() {
+      return Array.from(document.querySelectorAll("body *"))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const className = element.className?.toString?.() ?? "";
+          return {
+            element,
+            text: (element.textContent ?? "").trim(),
+            rect,
+            className,
+            role: element.getAttribute("role") ?? "",
+            display: style.display,
+            visibility: style.visibility
+          };
+        })
+        .filter(candidate =>
+          (candidate.role === "option" || candidate.className.toLowerCase().includes("comboboxitem"))
+          && candidate.rect.width > 0
+          && candidate.rect.height > 0
+          && candidate.display !== "none"
+          && candidate.visibility !== "hidden"
+          && candidate.rect.left >= -1
+          && candidate.rect.top >= -1
+          && candidate.rect.left <= innerWidth
+          && candidate.rect.top <= innerHeight)
+        .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
+    },
+
+    collectVisibleComboBoxControls() {
+      return Array.from(document.querySelectorAll("body *"))
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const className = element.className?.toString?.() ?? "";
+          return {
+            element,
+            rect,
+            className,
+            role: element.getAttribute("role") ?? "",
+            display: style.display,
+            visibility: style.visibility
+          };
+        })
+        .filter(candidate =>
+          (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+          && candidate.rect.width > 0
+          && candidate.rect.height > 0
+          && candidate.display !== "none"
+          && candidate.visibility !== "hidden"
+          && candidate.rect.left >= -1
+          && candidate.rect.top >= -1
+          && candidate.rect.left <= innerWidth
+          && candidate.rect.top <= innerHeight)
+        .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
     }
   };
 })();
