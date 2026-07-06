@@ -7,12 +7,14 @@ import {
   assertNoFatalConsoleMessages
 } from "./wasm-smoke-lib/browser-app.mjs";
 import {
-  navigateToSettingsSection,
   readNumericControlValue,
   setNumericControlValue,
   readAppSettingsPersistenceDebug,
   selectAlternateCacheRetentionValue
-} from "./wasm-smoke-lib/settings-ui.mjs";
+} from "./wasm-smoke-lib/ui-affordances.mjs";
+import {
+  navigateToSettingsSection
+} from "./wasm-smoke-lib/settings-shell.mjs";
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-settings-persistence-smoke.mjs");
 const dataStorageCacheRetentionControl = {

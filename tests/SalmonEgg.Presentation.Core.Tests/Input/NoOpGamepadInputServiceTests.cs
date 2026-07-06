@@ -43,4 +43,24 @@ public sealed class NoOpGamepadInputServiceTests
 
         Assert.False(raised);
     }
+
+    [Fact]
+    public void NoOpGamepadInputService_StartStopAndDispose_RemainEventSilent()
+    {
+        var service = new NoOpGamepadInputService();
+        var navigationRaised = false;
+        var shortcutRaised = false;
+        var contextRaised = false;
+        service.IntentRaised += (_, _) => navigationRaised = true;
+        service.ShortcutRaised += (_, _) => shortcutRaised = true;
+        service.ContextIntentRaised += (_, _) => contextRaised = true;
+
+        service.Start();
+        service.Stop();
+        service.Dispose();
+
+        Assert.False(navigationRaised);
+        Assert.False(shortcutRaised);
+        Assert.False(contextRaised);
+    }
 }

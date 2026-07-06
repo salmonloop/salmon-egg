@@ -8,17 +8,20 @@ import {
 } from "./wasm-smoke-lib/browser-app.mjs";
 import { startAcpWebSocketServer } from "./wasm-smoke-lib/acp-test-server.mjs";
 import {
-  navigateToSettingsSection,
-  createWebSocketProfile,
-  ensureGlobalAcpEnabled,
-  clickProfileConnectionToggle,
-  waitForInitializeWithDiagnostics,
   readControlState,
   scrollToVisibleControl,
   waitForControlState,
-  expectControlDoesNotEscapePage,
-  expectNoAdvertisedFileSystemCapability
-} from "./wasm-smoke-lib/settings-ui.mjs";
+  expectControlDoesNotEscapePage
+} from "./wasm-smoke-lib/ui-affordances.mjs";
+import {
+  navigateToSettingsSection
+} from "./wasm-smoke-lib/settings-shell.mjs";
+import {
+  createWebSocketProfile,
+  ensureGlobalAcpEnabled,
+  clickProfileConnectionToggle,
+  waitForInitializeWithDiagnostics
+} from "./wasm-smoke-lib/acp-ui-fixture.mjs";
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-capability-boundary-smoke.mjs");
 const profileName = `WASM capability ${Date.now()}`;
@@ -91,4 +94,19 @@ try {
 } finally {
   await browser.close();
   await acpServer.close();
+}
+
+function expectNoAdvertisedFileSystemCapability(initializeRequest) {
+  const clientCapabilities = initializeRequest?.params?.clientCapabilities;
+  if (!clientCapabilities || typeof clientCapabilities !== "object") {
+    throw new Error(`Initialize request did not include clientCapabilities: ${JSON.stringify(initializeRequest)}`);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(clientCapabilities, "fs")) {
+    throw new Error(`WASM client must not advertise ACP fs capability: ${JSON.stringify(clientCapabilities)}`);
+  }
+
+  if (clientCapabilities.terminal === true) {
+    throw new Error(`WASM client must not advertise ACP terminal capability: ${JSON.stringify(clientCapabilities)}`);
+  }
 }

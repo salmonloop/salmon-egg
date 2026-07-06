@@ -17,6 +17,11 @@ public sealed class PlatformRuntimeCapabilityProbe : IPlatformRuntimeCapabilityP
 #if __WASM__ || __ANDROID__ || __IOS__
             return false;
 #else
+            if (IsRestrictedRuntime())
+            {
+                return false;
+            }
+
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
@@ -121,7 +126,18 @@ public sealed class PlatformRuntimeCapabilityProbe : IPlatformRuntimeCapabilityP
             "libwebkit2gtk-4.0.so.37")
             && CanLoadAnyNativeLibrary(
                 "libjavascriptcoregtk-4.1.so.0",
-                "libjavascriptcoregtk-4.0.so.18");
+            "libjavascriptcoregtk-4.0.so.18");
+    }
+
+    private static bool IsRestrictedRuntime()
+    {
+#if NET5_0_OR_GREATER
+        return OperatingSystem.IsBrowser()
+            || OperatingSystem.IsAndroid()
+            || OperatingSystem.IsIOS();
+#else
+        return false;
+#endif
     }
 
     private bool CanLoadAnyNativeLibrary(params string[] libraryNames)

@@ -164,8 +164,10 @@ echo "[gate] Static server ready pid=${SERVER_PID} base=${BASE_URL}"
 
 PLAYWRIGHT_WORKDIR="$(mktemp -d)"
 cp "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-focus-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-settings-persistence-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-capability-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-gamepad-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-acp-full-chain-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp -R "${REPO_ROOT}/scripts/gates/wasm-smoke-lib" "${PLAYWRIGHT_WORKDIR}/"
 
@@ -180,6 +182,11 @@ run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-settings-navigation-smoke.mjs" \
   "${BASE_URL}"
 
+echo "[gate] Run WASM focus boundary smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-focus-boundary-smoke.mjs" \
+  "${BASE_URL}"
+
 echo "[gate] Run WASM settings persistence smoke"
 run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-settings-persistence-smoke.mjs" \
@@ -188,6 +195,11 @@ run_playwright_smoke \
 echo "[gate] Run WASM capability boundary smoke"
 run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-capability-boundary-smoke.mjs" \
+  "${BASE_URL}"
+
+echo "[gate] Run WASM gamepad boundary smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-gamepad-boundary-smoke.mjs" \
   "${BASE_URL}"
 
 echo "[gate] Run WASM ACP full-chain smoke"

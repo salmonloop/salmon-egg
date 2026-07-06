@@ -65,6 +65,17 @@ public sealed class PlatformCapabilityServiceTests
             sut.SupportsGamepadInput);
     }
 
+    [Fact]
+    public void SupportsGamepadInput_RequiresDesktopProcessHost()
+    {
+        var sut = new PlatformCapabilityService(new FakeRuntimeCapabilityProbe(
+            isDesktopProcessHost: false,
+            hasExternalFileOpener: false,
+            hasInteractiveTerminalSurface: false));
+
+        Assert.False(sut.SupportsGamepadInput);
+    }
+
     private sealed class FakeRuntimeCapabilityProbe : IPlatformRuntimeCapabilityProbe
     {
         public FakeRuntimeCapabilityProbe(

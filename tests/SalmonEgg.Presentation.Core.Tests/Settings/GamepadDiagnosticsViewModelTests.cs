@@ -73,12 +73,37 @@ public sealed class GamepadDiagnosticsViewModelTests
     {
         var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
         var viewModel = CreateViewModel(service, supportsGamepadInput: false);
+        viewModel.ConnectedGamepadsText = "9";
+        viewModel.ConnectedRawControllersText = "8";
+        viewModel.InputSourceText = "RawGameController";
+        viewModel.ActiveInputsText = "MoveDown";
+        viewModel.RawControllersText = "Wireless Controller";
 
         await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
 
         Assert.Equal(0, service.ReadCount);
         Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
+        Assert.Equal("0", viewModel.ConnectedGamepadsText);
+        Assert.Equal("0", viewModel.ConnectedRawControllersText);
+        Assert.Equal("无", viewModel.InputSourceText);
+        Assert.Equal("无", viewModel.ActiveInputsText);
+        Assert.Equal("未检测到 Raw 控制器", viewModel.RawControllersText);
         Assert.False(viewModel.CanStartMonitoring);
+    }
+
+    [Fact]
+    public async Task StartMonitoringCommand_WhenUnsupported_DoesNotPollPlatformService()
+    {
+        var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
+        var viewModel = CreateViewModel(service, supportsGamepadInput: false);
+
+        await viewModel.StartMonitoringCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, service.ReadCount);
+        Assert.False(viewModel.IsMonitoring);
+        Assert.False(viewModel.CanStartMonitoring);
+        Assert.False(viewModel.CanStopMonitoring);
+        Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
     }
 
     [Fact]

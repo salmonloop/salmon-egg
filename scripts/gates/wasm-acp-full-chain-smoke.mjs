@@ -8,7 +8,9 @@ import {
 } from "./wasm-smoke-lib/browser-app.mjs";
 import { startAcpWebSocketServer } from "./wasm-smoke-lib/acp-test-server.mjs";
 import {
-  navigateToSettingsSection,
+  navigateToSettingsSection
+} from "./wasm-smoke-lib/settings-shell.mjs";
+import {
   createWebSocketProfile,
   expectProfilePresence,
   createRemoteDirectory,
@@ -18,7 +20,7 @@ import {
   clickProfileConnectionToggle,
   waitForInitializeWithDiagnostics,
   createSessionAndSendPromptFromStart
-} from "./wasm-smoke-lib/settings-ui.mjs";
+} from "./wasm-smoke-lib/acp-ui-fixture.mjs";
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-acp-full-chain-smoke.mjs");
 const profileName = `WASM full chain ${Date.now()}`;

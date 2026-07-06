@@ -6,10 +6,12 @@ import {
   assertNoFatalConsoleMessages
 } from "./wasm-smoke-lib/browser-app.mjs";
 import {
+  waitForBodyText
+} from "./wasm-smoke-lib/ui-affordances.mjs";
+import {
   navigateToSettingsSection,
-  waitForBodyText,
   clickTopNavigationOverflowTargetUntilBodyText
-} from "./wasm-smoke-lib/settings-ui.mjs";
+} from "./wasm-smoke-lib/settings-shell.mjs";
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-settings-navigation-smoke.mjs");
 const browser = await chromium.launch({ headless: true });

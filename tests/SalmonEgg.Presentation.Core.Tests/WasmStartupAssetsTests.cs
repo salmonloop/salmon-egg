@@ -145,6 +145,8 @@ public sealed class WasmStartupAssetsTests
     {
         var appProject = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
         var infrastructureProject = XDocument.Parse(LoadFile(@"src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"));
+        var runtimeProbe = LoadFile(@"src\SalmonEgg.Infrastructure\Services\PlatformRuntimeCapabilityProbe.cs");
+        var capabilityService = LoadFile(@"src\SalmonEgg.Infrastructure\Services\PlatformCapabilityService.cs");
 
         var browserWasmPropertyGroup = LoadBrowserWasmPropertyGroup();
         var infrastructureReference = appProject
@@ -161,6 +163,8 @@ public sealed class WasmStartupAssetsTests
         Assert.DoesNotContain(infrastructureProject.Descendants("PackageReference"), element => (string?)element.Attribute("Include") == "Porta.Pty");
         var desktopReference = Assert.Single(desktopInfrastructureReferences);
         Assert.Equal("'$(SalmonEggSupportsDesktopProcessHost)' != 'false'", (string?)desktopReference.Attribute("Condition"));
+        Assert.Contains("OperatingSystem.IsBrowser()", runtimeProbe, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsGamepadInput => _runtimeProbe.IsDesktopProcessHost && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);", capabilityService, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -293,9 +297,12 @@ public sealed class WasmStartupAssetsTests
         var gate = LoadFile(@"scripts\gates\run-wasm-smoke-gates.sh");
 
         Assert.Contains("wasm-settings-navigation-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-focus-boundary-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-settings-persistence-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-capability-boundary-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-gamepad-boundary-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-acp-full-chain-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-smoke-lib", gate, StringComparison.Ordinal);
         Assert.Contains("GIT_BIN=", gate, StringComparison.Ordinal);
         Assert.Contains("PYTHON_BIN=", gate, StringComparison.Ordinal);
         Assert.Contains("CURL_BIN=", gate, StringComparison.Ordinal);
@@ -306,16 +313,32 @@ public sealed class WasmStartupAssetsTests
         Assert.DoesNotContain("dirname", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("grep -qiE", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("Run WASM file system availability smoke", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("settings-ui.mjs", gate, StringComparison.Ordinal);
     }
 
     [Fact]
     public void WasmSmokeScripts_AreSplitByBehaviorBoundary()
     {
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-settings-navigation-smoke.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-focus-boundary-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-settings-persistence-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-capability-boundary-smoke.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-gamepad-boundary-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-acp-full-chain-smoke.mjs")));
         Assert.True(Directory.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\ui-affordances.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-shell.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\acp-ui-fixture.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\browser-app.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\acp-test-server.mjs")));
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-file-system-availability-smoke.mjs")));
+        Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-ui.mjs")));
+
+        foreach (var script in Directory.EnumerateFiles(RepoPath(@"scripts\gates"), "wasm-*.mjs", SearchOption.TopDirectoryOnly))
+        {
+            var code = File.ReadAllText(script);
+            Assert.DoesNotContain("settings-ui.mjs", code, StringComparison.Ordinal);
+        }
     }
 
     private static string LoadFile(string relativePath)
