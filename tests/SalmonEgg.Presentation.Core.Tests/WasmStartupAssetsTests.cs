@@ -169,7 +169,8 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("public bool SupportsTray => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsLanguageOverride => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsMiniWindow => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
-        Assert.Contains("public bool SupportsGamepadInput => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("return OperatingSystem.IsBrowser();", capabilityService, StringComparison.Ordinal);
         Assert.Contains("private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);", capabilityService, StringComparison.Ordinal);
     }
 
@@ -223,6 +224,8 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("#if __WASM__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformShellService, WasmPlatformShellService>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IGamepadInputService, WasmGamepadInputService>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IGamepadDiagnosticsService, WasmGamepadDiagnosticsService>();", code, StringComparison.Ordinal);
         Assert.Contains("#elif __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
@@ -249,6 +252,25 @@ public sealed class WasmStartupAssetsTests
             Assert.DoesNotContain("__ANDROID__", code, StringComparison.Ordinal);
             Assert.DoesNotContain("__IOS__", code, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void BrowserWasmGamepadServices_UseNativeBrowserGamepadApiBehindPlatformBoundary()
+    {
+        var reader = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadSnapshotReader.cs");
+        var inputService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadInputService.cs");
+        var diagnosticsService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadDiagnosticsService.cs");
+
+        Assert.Contains("#if __WASM__", reader, StringComparison.Ordinal);
+        Assert.Contains("[JSImport(\"globalThis.navigator.getGamepads\")]", reader, StringComparison.Ordinal);
+        Assert.Contains("GamepadIntentProcessor.GetActiveIntents", reader, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", reader, StringComparison.Ordinal);
+        Assert.Contains("ConnectedRawControllerCount: 0", reader, StringComparison.Ordinal);
+        Assert.Contains("[SupportedOSPlatform(\"browser\")]", inputService, StringComparison.Ordinal);
+        Assert.Contains("WasmGamepadSnapshotReader.ReadInputReadings()", inputService, StringComparison.Ordinal);
+        Assert.Contains("[SupportedOSPlatform(\"browser\")]", diagnosticsService, StringComparison.Ordinal);
+        Assert.Contains("WasmGamepadSnapshotReader.ReadSnapshot()", diagnosticsService, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.Gaming.Input", reader, StringComparison.Ordinal);
     }
 
     [Fact]

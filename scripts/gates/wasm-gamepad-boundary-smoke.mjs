@@ -20,40 +20,123 @@ const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-gamepad-boundary-smoke.m
 const diagnosticsPagePattern = /Diagnostics and logs|诊断与日志|Gamepad input|手柄输入/;
 const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart"] };
 const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh"] };
+const supportedStatusPattern = /not started|stopped|monitoring|未启动|已停止|正在监测/i;
+const standardGamepadProjectionScript = `
+(() => {
+  const state = {
+    connected: false,
+    pressedButtons: new Set(),
+    axes: [0, 0, 0, 0],
+    timestamp: 1
+  };
+
+  function createButtons() {
+    return Array.from({ length: 16 }, (_, index) => {
+      const pressed = state.pressedButtons.has(index);
+      return {
+        pressed,
+        touched: pressed,
+        value: pressed ? 1 : 0
+      };
+    });
+  }
+
+  Object.defineProperty(globalThis.navigator, "getGamepads", {
+    configurable: true,
+    value() {
+      if (!state.connected) {
+        return [];
+      }
+
+      state.timestamp += 1;
+      return [{
+        id: "SalmonEgg Smoke Standard Gamepad",
+        index: 0,
+        connected: true,
+        mapping: "standard",
+        timestamp: state.timestamp,
+        buttons: createButtons(),
+        axes: state.axes.slice(),
+        hapticActuators: [],
+        vibrationActuator: null
+      }];
+    }
+  });
+
+  globalThis.__salmoneggSmokeGamepad = {
+    setState(nextState) {
+      state.connected = Boolean(nextState?.connected);
+      state.pressedButtons = new Set(nextState?.pressedButtons ?? []);
+      state.axes = Array.isArray(nextState?.axes) ? nextState.axes.slice(0, 4) : [0, 0, 0, 0];
+    }
+  };
+})();
+`;
 const browser = await chromium.launch({ headless: true });
 
 try {
-  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
-
-  try {
-    await openApp(page, baseUrl);
-    await navigateToSettingsSection(
-      page,
-      { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
-      diagnosticsPagePattern,
-      "diagnostics settings page");
-
-    await revealGamepadDiagnosticsSection(page);
-    const initialProjection = await expectUnsupportedGamepadProjection(page, "initial BrowserWasm gamepad diagnostics");
-
-    await page.mouse.click(initialProjection.startState.x, initialProjection.startState.y);
-    await page.waitForTimeout(250);
-    await expectUnsupportedGamepadProjection(page, "BrowserWasm gamepad diagnostics after start attempt");
-
-    await clickVisibleControl(page, gamepadRefresh);
-    await page.waitForTimeout(250);
-    await expectUnsupportedGamepadProjection(page, "refreshed BrowserWasm gamepad diagnostics");
-
-    assertNoFatalConsoleMessages(fatalConsoleMessages);
-    console.log("WASM gamepad boundary smoke passed");
-  } finally {
-    await context.close();
-  }
+  await verifyNativeBrowserNoDeviceProjection();
+  await verifyInjectedStandardGamepadProjection();
+  console.log("WASM gamepad boundary smoke passed");
 } finally {
   await browser.close();
 }
 
-async function expectUnsupportedGamepadProjection(page, label) {
+async function verifyNativeBrowserNoDeviceProjection() {
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await openDiagnosticsGamepadSection(page);
+    await clickVisibleControl(page, gamepadRefresh);
+    await page.waitForTimeout(250);
+    const projection = await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics");
+
+    await page.mouse.click(projection.startState.x, projection.startState.y);
+    await page.waitForTimeout(350);
+    await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics after monitoring start");
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+async function verifyInjectedStandardGamepadProjection() {
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await context.addInitScript({ content: standardGamepadProjectionScript });
+    await openDiagnosticsGamepadSection(page);
+    await page.evaluate(() => {
+      globalThis.__salmoneggSmokeGamepad.setState({
+        connected: true,
+        pressedButtons: [0, 13],
+        axes: [0.25, 0.5, 0, 0]
+      });
+    });
+
+    await clickVisibleControl(page, gamepadRefresh);
+    await page.waitForTimeout(250);
+    await expectActiveStandardGamepadProjection(page, "injected standard Gamepad API projection");
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+async function openDiagnosticsGamepadSection(page) {
+  await openApp(page, baseUrl);
+  await navigateToSettingsSection(
+    page,
+    { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
+    diagnosticsPagePattern,
+    "diagnostics settings page");
+
+  await revealGamepadDiagnosticsSection(page);
+}
+
+async function expectSupportedNoGamepadProjection(page, label) {
   const startState = await waitForControlState(page, gamepadStart, `${label} start action`);
   if (!Number.isFinite(startState.x) || !Number.isFinite(startState.y)) {
     throw new Error(`BrowserWasm gamepad start action did not expose a stable point. State=${JSON.stringify(startState)}`);
@@ -67,8 +150,8 @@ async function expectUnsupportedGamepadProjection(page, label) {
   await expectControlText(
     page,
     { labels: [], automationIds: ["Diagnostics.GamepadStatus"] },
-    /not supported|不支持/i,
-    `${label} unsupported status`);
+    supportedStatusPattern,
+    `${label} supported status`);
   await expectControlText(
     page,
     { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
@@ -92,6 +175,45 @@ async function expectUnsupportedGamepadProjection(page, label) {
   await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 
   return { startState, refreshState };
+}
+
+async function expectActiveStandardGamepadProjection(page, label) {
+  const startState = await waitForControlState(page, gamepadStart, `${label} start action`);
+  if (!startState.enabled) {
+    throw new Error(`BrowserWasm gamepad start action should be enabled for supported browser gamepad input. State=${JSON.stringify(startState)}`);
+  }
+
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadStatus"] },
+    supportedStatusPattern,
+    `${label} supported status`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
+    /^1$/,
+    `${label} standard gamepad count`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadRawCount"] },
+    /^0$/,
+    `${label} raw controller count`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadInputSource"] },
+    /^Gamepad$/,
+    `${label} input source`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+    /^(?=.*MoveDown)(?=.*Activate).+$/,
+    `${label} active input`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
+    /X 0\.25, Y -0\.50/,
+    `${label} thumbstick`);
+  await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 }
 
 async function expectControlText(page, options, pattern, label) {

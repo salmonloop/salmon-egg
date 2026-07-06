@@ -45,7 +45,19 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsLocalTerminal => SupportsStdioTransport && SupportsInteractiveTerminalSurface;
 
-    public bool SupportsGamepadInput => IsWindowsDesktopProcessHost;
+    public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;
 
     private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);
+
+    private static bool IsBrowserRuntime
+    {
+        get
+        {
+#if NET5_0_OR_GREATER
+            return OperatingSystem.IsBrowser();
+#else
+            return false;
+#endif
+        }
+    }
 }
