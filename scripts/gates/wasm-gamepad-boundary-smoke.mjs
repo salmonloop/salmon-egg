@@ -10,7 +10,8 @@ import {
   readControlState,
   scrollToVisibleControl,
   waitForBodyText,
-  waitForControlState
+  waitForControlState,
+  waitForFocusedElementSnapshot
 } from "./wasm-smoke-lib/ui-affordances.mjs";
 import {
   navigateToSettingsSection
@@ -77,6 +78,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   await verifyNativeBrowserNoDeviceProjection();
   await verifyInjectedStandardGamepadProjection();
+  await verifyInjectedStandardGamepadNativeControlBridge();
   console.log("WASM gamepad boundary smoke passed");
 } finally {
   await browser.close();
@@ -118,6 +120,45 @@ async function verifyInjectedStandardGamepadProjection() {
     await clickVisibleControl(page, gamepadRefresh);
     await page.waitForTimeout(250);
     await expectActiveStandardGamepadProjection(page, "injected standard Gamepad API projection");
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+async function verifyInjectedStandardGamepadNativeControlBridge() {
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await context.addInitScript({ content: standardGamepadProjectionScript });
+    await openDiagnosticsGamepadSection(page);
+    await page.evaluate(() => {
+      globalThis.__salmoneggSmokeGamepad.setState({
+        connected: true,
+        pressedButtons: [],
+        axes: [0, 0, 0, 0]
+      });
+    });
+
+    const beforeMove = await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh");
+    await setInjectedGamepadButtons(page, [13]);
+    const afterMove = await waitForDifferentFocusedElement(page, beforeMove, "DPadDown diagnostics focus move");
+    await setInjectedGamepadButtons(page, []);
+
+    if (afterMove.isBody || !afterMove.visible) {
+      throw new Error(`DPadDown moved focus to an invalid target. Snapshot=${JSON.stringify(afterMove)}`);
+    }
+
+    await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh before activate");
+    await setInjectedGamepadButtons(page, [0]);
+    await waitForControlText(
+      page,
+      { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+      /Activate/,
+      "gamepad Activate native control invocation",
+      5_000);
+    await setInjectedGamepadButtons(page, []);
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
   } finally {
@@ -222,6 +263,80 @@ async function expectControlText(page, options, pattern, label) {
   if (!pattern.test(text)) {
     throw new Error(`Unexpected ${label}. Text=${JSON.stringify(text)} State=${JSON.stringify(state)}`);
   }
+}
+
+async function waitForControlText(page, options, pattern, label, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+
+  while (Date.now() < deadline) {
+    lastState = await readControlState(page, options);
+    const text = (lastState?.text || lastState?.aria || "").trim();
+    if (lastState?.found && pattern.test(text)) {
+      return lastState;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out waiting for ${label}. State=${JSON.stringify(lastState)}`);
+}
+
+async function setInjectedGamepadButtons(page, pressedButtons) {
+  await page.evaluate(buttons => {
+    globalThis.__salmoneggSmokeGamepad.setState({
+      connected: true,
+      pressedButtons: buttons,
+      axes: [0, 0, 0, 0]
+    });
+  }, pressedButtons);
+}
+
+async function focusControlByAutomationId(page, automationId, label) {
+  await scrollToVisibleControl(page, { labels: [], automationIds: [automationId] });
+  const focused = await page.evaluate(id => {
+    const element = document.querySelector(`[aria-label="${id}"]`);
+    if (!element || typeof element.focus !== "function") {
+      return false;
+    }
+
+    element.focus();
+    return document.activeElement === element;
+  }, automationId);
+
+  if (!focused) {
+    const state = await readControlState(page, { labels: [], automationIds: [automationId] });
+    throw new Error(`Could not focus ${label}. State=${JSON.stringify(state)}`);
+  }
+
+  return await waitForFocusedElementSnapshot(page, `${label} focus`);
+}
+
+async function waitForDifferentFocusedElement(page, beforeSnapshot, label) {
+  const deadline = Date.now() + 5_000;
+  let lastSnapshot = null;
+
+  while (Date.now() < deadline) {
+    lastSnapshot = await waitForFocusedElementSnapshot(page, label, 1_000);
+    if (!isSameFocusSnapshot(beforeSnapshot, lastSnapshot)) {
+      return lastSnapshot;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out waiting for ${label}. Before=${JSON.stringify(beforeSnapshot)} After=${JSON.stringify(lastSnapshot)}`);
+}
+
+function isSameFocusSnapshot(left, right) {
+  return left?.tag === right?.tag
+    && left?.text === right?.text
+    && left?.aria === right?.aria
+    && left?.role === right?.role
+    && left?.rect?.left === right?.rect?.left
+    && left?.rect?.top === right?.rect?.top
+    && left?.rect?.width === right?.rect?.width
+    && left?.rect?.height === right?.rect?.height;
 }
 
 async function revealGamepadDiagnosticsSection(page) {

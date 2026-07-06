@@ -190,17 +190,18 @@ public static class DependencyInjection
 #elif __WASM__
         if (OperatingSystem.IsBrowser())
         {
+            services.AddSingleton<IGamepadNativeInputBridge, WasmGamepadNativeInputBridge>();
             services.AddSingleton<IGamepadInputService, WasmGamepadInputService>();
             services.AddSingleton<IGamepadDiagnosticsService, WasmGamepadDiagnosticsService>();
         }
         else
         {
+            services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
             services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
             services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
         }
 
         services.AddSingleton<IAudioInputSignalDiagnosticsService, NoOpAudioInputSignalDiagnosticsService>();
-        services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #else
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
