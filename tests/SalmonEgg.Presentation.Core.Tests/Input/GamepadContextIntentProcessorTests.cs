@@ -64,4 +64,28 @@ public sealed class GamepadContextIntentProcessorTests
 
         Assert.Empty(intents);
     }
+
+    [Fact]
+    public void Process_RaisesBothPageIntentsAndReleasesEachTriggerIndependently()
+    {
+        var processor = new GamepadContextIntentProcessor();
+        var bothTriggers = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: false,
+            Back: false,
+            LeftTrigger: 0.75,
+            RightTrigger: 0.75);
+        var rightTriggerOnly = bothTriggers with { LeftTrigger = 0 };
+
+        var first = processor.Process(bothTriggers);
+        var heldRight = processor.Process(rightTriggerOnly);
+        var bothAgain = processor.Process(bothTriggers);
+
+        Assert.Equal(new[] { GamepadContextIntent.PageUp, GamepadContextIntent.PageDown }, first);
+        Assert.Empty(heldRight);
+        Assert.Equal(new[] { GamepadContextIntent.PageUp }, bothAgain);
+    }
 }

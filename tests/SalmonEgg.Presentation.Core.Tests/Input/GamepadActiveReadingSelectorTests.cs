@@ -145,4 +145,27 @@ public sealed class GamepadActiveReadingSelectorTests
         Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
         Assert.Equal(gamepadReadings[0], selection.Reading);
     }
+
+    [Fact]
+    public void TrySelectActiveReading_TreatsThumbstickOnlyReadingAsActive()
+    {
+        var gamepadReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: false,
+                Back: false,
+                ThumbstickX: 0.75,
+                ThumbstickY: 0.10)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(gamepadReadings, [], out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
+        Assert.Equal(gamepadReadings[0], selection.Reading);
+    }
 }

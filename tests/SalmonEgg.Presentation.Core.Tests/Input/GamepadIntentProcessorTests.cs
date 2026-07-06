@@ -118,6 +118,26 @@ public sealed class GamepadIntentProcessorTests
     }
 
     [Fact]
+    public void Process_RaisesNewDirectionImmediately_WhenDirectionChangesBeforeRepeatDelay()
+    {
+        var processor = new GamepadIntentProcessor(TimeSpan.FromMilliseconds(350), TimeSpan.FromMilliseconds(120));
+        var start = DateTimeOffset.Parse("2026-05-19T00:00:00Z");
+
+        _ = processor.Process(Reading(moveDown: true), start);
+        var changedDirection = processor.Process(
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: true,
+                Activate: false,
+                Back: false),
+            start.AddMilliseconds(50));
+
+        Assert.Equal(new[] { GamepadNavigationIntent.MoveRight }, changedDirection);
+    }
+
+    [Fact]
     public void Reset_ClearsRepeatState()
     {
         var processor = new GamepadIntentProcessor(TimeSpan.FromMilliseconds(350), TimeSpan.FromMilliseconds(120));
