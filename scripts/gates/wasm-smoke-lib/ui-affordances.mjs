@@ -365,9 +365,20 @@ export async function typeIntoAutomationTextBox(page, automationId, value) {
   await page.keyboard.type(value);
 }
 
-export async function typeIntoVisibleTextField(page, options, value, label) {
-  const point = await page.evaluate(findVisibleTextInputPoint, options)
-    ?? await page.evaluate(findVisibleControlPoint, options);
+export async function typeIntoVisibleTextField(page, options, value, label, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let point = null;
+
+  while (Date.now() < deadline) {
+    point = await page.evaluate(findVisibleTextInputPoint, options)
+      ?? await page.evaluate(findVisibleControlPoint, options);
+    if (point) {
+      break;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
   if (!point) {
     const inputs = await page.evaluate(collectVisibleTextInputPoints);
     throw new Error(`No visible text field found for ${label}. Options=${JSON.stringify(options)} Inputs=${JSON.stringify(inputs)}`);

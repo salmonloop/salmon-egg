@@ -844,6 +844,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ComposerTextBoxes_UseThemeAwareNativeTextBoxStyle()
+    {
+        var appXaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+        var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        var miniChatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.Contains("x:Key=\"ComposerTextBoxStyle\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("BasedOn=\"{StaticResource DefaultTextBoxStyle}\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"Foreground\" Value=\"{ThemeResource TextFillColorPrimaryBrush}\"", appXaml, StringComparison.Ordinal);
+        Assert.Contains("<Setter Property=\"PlaceholderForeground\" Value=\"{ThemeResource TextFillColorSecondaryBrush}\"", appXaml, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(chatInputXaml, "Style=\"{StaticResource ComposerTextBoxStyle}\""));
+        Assert.Equal(1, CountOccurrences(miniChatXaml, "Style=\"{StaticResource ComposerTextBoxStyle}\""));
+    }
+
+    [Fact]
     public void ChatInputArea_DoesNotHijackGeneralFocusFlowForGamepadEntry()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");

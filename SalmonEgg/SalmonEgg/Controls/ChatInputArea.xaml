@@ -143,8 +143,7 @@
                                      TextWrapping="Wrap"
                                      MinHeight="44"
                                      MaxHeight="240"
-                                     BorderThickness="0"
-                                     Background="Transparent"
+                                     Style="{StaticResource ComposerTextBoxStyle}"
                                      IsEnabled="{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}"
                                      KeyboardAcceleratorPlacementMode="Hidden"
                                      KeyDown="OnInputKeyDown">
