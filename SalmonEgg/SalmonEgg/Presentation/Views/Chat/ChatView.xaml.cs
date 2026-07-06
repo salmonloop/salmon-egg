@@ -428,9 +428,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return false;
             }
 
+            var hasTranscriptContextFocus =
+                _isTranscriptViewportLayerActive
+                || IsTranscriptViewportSurfaceFocusWithin()
+                || (!_isTranscriptChildControlLayerActive && IsTranscriptMessageContainerFocused());
             var consumed = ChatTranscriptContextIntentHandler.TryConsume(
                 intent,
-                _isTranscriptViewportLayerActive || IsTranscriptViewportSurfaceFocusWithin(),
+                hasTranscriptContextFocus,
                 ViewModel.MessageHistory.Count,
                 _transcriptViewportHost.TryScrollByPages,
                 RegisterUserViewportIntent);
@@ -547,6 +551,20 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
             var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
             return DependencyObjectAncestry.FindAncestorOrSelf<ListViewItem>(current) is ListViewItem itemContainer
+                && DependencyObjectAncestry.IsDescendantOf(itemContainer, MessagesList);
+        }
+
+        private bool IsTranscriptMessageContainerFocused()
+        {
+            if (MessagesList?.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            var itemContainer = DependencyObjectAncestry.FindAncestorOrSelf<ListViewItem>(current);
+            return itemContainer is not null
+                && ReferenceEquals(current, itemContainer)
                 && DependencyObjectAncestry.IsDescendantOf(itemContainer, MessagesList);
         }
 

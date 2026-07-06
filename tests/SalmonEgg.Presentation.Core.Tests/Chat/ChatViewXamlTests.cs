@@ -330,6 +330,35 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViews_ContextPagingTreatsFocusedTranscriptMessageAsTranscriptFocus()
+    {
+        var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+
+        Assert.Contains("private bool IsTranscriptMessageContainerFocused()", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("private bool IsTranscriptMessageContainerFocused()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("|| (!_isTranscriptChildControlLayerActive && IsTranscriptMessageContainerFocused())", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("|| IsTranscriptMessageContainerFocused()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ReferenceEquals(current, itemContainer)", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("ReferenceEquals(current, itemContainer)", miniChatViewCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MiniChatTranscriptFocus_UsesNativeViewportHostLikeMainTranscript()
+    {
+        var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var miniChatViewXaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+        var focusMethodIndex = miniChatViewCode.IndexOf("private bool TryFocusTranscriptScroller(FocusState focusState)", StringComparison.Ordinal);
+
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", miniChatViewXaml, StringComparison.Ordinal);
+        Assert.Contains("XYFocusKeyboardNavigation=\"Enabled\"", miniChatViewXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"IsTabStop\" Value=\"False\" />", miniChatViewXaml, StringComparison.Ordinal);
+        Assert.True(focusMethodIndex >= 0, "Mini transcript should expose a single viewport focus helper.");
+        Assert.Contains("_transcriptViewportHost?.TryFocusViewport(focusState)", miniChatViewCode.Substring(focusMethodIndex), StringComparison.Ordinal);
+        Assert.DoesNotContain("_ = MessagesList.Focus(FocusState.Programmatic);", miniChatViewCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatTranscriptViewportHost_ExposesRelativeItemScrollWithoutOwningViewportState()
     {
         var hostInterface = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ITranscriptViewportHost.cs");

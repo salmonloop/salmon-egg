@@ -111,6 +111,8 @@
                   SelectionMode="None"
                   HorizontalAlignment="Stretch"
                   MinWidth="0"
+                  IsFocusEngagementEnabled="True"
+                  XYFocusKeyboardNavigation="Enabled"
                   Loaded="OnMessagesListLoaded"
                   Unloaded="OnMessagesListUnloaded"
                   PointerReleased="OnMessagesListPointerReleased">
@@ -124,7 +126,6 @@
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="Padding" Value="0" />
                     <Setter Property="MinHeight" Value="0" />
-                    <Setter Property="IsTabStop" Value="False" />
                 </Style>
             </ListView.ItemContainerStyle>
         </ListView>
