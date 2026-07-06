@@ -164,6 +164,7 @@ echo "[gate] Static server ready pid=${SERVER_PID} base=${BASE_URL}"
 
 PLAYWRIGHT_WORKDIR="$(mktemp -d)"
 cp "${REPO_ROOT}/scripts/gates/wasm-settings-navigation-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
+cp "${REPO_ROOT}/scripts/gates/wasm-start-visibility-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-focus-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-settings-persistence-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
 cp "${REPO_ROOT}/scripts/gates/wasm-capability-boundary-smoke.mjs" "${PLAYWRIGHT_WORKDIR}/"
@@ -180,6 +181,11 @@ echo "[gate] Install Playwright Chromium"
 echo "[gate] Run WASM settings navigation smoke"
 run_playwright_smoke \
   "${PLAYWRIGHT_WORKDIR}/wasm-settings-navigation-smoke.mjs" \
+  "${BASE_URL}"
+
+echo "[gate] Run WASM start visibility smoke"
+run_playwright_smoke \
+  "${PLAYWRIGHT_WORKDIR}/wasm-start-visibility-smoke.mjs" \
   "${BASE_URL}"
 
 echo "[gate] Run WASM focus boundary smoke"

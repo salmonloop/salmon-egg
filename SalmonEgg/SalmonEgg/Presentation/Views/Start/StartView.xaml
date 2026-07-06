@@ -9,26 +9,13 @@
     xmlns:controls="using:SalmonEgg.Controls"
     xmlns:domain="using:SalmonEgg.Domain.Models"
     xmlns:local_vm="using:SalmonEgg.Presentation.ViewModels.Start"
+    xmlns:start_views="using:SalmonEgg.Presentation.Views.Start"
     xmlns:chat_vm="using:SalmonEgg.Presentation.ViewModels.Chat"
     mc:Ignorable="d"
     Background="Transparent">
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-
-        <Style x:Key="HeroSuggestionButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
-            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="14"/>
-            <Setter Property="Margin" Value="0,0,14,0"/>
-            <Setter Property="Padding" Value="18,14"/>
-            <Setter Property="MinWidth" Value="216"/>
-            <Setter Property="MinHeight" Value="112"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="VerticalContentAlignment" Value="Top"/>
-        </Style>
-
     </Page.Resources>
 
     <Grid x:Name="StartRoot"
@@ -77,7 +64,6 @@
                     </TextBlock>
                     <TextBlock x:Uid="Start_Subtitle"
                                FontSize="18"
-                               Opacity="0.6"
                                FontWeight="Medium"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
@@ -95,33 +81,8 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
-                            <Button Style="{StaticResource HeroSuggestionButtonStyle}"
-                                    Command="{x:Bind ActionCommand}"
-                                    CommandParameter="{x:Bind}"
-                                    Loaded="OnHeroSuggestionButtonLoaded"
-                                    AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
-                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
-                                <StackPanel Spacing="10">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="{x:Bind Icon, Mode=OneWay}"
-                                                  FontSize="18"
-                                                  Foreground="{ThemeResource AccentBrush}" />
-                                        <TextBlock x:Uid="Start_QuickLaunchLabel"
-                                                   FontSize="12"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    </StackPanel>
-                                    <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                                               FontSize="14"
-                                               FontWeight="SemiBold"
-                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                                    <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
-                                               FontSize="12"
-                                               MaxLines="2"
-                                               TextWrapping="WrapWholeWords"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </StackPanel>
-                            </Button>
+                            <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"
+                                                            Loaded="OnHeroSuggestionCardLoaded" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

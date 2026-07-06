@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Specialized;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,6 +15,8 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
     public StartViewModel ViewModel { get; }
 
     public bool IsGuiAutomationMode { get; }
+
+    private bool _isSuggestionCollectionHooked;
 
     public StartView()
     {
@@ -31,6 +34,7 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        HookSuggestionCollection();
         ViewModel.OnComposerLoaded();
         RefreshHeroSuggestionFocusTargets();
         _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
@@ -47,12 +51,41 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        UnhookSuggestionCollection();
         ViewModel.OnComposerUnloaded();
     }
 
-    private void OnHeroSuggestionButtonLoaded(object sender, RoutedEventArgs e)
+    private void OnHeroSuggestionCardLoaded(object sender, RoutedEventArgs e)
     {
         RefreshHeroSuggestionFocusTargets();
+    }
+
+    private void HookSuggestionCollection()
+    {
+        if (_isSuggestionCollectionHooked)
+        {
+            return;
+        }
+
+        ViewModel.Suggestions.CollectionChanged += OnSuggestionsChanged;
+        _isSuggestionCollectionHooked = true;
+    }
+
+    private void UnhookSuggestionCollection()
+    {
+        if (!_isSuggestionCollectionHooked)
+        {
+            return;
+        }
+
+        ViewModel.Suggestions.CollectionChanged -= OnSuggestionsChanged;
+        _isSuggestionCollectionHooked = false;
+    }
+
+    private void OnSuggestionsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RefreshHeroSuggestionFocusTargets();
+        _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
     }
 
     public bool TryFocusPrimaryContentTarget()

@@ -297,6 +297,7 @@ public sealed class WasmStartupAssetsTests
         var gate = LoadFile(@"scripts\gates\run-wasm-smoke-gates.sh");
 
         Assert.Contains("wasm-settings-navigation-smoke.mjs", gate, StringComparison.Ordinal);
+        Assert.Contains("wasm-start-visibility-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-focus-boundary-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-settings-persistence-smoke.mjs", gate, StringComparison.Ordinal);
         Assert.Contains("wasm-capability-boundary-smoke.mjs", gate, StringComparison.Ordinal);
@@ -320,6 +321,7 @@ public sealed class WasmStartupAssetsTests
     public void WasmSmokeScripts_AreSplitByBehaviorBoundary()
     {
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-settings-navigation-smoke.mjs")));
+        Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-start-visibility-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-focus-boundary-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-settings-persistence-smoke.mjs")));
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-capability-boundary-smoke.mjs")));

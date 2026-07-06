@@ -605,4 +605,31 @@ Create the corresponding Markdown file in:
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
     <value>Enter an absolute remote project path before saving.</value>
   </data>
+  <data name="StartSuggestion_AnalyzeCodebaseTitle" xml:space="preserve">
+    <value>Analyze codebase</value>
+  </data>
+  <data name="StartSuggestion_AnalyzeCodebaseSubtitle" xml:space="preserve">
+    <value>Understand the project architecture and logic</value>
+  </data>
+  <data name="StartSuggestion_AnalyzeCodebasePrompt" xml:space="preserve">
+    <value>Analyze the current codebase architecture and core logic.</value>
+  </data>
+  <data name="StartSuggestion_RecommendTasksTitle" xml:space="preserve">
+    <value>Recommend tasks</value>
+  </data>
+  <data name="StartSuggestion_RecommendTasksSubtitle" xml:space="preserve">
+    <value>Clarify what to work on next</value>
+  </data>
+  <data name="StartSuggestion_RecommendTasksPrompt" xml:space="preserve">
+    <value>Based on current progress, recommend a few development tasks or improvements to tackle next.</value>
+  </data>
+  <data name="StartSuggestion_ResolveErrorsTitle" xml:space="preserve">
+    <value>Resolve recent errors</value>
+  </data>
+  <data name="StartSuggestion_ResolveErrorsSubtitle" xml:space="preserve">
+    <value>Share the error log for analysis</value>
+  </data>
+  <data name="StartSuggestion_ResolveErrorsPrompt" xml:space="preserve">
+    <value>I ran into some errors. Analyze them and help fix them.</value>
+  </data>
 </root>

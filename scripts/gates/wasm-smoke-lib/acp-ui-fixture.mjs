@@ -267,7 +267,12 @@ export async function createSessionAndSendPromptFromStart(
     page,
     "StartView.AgentSelector",
     profileName,
-    { verifySelectionText: false });
+    { keyboardSelectVisibleItem: true });
+  await waitForBodyText(
+    page,
+    new RegExp(escapeRegExp(profileName)),
+    "selected ACP profile on Start",
+    30_000);
   await selectComboBoxItem(
     page,
     "StartView.ProjectSelector",

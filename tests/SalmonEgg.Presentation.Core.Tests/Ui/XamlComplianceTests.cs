@@ -2583,14 +2583,32 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
+        var cardXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\HeroSuggestionCard.xaml");
+        var cardCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\HeroSuggestionCard.xaml.cs");
         var suggestionVm = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Start\QuickSuggestionViewModel.cs");
         var startVm = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Start\StartViewModel.cs");
 
         Assert.Contains("ItemsControl x:Name=\"HeroSuggestionsHost\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<ListView x:Name=\"HeroSuggestionsList\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<start_views:HeroSuggestionCard Suggestion=\"{x:Bind Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Loaded=\"OnHeroSuggestionCardLoaded\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"{x:Bind AutomationId, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"{x:Bind Title, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Glyph=\"{x:Bind Icon, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind Title, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind Subtitle, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("CommandParameter=\"{x:Bind Suggestion, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{Binding Title", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"{Binding Subtitle", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Glyph=\"{Binding Icon", xaml, StringComparison.Ordinal);
+        Assert.Contains("QuickSuggestionViewModel? Suggestion", cardCode, StringComparison.Ordinal);
+        Assert.Contains("new PropertyMetadata(null, OnSuggestionChanged)", cardCode, StringComparison.Ordinal);
+        Assert.Contains("suggestion.PropertyChanged += OnSuggestionPropertyChanged;", cardCode, StringComparison.Ordinal);
+        Assert.Contains("_observedSuggestion.PropertyChanged -= OnSuggestionPropertyChanged;", cardCode, StringComparison.Ordinal);
         Assert.Contains("IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
         Assert.Contains("FindSuggestionButton(ViewModel.Suggestions[0].AutomationId)", code, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.Suggestions.CollectionChanged += OnSuggestionsChanged;", code, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.Suggestions.CollectionChanged -= OnSuggestionsChanged;", code, StringComparison.Ordinal);
         Assert.Contains("promptBox.XYFocusUp = firstSuggestion;", code, StringComparison.Ordinal);
         Assert.Contains("button.XYFocusDown = promptFocusTarget;", code, StringComparison.Ordinal);
         Assert.Contains("button.ClearValue(Control.XYFocusDownProperty);", code, StringComparison.Ordinal);
@@ -2600,9 +2618,20 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("TryActivateSelectedHeroSuggestion", code, StringComparison.Ordinal);
         Assert.DoesNotContain("HeroSuggestionsList.SelectedIndex", code, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateSlug(", suggestionVm, StringComparison.Ordinal);
+        Assert.Contains("ObservableObject", suggestionVm, StringComparison.Ordinal);
         Assert.Contains("StartView.Suggestion.AnalyzeCodebase", startVm, StringComparison.Ordinal);
         Assert.Contains("StartView.Suggestion.RecommendTasks", startVm, StringComparison.Ordinal);
         Assert.Contains("StartView.Suggestion.ResolveErrors", startVm, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StartView_SecondaryTextUsesThemeBrushWithoutStackedOpacity()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml"));
+        var startSubtitle = FindElementByUid(document, "Start_Subtitle");
+
+        Assert.Equal("{ThemeResource TextFillColorSecondaryBrush}", startSubtitle.Attribute("Foreground")?.Value);
+        Assert.Null(startSubtitle.Attribute("Opacity"));
     }
 
     [Fact]

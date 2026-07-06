@@ -177,9 +177,10 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 scripts/gates/run-wasm-smoke-gates.sh Debug
 ```
 
-该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管本次构建输出的 `wwwroot`，再用 Playwright/Chromium 执行 6 条 WASM 浏览器行为路径：
+该 gate 会构建当前 `net10.0-browserwasm` 产物、静态托管本次构建输出的 `wwwroot`，再用 Playwright/Chromium 执行 7 条 WASM 浏览器行为路径：
 
 - 设置页顶部原生 `NavigationView` overflow 导航；
+- Start 页推荐卡片可见性：确认推荐标题和说明文本进入可见 DOM，且辅助文本不会解析为透明；
 - Diagnostics 页焦点边界：确认焦点不会落到隐藏、stale 或 body-only 状态；
 - 设置持久化：通过 UI 修改缓存保留天数，刷新后从同一可见设置面确认值仍存在；
 - ACP / 平台能力边界：保存 ACP WebSocket profile，验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
