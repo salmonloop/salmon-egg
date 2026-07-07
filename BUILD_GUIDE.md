@@ -82,11 +82,26 @@ dotnet build SalmonEgg.sln --configuration Release
 # 运行测试
 dotnet test SalmonEgg.sln
 
-# 发布应用
+# 发布 Linux desktop 应用
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
   --configuration Release \
   --framework net10.0-desktop \
   --output publish/linux-desktop
+
+# 发布 macOS desktop 应用（按目标架构选择 RID）
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  --configuration Release \
+  --framework net10.0-desktop \
+  --runtime osx-arm64 \
+  --self-contained false \
+  --output publish/macos-arm64
+
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  --configuration Release \
+  --framework net10.0-desktop \
+  --runtime osx-x64 \
+  --self-contained false \
+  --output publish/macos-x64
 ```
 
 #### 快速构建（开发时）
@@ -297,7 +312,7 @@ Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=Sa
 构建成功后，您会在以下目录找到输出：
 
 - **Linux Desktop**: `publish/linux-desktop/SalmonEgg`
-- **macOS Desktop**: `publish/macos-desktop/SalmonEgg`
+- **macOS Desktop**: `publish/macos-arm64/SalmonEgg` 或 `publish/macos-x64/SalmonEgg`
 - **WebAssembly**: `publish/wasm/wwwroot/`
 
 ## 开发工作流

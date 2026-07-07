@@ -260,20 +260,22 @@ xcrun altool --upload-app --type ios -f SalmonEgg.ipa \
 ```bash
 cd SalmonEgg/SalmonEgg
 
-# 发布 macOS 应用
-dotnet publish -f net10.0-maccatalyst -c Release \
-  --self-contained true \
+# 发布 macOS desktop 应用（Intel）
+dotnet publish -f net10.0-desktop -c Release \
+  --self-contained false \
   -r osx-x64 \
   -o ../../publish/macos-x64
 
-# 或 Apple Silicon (M1/M2)
-dotnet publish -f net10.0-maccatalyst -c Release \
-  --self-contained true \
+# 发布 macOS desktop 应用（Apple Silicon）
+dotnet publish -f net10.0-desktop -c Release \
+  --self-contained false \
   -r osx-arm64 \
   -o ../../publish/macos-arm64
 ```
 
 ### 创建 DMG 安装包
+
+当前工程的 macOS desktop 产物来自 Uno `net10.0-desktop`，publish 输出为可执行文件目录；如需 `.app`/DMG，需要先在 macOS 上完成 `.app` bundle、签名和公证流程，再打包 DMG。
 
 ```bash
 # 使用 create-dmg（需要安装）
