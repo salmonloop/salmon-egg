@@ -46,6 +46,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         private readonly TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs> _messagesListContainerContentChangingHandler;
         private readonly RoutedEventHandler _messagesListItemGotFocusHandler;
         private ITranscriptViewportHost? _transcriptViewportHost;
+        private TranscriptScrollRequestToken? _queuedNativeTranscriptScrollRequestToken;
         public ChatView()
         {
             ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
@@ -239,6 +240,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         private void DisposeTranscriptViewportHost()
         {
+            _queuedNativeTranscriptScrollRequestToken = null;
             if (_transcriptViewportHost is null)
             {
                 return;
@@ -1076,10 +1078,21 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return;
             }
 
+            if (_queuedNativeTranscriptScrollRequestToken == requestToken)
+            {
+                return;
+            }
+
+            _queuedNativeTranscriptScrollRequestToken = requestToken;
             RequestScrollToEnd();
 
-            _ = DispatcherQueue.TryEnqueue(() =>
+            if (!DispatcherQueue.TryEnqueue(() =>
             {
+                if (_queuedNativeTranscriptScrollRequestToken == requestToken)
+                {
+                    _queuedNativeTranscriptScrollRequestToken = null;
+                }
+
                 if (!_isViewLoaded
                     || _transcriptViewportHost is null
                     || ViewModel.MessageHistory.Count <= 0
@@ -1090,7 +1103,10 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
                 RequestScrollToEnd();
                 ScheduleTranscriptScrollRequestObservation(requestToken);
-            });
+            }))
+            {
+                _queuedNativeTranscriptScrollRequestToken = null;
+            }
         }
 
         private void ScheduleTranscriptScrollRequestObservation(TranscriptScrollRequestToken requestToken)

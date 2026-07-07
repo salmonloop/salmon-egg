@@ -40,6 +40,80 @@ public sealed class TranscriptViewportControllerTests
     }
 
     [Fact]
+    public void AttachedAppendDuringActiveScroll_RetargetsLatestTailWithActiveRequestToken()
+    {
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+
+        var firstAppend = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: true,
+            HasMessages: true,
+            IsAtBottom: false));
+        Assert.Contains(firstAppend, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.True(sut.TryCaptureActiveScrollRequest(out var activeRequest));
+
+        var nextAppend = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: true,
+            HasMessages: true,
+            IsAtBottom: false));
+
+        var retarget = Assert.Single(nextAppend, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Equal(activeRequest, retarget.ScrollRequestToken);
+        Assert.True(sut.MatchesActiveScrollRequest(retarget.ScrollRequestToken));
+        Assert.True(sut.IsAutoFollowAttached);
+        Assert.False(sut.IsViewportDetached);
+    }
+
+    [Fact]
+    public void AttachedAppendDuringActiveScroll_WhenTailIsNotRealized_RetargetsThroughNativeListView()
+    {
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+
+        _ = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: true,
+            HasMessages: true,
+            IsAtBottom: false));
+        Assert.True(sut.TryCaptureActiveScrollRequest(out var activeRequest));
+
+        var nextAppend = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: false,
+            HasMessages: true,
+            IsAtBottom: false));
+
+        var retarget = Assert.Single(nextAppend, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Equal(activeRequest, retarget.ScrollRequestToken);
+        Assert.True(sut.MatchesActiveScrollRequest(retarget.ScrollRequestToken));
+    }
+
+    [Fact]
+    public void AttachedAppendDuringActiveScroll_WhenViewIsNotReady_DoesNotIssueNativeScroll()
+    {
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+
+        _ = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: true,
+            IsViewportReady: true,
+            HasMessages: true,
+            IsAtBottom: false));
+        Assert.True(sut.HasActiveScrollGeneration);
+
+        var nextAppend = sut.OnMessagesAppended(1, new TranscriptViewportViewState(
+            IsViewReady: false,
+            IsViewportReady: false,
+            HasMessages: true,
+            IsAtBottom: false));
+
+        Assert.DoesNotContain(nextAppend, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.True(sut.HasActiveScrollGeneration);
+    }
+
+    [Fact]
     public void UserScrollAwayFromBottom_DetachesAndSuppressesAutoFollowForLaterAppends()
     {
         var sut = new TranscriptViewportController();

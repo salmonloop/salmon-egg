@@ -38,6 +38,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
     private readonly PointerEventHandler _messagesListHandledPointerWheelChangedHandler;
     private ITranscriptViewportHost? _transcriptViewportHost;
+    private TranscriptScrollRequestToken? _queuedNativeTranscriptScrollRequestToken;
 #if WINDOWS
     private Microsoft.UI.Xaml.Controls.TitleBar? _nativeTitleBarControl;
 #endif
@@ -346,6 +347,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
     private void DisposeTranscriptViewportHost()
     {
+        _queuedNativeTranscriptScrollRequestToken = null;
         if (_transcriptViewportHost is null)
         {
             return;
@@ -652,8 +654,35 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             return;
         }
 
+        if (_queuedNativeTranscriptScrollRequestToken == requestToken)
+        {
+            return;
+        }
+
+        _queuedNativeTranscriptScrollRequestToken = requestToken;
         RequestScrollToEnd();
-        ScheduleTranscriptScrollRequestObservation(requestToken);
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_queuedNativeTranscriptScrollRequestToken == requestToken)
+            {
+                _queuedNativeTranscriptScrollRequestToken = null;
+            }
+
+            if (!_isLoaded
+                || !_isMessagesListLoaded
+                || _transcriptViewportHost is null
+                || ViewModel.MessageHistory.Count <= 0
+                || !_viewportController.MatchesActiveScrollRequest(requestToken))
+            {
+                return;
+            }
+
+            RequestScrollToEnd();
+            ScheduleTranscriptScrollRequestObservation(requestToken);
+        }))
+        {
+            _queuedNativeTranscriptScrollRequestToken = null;
+        }
     }
 
     private void ScheduleTranscriptScrollRequestObservation(TranscriptScrollRequestToken requestToken)

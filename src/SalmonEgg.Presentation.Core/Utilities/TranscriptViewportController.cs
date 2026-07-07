@@ -180,6 +180,12 @@ public sealed class TranscriptViewportController
             return actions;
         }
 
+        actions.AddRange(TryRetargetActiveScrollRequest(addedCount, viewState));
+        if (actions.Count > 0)
+        {
+            return actions;
+        }
+
         actions.AddRange(TryIssueScrollRequest(viewState));
         if (actions.Count > 0)
         {
@@ -417,6 +423,30 @@ public sealed class TranscriptViewportController
                 hasMessages: viewState.HasMessages,
                 isReady: CanIssueScrollRequest(viewState)),
             viewState);
+
+    private IReadOnlyList<TranscriptViewportControllerAction> TryRetargetActiveScrollRequest(
+        int addedCount,
+        TranscriptViewportViewState viewState)
+    {
+        if (addedCount <= 0
+            || !_orchestrator.HasActiveScrollGeneration
+            || !_orchestrator.IsAutoFollowAttached
+            || _orchestrator.IsViewportDetached
+            || !CanRetargetActiveScrollRequest(viewState)
+            || !_orchestrator.TryCaptureActiveScrollRequestToken(_conversationId, out var requestToken))
+        {
+            return [];
+        }
+
+        return [new TranscriptViewportControllerAction(
+            TranscriptViewportControllerActionKind.ScrollTranscriptToEnd,
+            requestToken,
+            Generation: requestToken.Generation)];
+    }
+
+    private bool CanRetargetActiveScrollRequest(TranscriptViewportViewState viewState)
+        => CanTrackViewport(viewState.HasMessages)
+            && viewState.IsViewReady;
 
     private IReadOnlyList<TranscriptViewportControllerAction> ApplyScrollDecision(
         TranscriptScrollDecision decision,
