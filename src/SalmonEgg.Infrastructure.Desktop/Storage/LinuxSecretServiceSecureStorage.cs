@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Infrastructure.Services;
 
@@ -14,16 +15,29 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
     private const string ServiceAttributeValue = "SalmonEgg";
     private const string KeyAttributeName = "key";
     private const string Label = "SalmonEgg";
+    private static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromSeconds(10);
     private readonly ISecretToolRunner _runner;
+    private readonly TimeSpan _operationTimeout;
 
     public LinuxSecretServiceSecureStorage()
-        : this(new SecretToolRunner())
+        : this(new SecretToolRunner(), DefaultOperationTimeout)
     {
     }
 
     internal LinuxSecretServiceSecureStorage(ISecretToolRunner runner)
+        : this(runner, DefaultOperationTimeout)
+    {
+    }
+
+    internal LinuxSecretServiceSecureStorage(ISecretToolRunner runner, TimeSpan operationTimeout)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        if (operationTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(operationTimeout));
+        }
+
+        _operationTimeout = operationTimeout;
     }
 
     public async Task SaveAsync(string key, string value)
@@ -34,7 +48,7 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
             throw new ArgumentNullException(nameof(value));
         }
 
-        var result = await _runner.RunAsync(
+        var result = await RunSecretToolAsync(
             [
                 "store",
                 "--label",
@@ -55,7 +69,7 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
     public async Task<string?> LoadAsync(string key)
     {
         ValidateKey(key);
-        var result = await _runner.RunAsync(
+        var result = await RunSecretToolAsync(
             [
                 "lookup",
                 ServiceAttributeName,
@@ -71,7 +85,7 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
     public async Task DeleteAsync(string key)
     {
         ValidateKey(key);
-        await _runner.RunAsync(
+        await RunSecretToolAsync(
             [
                 "clear",
                 ServiceAttributeName,
@@ -80,6 +94,22 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
                 GetKeyHash(key)
             ],
             standardInput: null).ConfigureAwait(false);
+    }
+
+    private async Task<SecretToolResult> RunSecretToolAsync(string[] arguments, string? standardInput)
+    {
+        using var timeout = new CancellationTokenSource(_operationTimeout);
+        try
+        {
+            return await _runner.RunAsync(arguments, standardInput, timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            return new SecretToolResult(
+                124,
+                string.Empty,
+                $"secret-tool timed out after {_operationTimeout.TotalSeconds:0.##} seconds.");
+        }
     }
 
     private static string CreateUnavailableMessage(SecretToolResult result)
@@ -124,13 +154,20 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
 
     internal interface ISecretToolRunner
     {
-        Task<SecretToolResult> RunAsync(string[] arguments, string? standardInput);
+        Task<SecretToolResult> RunAsync(
+            string[] arguments,
+            string? standardInput,
+            CancellationToken cancellationToken);
     }
 
     internal sealed class SecretToolRunner : ISecretToolRunner
     {
-        public async Task<SecretToolResult> RunAsync(string[] arguments, string? standardInput)
+        public async Task<SecretToolResult> RunAsync(
+            string[] arguments,
+            string? standardInput,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!RuntimeCommandResolver.TryResolve(SecretToolCommand, out var secretToolPath))
             {
                 return new SecretToolResult(127, string.Empty, "secret-tool was not found in PATH.");
@@ -152,9 +189,16 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
             }
 
             using var process = new Process { StartInfo = startInfo };
-            if (!process.Start())
+            try
             {
-                return new SecretToolResult(1, string.Empty, "secret-tool could not be started.");
+                if (!process.Start())
+                {
+                    return new SecretToolResult(1, string.Empty, "secret-tool could not be started.");
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return new SecretToolResult(1, string.Empty, $"secret-tool could not be started: {ex.Message}");
             }
 
             if (standardInput != null)
@@ -165,12 +209,35 @@ public sealed class LinuxSecretServiceSecureStorage : ISecureStorage
 
             var outputTask = process.StandardOutput.ReadToEndAsync();
             var errorTask = process.StandardError.ReadToEndAsync();
-            await Task.Run(process.WaitForExit).ConfigureAwait(false);
+            var waitTask = Task.Run(process.WaitForExit);
+            var cancellationTask = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            var completedTask = await Task.WhenAny(waitTask, cancellationTask).ConfigureAwait(false);
+            if (completedTask != waitTask)
+            {
+                TryKill(process);
+                return new SecretToolResult(124, string.Empty, "secret-tool timed out.");
+            }
+
+            await waitTask.ConfigureAwait(false);
 
             return new SecretToolResult(
                 process.ExitCode,
                 await outputTask.ConfigureAwait(false),
                 await errorTask.ConfigureAwait(false));
+        }
+
+        private static void TryKill(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
     }
 

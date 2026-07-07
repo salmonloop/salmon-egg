@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Infrastructure.Storage;
 
@@ -57,6 +58,31 @@ public sealed class LinuxSecretServiceSecureStorageTests
             () => storage.SaveAsync("salmonegg/config/profile/token", "secret-token"));
     }
 
+    [Fact]
+    public async Task SaveAsync_WhenSecretToolHangs_FailsClosed()
+    {
+        var runner = new HangingSecretToolRunner();
+        var storage = new LinuxSecretServiceSecureStorage(runner, TimeSpan.FromMilliseconds(10));
+
+        var ex = await Assert.ThrowsAsync<SecureStorageUnavailableException>(
+            () => storage.SaveAsync("salmonegg/config/profile/token", "secret-token"));
+
+        Assert.Contains("timed out", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(runner.Calls);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenSecretToolHangs_ReturnsNull()
+    {
+        var runner = new HangingSecretToolRunner();
+        var storage = new LinuxSecretServiceSecureStorage(runner, TimeSpan.FromMilliseconds(10));
+
+        var value = await storage.LoadAsync("salmonegg/config/profile/token");
+
+        Assert.Null(value);
+        Assert.Single(runner.Calls);
+    }
+
     private sealed class RecordingSecretToolRunner : LinuxSecretServiceSecureStorage.ISecretToolRunner
     {
         private readonly LinuxSecretServiceSecureStorage.SecretToolResult _result;
@@ -70,10 +96,26 @@ public sealed class LinuxSecretServiceSecureStorageTests
 
         public Task<LinuxSecretServiceSecureStorage.SecretToolResult> RunAsync(
             string[] arguments,
-            string? standardInput)
+            string? standardInput,
+            CancellationToken cancellationToken)
         {
             Calls.Add(new Call(arguments, standardInput));
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class HangingSecretToolRunner : LinuxSecretServiceSecureStorage.ISecretToolRunner
+    {
+        public List<Call> Calls { get; } = new();
+
+        public async Task<LinuxSecretServiceSecureStorage.SecretToolResult> RunAsync(
+            string[] arguments,
+            string? standardInput,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add(new Call(arguments, standardInput));
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            return new LinuxSecretServiceSecureStorage.SecretToolResult(0, string.Empty, string.Empty);
         }
     }
 

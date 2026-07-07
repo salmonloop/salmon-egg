@@ -392,7 +392,8 @@ public sealed partial class StartViewModel : ObservableObject
             string.Equals(candidate.Id, item!.SemanticValue, StringComparison.Ordinal));
         if (agent is not null)
         {
-            Chat.SelectedAcpProfile = agent;
+            Chat.SelectProfileForUserIntent(agent);
+            RefreshStartProjectOptions();
         }
     }
 

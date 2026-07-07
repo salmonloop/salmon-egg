@@ -1004,11 +1004,40 @@ public partial class ChatViewModel
         _ = SelectProfileAsync(profile);
     }
 
+    public void SelectProfileForUserIntent(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            ApplyUserSelectedProfile(profile);
+            return;
+        }
+
+        _ = SelectProfileForUserIntentAsync(profile);
+    }
+
     public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);
         cancellationToken.ThrowIfCancellationRequested();
         return SelectProfileCoreAsync(profile, cancellationToken);
+    }
+
+    public Task SelectProfileForUserIntentAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        cancellationToken.ThrowIfCancellationRequested();
+        return SelectProfileForUserIntentCoreAsync(profile, cancellationToken);
+    }
+
+    private void ApplyUserSelectedProfile(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var selectedProfile = ResolveLoadedProfileSelection(profile);
+        SelectedAcpProfile = selectedProfile;
+        _acpProfiles.SelectedProfile = selectedProfile;
     }
 
     private async Task SelectProfileCoreAsync(ServerConfiguration profile, CancellationToken cancellationToken)
@@ -1017,6 +1046,12 @@ public partial class ChatViewModel
         await PostToUiAsync(() => ApplySelectedProfile(profile)).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profile.Id)).ConfigureAwait(false);
+    }
+
+    private async Task SelectProfileForUserIntentCoreAsync(ServerConfiguration profile, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await PostToUiAsync(() => ApplyUserSelectedProfile(profile)).ConfigureAwait(false);
     }
 
     private void ApplyChatServiceReplacement(
