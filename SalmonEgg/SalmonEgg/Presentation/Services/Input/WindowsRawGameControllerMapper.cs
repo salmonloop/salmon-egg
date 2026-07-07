@@ -22,7 +22,7 @@ public sealed class WindowsRawGameControllerMapper
         var axes = new double[controller.AxisCount];
         controller.GetCurrentReading(buttons, switches, axes);
 
-        var reading = default(GamepadInputReading);
+        var pressedButtonLabels = new List<RawGameControllerButtonLabel>();
 
         for (var i = 0; i < buttons.Length; i++)
         {
@@ -31,41 +31,43 @@ public sealed class WindowsRawGameControllerMapper
                 continue;
             }
 
-            reading = MapButtonLabel(controller.GetButtonLabel(i), reading);
+            pressedButtonLabels.Add(MapButtonLabel(controller.GetButtonLabel(i)));
         }
 
-        for (var i = 0; i < switches.Length; i++)
-        {
-            reading = GamepadDirectionalSwitchMapper.Apply(
-                (GamepadDirectionalSwitchPosition)(int)switches[i],
-                reading);
-        }
+        var switchPositions = Array.ConvertAll(
+            switches,
+            static position => (GamepadDirectionalSwitchPosition)(int)position);
 
-        if (axes.Length >= 2 && !RawGameControllerAxisNormalizer.IsAllAxesZero(axes))
-        {
-            reading = reading with
-            {
-                ThumbstickX = RawGameControllerAxisNormalizer.NormalizeHorizontal(axes[0]),
-                ThumbstickY = RawGameControllerAxisNormalizer.NormalizeVertical(axes[1])
-            };
-        }
-
-        return reading;
+        return RawGameControllerInputReadingMapper.GetInputReading(pressedButtonLabels, switchPositions, axes);
     }
 
-    private static GamepadInputReading MapButtonLabel(GameControllerButtonLabel label, GamepadInputReading reading)
+    private static RawGameControllerButtonLabel MapButtonLabel(GameControllerButtonLabel label)
     {
         return label switch
         {
-            GameControllerButtonLabel.XboxUp or GameControllerButtonLabel.Up => reading with { MoveUp = true },
-            GameControllerButtonLabel.XboxDown or GameControllerButtonLabel.Down => reading with { MoveDown = true },
-            GameControllerButtonLabel.XboxLeft or GameControllerButtonLabel.Left => reading with { MoveLeft = true },
-            GameControllerButtonLabel.XboxRight or GameControllerButtonLabel.Right => reading with { MoveRight = true },
-            GameControllerButtonLabel.XboxA or GameControllerButtonLabel.Cross or GameControllerButtonLabel.LetterA => reading with { Activate = true },
-            GameControllerButtonLabel.XboxB or GameControllerButtonLabel.Circle or GameControllerButtonLabel.LetterB or GameControllerButtonLabel.Back => reading with { Back = true },
-            GameControllerButtonLabel.XboxLeftTrigger => reading with { LeftTrigger = 1 },
-            GameControllerButtonLabel.XboxRightTrigger => reading with { RightTrigger = 1 },
-            _ => reading
+            GameControllerButtonLabel.XboxUp => RawGameControllerButtonLabel.XboxUp,
+            GameControllerButtonLabel.Up => RawGameControllerButtonLabel.Up,
+            GameControllerButtonLabel.XboxDown => RawGameControllerButtonLabel.XboxDown,
+            GameControllerButtonLabel.Down => RawGameControllerButtonLabel.Down,
+            GameControllerButtonLabel.XboxLeft => RawGameControllerButtonLabel.XboxLeft,
+            GameControllerButtonLabel.Left => RawGameControllerButtonLabel.Left,
+            GameControllerButtonLabel.XboxRight => RawGameControllerButtonLabel.XboxRight,
+            GameControllerButtonLabel.Right => RawGameControllerButtonLabel.Right,
+            GameControllerButtonLabel.XboxA => RawGameControllerButtonLabel.XboxA,
+            GameControllerButtonLabel.Cross => RawGameControllerButtonLabel.Cross,
+            GameControllerButtonLabel.LetterA => RawGameControllerButtonLabel.LetterA,
+            GameControllerButtonLabel.XboxB => RawGameControllerButtonLabel.XboxB,
+            GameControllerButtonLabel.Circle => RawGameControllerButtonLabel.Circle,
+            GameControllerButtonLabel.LetterB => RawGameControllerButtonLabel.LetterB,
+            GameControllerButtonLabel.Back => RawGameControllerButtonLabel.Back,
+            GameControllerButtonLabel.XboxY => RawGameControllerButtonLabel.XboxY,
+            GameControllerButtonLabel.Triangle => RawGameControllerButtonLabel.Triangle,
+            GameControllerButtonLabel.LetterY => RawGameControllerButtonLabel.LetterY,
+            GameControllerButtonLabel.XboxLeftTrigger => RawGameControllerButtonLabel.XboxLeftTrigger,
+            GameControllerButtonLabel.LeftTrigger => RawGameControllerButtonLabel.LeftTrigger,
+            GameControllerButtonLabel.XboxRightTrigger => RawGameControllerButtonLabel.XboxRightTrigger,
+            GameControllerButtonLabel.RightTrigger => RawGameControllerButtonLabel.RightTrigger,
+            _ => RawGameControllerButtonLabel.None
         };
     }
 }

@@ -2235,23 +2235,15 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void WindowsRawGameControllerMapper_DelegatesAxisNormalizationToCorePolicy()
+    public void WindowsRawGameControllerMapper_DelegatesRawReadingSemanticsToCorePolicy()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsRawGameControllerMapper.cs");
 
-        Assert.Contains("!RawGameControllerAxisNormalizer.IsAllAxesZero(axes)", code, StringComparison.Ordinal);
-        Assert.Contains("RawGameControllerAxisNormalizer.NormalizeHorizontal(axes[0])", code, StringComparison.Ordinal);
-        Assert.Contains("RawGameControllerAxisNormalizer.NormalizeVertical(axes[1])", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("axes[0] - 0.5", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("0.5 - axes[1]", code, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WindowsRawGameControllerMapper_DelegatesEightWaySwitchMappingToCorePolicy()
-    {
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsRawGameControllerMapper.cs");
-
-        Assert.Contains("GamepadDirectionalSwitchMapper.Apply", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
+        Assert.Contains("MapButtonLabel(controller.GetButtonLabel(i))", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("RawGameControllerAxisNormalizer", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadDirectionalSwitchMapper.Apply", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("reading with", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GameControllerSwitchPosition.Up) == GameControllerSwitchPosition.Up", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GameControllerSwitchPosition.Down) == GameControllerSwitchPosition.Down", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GameControllerSwitchPosition.Left) == GameControllerSwitchPosition.Left", code, StringComparison.Ordinal);

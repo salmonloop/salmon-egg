@@ -12,35 +12,41 @@ public sealed class GamepadAdaptationPipelineTests
         yield return
         [
             Standard(moveUp: true),
-            GamepadDirectionalSwitchMapper.Apply(GamepadDirectionalSwitchPosition.Up, default),
+            RawController([], [GamepadDirectionalSwitchPosition.Up], []),
             GamepadNavigationIntent.MoveUp
         ];
         yield return
         [
             Standard(moveDown: true),
-            GamepadDirectionalSwitchMapper.Apply(GamepadDirectionalSwitchPosition.Down, default),
+            RawController([], [GamepadDirectionalSwitchPosition.Down], []),
             GamepadNavigationIntent.MoveDown
         ];
         yield return
         [
             Standard(moveLeft: true),
-            GamepadDirectionalSwitchMapper.Apply(GamepadDirectionalSwitchPosition.Left, default),
+            RawController([], [GamepadDirectionalSwitchPosition.Left], []),
             GamepadNavigationIntent.MoveLeft
         ];
         yield return
         [
             Standard(moveRight: true),
-            GamepadDirectionalSwitchMapper.Apply(GamepadDirectionalSwitchPosition.Right, default),
+            RawController([], [GamepadDirectionalSwitchPosition.Right], []),
             GamepadNavigationIntent.MoveRight
         ];
     }
 
+    public static IEnumerable<object[]> ButtonSamples()
+    {
+        yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.XboxA], [], []), GamepadNavigationIntent.Activate];
+        yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.XboxB], [], []), GamepadNavigationIntent.Back];
+    }
+
     public static IEnumerable<object[]> ThumbstickSamples()
     {
-        yield return [Thumbstick(0.75, 0.10), RawThumbstick(0.875, 0.45), GamepadNavigationIntent.MoveRight];
-        yield return [Thumbstick(-0.75, 0.10), RawThumbstick(0.125, 0.45), GamepadNavigationIntent.MoveLeft];
-        yield return [Thumbstick(0.10, 0.75), RawThumbstick(0.55, 0.125), GamepadNavigationIntent.MoveUp];
-        yield return [Thumbstick(0.10, -0.75), RawThumbstick(0.55, 0.875), GamepadNavigationIntent.MoveDown];
+        yield return [Thumbstick(0.75, 0.10), RawController([], [], [0.875, 0.45]), GamepadNavigationIntent.MoveRight];
+        yield return [Thumbstick(-0.75, 0.10), RawController([], [], [0.125, 0.45]), GamepadNavigationIntent.MoveLeft];
+        yield return [Thumbstick(0.10, 0.75), RawController([], [], [0.55, 0.125]), GamepadNavigationIntent.MoveUp];
+        yield return [Thumbstick(0.10, -0.75), RawController([], [], [0.55, 0.875]), GamepadNavigationIntent.MoveDown];
     }
 
     [Theory]
@@ -61,6 +67,20 @@ public sealed class GamepadAdaptationPipelineTests
         Assert.Equal(
             Order(standardIntents),
             Order(new GamepadIntentProcessor().Process(rawReading, SampleTime)));
+    }
+
+    [Theory]
+    [MemberData(nameof(ButtonSamples))]
+    public void StandardGamepadAndRawControllerButtons_ProjectToSameNavigationIntent(
+        GamepadInputReading standardReading,
+        GamepadInputReading rawReading,
+        GamepadNavigationIntent expected)
+    {
+        var standardIntents = GamepadIntentProcessor.GetActiveIntents(standardReading);
+        var rawIntents = GamepadIntentProcessor.GetActiveIntents(rawReading);
+
+        Assert.Equal([expected], Order(standardIntents));
+        Assert.Equal(Order(standardIntents), Order(rawIntents));
     }
 
     [Theory]
@@ -133,6 +153,35 @@ public sealed class GamepadAdaptationPipelineTests
         Assert.Equal(GamepadInputPath.RawGameController, contextSelection.InputPath);
     }
 
+    [Fact]
+    public void StandardGamepadAndRawControllerVoiceShortcut_ProjectToSameShortcutIntent()
+    {
+        var standardReading = Standard(shortcutVoiceToggle: true);
+        var rawReading = RawController([RawGameControllerButtonLabel.XboxY], [], []);
+
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(standardReading));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(rawReading));
+        Assert.Equal(
+            GamepadShortcutIntentProjector.GetActiveShortcuts(standardReading),
+            GamepadShortcutIntentProjector.GetActiveShortcuts(rawReading));
+    }
+
+    [Fact]
+    public void StandardGamepadAndRawControllerTriggers_ProjectToSameContextIntent()
+    {
+        var standardReading = Standard(leftTrigger: 0.75, rightTrigger: 0.75);
+        var rawReading = RawController(
+            [RawGameControllerButtonLabel.XboxLeftTrigger, RawGameControllerButtonLabel.XboxRightTrigger],
+            [],
+            []);
+
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(standardReading));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(rawReading));
+        Assert.Equal(
+            GamepadContextIntentProjector.GetActiveIntents(standardReading),
+            GamepadContextIntentProjector.GetActiveIntents(rawReading));
+    }
+
     private static readonly DateTimeOffset SampleTime = DateTimeOffset.Parse("2026-07-06T00:00:00Z");
 
     private static GamepadInputReading Standard(
@@ -167,11 +216,12 @@ public sealed class GamepadAdaptationPipelineTests
             ThumbstickX: x,
             ThumbstickY: y);
 
-    private static GamepadInputReading RawThumbstick(double horizontalAxis, double verticalAxis)
-        => Thumbstick(
-            RawGameControllerAxisNormalizer.NormalizeHorizontal(horizontalAxis),
-            RawGameControllerAxisNormalizer.NormalizeVertical(verticalAxis));
-
     private static GamepadNavigationIntent[] Order(IEnumerable<GamepadNavigationIntent> intents)
         => intents.OrderBy(static intent => intent).ToArray();
+
+    private static GamepadInputReading RawController(
+        IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels,
+        IReadOnlyList<GamepadDirectionalSwitchPosition> switches,
+        IReadOnlyList<double> axes)
+        => RawGameControllerInputReadingMapper.GetInputReading(pressedButtonLabels, switches, axes);
 }
