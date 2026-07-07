@@ -2061,10 +2061,20 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
 
         Assert.Contains("GamepadIntentProcessor", code);
+        Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialRepeatDelay", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RepeatInterval", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ThumbstickDeadzone", code, StringComparison.Ordinal);
         Assert.DoesNotContain("PressState", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsGamepadDiagnosticsService_DelegatesStandardReadingSemanticsToCorePolicy()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
+
+        Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadInputReading(", code, StringComparison.Ordinal);
     }
 
     [Fact]

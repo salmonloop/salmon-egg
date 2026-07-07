@@ -25,8 +25,9 @@ public sealed class GamepadContextIntentDispatcherSourceTests
 
         Assert.Contains("GamepadContextIntentProcessor", code);
         Assert.Contains("ContextIntentRaised", code);
-        Assert.Contains("LeftTrigger: reading.LeftTrigger", code);
-        Assert.Contains("RightTrigger: reading.RightTrigger", code);
+        Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code);
+        Assert.Contains("leftTrigger: reading.LeftTrigger", code);
+        Assert.Contains("rightTrigger: reading.RightTrigger", code);
         Assert.DoesNotContain("GamepadNavigationIntent.PageDown", code);
     }
 

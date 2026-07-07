@@ -120,18 +120,18 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
 
     private static GamepadInputReading GetInputReading(GamepadReading reading)
     {
-        return new GamepadInputReading(
-            MoveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
-            MoveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
-            MoveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
-            MoveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            Activate: reading.Buttons.HasFlag(GamepadButtons.A),
-            Back: reading.Buttons.HasFlag(GamepadButtons.B),
-            ShortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
-            LeftTrigger: reading.LeftTrigger,
-            RightTrigger: reading.RightTrigger,
-            ThumbstickX: reading.LeftThumbstickX,
-            ThumbstickY: reading.LeftThumbstickY);
+        return StandardGamepadInputReadingMapper.GetInputReading(
+            moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
+            moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
+            moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
+            moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
+            activate: reading.Buttons.HasFlag(GamepadButtons.A),
+            back: reading.Buttons.HasFlag(GamepadButtons.B),
+            shortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
+            leftTrigger: reading.LeftTrigger,
+            rightTrigger: reading.RightTrigger,
+            thumbstickX: reading.LeftThumbstickX,
+            thumbstickY: reading.LeftThumbstickY);
     }
 }
 #endif

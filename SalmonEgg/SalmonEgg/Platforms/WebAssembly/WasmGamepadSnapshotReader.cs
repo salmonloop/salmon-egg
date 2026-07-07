@@ -10,8 +10,6 @@ namespace SalmonEgg.Platforms.WebAssembly;
 [SupportedOSPlatform("browser")]
 internal static partial class WasmGamepadSnapshotReader
 {
-    private const double ButtonPressedThreshold = 0.5;
-
     public static GamepadDiagnosticsSnapshot ReadSnapshot()
     {
         var readings = ReadInputReadings();
@@ -79,43 +77,62 @@ internal static partial class WasmGamepadSnapshotReader
     {
         using var buttons = SafeGetObject(gamepad, "buttons");
         using var axes = SafeGetObject(gamepad, "axes");
+        var mapping = SafeGetString(gamepad, "mapping");
 
-        return new GamepadInputReading(
-            MoveUp: IsButtonPressed(buttons, 12),
-            MoveDown: IsButtonPressed(buttons, 13),
-            MoveLeft: IsButtonPressed(buttons, 14),
-            MoveRight: IsButtonPressed(buttons, 15),
-            Activate: IsButtonPressed(buttons, 0),
-            Back: IsButtonPressed(buttons, 1),
-            ShortcutVoiceToggle: IsButtonPressed(buttons, 3),
-            LeftTrigger: GetButtonValue(buttons, 6),
-            RightTrigger: GetButtonValue(buttons, 7),
-            ThumbstickX: GetAxisValue(axes, 0),
-            ThumbstickY: -GetAxisValue(axes, 1));
+        return BrowserGamepadInputReadingMapper.GetInputReading(
+            mapping,
+            ReadButtons(buttons),
+            ReadAxes(axes));
     }
 
-    private static bool IsButtonPressed(JSObject? buttons, int index)
+    private static IReadOnlyList<BrowserGamepadButtonReading> ReadButtons(JSObject? buttons)
     {
-        using var button = SafeGetObject(buttons, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        if (button is null)
+        if (buttons is null)
         {
-            return false;
+            return [];
         }
 
-        return SafeGetBoolean(button, "pressed") || GetButtonValue(button) >= ButtonPressedThreshold;
+        var length = SafeGetInt32(buttons, "length");
+        if (length <= 0)
+        {
+            return [];
+        }
+
+        var readings = new List<BrowserGamepadButtonReading>(length);
+        for (var index = 0; index < length; index++)
+        {
+            using var button = SafeGetObject(buttons, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            readings.Add(button is null
+                ? default
+                : new BrowserGamepadButtonReading(
+                    Pressed: SafeGetBoolean(button, "pressed"),
+                    Value: SafeGetDouble(button, "value")));
+        }
+
+        return readings;
     }
 
-    private static double GetButtonValue(JSObject? buttons, int index)
+    private static IReadOnlyList<double> ReadAxes(JSObject? axes)
     {
-        using var button = SafeGetObject(buttons, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        return button is null ? 0 : GetButtonValue(button);
+        if (axes is null)
+        {
+            return [];
+        }
+
+        var length = SafeGetInt32(axes, "length");
+        if (length <= 0)
+        {
+            return [];
+        }
+
+        var readings = new List<double>(length);
+        for (var index = 0; index < length; index++)
+        {
+            readings.Add(SafeGetDouble(axes, index.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return readings;
     }
-
-    private static double GetButtonValue(JSObject button)
-        => ClampUnit(SafeGetDouble(button, "value"));
-
-    private static double GetAxisValue(JSObject? axes, int index)
-        => ClampSigned(SafeGetDouble(axes, index.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
     private static JSObject? SafeGetObject(JSObject? value, string propertyName)
     {
@@ -134,18 +151,6 @@ internal static partial class WasmGamepadSnapshotReader
         }
     }
 
-    private static bool SafeGetBoolean(JSObject value, string propertyName)
-    {
-        try
-        {
-            return value.GetPropertyAsBoolean(propertyName);
-        }
-        catch (JSException)
-        {
-            return false;
-        }
-    }
-
     private static int SafeGetInt32(JSObject value, string propertyName)
     {
         try
@@ -155,6 +160,30 @@ internal static partial class WasmGamepadSnapshotReader
         catch (JSException)
         {
             return 0;
+        }
+    }
+
+    private static string SafeGetString(JSObject value, string propertyName)
+    {
+        try
+        {
+            return value.GetPropertyAsString(propertyName) ?? string.Empty;
+        }
+        catch (JSException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static bool SafeGetBoolean(JSObject value, string propertyName)
+    {
+        try
+        {
+            return value.GetPropertyAsBoolean(propertyName);
+        }
+        catch (JSException)
+        {
+            return false;
         }
     }
 
@@ -173,26 +202,6 @@ internal static partial class WasmGamepadSnapshotReader
         {
             return 0;
         }
-    }
-
-    private static double ClampUnit(double value)
-    {
-        if (double.IsNaN(value))
-        {
-            return 0;
-        }
-
-        return Math.Clamp(value, 0, 1);
-    }
-
-    private static double ClampSigned(double value)
-    {
-        if (double.IsNaN(value))
-        {
-            return 0;
-        }
-
-        return Math.Clamp(value, -1, 1);
     }
 }
 #endif

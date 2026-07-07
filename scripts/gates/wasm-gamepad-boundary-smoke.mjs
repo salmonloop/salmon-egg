@@ -26,6 +26,7 @@ const standardGamepadProjectionScript = `
 (() => {
   const state = {
     connected: false,
+    mapping: "standard",
     pressedButtons: new Set(),
     axes: [0, 0, 0, 0],
     timestamp: 1
@@ -54,7 +55,7 @@ const standardGamepadProjectionScript = `
         id: "SalmonEgg Smoke Standard Gamepad",
         index: 0,
         connected: true,
-        mapping: "standard",
+        mapping: state.mapping,
         timestamp: state.timestamp,
         buttons: createButtons(),
         axes: state.axes.slice(),
@@ -67,6 +68,7 @@ const standardGamepadProjectionScript = `
   globalThis.__salmoneggSmokeGamepad = {
     setState(nextState) {
       state.connected = Boolean(nextState?.connected);
+      state.mapping = typeof nextState?.mapping === "string" ? nextState.mapping : "standard";
       state.pressedButtons = new Set(nextState?.pressedButtons ?? []);
       state.axes = Array.isArray(nextState?.axes) ? nextState.axes.slice(0, 4) : [0, 0, 0, 0];
     }
@@ -77,6 +79,7 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   await verifyNativeBrowserNoDeviceProjection();
+  await verifyInjectedNonStandardGamepadIsNotMisread();
   await verifyInjectedStandardGamepadProjection();
   await verifyInjectedStandardGamepadNativeControlBridge();
   console.log("WASM gamepad boundary smoke passed");
@@ -96,6 +99,33 @@ async function verifyNativeBrowserNoDeviceProjection() {
     await page.mouse.click(projection.startState.x, projection.startState.y);
     await page.waitForTimeout(350);
     await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics after monitoring start");
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+async function verifyInjectedNonStandardGamepadIsNotMisread() {
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await context.addInitScript({ content: standardGamepadProjectionScript });
+    await openDiagnosticsGamepadSection(page);
+    await page.evaluate(() => {
+      globalThis.__salmoneggSmokeGamepad.setState({
+        connected: true,
+        mapping: "",
+        pressedButtons: [0, 13],
+        axes: [1, -1, 0, 0]
+      });
+    });
+
+    await clickVisibleControl(page, gamepadRefresh);
+    await page.waitForTimeout(250);
+    await expectConnectedNonStandardGamepadWithoutActiveProjection(
+      page,
+      "injected non-standard Gamepad API projection");
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
   } finally {
@@ -216,6 +246,40 @@ async function expectSupportedNoGamepadProjection(page, label) {
   await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 
   return { startState, refreshState };
+}
+
+async function expectConnectedNonStandardGamepadWithoutActiveProjection(page, label) {
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadStatus"] },
+    supportedStatusPattern,
+    `${label} supported status`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
+    /^1$/,
+    `${label} standard gamepad count`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadRawCount"] },
+    /^0$/,
+    `${label} raw controller count`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadInputSource"] },
+    /^(None|无)$/,
+    `${label} input source`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+    /^(None|无)$/,
+    `${label} active input`);
+  await expectControlText(
+    page,
+    { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
+    /X 0\.00, Y 0\.00/,
+    `${label} thumbstick`);
+  await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 }
 
 async function expectActiveStandardGamepadProjection(page, label) {
