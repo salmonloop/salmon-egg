@@ -72,6 +72,25 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     }
 
     [Fact]
+    public void GamepadShellSmokeTests_CoverTranscriptTriggerFocusDomainIsolation()
+    {
+        var code = TestSourceFiles.ReadAllText(
+            @"tests\SalmonEgg.GuiTests.Windows\GamepadShellSmokeTests.cs");
+
+        Assert.Contains(
+            "ChatTranscriptViewport_VirtualGamepadLeftTrigger_CanPageUpTranscript",
+            code,
+            System.StringComparison.Ordinal);
+        Assert.Contains(
+            "ChatInputBox_AfterTranscriptTrigger_VirtualGamepadLeftTrigger_DoesNotStealFocusOrScrollTranscript",
+            code,
+            System.StringComparison.Ordinal);
+        Assert.Contains("session.PressVirtualGamepadLeftTrigger();", code, System.StringComparison.Ordinal);
+        Assert.Contains("session.IsFocusWithinAutomationId(\"InputBox\")", code, System.StringComparison.Ordinal);
+        Assert.Contains("Left trigger scrolled the transcript while chat input focus was active.", code, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GamepadContextIntentDispatcher_DelegatesToShellFocusScope()
     {
         var code = TestSourceFiles.ReadAllText(

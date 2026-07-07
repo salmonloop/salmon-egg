@@ -775,6 +775,73 @@ public sealed class ShellFocusedActivationSmokeTests
     }
 
     [SkippableFact]
+    public void ChatInputBox_AfterTranscriptTrigger_VirtualGamepadLeftTrigger_DoesNotStealFocusOrScrollTranscript()
+    {
+        GuiTestGate.RequireEnabled();
+
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true, messageCountPerSession: 80);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+
+        Assert.True(
+            session.WaitUntilOnscreen("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15)),
+            $"Session item did not appear before chat input trigger isolation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(10));
+        session.ActivateElement(sessionItem);
+        Assert.True(
+            session.WaitUntilVisible("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10)),
+            $"Chat view did not become visible before chat input trigger isolation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        Assert.True(messagesList.Patterns.Scroll.IsSupported, "Chat transcript list should expose ScrollPattern.");
+        var scroll = messagesList.Patterns.Scroll.Pattern;
+        Assert.True(scroll.VerticallyScrollable.Value, "Chat transcript list should be vertically scrollable in seeded data.");
+
+        session.FocusElement(messagesList);
+        Assert.True(
+            WaitUntil(
+                () => session.IsFocusWithinAutomationId("ChatView.MessagesList"),
+                TimeSpan.FromSeconds(2)),
+            $"Unable to focus chat transcript list before trigger isolation validation.{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        session.PressPageUp();
+        Thread.Sleep(150);
+        var transcriptPercentBeforePriming = scroll.VerticalScrollPercent.Value;
+        Assert.True(
+            WaitUntil(
+                () =>
+                {
+                    session.PressVirtualGamepadLeftTrigger();
+                    return Math.Abs(scroll.VerticalScrollPercent.Value - transcriptPercentBeforePriming) > 0.5;
+                },
+                TimeSpan.FromSeconds(3)),
+            $"Left trigger did not prime transcript context paging before input focus isolation validation."
+            + $"{Environment.NewLine}beforePercent={transcriptPercentBeforePriming:0.##}"
+            + $"{Environment.NewLine}afterPercent={scroll.VerticalScrollPercent.Value:0.##}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        var inputBox = session.FindByAutomationId("InputBox", TimeSpan.FromSeconds(10));
+        FocusAndAssert(session, inputBox, "InputBox", "chat input box after transcript trigger");
+        var inputPercentBeforeTrigger = scroll.VerticalScrollPercent.Value;
+
+        session.PressVirtualGamepadLeftTrigger();
+        Thread.Sleep(250);
+
+        Assert.True(
+            session.IsFocusWithinAutomationId("InputBox"),
+            $"Left trigger stole focus from the chat input box after transcript context paging was previously active."
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+        Assert.True(
+            Math.Abs(scroll.VerticalScrollPercent.Value - inputPercentBeforeTrigger) <= 0.5,
+            $"Left trigger scrolled the transcript while chat input focus was active."
+            + $"{Environment.NewLine}beforePercent={inputPercentBeforeTrigger:0.##}"
+            + $"{Environment.NewLine}afterPercent={scroll.VerticalScrollPercent.Value:0.##}"
+            + $"{Environment.NewLine}Focus={session.DescribeFocusedElementDetailed()}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    [SkippableFact]
     public void SettingsDataStorageContent_VirtualGamepadRightTrigger_CanPageDownSettingsContent()
     {
         GuiTestGate.RequireEnabled();
