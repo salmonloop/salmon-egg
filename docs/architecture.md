@@ -77,6 +77,8 @@ SalmonEgg.sln
     └── SalmonEgg.GuiTests.Windows/         # GUI smoke（Windows FlaUI）
 ```
 
+GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，BrowserWasm 行为使用 Playwright/Chromium，Skia Desktop 行为使用 `scripts/gates/run-skia-desktop-gui-smoke-gates.sh` 在真实 `net10.0-desktop` 产物上验证 shell readiness。跨平台一致性由共享 ViewModel/Core 行为测试和平台专属 GUI gate 共同保证。
+
 ## 能力边界（跨平台）
 
 平台能力由统一的能力事实源（`IPlatformCapabilityService`）提供，禁止在 ViewModel 或业务层散落平台判断。

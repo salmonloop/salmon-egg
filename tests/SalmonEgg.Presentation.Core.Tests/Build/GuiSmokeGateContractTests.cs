@@ -1,0 +1,40 @@
+using System;
+using SalmonEgg.Presentation.Core.Tests;
+using Xunit;
+
+namespace SalmonEgg.Presentation.Core.Tests.Build;
+
+public sealed class GuiSmokeGateContractTests
+{
+    [Fact]
+    public void SkiaDesktopGuiSmokeGate_UsesRealDesktopBuildAndDebugReadinessProbe()
+    {
+        var script = TestSourceFiles.ReadAllText(
+            @"scripts\gates\run-skia-desktop-gui-smoke-gates.sh");
+
+        Assert.Contains("-f net10.0-desktop", script, StringComparison.Ordinal);
+        Assert.Contains("SalmonEggTargetFrameworks=net10.0-desktop", script, StringComparison.Ordinal);
+        Assert.Contains("SalmonEggAllTargetFrameworks=net10.0-desktop", script, StringComparison.Ordinal);
+        Assert.Contains("APP_PATH=\"${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/SalmonEgg\"", script, StringComparison.Ordinal);
+        Assert.Contains("SALMONEGG_GUI=1", script, StringComparison.Ordinal);
+        Assert.Contains("SALMONEGG_APPDATA_ROOT=\"${APPDATA_ROOT}\"", script, StringComparison.Ordinal);
+        Assert.Contains("READY_MARKER=\"MainPage: initial shell content activated\"", script, StringComparison.Ordinal);
+        Assert.Contains("Skia Desktop GUI smoke requires Debug configuration", script, StringComparison.Ordinal);
+        Assert.Contains("xvfb-run", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tests/SalmonEgg.GuiTests.Windows", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet test", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildGuide_SeparatesPlatformGuiSmokeDrivers()
+    {
+        var guide = TestSourceFiles.ReadAllText(@"BUILD_GUIDE.md");
+
+        Assert.Contains("scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug", guide, StringComparison.Ordinal);
+        Assert.Contains("scripts/gates/run-gui-smoke-gates.ps1", guide, StringComparison.Ordinal);
+        Assert.Contains("scripts/gates/run-wasm-smoke-gates.sh Debug", guide, StringComparison.Ordinal);
+        Assert.Contains("FlaUI/UIA3", guide, StringComparison.Ordinal);
+        Assert.Contains("Playwright/Chromium", guide, StringComparison.Ordinal);
+        Assert.Contains("net10.0-desktop", guide, StringComparison.Ordinal);
+    }
+}
