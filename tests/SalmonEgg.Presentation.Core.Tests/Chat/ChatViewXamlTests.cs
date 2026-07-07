@@ -344,6 +344,42 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatViews_ContextPagingRequiresCurrentTranscriptFocusDomain()
+    {
+        var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var chatContextMethod = ExtractSection(
+            chatViewCode,
+            "public bool TryConsumeContextIntent(GamepadContextIntent intent)",
+            "public bool TryFocusPrimaryContentTarget()");
+        var miniContextMethod = ExtractSection(
+            miniChatViewCode,
+            "public bool TryConsumeContextIntent(GamepadContextIntent intent)",
+            "private void DisposeTranscriptViewportHost()");
+
+        Assert.Contains("if (!IsTranscriptContextFocusWithin())", chatContextMethod, StringComparison.Ordinal);
+        Assert.Contains("ClearTranscriptMessageLayerState();", chatContextMethod, StringComparison.Ordinal);
+        Assert.Contains("private bool IsTranscriptContextFocusWithin()", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);", chatViewCode, StringComparison.Ordinal);
+        Assert.Contains("if (MessagesList is null || IsConversationInputSurfaceFocusWithin())", chatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_isTranscriptViewportLayerActive", ExtractSection(
+            chatContextMethod,
+            "var hasTranscriptContextFocus =",
+            "var consumed = ChatTranscriptContextIntentHandler.TryConsume("),
+            StringComparison.Ordinal);
+
+        Assert.Contains("if (!IsTranscriptContextFocusWithin())", miniContextMethod, StringComparison.Ordinal);
+        Assert.Contains("private bool IsTranscriptContextFocusWithin()", miniChatViewCode, StringComparison.Ordinal);
+        Assert.Contains("return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);", miniChatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsTranscriptInputSurfaceFocusWithin", miniChatViewCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("_isTranscriptViewportLayerActive", ExtractSection(
+            miniContextMethod,
+            "var hasTranscriptContextFocus =",
+            "var consumed = ChatTranscriptContextIntentHandler.TryConsume("),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MiniChatTranscriptFocus_UsesNativeViewportHostLikeMainTranscript()
     {
         var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");

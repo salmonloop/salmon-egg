@@ -430,9 +430,15 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return false;
             }
 
+            if (!IsTranscriptContextFocusWithin())
+            {
+                _isTranscriptViewportLayerActive = false;
+                ClearTranscriptMessageLayerState();
+                return false;
+            }
+
             var hasTranscriptContextFocus =
-                _isTranscriptViewportLayerActive
-                || IsTranscriptViewportSurfaceFocusWithin()
+                IsTranscriptViewportSurfaceFocusWithin()
                 || (!_isTranscriptChildControlLayerActive && IsTranscriptMessageContainerFocused());
             var consumed = ChatTranscriptContextIntentHandler.TryConsume(
                 intent,
@@ -542,6 +548,33 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             }
 
             return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);
+        }
+
+        private bool IsTranscriptContextFocusWithin()
+        {
+            if (MessagesList is null || IsConversationInputSurfaceFocusWithin())
+            {
+                return false;
+            }
+
+            if (MessagesList.XamlRoot is null)
+            {
+                return MessagesList.FocusState is FocusState.Keyboard or FocusState.Programmatic;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+            return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);
+        }
+
+        private bool IsConversationInputSurfaceFocusWithin()
+        {
+            if (ConversationInputArea is null || ConversationInputArea.XamlRoot is null)
+            {
+                return false;
+            }
+
+            var current = XamlFocusManager.GetFocusedElement(ConversationInputArea.XamlRoot) as DependencyObject;
+            return DependencyObjectAncestry.IsDescendantOf(current, ConversationInputArea);
         }
 
         private bool IsTranscriptMessageLayerFocusWithin()

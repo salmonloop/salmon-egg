@@ -23,7 +23,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private bool _isLoaded;
     private bool _isMessagesListLoaded;
     private bool _isTrackingViewModel;
-    private bool _isTranscriptViewportLayerActive;
     private INotifyCollectionChanged? _trackedMessageHistory;
     private readonly TranscriptViewportController _viewportController = new();
     private const double BottomThreshold = 10;
@@ -316,15 +315,13 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             return false;
         }
 
-        if (IsTranscriptInputSurfaceFocusWithin())
+        if (!IsTranscriptContextFocusWithin())
         {
-            _isTranscriptViewportLayerActive = false;
             return false;
         }
 
         var hasTranscriptContextFocus =
-            _isTranscriptViewportLayerActive
-            || IsTranscriptViewportSurfaceFocusWithin()
+            IsTranscriptViewportSurfaceFocusWithin()
             || IsTranscriptMessageContainerFocused();
         var consumed = ChatTranscriptContextIntentHandler.TryConsume(
             intent,
@@ -335,7 +332,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
         if (consumed)
         {
-            _isTranscriptViewportLayerActive = true;
             if (!IsTranscriptViewportSurfaceFocusWithin())
             {
                 _ = TryFocusTranscriptScroller(FocusState.Keyboard);
@@ -430,15 +426,20 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             && DependencyObjectAncestry.IsDescendantOf(itemContainer, MessagesList);
     }
 
-    private bool IsTranscriptInputSurfaceFocusWithin()
+    private bool IsTranscriptContextFocusWithin()
     {
-        if (MiniChatInputBox is null || MiniChatInputBox.XamlRoot is null)
+        if (MessagesList is null)
         {
             return false;
         }
 
-        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MiniChatInputBox.XamlRoot) as DependencyObject;
-        return DependencyObjectAncestry.IsDescendantOf(current, MiniChatInputBox);
+        if (MessagesList.XamlRoot is null)
+        {
+            return MessagesList.FocusState is FocusState.Keyboard or FocusState.Programmatic;
+        }
+
+        var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
+        return DependencyObjectAncestry.IsDescendantOf(current, MessagesList);
     }
 
     private bool TryFocusTranscriptScroller(FocusState focusState)
