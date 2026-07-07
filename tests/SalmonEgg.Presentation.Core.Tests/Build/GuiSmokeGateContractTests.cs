@@ -19,8 +19,12 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("SALMONEGG_GUI=1", script, StringComparison.Ordinal);
         Assert.Contains("SALMONEGG_APPDATA_ROOT=\"${APPDATA_ROOT}\"", script, StringComparison.Ordinal);
         Assert.Contains("READY_MARKER=\"MainPage: initial shell content activated\"", script, StringComparison.Ordinal);
+        Assert.Contains("X11_PROBE=\"${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py\"", script, StringComparison.Ordinal);
+        Assert.Contains("--min-distinct-pixels", TestSourceFiles.ReadAllText(
+            @"scripts\gates\skia-desktop-x11-window-probe.py"), StringComparison.Ordinal);
+        Assert.Contains("Skia Desktop GUI smoke did not expose a mapped, nonblank X11 window.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke requires Debug configuration", script, StringComparison.Ordinal);
-        Assert.Contains("xvfb-run", script, StringComparison.Ordinal);
+        Assert.Contains("Xvfb", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tests/SalmonEgg.GuiTests.Windows", script, StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet test", script, StringComparison.Ordinal);
     }

@@ -10,11 +10,13 @@ fi
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
 PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
 APP_PATH="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/SalmonEgg"
+X11_PROBE="${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py"
 READY_MARKER="MainPage: initial shell content activated"
 
 DOTNET_BIN="${DOTNET_BIN:-$(command -v dotnet || true)}"
 GIT_BIN="${GIT_BIN:-$(command -v git || true)}"
 UNAME_BIN="${UNAME_BIN:-$(command -v uname || true)}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
 
 if [ "${CONFIGURATION}" != "Debug" ]; then
   echo "Skia Desktop GUI smoke requires Debug configuration because the XAML readiness probe is DEBUG-only boot.log output." >&2
@@ -36,16 +38,30 @@ if [ -z "${UNAME_BIN}" ]; then
   exit 1
 fi
 
+if [ -z "${PYTHON_BIN}" ]; then
+  echo "Unable to locate python3 in PATH." >&2
+  exit 1
+fi
+
 OS_NAME="$("${UNAME_BIN}" -s)"
 APPDATA_ROOT="$(mktemp -d -t salmonegg-skia-gui-appdata.XXXXXX)"
 STDOUT_LOG="$(mktemp -t salmonegg-skia-gui-smoke.XXXXXX.log)"
+XVFB_LOG="$(mktemp -t salmonegg-skia-gui-xvfb.XXXXXX.log)"
+X11_PROBE_LOG="$(mktemp -t salmonegg-skia-gui-x11-probe.XXXXXX.log)"
 BOOT_LOG="${APPDATA_ROOT}/boot.log"
 APP_PID=""
+XVFB_PID=""
+SMOKE_DISPLAY="${DISPLAY:-}"
 
 cleanup() {
   if [ -n "${APP_PID}" ] && kill -0 "${APP_PID}" 2>/dev/null; then
     kill "${APP_PID}" 2>/dev/null || true
     wait "${APP_PID}" 2>/dev/null || true
+  fi
+
+  if [ -n "${XVFB_PID}" ] && kill -0 "${XVFB_PID}" 2>/dev/null; then
+    kill "${XVFB_PID}" 2>/dev/null || true
+    wait "${XVFB_PID}" 2>/dev/null || true
   fi
 
   if [ -d "${APPDATA_ROOT}" ]; then
@@ -55,14 +71,43 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+start_xvfb() {
+  local xvfb_bin="$1"
+  local base_display="${SALMONEGG_SKIA_GUI_DISPLAY_BASE:-90}"
+  local screen_config="${XVFB_SCREEN:-0 1920x1080x24}"
+
+  for offset in $(seq 0 49); do
+    local display_number=$((base_display + offset))
+    SMOKE_DISPLAY=":${display_number}"
+    "${xvfb_bin}" "${SMOKE_DISPLAY}" -screen ${screen_config} -nolisten tcp >"${XVFB_LOG}" 2>&1 &
+    XVFB_PID="$!"
+    sleep 0.5
+
+    if kill -0 "${XVFB_PID}" 2>/dev/null; then
+      export DISPLAY="${SMOKE_DISPLAY}"
+      return 0
+    fi
+
+    wait "${XVFB_PID}" 2>/dev/null || true
+    XVFB_PID=""
+  done
+
+  cat "${XVFB_LOG}" >&2
+  echo "Unable to start Xvfb for Skia Desktop GUI smoke." >&2
+  return 1
+}
+
 case "${OS_NAME}" in
   Linux)
-    XVFB_RUN_BIN="${XVFB_RUN_BIN:-$(command -v xvfb-run || true)}"
-    if [ -z "${XVFB_RUN_BIN}" ]; then
-      echo "Unable to locate xvfb-run in PATH. Install xvfb to run Linux Skia Desktop GUI smoke headlessly." >&2
+    XVFB_BIN="${XVFB_BIN:-$(command -v Xvfb || true)}"
+    if [ -z "${XVFB_BIN}" ]; then
+      echo "Unable to locate Xvfb in PATH. Install xvfb to run Linux Skia Desktop GUI smoke headlessly." >&2
       exit 1
     fi
-    LAUNCH_COMMAND=("${XVFB_RUN_BIN}" -a env SALMONEGG_GUI=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
+    if [ -z "${SMOKE_DISPLAY}" ]; then
+      start_xvfb "${XVFB_BIN}"
+    fi
+    LAUNCH_COMMAND=(env DISPLAY="${SMOKE_DISPLAY}" SALMONEGG_GUI=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
     ;;
   Darwin)
     LAUNCH_COMMAND=(env SALMONEGG_GUI=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
@@ -92,9 +137,28 @@ echo "[gate] Launch Skia Desktop GUI smoke"
 echo "[gate] Runtime source commit=${COMMIT}"
 echo "[gate] App artifact=${APP_PATH}"
 echo "[gate] AppData root=${APPDATA_ROOT}"
+if [ -n "${SMOKE_DISPLAY}" ]; then
+  echo "[gate] Display=${SMOKE_DISPLAY}"
+fi
 
 "${LAUNCH_COMMAND[@]}" >"${STDOUT_LOG}" 2>&1 &
 APP_PID="$!"
+
+if [ "${OS_NAME}" = "Linux" ]; then
+  if ! "${PYTHON_BIN}" "${X11_PROBE}" \
+      --display "${SMOKE_DISPLAY}" \
+      --pid "${APP_PID}" \
+      --timeout 20 \
+      >"${X11_PROBE_LOG}" 2>&1; then
+    cat "${STDOUT_LOG}" >&2
+    cat "${X11_PROBE_LOG}" >&2
+    if [ -f "${BOOT_LOG}" ]; then
+      cat "${BOOT_LOG}" >&2
+    fi
+    echo "Skia Desktop GUI smoke did not expose a mapped, nonblank X11 window." >&2
+    exit 1
+  fi
+fi
 
 deadline=$((SECONDS + 35))
 while [ "${SECONDS}" -lt "${deadline}" ]; do
@@ -132,3 +196,6 @@ fi
 
 echo "[gate] Skia Desktop GUI smoke passed"
 echo "[gate] Smoke log=${STDOUT_LOG}"
+if [ "${OS_NAME}" = "Linux" ]; then
+  echo "[gate] X11 probe log=${X11_PROBE_LOG}"
+fi
