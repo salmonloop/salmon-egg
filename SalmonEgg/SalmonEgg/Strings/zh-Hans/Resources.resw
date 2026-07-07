@@ -1371,4 +1371,22 @@
   <data name="ApplicationName" xml:space="preserve">
     <value>SalmonEgg-en</value>
   </data>
+  <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
+    <value>配置云同步</value>
+  </data>
+  <data name="DataStorage_CloudSyncOneDriveTitle.Text" xml:space="preserve">
+    <value>OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
+    <value>将完整配置目录和已保存凭据同步到 OneDrive。凭据会包含在云端配置包中。</value>
+  </data>
+  <data name="DataStorage_CloudSyncAuthorizeOneDrive.Content" xml:space="preserve">
+    <value>授权 OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncNow.Content" xml:space="preserve">
+    <value>立即同步</value>
+  </data>
+  <data name="DataStorage_CloudSyncDisconnect.Content" xml:space="preserve">
+    <value>断开连接</value>
+  </data>
 </root>

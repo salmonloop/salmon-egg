@@ -87,7 +87,7 @@ GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，Brows
 |------|:-------:|:-------------:|:-------------:|:-------:|:---:|:----:|
 | 本地文件系统访问 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Stdio 子进程 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 安全凭据存储 | DPAPI | Secret Service | Keychain | AndroidKeyStore | Keychain | Volatile（内存） |
+| 安全凭据存储 | DPAPI | Secret Service + plaintext fallback | Keychain + plaintext fallback | AndroidKeyStore | Keychain | Plaintext file |
 | WebSocket (`ws://`) | ✅ | ✅ | ✅ | ✅ | ✅ | 仅 `http://` 来源下允许 |
 | WebSocket (`wss://`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ACP `clientCapabilities.fs` | ✅ | ✅ | ✅ | ❌（不声明） | ❌（不声明） | ❌（不声明） |
@@ -97,9 +97,10 @@ GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，Brows
 
 详见 `docs/SPEC-CONFIG-PERSISTENCE-YAML.md`。
 
-- **非敏感配置**：YAML 文件，存储在平台 AppData 目录（Windows: `%LOCALAPPDATA%\SalmonEgg\`，WASM: 浏览器 IDBFS `/local/SalmonEgg`）。
-- **敏感信息**（Token / API Key）：仅通过平台安全存储（`ISecureStorage`）持久化，永不落盘到 YAML。
-- **WASM 持久化**：通过 Uno IDBFS 实现，可持久化 ACP profile YAML 和普通应用设置；安全凭据使用 volatile 存储（内存）。
+- **普通配置**：YAML 文件，存储在平台 AppData 目录（Windows: `%LOCALAPPDATA%\SalmonEgg\`，WASM: 浏览器 IDBFS `/local/SalmonEgg`）。
+- **敏感信息**（Token / API Key）：通过 `ISecureStorage` 抽象持久化；有 OS-backed secure store 的平台优先使用系统能力，受限平台或 Linux/macOS 系统安全存储不可用时可降级到应用数据目录下的 plaintext secure storage。
+- **WASM 持久化**：通过 Uno IDBFS 实现，可持久化 ACP profile YAML、普通应用设置和 plaintext secure storage。
+- **配置云同步**：OneDrive provider 通过 MSAL.NET 授权并上传/下载 provider-neutral 同步包；同步包包含 `config/` 和已登记的配置相关凭据，`secrets.json` 为明文内容。
 
 ## 传输层
 

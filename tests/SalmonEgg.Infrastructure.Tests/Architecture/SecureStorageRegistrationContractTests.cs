@@ -6,20 +6,21 @@ namespace SalmonEgg.Infrastructure.Tests.Architecture;
 public sealed class SecureStorageRegistrationContractTests
 {
     [Fact]
-    public void DependencyInjection_DoesNotRegisterFileBackedSecureStorageForProductionPlatforms()
+    public void DependencyInjection_RegistersPlainTextFallbackSecureStorage()
     {
         var source = LoadText("SalmonEgg/SalmonEgg/DependencyInjection.cs");
 
-        Assert.DoesNotContain("AddSingleton<ISecureStorage>(sp =>", source, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(FindRepoRoot(), "src/SalmonEgg.Infrastructure/Storage/AppFileStoreSecureStorage.cs")));
+        Assert.True(File.Exists(Path.Combine(FindRepoRoot(), "src/SalmonEgg.Infrastructure/Storage/PlainTextFileSecureStorage.cs")));
+        Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", source, StringComparison.Ordinal);
         Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Linux)", source, StringComparison.Ordinal);
         Assert.Contains("new LinuxSecretServiceSecureStorage()", source, StringComparison.Ordinal);
+        Assert.Contains("new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)", source, StringComparison.Ordinal);
         Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.OSX)", source, StringComparison.Ordinal);
         Assert.Contains("new MacOSKeychainSecureStorage()", source, StringComparison.Ordinal);
+        Assert.Contains("new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)", source, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", source, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("#elif __WASM__ || __ANDROID__ || __IOS__", source, StringComparison.Ordinal);
-        Assert.Contains("AddSingleton<ISecureStorage, VolatileSecureStorage>();", source, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", source, StringComparison.Ordinal);
     }
 
     private static string LoadText(string relativePath)

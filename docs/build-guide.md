@@ -137,9 +137,10 @@ WASM 调试前必须先清理旧的 `WasmAppHost`。如果端口仍由其它目�
 
 WASM 持久化与能力边界：
 
-- `net10.0-browserwasm` 启用了 Uno IDBFS，用于 `/local/SalmonEgg` 下的非敏感应用数据；
-- 当前已确认会持久化浏览器 IndexedDB-backed 文件系统的数据包括：应用设置、ACP profile YAML、以及其它走应用文件存储抽象的普通配置；
-- 安全存储仍然不是 IDBFS 的职责；WASM 继续使用 volatile secure storage，不能把“配置持久化”误解成“安全凭据也持久化”；
+- `net10.0-browserwasm` 启用了 Uno IDBFS，用于 `/local/SalmonEgg` 下的应用数据；
+- 当前已确认会持久化浏览器 IndexedDB-backed 文件系统的数据包括：应用设置、ACP profile YAML、其它走应用文件存储抽象的普通配置，以及 plaintext secure storage 中的配置相关凭据；
+- WASM 没有 OS-backed secure store，配置相关凭据会以普通应用文件形式持久化；
+- 配置云同步包会包含 config 目录和已登记的 ACP token/API key 等凭据，`secrets.json` 为明文内容；
 - WASM 不会向 ACP Server 声明 `clientCapabilities.fs`，也不会把 `terminal` 声明为 `true`；
 - 设置页中的本地目录打开/导出等桌面入口在 WASM 上必须保持受限。
 

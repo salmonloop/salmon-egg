@@ -638,4 +638,34 @@
   <data name="StartSuggestion_ResolveErrorsPrompt" xml:space="preserve">
     <value>我刚才遇到了一些报错，请帮我分析并解决它们。</value>
   </data>
+  <data name="DataStorage_CloudSyncStatusEnabled" xml:space="preserve">
+    <value>OneDrive 配置同步已启用。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusDisabled" xml:space="preserve">
+    <value>OneDrive 配置同步未启用。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusUploaded" xml:space="preserve">
+    <value>本地配置已上传到 OneDrive。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusRestored" xml:space="preserve">
+    <value>已从 OneDrive 恢复配置。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusConflict" xml:space="preserve">
+    <value>检测到远端变更，已应用 OneDrive 配置并保留本地备份。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusNotConfigured" xml:space="preserve">
+    <value>OneDrive 应用注册未配置。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusNotAuthorized" xml:space="preserve">
+    <value>需要重新授权 OneDrive。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusSignedOut" xml:space="preserve">
+    <value>已断开 OneDrive 配置同步。</value>
+  </data>
+  <data name="DataStorage_CloudSyncStatusFailed" xml:space="preserve">
+    <value>OneDrive 配置同步失败。</value>
+  </data>
+  <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
+    <value>上次同步：{0:g}</value>
+  </data>
 </root>

@@ -60,6 +60,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private int _cacheRetentionDays = 7;
 
+    [ObservableProperty]
+    private CloudConfigSyncSettings _cloudConfigSync = new();
+
     // Navigation state (Projects -> Sessions) lives in AppSettings to persist between launches.
     // Keep a single writer (AppPreferencesViewModel) to avoid settings overwrite races.
     public ObservableCollection<ProjectDefinition> Projects { get; } = new();
@@ -189,6 +192,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 AcpEnabled = settings.AcpEnabled;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                CloudConfigSync = CloneCloudConfigSyncSettings(settings.CloudConfigSync);
                 KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
                 AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction;
@@ -302,6 +306,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnAcpEnabledChanged(bool value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnCloudConfigSyncChanged(CloudConfigSyncSettings value) => ScheduleSave();
     partial void OnKeyboardShortcutsEnabledChanged(bool value)
     {
         NotifyShortcutConfigurationChanged();
@@ -412,6 +417,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             AcpEnabled = true;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
+            CloudConfigSync = new CloudConfigSyncSettings();
             KeyboardShortcutsEnabled = true;
             AcpEnableConnectionEviction = false;
             AcpConnectionIdleTtlMinutes = null;
@@ -477,6 +483,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             AcpEnabled = AcpEnabled,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
+            CloudConfigSync = CloneCloudConfigSyncSettings(CloudConfigSync),
             KeyboardShortcutsEnabled = KeyboardShortcutsEnabled,
             AcpEnableConnectionEviction = AcpEnableConnectionEviction,
             AcpConnectionIdleTtlMinutes = AcpConnectionIdleTtlMinutes,
@@ -504,6 +511,11 @@ public partial class AppPreferencesViewModel : ObservableObject
                 .ToDictionary(g => g.Key, g => g.Last().Gesture.Trim(), StringComparer.OrdinalIgnoreCase)
         };
 
+    public void SetCloudConfigSyncSettings(CloudConfigSyncSettings settings)
+    {
+        CloudConfigSync = CloneCloudConfigSyncSettings(settings);
+    }
+
     private async Task ApplyLaunchOnStartupAsync(bool enabled)
     {
         if (!_startupService.IsSupported)
@@ -523,6 +535,21 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             _logger.LogWarning(ex, "Failed to apply launch-on-startup setting");
         }
+    }
+
+    private static CloudConfigSyncSettings CloneCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
+    {
+        if (settings is null)
+        {
+            return new CloudConfigSyncSettings();
+        }
+
+        return new CloudConfigSyncSettings
+        {
+            Enabled = settings.Enabled,
+            ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
+            IncludeSecrets = settings.IncludeSecrets
+        };
     }
 
     private static List<AgentRemoteDirectory> NormalizeAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)

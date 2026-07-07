@@ -51,7 +51,7 @@ Linux 桌面运行时依赖按能力分层：
 - 本地交互终端 WebView：WebKitGTK / JavaScriptCore（例如 Ubuntu 上的 `libwebkit2gtk-4.1-0` 或发行版对应包）；
 - Linux 安全凭据持久化：Secret Service provider 和 `libsecret-tools`（提供 `secret-tool`）。
 
-缺少可选依赖时，对应能力会被平台能力服务关闭或 fail-closed；敏感凭据不会降级写入普通文件。
+缺少可选依赖时，对应能力会被平台能力服务关闭或使用受限 fallback。Linux/macOS 桌面安全存储不可用时会降级到应用数据目录下的 plaintext secure storage；WASM 使用浏览器持久化文件系统保存该 plaintext secure storage。
 
 ### 2. 检查环境
 
@@ -219,19 +219,20 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 
 #### WebAssembly 持久化策略
 
-Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的非敏感应用数据。
+Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的应用数据。
 
 当前已确认的 WASM 持久化范围：
 
 - 应用设置；
 - ACP profile YAML；
-- 其它走应用文件存储抽象的非敏感配置数据。
+- 其它走应用文件存储抽象的普通配置；
+- plaintext secure storage 中的 ACP token/API key 等配置相关凭据。
 
 当前不应混淆的边界：
 
-- 浏览器 IndexedDB-backed 文件系统只负责非敏感应用数据持久化；
-- 安全存储仍由平台安全存储服务决定；WASM 继续使用 volatile secure storage；
-- 因此“WASM 可以持久化 ACP 配置 / 普通设置”与“WASM 没有持久化安全凭据存储”可以同时成立。
+- 浏览器 IndexedDB-backed 文件系统负责 WASM 应用数据持久化，包括受限平台 fallback 使用的 plaintext secure storage；
+- WASM 没有 OS-backed secure store，配置相关凭据会以普通应用文件形式持久化；
+- 配置云同步包会包含 config 目录和已登记的 ACP token/API key 等凭据，`secrets.json` 为明文内容。
 
 ACP / 文件系统能力边界：
 

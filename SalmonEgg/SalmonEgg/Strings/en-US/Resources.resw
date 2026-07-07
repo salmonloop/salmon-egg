@@ -1371,4 +1371,22 @@
   <data name="ApplicationName" xml:space="preserve">
     <value>SalmonEgg-en</value>
   </data>
+  <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
+    <value>Configuration cloud sync</value>
+  </data>
+  <data name="DataStorage_CloudSyncOneDriveTitle.Text" xml:space="preserve">
+    <value>OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
+    <value>Syncs the full configuration folder and saved credentials to OneDrive. Credentials are included in the cloud package.</value>
+  </data>
+  <data name="DataStorage_CloudSyncAuthorizeOneDrive.Content" xml:space="preserve">
+    <value>Authorize OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncNow.Content" xml:space="preserve">
+    <value>Sync now</value>
+  </data>
+  <data name="DataStorage_CloudSyncDisconnect.Content" xml:space="preserve">
+    <value>Disconnect</value>
+  </data>
 </root>

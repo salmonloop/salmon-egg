@@ -13,6 +13,7 @@
 
     <Page.Resources>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
     <ScrollViewer Padding="0"
@@ -52,6 +53,57 @@
                                               IsOn="{x:Bind ViewModel.Preferences.SaveLocalHistory, Mode=TwoWay}"
                                               VerticalAlignment="Center"/>
                             </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="DataStorage_CloudSyncTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_CloudSyncOneDriveTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_CloudSyncDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncStatusText, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncLastSyncText, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncErrorText, Mode=OneWay}"
+                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="1"
+                                                Spacing="8"
+                                                Margin="0,12,0,0"
+                                                HorizontalAlignment="Stretch">
+                                        <Button x:Uid="DataStorage_CloudSyncAuthorizeOneDrive"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.AuthorizeOneDrive"
+                                                Command="{x:Bind ViewModel.AuthorizeOneDriveCloudSyncCommand}"
+                                                IsEnabled="{x:Bind ViewModel.IsCloudConfigSyncConfigured, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="DataStorage_CloudSyncNow"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.SyncNow"
+                                                Command="{x:Bind ViewModel.SyncCloudConfigCommand}"
+                                                IsEnabled="{x:Bind ViewModel.IsCloudConfigSyncEnabled, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="DataStorage_CloudSyncDisconnect"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.Disconnect"
+                                                Command="{x:Bind ViewModel.DisconnectCloudConfigCommand}"
+                                                IsEnabled="{x:Bind ViewModel.IsCloudConfigSyncEnabled, Mode=OneWay}"
+                                                HorizontalAlignment="Stretch"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
                         </Border>
                     </StackPanel>
 

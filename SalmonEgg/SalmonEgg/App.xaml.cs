@@ -5,6 +5,7 @@ using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Infrastructure.Storage;
+using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg;
 
@@ -139,6 +140,20 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         }
 
         AppPreferencesViewModel? preferences = null;
+        try
+        {
+            var cloudSync = ServiceProvider.GetService<ICloudConfigSyncService>();
+            if (cloudSync is not null)
+            {
+                _ = await cloudSync.InitializeAsync();
+                BootLog("OnLaunched: cloud config sync initialized");
+            }
+        }
+        catch
+        {
+            BootLog("OnLaunched: cloud config sync initialization failed");
+        }
+
         try
         {
             preferences = ServiceProvider.GetService<AppPreferencesViewModel>();

@@ -12,7 +12,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 
 public sealed class AppSettingsService : IAppSettingsService
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly IAppFileStore _fileStore;
     private readonly ILogger<AppSettingsService> _logger;
@@ -55,6 +55,7 @@ public sealed class AppSettingsService : IAppSettingsService
                 Backdrop = string.IsNullOrWhiteSpace(model.Backdrop) ? "System" : model.Backdrop,
                 SaveLocalHistory = model.SaveLocalHistory,
                 CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
+                CloudConfigSync = FromYaml(model.CloudConfigSync),
                 KeyboardShortcutsEnabled = model.KeyboardShortcutsEnabled,
                 KeyBindings = model.KeyBindings ?? new(),
                 Projects = model.Projects ?? new(),
@@ -99,6 +100,7 @@ public sealed class AppSettingsService : IAppSettingsService
             Backdrop = settings.Backdrop ?? "System",
             SaveLocalHistory = settings.SaveLocalHistory,
             CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
+            CloudConfigSync = ToYaml(settings.CloudConfigSync),
             KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled,
             KeyBindings = settings.KeyBindings ?? new(),
             Projects = settings.Projects ?? new(),
@@ -170,5 +172,35 @@ public sealed class AppSettingsService : IAppSettingsService
         }
 
         return clone;
+    }
+
+    private static CloudConfigSyncSettings FromYaml(CloudConfigSyncYamlV1? yaml)
+    {
+        if (yaml is null)
+        {
+            return new CloudConfigSyncSettings();
+        }
+
+        return new CloudConfigSyncSettings
+        {
+            Enabled = yaml.Enabled,
+            ProviderId = yaml.ProviderId?.Trim() ?? string.Empty,
+            IncludeSecrets = yaml.IncludeSecrets
+        };
+    }
+
+    private static CloudConfigSyncYamlV1 ToYaml(CloudConfigSyncSettings? settings)
+    {
+        if (settings is null)
+        {
+            return new CloudConfigSyncYamlV1();
+        }
+
+        return new CloudConfigSyncYamlV1
+        {
+            Enabled = settings.Enabled,
+            ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
+            IncludeSecrets = settings.IncludeSecrets
+        };
     }
 }

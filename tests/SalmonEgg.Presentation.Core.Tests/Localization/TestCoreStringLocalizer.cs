@@ -179,6 +179,16 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["About_AcknowledgementSourceFallback"] = "来源未列出",
         ["Platform_ExternalOpenUnsupported"] = "当前平台暂不支持打开本地文件或目录。",
         ["Platform_LocalFileExportUnsupported"] = "当前平台暂不支持导出本地文件。",
+        ["DataStorage_CloudSyncStatusEnabled"] = "OneDrive 配置同步已启用。",
+        ["DataStorage_CloudSyncStatusDisabled"] = "OneDrive 配置同步未启用。",
+        ["DataStorage_CloudSyncStatusUploaded"] = "本地配置已上传到 OneDrive。",
+        ["DataStorage_CloudSyncStatusRestored"] = "已从 OneDrive 恢复配置。",
+        ["DataStorage_CloudSyncStatusConflict"] = "检测到远端变更，已应用 OneDrive 配置并保留本地备份。",
+        ["DataStorage_CloudSyncStatusNotConfigured"] = "OneDrive 应用注册未配置。",
+        ["DataStorage_CloudSyncStatusNotAuthorized"] = "需要重新授权 OneDrive。",
+        ["DataStorage_CloudSyncStatusSignedOut"] = "已断开 OneDrive 配置同步。",
+        ["DataStorage_CloudSyncStatusFailed"] = "OneDrive 配置同步失败。",
+        ["DataStorage_CloudSyncLastSyncFormat"] = "上次同步：{0:g}",
         ["About_MissingDocumentMessage"] = "未找到{0}文件。",
         ["About_MissingDocumentWithFolderMessage"] = "未找到{0}文件。\n请在以下目录创建对应的 Markdown 文件：\n{1}"
     };

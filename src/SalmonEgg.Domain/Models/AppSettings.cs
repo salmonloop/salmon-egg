@@ -33,6 +33,8 @@ public sealed class AppSettings
 
     public int CacheRetentionDays { get; set; } = 7;
 
+    public CloudConfigSyncSettings CloudConfigSync { get; set; } = new();
+
     // Shortcuts
     public bool KeyboardShortcutsEnabled { get; set; } = true;
 

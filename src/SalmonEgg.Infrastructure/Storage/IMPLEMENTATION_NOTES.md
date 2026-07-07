@@ -7,11 +7,11 @@
 ### 平台分派（DependencyInjection.cs）
 
 Windows: WindowsDpapiSecureStorage (DPAPI 加密，用户账户绑定)
-Linux Desktop: LinuxSecretServiceSecureStorage (Secret Service / secret-tool)
-macOS Desktop: MacOSKeychainSecureStorage (Security.framework Keychain)
+Linux Desktop: FallbackSecureStorage (Secret Service / secret-tool, fallback 到 plaintext file)
+macOS Desktop: FallbackSecureStorage (Security.framework Keychain, fallback 到 plaintext file)
 Android: AndroidKeyStoreSecureStorage (AndroidKeyStore AES-GCM + 私有 SharedPreferences 密文)
 iOS: IosKeychainSecureStorage (Keychain generic password)
-受限平台: VolatileSecureStorage (进程内、不持久化)
+受限平台: PlainTextFileSecureStorage (AppData 普通文件持久化)
 
 ### WindowsDpapiSecureStorage
 
@@ -23,13 +23,13 @@ iOS: IosKeychainSecureStorage (Keychain generic password)
 
 - 通过 `secret-tool` 使用 Linux Secret Service provider
 - secret 通过 stdin 写入，命令行参数只包含哈希后的 key attribute
-- Secret Service 不可用时，保存敏感凭据失败，读取返回 null
+- 在 Linux desktop DI 中由 `FallbackSecureStorage` 包装；Secret Service 不可用时降级到 plaintext file
 
 ### MacOSKeychainSecureStorage
 
 - 通过 Security.framework Keychain generic password API 保存敏感凭据
 - secret 作为 Keychain item data 写入，不经过命令行参数
-- Keychain 不可用时，保存敏感凭据失败，读取 missing item 返回 null
+- 在 macOS desktop DI 中由 `FallbackSecureStorage` 包装；Keychain 不可用时降级到 plaintext file
 
 ### AndroidKeyStoreSecureStorage
 
@@ -43,7 +43,14 @@ iOS: IosKeychainSecureStorage (Keychain generic password)
 - secret 作为 Keychain item data 写入，不经过普通文件系统
 - Keychain 不可用时，保存敏感凭据失败，读取 missing item 返回 null
 
-### VolatileSecureStorage
+### PlainTextFileSecureStorage
 
 - 用于没有 OS-backed secure store 的受限平台
-- 不写入文件系统，不跨进程持久化
+- 在 AppData 下的 `SecureStoragePlainText/` 目录保存明文 secret
+- key 经 SHA-256 转为文件名，value 明文写入普通应用文件
+
+### FallbackSecureStorage
+
+- 优先使用 OS-backed secure store
+- 主存储不可用或写入失败时使用 `PlainTextFileSecureStorage`
+- 读取时先读主存储，再读 fallback

@@ -208,6 +208,7 @@ public partial class ChatViewModelTests
                 capabilities.Object,
                 storageLocations.Object,
                 sessionExport.Object,
+                Mock.Of<ICloudConfigSyncService>(),
                 ui.Object,
                 new TestCoreStringLocalizer(),
                 Mock.Of<ILogger<DataStorageSettingsViewModel>>());

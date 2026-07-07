@@ -34,6 +34,7 @@ using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Services.Search;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Services.Cloud;
 using SalmonEgg.Presentation.Services.Input;
 using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -238,8 +239,14 @@ public static class DependencyInjection
         services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();
 #endif
 
+        services.AddSingleton<IAppDataService, AppDataService>();
+        services.AddSingleton<IConfigChangeSignal, ConfigChangeSignal>();
+
         // App settings (config/app.yaml)
-        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));
+        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(
+            sp.GetRequiredService<IFileSystemPersistence>(),
+            sp.GetRequiredService<IConfigChangeSignal>()));
+        services.AddSingleton<PlainTextFileSecureStorage>();
 
         // Secure Storage
         // Windows: DPAPI (hardware-bound, user-scoped encryption).
@@ -247,8 +254,6 @@ public static class DependencyInjection
         // macOS desktop: Keychain via Security.framework.
         // Android: AndroidKeyStore-backed AES-GCM with private SharedPreferences ciphertext.
         // iOS: Keychain generic password item.
-        // Restricted platforms: volatile fail-closed storage; sensitive values are not persisted
-        // unless an OS-backed secure store exists.
 #if WINDOWS
         services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
 #elif __ANDROID__
@@ -256,18 +261,20 @@ public static class DependencyInjection
 #elif __IOS__
         services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();
 #elif __WASM__
-        services.AddSingleton<ISecureStorage, VolatileSecureStorage>();
+        services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());
 #else
-        services.AddSingleton<ISecureStorage>(_ =>
-            RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ? new LinuxSecretServiceSecureStorage()
+        services.AddSingleton<ISecureStorage>(sp =>
+        {
+            var fallback = sp.GetRequiredService<PlainTextFileSecureStorage>();
+            return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                ? new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)
                 : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? new MacOSKeychainSecureStorage()
-                : new VolatileSecureStorage());
+                    ? new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)
+                    : fallback;
+        });
 #endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
-        services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IAppSupportInfoService>(_ => new AppSupportInfoService(typeof(App).Assembly));
@@ -337,6 +344,11 @@ public static class DependencyInjection
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
         services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
         services.AddSingleton<ILogFileCatalog, SalmonEgg.Infrastructure.Services.LogFileCatalog>();
+        services.AddSingleton<ConfigurationSecretSnapshotService>();
+        services.AddSingleton<ConfigSyncPackageService>();
+        services.AddSingleton<CloudConfigSyncStateStore>();
+        services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
+        services.AddSingleton<ICloudConfigSyncService, CloudConfigSyncService>();
 
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();

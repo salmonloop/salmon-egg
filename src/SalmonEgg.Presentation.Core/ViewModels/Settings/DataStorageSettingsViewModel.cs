@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
@@ -23,6 +24,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private readonly IPlatformCapabilityService _capabilities;
     private readonly IStorageLocationService _storageLocations;
     private readonly ISessionExportService _sessionExport;
+    private readonly ICloudConfigSyncService _cloudConfigSync;
     private readonly IUiInteractionService _ui;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<DataStorageSettingsViewModel> _logger;
@@ -39,6 +41,24 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     public bool CanExportLocalFiles => _capabilities.SupportsLocalFileExport;
 
+    public bool IsCloudConfigSyncConfigured =>
+        _cloudConfigSync.Providers.Any(provider => provider.ProviderId == "onedrive" && provider.IsConfigured);
+
+    [ObservableProperty]
+    private bool _isCloudConfigSyncBusy;
+
+    [ObservableProperty]
+    private bool _isCloudConfigSyncEnabled;
+
+    [ObservableProperty]
+    private string _cloudConfigSyncStatusText = string.Empty;
+
+    [ObservableProperty]
+    private string _cloudConfigSyncLastSyncText = string.Empty;
+
+    [ObservableProperty]
+    private string _cloudConfigSyncErrorText = string.Empty;
+
     public DataStorageSettingsViewModel(
         AppPreferencesViewModel preferences,
         ChatViewModel chatViewModel,
@@ -49,6 +69,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         IPlatformCapabilityService capabilities,
         IStorageLocationService storageLocations,
         ISessionExportService sessionExport,
+        ICloudConfigSyncService cloudConfigSync,
         IUiInteractionService ui,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<DataStorageSettingsViewModel> logger)
@@ -62,9 +83,11 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _storageLocations = storageLocations ?? throw new ArgumentNullException(nameof(storageLocations));
         _sessionExport = sessionExport ?? throw new ArgumentNullException(nameof(sessionExport));
+        _cloudConfigSync = cloudConfigSync ?? throw new ArgumentNullException(nameof(cloudConfigSync));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        ApplyCloudConfigSyncSettings(Preferences.CloudConfigSync);
     }
 
     [RelayCommand]
@@ -174,6 +197,24 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         await _maintenance.ClearAllLocalDataAsync();
     }
 
+    [RelayCommand]
+    private async Task AuthorizeOneDriveCloudSyncAsync()
+    {
+        await RunCloudSyncOperationAsync(() => _cloudConfigSync.AuthorizeAndSyncAsync("onedrive"));
+    }
+
+    [RelayCommand]
+    private async Task SyncCloudConfigAsync()
+    {
+        await RunCloudSyncOperationAsync(() => _cloudConfigSync.SyncNowAsync());
+    }
+
+    [RelayCommand]
+    private async Task DisconnectCloudConfigAsync()
+    {
+        await RunCloudSyncOperationAsync(() => _cloudConfigSync.DisconnectAsync());
+    }
+
     private async Task OpenStorageLocationAsync(AppStorageLocation location)
     {
         if (!await _storageLocations.OpenAsync(location))
@@ -195,6 +236,73 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     private Task NotifyLocalFileExportUnsupportedAsync()
         => _ui.ShowInfoAsync(_localizer["Platform_LocalFileExportUnsupported"]);
+
+    private async Task RunCloudSyncOperationAsync(Func<Task<CloudConfigSyncResult>> operation)
+    {
+        try
+        {
+            IsCloudConfigSyncBusy = true;
+            CloudConfigSyncErrorText = string.Empty;
+            var result = await operation();
+            ApplyCloudConfigSyncResult(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Cloud config sync command failed");
+            CloudConfigSyncErrorText = _localizer["DataStorage_CloudSyncStatusFailed"];
+            CloudConfigSyncStatusText = CloudConfigSyncErrorText;
+        }
+        finally
+        {
+            IsCloudConfigSyncBusy = false;
+        }
+    }
+
+    private void ApplyCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
+    {
+        IsCloudConfigSyncEnabled = settings?.Enabled == true;
+        CloudConfigSyncStatusText = IsCloudConfigSyncEnabled
+            ? _localizer["DataStorage_CloudSyncStatusEnabled"]
+            : _localizer["DataStorage_CloudSyncStatusDisabled"];
+    }
+
+    private void ApplyCloudConfigSyncResult(CloudConfigSyncResult result)
+    {
+        IsCloudConfigSyncEnabled = result.Status is CloudConfigSyncStatus.Uploaded
+            or CloudConfigSyncStatus.Restored
+            or CloudConfigSyncStatus.ConflictRemoteApplied;
+        CloudConfigSyncStatusText = result.Status switch
+        {
+            CloudConfigSyncStatus.Uploaded => _localizer["DataStorage_CloudSyncStatusUploaded"],
+            CloudConfigSyncStatus.Restored => _localizer["DataStorage_CloudSyncStatusRestored"],
+            CloudConfigSyncStatus.ConflictRemoteApplied => _localizer["DataStorage_CloudSyncStatusConflict"],
+            CloudConfigSyncStatus.NotConfigured => _localizer["DataStorage_CloudSyncStatusNotConfigured"],
+            CloudConfigSyncStatus.NotAuthorized => _localizer["DataStorage_CloudSyncStatusNotAuthorized"],
+            CloudConfigSyncStatus.SignedOut => _localizer["DataStorage_CloudSyncStatusSignedOut"],
+            CloudConfigSyncStatus.Disabled => _localizer["DataStorage_CloudSyncStatusDisabled"],
+            CloudConfigSyncStatus.Failed => result.UserMessage ?? _localizer["DataStorage_CloudSyncStatusFailed"],
+            _ => _localizer["DataStorage_CloudSyncStatusEnabled"]
+        };
+
+        CloudConfigSyncErrorText = result.Status is CloudConfigSyncStatus.Failed or CloudConfigSyncStatus.NotConfigured or CloudConfigSyncStatus.NotAuthorized
+            ? CloudConfigSyncStatusText
+            : string.Empty;
+
+        if (result.LastSyncUtc.HasValue)
+        {
+            CloudConfigSyncLastSyncText = string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                _localizer["DataStorage_CloudSyncLastSyncFormat"],
+                result.LastSyncUtc.Value.ToLocalTime());
+        }
+
+        Preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
+        {
+            Enabled = IsCloudConfigSyncEnabled,
+            ProviderId = IsCloudConfigSyncEnabled ? result.ProviderId ?? "onedrive" : string.Empty,
+            IncludeSecrets = true
+        });
+    }
 
     private async Task OpenExportResultOrNotifyAsync(SessionExportResult result)
     {

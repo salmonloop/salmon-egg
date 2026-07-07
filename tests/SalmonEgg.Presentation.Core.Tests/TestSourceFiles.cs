@@ -16,7 +16,8 @@ internal static class TestSourceFiles
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, ".git"))
+            var gitPath = Path.Combine(directory.FullName, ".git");
+            if ((Directory.Exists(gitPath) || File.Exists(gitPath))
                 && Directory.Exists(Path.Combine(directory.FullName, "src"))
                 && Directory.Exists(Path.Combine(directory.FullName, "SalmonEgg")))
             {

@@ -58,6 +58,31 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveThenLoad_RoundTripsCloudConfigSyncSettings()
+    {
+        var service = CreateService();
+
+        await service.SaveAsync(new AppSettings
+        {
+            CloudConfigSync = new CloudConfigSyncSettings
+            {
+                Enabled = true,
+                ProviderId = "onedrive",
+                IncludeSecrets = true
+            }
+        });
+
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var loaded = await service.LoadAsync();
+
+        Assert.Contains("schema_version: 2", yaml, StringComparison.Ordinal);
+        Assert.True(loaded.CloudConfigSync.Enabled);
+        Assert.Equal("onedrive", loaded.CloudConfigSync.ProviderId);
+        Assert.True(loaded.CloudConfigSync.IncludeSecrets);
+    }
+
+    [Fact]
     public async Task SaveThenLoad_TrimsAgentRemoteDirectories_WithoutPersistingProfileBinding()
     {
         var service = CreateService();

@@ -11,6 +11,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 public sealed class FileSystemAppFileStore : IAppFileStore
 {
     private readonly IFileSystemPersistence _persistence;
+    private readonly IConfigChangeSignal? _configChangeSignal;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
     private bool _isLoaded;
 
@@ -20,8 +21,14 @@ public sealed class FileSystemAppFileStore : IAppFileStore
     }
 
     public FileSystemAppFileStore(IFileSystemPersistence persistence)
+        : this(persistence, null)
+    {
+    }
+
+    public FileSystemAppFileStore(IFileSystemPersistence persistence, IConfigChangeSignal? configChangeSignal)
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
+        _configChangeSignal = configChangeSignal;
     }
 
     public async Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default)
@@ -46,6 +53,7 @@ public sealed class FileSystemAppFileStore : IAppFileStore
         await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
         await AtomicFile.WriteUtf8AtomicAsync(path, content, cancellationToken).ConfigureAwait(false);
         await _persistence.FlushAsync(cancellationToken).ConfigureAwait(false);
+        _configChangeSignal?.NotifyChanged(path, ConfigChangeKind.Written);
     }
 
     public async Task DeleteAsync(string path, CancellationToken cancellationToken = default)
@@ -56,6 +64,7 @@ public sealed class FileSystemAppFileStore : IAppFileStore
         {
             File.Delete(path);
             await _persistence.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _configChangeSignal?.NotifyChanged(path, ConfigChangeKind.Deleted);
         }
     }
 

@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -46,10 +47,51 @@ public sealed class DataStorageSettingsViewModelTests
         ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持导出本地文件。"), Times.Once);
     }
 
+    [Fact]
+    public async Task AuthorizeOneDriveCloudSyncCommand_WhenProviderUploads_UpdatesStatus()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("onedrive", "OneDrive", true)
+        });
+        cloudSync
+            .Setup(service => service.AuthorizeAndSyncAsync("onedrive", default))
+            .ReturnsAsync(new CloudConfigSyncResult(
+                CloudConfigSyncStatus.Uploaded,
+                "onedrive",
+                "etag-1",
+                new DateTimeOffset(2026, 7, 7, 12, 0, 0, TimeSpan.Zero)));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        await viewModel.AuthorizeOneDriveCloudSyncCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsCloudConfigSyncEnabled);
+        Assert.Equal("本地配置已上传到 OneDrive。", viewModel.CloudConfigSyncStatusText);
+        Assert.Empty(viewModel.CloudConfigSyncErrorText);
+    }
+
+    [Fact]
+    public async Task AuthorizeOneDriveCloudSyncCommand_WhenProviderMissingConfig_ShowsErrorStatus()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(Array.Empty<CloudConfigProviderDescriptor>());
+        cloudSync
+            .Setup(service => service.AuthorizeAndSyncAsync("onedrive", default))
+            .ReturnsAsync(CloudConfigSyncResult.NotConfigured("onedrive"));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        await viewModel.AuthorizeOneDriveCloudSyncCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.IsCloudConfigSyncEnabled);
+        Assert.Equal("OneDrive 应用注册未配置。", viewModel.CloudConfigSyncErrorText);
+    }
+
     private static DataStorageSettingsViewModel CreateViewModel(
         bool supportsLocalFileExport = true,
         Mock<IDiagnosticsBundleService>? diagnostics = null,
         Mock<ISessionExportService>? sessionExport = null,
+        Mock<ICloudConfigSyncService>? cloudSync = null,
         Mock<IUiInteractionService>? ui = null)
     {
         var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
@@ -68,8 +110,16 @@ public sealed class DataStorageSettingsViewModelTests
             capabilities.Object,
             Mock.Of<IStorageLocationService>(),
             sessionExport?.Object ?? Mock.Of<ISessionExportService>(),
+            cloudSync?.Object ?? CreateDefaultCloudConfigSync().Object,
             ui?.Object ?? Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<DataStorageSettingsViewModel>>());
+    }
+
+    private static Mock<ICloudConfigSyncService> CreateDefaultCloudConfigSync()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(Array.Empty<CloudConfigProviderDescriptor>());
+        return cloudSync;
     }
 }

@@ -196,8 +196,8 @@ public sealed class ConfigurationManager : IConfigurationService
             throw new InvalidOperationException($"Failed to delete configuration '{id}'", ex);
         }
 
-        await _secureStorage.DeleteAsync(GetTokenKey(id)).ConfigureAwait(false);
-        await _secureStorage.DeleteAsync(GetApiKeyKey(id)).ConfigureAwait(false);
+        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
+        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
     }
 
     private static ServerConfigurationYaml ToYaml(ServerConfiguration config, string mode)
@@ -254,14 +254,14 @@ public sealed class ConfigurationManager : IConfigurationService
         mode = (mode ?? "none").Trim().ToLowerInvariant();
         if (mode == "bearer_token")
         {
-            var token = await _secureStorage.LoadAsync(GetTokenKey(config.Id)).ConfigureAwait(false);
+            var token = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetTokenKey(config.Id)).ConfigureAwait(false);
             config.Authentication = new AuthenticationConfig { Token = token };
             return;
         }
 
         if (mode == "api_key")
         {
-            var apiKey = await _secureStorage.LoadAsync(GetApiKeyKey(config.Id)).ConfigureAwait(false);
+            var apiKey = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetApiKeyKey(config.Id)).ConfigureAwait(false);
             config.Authentication = new AuthenticationConfig { ApiKey = apiKey };
             return;
         }
@@ -274,14 +274,14 @@ public sealed class ConfigurationManager : IConfigurationService
             var token = authentication?.Token;
             if (!string.IsNullOrEmpty(token))
             {
-                await _secureStorage.SaveAsync(GetTokenKey(id), token).ConfigureAwait(false);
+                await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetTokenKey(id), token).ConfigureAwait(false);
             }
             else
             {
-                await _secureStorage.DeleteAsync(GetTokenKey(id)).ConfigureAwait(false);
+                await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
             }
 
-            await _secureStorage.DeleteAsync(GetApiKeyKey(id)).ConfigureAwait(false);
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
             return;
         }
 
@@ -290,19 +290,19 @@ public sealed class ConfigurationManager : IConfigurationService
             var apiKey = authentication?.ApiKey;
             if (!string.IsNullOrEmpty(apiKey))
             {
-                await _secureStorage.SaveAsync(GetApiKeyKey(id), apiKey).ConfigureAwait(false);
+                await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetApiKeyKey(id), apiKey).ConfigureAwait(false);
             }
             else
             {
-                await _secureStorage.DeleteAsync(GetApiKeyKey(id)).ConfigureAwait(false);
+                await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
             }
 
-            await _secureStorage.DeleteAsync(GetTokenKey(id)).ConfigureAwait(false);
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
             return;
         }
 
-        await _secureStorage.DeleteAsync(GetTokenKey(id)).ConfigureAwait(false);
-        await _secureStorage.DeleteAsync(GetApiKeyKey(id)).ConfigureAwait(false);
+        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
+        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
     }
 
     private static string GetAuthenticationMode(AuthenticationConfig? authentication)
@@ -400,10 +400,6 @@ public sealed class ConfigurationManager : IConfigurationService
         }
         return true;
     }
-
-    private static string GetTokenKey(string serverId) => $"salmonegg/config/{serverId}/token";
-
-    private static string GetApiKeyKey(string serverId) => $"salmonegg/config/{serverId}/apiKey";
 
     private async Task EnsureWritableSchemaAsync(string serverPath)
     {

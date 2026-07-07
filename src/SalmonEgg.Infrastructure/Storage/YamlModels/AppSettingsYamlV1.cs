@@ -33,6 +33,8 @@ internal sealed class AppSettingsYamlV1
 
     public int CacheRetentionDays { get; set; } = 7;
 
+    public CloudConfigSyncYamlV1 CloudConfigSync { get; set; } = new();
+
     // Shortcuts
     public bool KeyboardShortcutsEnabled { get; set; } = true;
 
@@ -55,4 +57,13 @@ internal sealed class AppSettingsYamlV1
     public int? AcpMaxPinnedProfiles { get; set; }
 
     public string AcpHydrationCompletionMode { get; set; } = "StrictReplay";
+}
+
+internal sealed class CloudConfigSyncYamlV1
+{
+    public bool Enabled { get; set; }
+
+    public string ProviderId { get; set; } = string.Empty;
+
+    public bool IncludeSecrets { get; set; } = true;
 }

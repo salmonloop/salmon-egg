@@ -1,6 +1,6 @@
 # 配置持久化方案 SPEC（YAML + 安全存储 + 版本化）
 
-本文档钉死 Salmon Egg 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的非敏感配置，敏感字段进入**平台安全存储**（Windows DPAPI / macOS Keychain / Linux Secret Service / AndroidKeyStore / iOS Keychain / Web 的替代实现），并提供可演进的版本化与迁移策略。
+本文档钉死 Salmon Egg 的**配置持久化**最佳实践方案：使用 **YAML** 存储可读/可审计的普通配置，敏感字段进入 `ISecureStorage` 抽象（Windows DPAPI / macOS Keychain / Linux Secret Service / AndroidKeyStore / iOS Keychain / 受限平台 plaintext file 替代实现），并提供可演进的版本化与迁移策略。
 
 > 目标：可读、可合并、可迁移、跨平台一致、不会因为新增字段/枚举值/格式差异导致客户端崩溃。
 
@@ -14,7 +14,7 @@
 - 覆盖“连接与会话”相关的**默认项**（但不持久化临时 sessionId）。
 
 ### 1.2 原则
-- **明文 YAML 只保存非敏感信息**（如 URL、超时、选项），密钥/Token/证书等永不落盘。
+- **明文 YAML 只保存普通配置**（如 URL、超时、选项），密钥/Token/证书等不写入 YAML；受限平台的 `ISecureStorage` 可使用应用数据目录下的 plaintext file fallback。
 - 文件必须**向前兼容**：读取到未知字段必须忽略；枚举未知值必须回退到默认值并记录 warning。
 - 写入必须**原子性**：写临时文件 → fsync/flush → rename 替换，避免断电/崩溃导致半文件。文件操作使用统一包装工具。
 - 多配置必须**可扩展**：允许用户手动编辑/版本控制，但不要求必须手动编辑。
@@ -111,8 +111,10 @@ authentication:
 
 ## 4. 敏感信息策略（钉死）
 
-### 4.1 绝不落盘字段
-暂无
+### 4.1 持久化边界
+- 敏感字段不得写入 `app.yaml` 或 `servers/<id>.yaml`。
+- 敏感字段通过 `ISecureStorage` 保存；平台实现可为 OS-backed secure store，也可为受限平台的 plaintext file fallback。
+- 配置云同步启用且 `IncludeSecrets=true` 时，同步包中的 `secrets.json` 会明文包含已登记的配置相关凭据。
 
 ### 4.2 SecureStorage Key 规则
 统一 key 前缀，便于清理与迁移：

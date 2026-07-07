@@ -294,18 +294,20 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void DependencyInjection_RegistersPlatformSecureStorageWithoutFileFallback()
+    public void DependencyInjection_RegistersPlainTextSecureStorageFallback()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
         Assert.Contains("services.AddSingleton<IFileSystemPersistence, WasmFileSystemPersistence>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(sp.GetRequiredService<IFileSystemPersistence>()));", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, VolatileSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.Contains("sp.GetRequiredService<IConfigChangeSignal>()", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", code, StringComparison.Ordinal);
+        Assert.Contains("new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)", code, StringComparison.Ordinal);
+        Assert.Contains("new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("#elif __WASM__ || __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Storage\AppFileStoreSecureStorage.cs")));
+        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Storage\PlainTextFileSecureStorage.cs")));
     }
 
     [Fact]
