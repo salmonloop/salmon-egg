@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Graph;
@@ -32,7 +33,7 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
     private bool _cacheRegistered;
 
     public OneDriveCloudConfigStorageProvider(IAppDataService appData)
-        : this(appData, OneDriveCloudConfigOptions.FromEnvironment())
+        : this(appData, OneDriveCloudConfigOptions.FromAssembly(typeof(OneDriveCloudConfigStorageProvider).Assembly))
     {
     }
 
@@ -276,18 +277,33 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
 
         public bool IsConfigured => !string.IsNullOrWhiteSpace(ClientId);
 
-        public static OneDriveCloudConfigOptions FromEnvironment()
+        public static OneDriveCloudConfigOptions FromAssembly(Assembly assembly)
         {
-            var scopes = Environment.GetEnvironmentVariable("SALMONEGG_ONEDRIVE_SCOPES");
+            if (assembly is null) throw new ArgumentNullException(nameof(assembly));
+
+            var scopes = GetMetadataValue(assembly, "SalmonEgg.OneDrive.Scopes");
             return new OneDriveCloudConfigOptions
             {
-                ClientId = Environment.GetEnvironmentVariable("SALMONEGG_ONEDRIVE_CLIENT_ID")?.Trim() ?? string.Empty,
-                TenantId = Environment.GetEnvironmentVariable("SALMONEGG_ONEDRIVE_TENANT_ID")?.Trim() ?? "common",
-                RedirectUri = Environment.GetEnvironmentVariable("SALMONEGG_ONEDRIVE_REDIRECT_URI")?.Trim() ?? string.Empty,
+                ClientId = GetMetadataValue(assembly, "SalmonEgg.OneDrive.ClientId"),
+                TenantId = GetMetadataValue(assembly, "SalmonEgg.OneDrive.TenantId", "common"),
+                RedirectUri = GetMetadataValue(assembly, "SalmonEgg.OneDrive.RedirectUri"),
                 Scopes = string.IsNullOrWhiteSpace(scopes)
                     ? DefaultScopes
                     : scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             };
+        }
+
+        private static string GetMetadataValue(Assembly assembly, string key, string fallback = "")
+        {
+            foreach (var attribute in assembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+            {
+                if (string.Equals(attribute.Key, key, StringComparison.Ordinal))
+                {
+                    return string.IsNullOrWhiteSpace(attribute.Value) ? fallback : attribute.Value.Trim();
+                }
+            }
+
+            return fallback;
         }
     }
 

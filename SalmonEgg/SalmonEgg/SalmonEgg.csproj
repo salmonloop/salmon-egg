@@ -58,6 +58,13 @@
     <PackageReference Include="Uno.Fonts.OpenSans" GeneratePathProperty="true" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <SalmonEggOneDriveClientId Condition="'$(SalmonEggOneDriveClientId)' == ''">$(SALMONEGG_ONEDRIVE_CLIENT_ID)</SalmonEggOneDriveClientId>
+    <SalmonEggOneDriveTenantId Condition="'$(SalmonEggOneDriveTenantId)' == ''">$(SALMONEGG_ONEDRIVE_TENANT_ID)</SalmonEggOneDriveTenantId>
+    <SalmonEggOneDriveRedirectUri Condition="'$(SalmonEggOneDriveRedirectUri)' == ''">$(SALMONEGG_ONEDRIVE_REDIRECT_URI)</SalmonEggOneDriveRedirectUri>
+    <SalmonEggOneDriveScopes Condition="'$(SalmonEggOneDriveScopes)' == ''">$(SALMONEGG_ONEDRIVE_SCOPES)</SalmonEggOneDriveScopes>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js" />
@@ -78,6 +85,10 @@
 
   <ItemGroup>
     <AssemblyMetadata Include="SalmonEgg.ReportInappropriateAiContentEmail" Value="shangxin9515@outlook.com" />
+    <AssemblyMetadata Include="SalmonEgg.OneDrive.ClientId" Value="$(SalmonEggOneDriveClientId)" />
+    <AssemblyMetadata Include="SalmonEgg.OneDrive.TenantId" Value="$(SalmonEggOneDriveTenantId)" />
+    <AssemblyMetadata Include="SalmonEgg.OneDrive.RedirectUri" Value="$(SalmonEggOneDriveRedirectUri)" />
+    <AssemblyMetadata Include="SalmonEgg.OneDrive.Scopes" Value="$(SalmonEggOneDriveScopes)" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' != ''">
