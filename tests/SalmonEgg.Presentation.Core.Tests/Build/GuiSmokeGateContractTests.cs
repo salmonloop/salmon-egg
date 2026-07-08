@@ -26,6 +26,7 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("--require-focus-input", script, StringComparison.Ordinal);
         Assert.Contains("libXtst.so.6", x11Probe, StringComparison.Ordinal);
         Assert.Contains("XTestFakeKeyEvent", x11Probe, StringComparison.Ordinal);
+        Assert.Contains("Install the XTest runtime", x11Probe, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke did not expose a mapped, nonblank X11 window.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke did not expose a focusable X11 window that accepts synthetic keyboard input.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke requires Debug configuration", script, StringComparison.Ordinal);
@@ -45,5 +46,7 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("FlaUI/UIA3", guide, StringComparison.Ordinal);
         Assert.Contains("Playwright/Chromium", guide, StringComparison.Ordinal);
         Assert.Contains("net10.0-desktop", guide, StringComparison.Ordinal);
+        Assert.Contains("libx11-6", guide, StringComparison.Ordinal);
+        Assert.Contains("libxtst6", guide, StringComparison.Ordinal);
     }
 }

@@ -15,6 +15,15 @@ CURRENT_TIME = 0
 XK_TAB = 0xFF09
 
 
+def load_library(library_name, install_hint):
+    try:
+        return ctypes.CDLL(library_name)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Unable to load {library_name}. {install_hint} ({exc})"
+        ) from exc
+
+
 class XWindowAttributes(ctypes.Structure):
     _fields_ = [
         ("x", ctypes.c_int),
@@ -44,7 +53,10 @@ class XWindowAttributes(ctypes.Structure):
 
 
 def configure_x11():
-    x11 = ctypes.CDLL("libX11.so.6")
+    x11 = load_library(
+        "libX11.so.6",
+        "Install the X11 client runtime, for example the libx11-6 package on Debian/Ubuntu.",
+    )
 
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
     x11.XOpenDisplay.restype = ctypes.c_void_p
@@ -125,7 +137,10 @@ def configure_x11():
 
 
 def configure_xtst():
-    xtst = ctypes.CDLL("libXtst.so.6")
+    xtst = load_library(
+        "libXtst.so.6",
+        "Install the XTest runtime, for example the libxtst6 package on Debian/Ubuntu.",
+    )
     xtst.XTestQueryExtension.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(ctypes.c_int),
@@ -297,7 +312,11 @@ def describe_focus_target(x11, display):
 
 
 def verify_focus_and_keyboard_input(x11, display, window):
-    xtst = configure_xtst()
+    try:
+        xtst = configure_xtst()
+    except RuntimeError as exc:
+        return False, str(exc)
+
     event_base = ctypes.c_int()
     error_base = ctypes.c_int()
     major_version = ctypes.c_int()
@@ -404,7 +423,11 @@ def main():
     parser.add_argument("--min-distinct-pixels", type=int, default=2)
     parser.add_argument("--require-focus-input", action="store_true")
     args = parser.parse_args()
-    return probe(args)
+    try:
+        return probe(args)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

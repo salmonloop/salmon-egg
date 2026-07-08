@@ -43,10 +43,10 @@ run.bat desktop
   - Linux (Ubuntu 20.04+, Debian 11+, 等)
   - macOS 12+
 
-Linux 桌面运行时依赖按能力分层：
+Linux 桌面运行时依赖按能力分层（包名以 Debian/Ubuntu 为例）：
 
-- 基础 Skia Desktop / X11：`libfreetype6`、`fontconfig`、`libfontconfig1`、`libgtk-3-0`；
-- Headless GUI：`xvfb`；
+- 基础 Skia Desktop / X11：`libfreetype6`、`fontconfig`、`libfontconfig1`、`libgtk-3-0`、`libx11-6`；
+- Headless GUI / XTest input smoke：`xvfb`、`libxtst6`；
 - 外部文件/目录打开：`xdg-utils`（提供 `xdg-open`）或等价桌面 opener；
 - 本地交互终端 WebView：WebKitGTK / JavaScriptCore（例如 Ubuntu 上的 `libwebkit2gtk-4.1-0` 或发行版对应包）；
 - Linux 安全凭据持久化：Secret Service provider 和 `libsecret-tools`（提供 `secret-tool`）。
