@@ -48,5 +48,9 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("net10.0-desktop", guide, StringComparison.Ordinal);
         Assert.Contains("libx11-6", guide, StringComparison.Ordinal);
         Assert.Contains("libxtst6", guide, StringComparison.Ordinal);
+        Assert.Contains("AT-SPI", guide, StringComparison.Ordinal);
+        Assert.Contains("AutomationId", guide, StringComparison.Ordinal);
+        Assert.Contains("X11 window", guide, StringComparison.Ordinal);
+        Assert.Contains("test hook", guide, StringComparison.Ordinal);
     }
 }

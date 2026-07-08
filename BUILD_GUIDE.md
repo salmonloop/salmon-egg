@@ -159,6 +159,8 @@ Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物�
 scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 ```
 
+Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI、AutomationId 或控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容或应用内 test hook 冒充语义自动化。
+
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
