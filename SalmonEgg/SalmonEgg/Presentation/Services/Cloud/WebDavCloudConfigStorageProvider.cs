@@ -69,6 +69,27 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         return CloudConfigProviderConfigurationResult.Success();
     }
 
+    public async Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+        IReadOnlyDictionary<string, string> options,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetNormalizedFileUrl(options, out _, out var validationError))
+        {
+            return CloudConfigProviderConfigurationStatus.Missing(validationError);
+        }
+
+        var username = GetValue(options, UsernameOptionKey).Trim();
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return CloudConfigProviderConfigurationStatus.NotRequired();
+        }
+
+        var password = await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false);
+        return string.IsNullOrEmpty(password)
+            ? CloudConfigProviderConfigurationStatus.Missing("WebDAV password is required when a username is set.")
+            : CloudConfigProviderConfigurationStatus.NotRequired();
+    }
+
     public async Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(
         bool interactive,
         CancellationToken cancellationToken = default)

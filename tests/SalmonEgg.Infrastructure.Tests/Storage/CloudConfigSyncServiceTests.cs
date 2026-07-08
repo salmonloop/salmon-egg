@@ -358,6 +358,11 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             return Task.FromResult(CloudConfigProviderConfigurationResult.Success());
         }
 
+        public Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+            IReadOnlyDictionary<string, string> options,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(CloudConfigProviderConfigurationStatus.NotRequired());
+
         public Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(bool interactive, CancellationToken cancellationToken = default)
             => Task.FromResult(CloudConfigAuthorizationResult.Success());
 

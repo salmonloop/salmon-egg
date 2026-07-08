@@ -151,6 +151,25 @@ public sealed class CloudConfigSyncService : ICloudConfigSyncService
         return new CloudConfigSyncResult(CloudConfigSyncStatus.Disabled, provider.Descriptor.ProviderId);
     }
 
+    public async Task<CloudConfigProviderConfigurationStatus> GetProviderConfigurationStatusAsync(
+        string providerId,
+        IReadOnlyDictionary<string, string> options,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!TryGetProvider(providerId, out var provider))
+        {
+            return CloudConfigProviderConfigurationStatus.Missing("Cloud provider is not configured.");
+        }
+
+        if (provider is IConfigurableCloudConfigStorageProvider configurable)
+        {
+            return await configurable.GetConfigurationStatusAsync(options, cancellationToken).ConfigureAwait(false);
+        }
+
+        return CloudConfigProviderConfigurationStatus.NotRequired();
+    }
+
     public async Task<CloudConfigSyncResult> SyncNowAsync(CancellationToken cancellationToken = default)
     {
         await _syncGate.WaitAsync(cancellationToken).ConfigureAwait(false);

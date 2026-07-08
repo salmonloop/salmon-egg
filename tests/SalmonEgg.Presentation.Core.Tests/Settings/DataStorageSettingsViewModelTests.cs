@@ -97,6 +97,12 @@ public sealed class DataStorageSettingsViewModelTests
             new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
         });
         cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        cloudSync
             .Setup(service => service.ConfigureProviderAsync(
                 "webdav",
                 It.Is<IReadOnlyDictionary<string, string>>(options =>
@@ -162,6 +168,12 @@ public sealed class DataStorageSettingsViewModelTests
             new CloudConfigProviderDescriptor("s3", "S3 compatible", true)
         });
         cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        cloudSync
             .Setup(service => service.ConfigureProviderAsync(
                 "s3",
                 It.Is<IReadOnlyDictionary<string, string>>(options =>
@@ -200,6 +212,187 @@ public sealed class DataStorageSettingsViewModelTests
         cloudSync.VerifyAll();
     }
 
+    [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenSwitchingProvider_RequiresConfirmation()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("onedrive", "OneDrive", true),
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                "切换云同步 provider",
+                It.IsAny<string>(),
+                "切换并同步",
+                "取消"))
+            .ReturnsAsync(false);
+        var viewModel = CreateViewModel(cloudSync: cloudSync, ui: ui);
+        viewModel.Preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
+        {
+            Enabled = true,
+            ProviderId = "onedrive"
+        });
+
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "https://dav.example.test/salmonegg-config.zip";
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        cloudSync.Verify(service => service.ConfigureProviderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            default), Times.Never);
+        cloudSync.Verify(service => service.AuthorizeAndSyncAsync(It.IsAny<string>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenS3CredentialsMissing_DoesNotConnect()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("s3", "S3 compatible", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "s3",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.Missing());
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "s3";
+        viewModel.S3Endpoint = "https://s3.example.test";
+        viewModel.S3Bucket = "salmonegg";
+        await Task.Delay(50);
+
+        Assert.False(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("请填写 S3 access key ID 和 secret access key。", viewModel.S3ValidationMessage);
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        cloudSync.Verify(service => service.ConfigureProviderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            default), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenWebDavCredentialsMissing_DoesNotConnect()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.Missing());
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "https://dav.example.test/salmonegg-config.zip";
+        viewModel.WebDavUsername = "alice";
+        await Task.Delay(50);
+
+        Assert.False(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。", viewModel.WebDavValidationMessage);
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        Assert.Equal("已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。", viewModel.CloudConfigSyncErrorText);
+        cloudSync.Verify(service => service.ConfigureProviderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            default), Times.Never);
+    }
+
+    [Fact]
+    public async Task SelectedProviderConfigurationStatus_WhenCredentialsSaved_AllowsBlankSecretFields()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("s3", "S3 compatible", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "s3",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "s3";
+        viewModel.S3Endpoint = "https://s3.example.test";
+        viewModel.S3Bucket = "salmonegg";
+        await Task.Delay(50);
+
+        Assert.True(viewModel.SelectedCloudConfigProviderHasStoredCredentials);
+        Assert.True(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("已保存该 provider 的凭据。留空密码或密钥字段会继续使用已保存凭据。", viewModel.CloudConfigProviderCredentialStatusText);
+    }
+
+    [Fact]
+    public async Task SelectedProviderConfigurationStatus_WhenRefreshFails_KeepsValidationConservative()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("s3", "S3 compatible", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "s3",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ThrowsAsync(new InvalidOperationException("status unavailable"));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "s3";
+        viewModel.S3Endpoint = "https://s3.example.test";
+        viewModel.S3Bucket = "salmonegg";
+        await Task.Delay(50);
+
+        Assert.False(viewModel.SelectedCloudConfigProviderHasStoredCredentials);
+        Assert.False(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("请填写 S3 access key ID 和 secret access key。", viewModel.S3ValidationMessage);
+    }
+
+    [Fact]
+    public async Task SyncAndDisconnectCommands_WhenBusy_DoNotInvokeServices()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("onedrive", "OneDrive", true)
+        });
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+        viewModel.Preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
+        {
+            Enabled = true,
+            ProviderId = "onedrive"
+        });
+        viewModel.IsCloudConfigSyncBusy = true;
+
+        await viewModel.SyncCloudConfigCommand.ExecuteAsync(null);
+        await viewModel.DisconnectCloudConfigCommand.ExecuteAsync(null);
+
+        cloudSync.Verify(service => service.SyncNowAsync(default), Times.Never);
+        cloudSync.Verify(service => service.DisconnectAsync(default), Times.Never);
+    }
+
     private static DataStorageSettingsViewModel CreateViewModel(
         bool supportsLocalFileExport = true,
         Mock<IDiagnosticsBundleService>? diagnostics = null,
@@ -233,6 +426,12 @@ public sealed class DataStorageSettingsViewModelTests
     {
         var cloudSync = new Mock<ICloudConfigSyncService>();
         cloudSync.SetupGet(service => service.Providers).Returns(Array.Empty<CloudConfigProviderDescriptor>());
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
         return cloudSync;
     }
 }

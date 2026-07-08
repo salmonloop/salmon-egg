@@ -59,6 +59,15 @@ public sealed record CloudConfigProviderConfigurationResult(bool Succeeded, stri
     public static CloudConfigProviderConfigurationResult Failed(string message) => new(false, message);
 }
 
+public sealed record CloudConfigProviderConfigurationStatus(
+    bool HasStoredCredentials,
+    string? UserMessage = null)
+{
+    public static CloudConfigProviderConfigurationStatus NotRequired() => new(true);
+
+    public static CloudConfigProviderConfigurationStatus Missing(string? message = null) => new(false, message);
+}
+
 public sealed record CloudConfigRemoteFile(byte[] Content, string? ETag, DateTimeOffset? LastModifiedUtc);
 
 public enum CloudConfigUploadStatus
@@ -100,6 +109,10 @@ public interface IConfigurableCloudConfigStorageProvider : ICloudConfigStoragePr
         IReadOnlyDictionary<string, string> options,
         IReadOnlyDictionary<string, string> secrets,
         CancellationToken cancellationToken = default);
+
+    Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+        IReadOnlyDictionary<string, string> options,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ICloudConfigSyncService
@@ -114,6 +127,11 @@ public interface ICloudConfigSyncService
         string providerId,
         IReadOnlyDictionary<string, string> options,
         IReadOnlyDictionary<string, string> secrets,
+        CancellationToken cancellationToken = default);
+
+    Task<CloudConfigProviderConfigurationStatus> GetProviderConfigurationStatusAsync(
+        string providerId,
+        IReadOnlyDictionary<string, string> options,
         CancellationToken cancellationToken = default);
 
     Task<CloudConfigSyncResult> SyncNowAsync(CancellationToken cancellationToken = default);

@@ -92,6 +92,22 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
         return CloudConfigProviderConfigurationResult.Success();
     }
 
+    public async Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+        IReadOnlyDictionary<string, string> options,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryCreateConfiguration(options, accessKeyId: string.Empty, secretAccessKey: string.Empty, out _, out var validationError))
+        {
+            return CloudConfigProviderConfigurationStatus.Missing(validationError);
+        }
+
+        var accessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
+        var secretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(accessKeyId) || string.IsNullOrEmpty(secretAccessKey)
+            ? CloudConfigProviderConfigurationStatus.Missing("S3 access key ID and secret access key are required.")
+            : CloudConfigProviderConfigurationStatus.NotRequired();
+    }
+
     public async Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(
         bool interactive,
         CancellationToken cancellationToken = default)

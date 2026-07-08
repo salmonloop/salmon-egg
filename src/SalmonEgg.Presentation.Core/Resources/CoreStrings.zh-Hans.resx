@@ -665,6 +665,51 @@
   <data name="DataStorage_CloudSyncStatusFailed" xml:space="preserve">
     <value>配置云同步失败。</value>
   </data>
+  <data name="DataStorage_CloudSyncCredentialsSaved" xml:space="preserve">
+    <value>已保存该 provider 的凭据。留空密码或密钥字段会继续使用已保存凭据。</value>
+  </data>
+  <data name="DataStorage_CloudSyncCredentialsMissing" xml:space="preserve">
+    <value>尚未保存该 provider 的凭据。首次连接需要填写凭据。</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrlRequired" xml:space="preserve">
+    <value>请填写 WebDAV 文件 URL。</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavCredentialsRequired" xml:space="preserve">
+    <value>已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3EndpointRequired" xml:space="preserve">
+    <value>请填写 S3 endpoint。</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3BucketRequired" xml:space="preserve">
+    <value>请填写 S3 bucket。</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3CredentialsRequired" xml:space="preserve">
+    <value>请填写 S3 access key ID 和 secret access key。</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectOneDrive" xml:space="preserve">
+    <value>授权 OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectWebDav" xml:space="preserve">
+    <value>连接 WebDAV</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectS3" xml:space="preserve">
+    <value>连接 S3</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectSelected" xml:space="preserve">
+    <value>连接所选 provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmTitle" xml:space="preserve">
+    <value>切换云同步 provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmMessage" xml:space="preserve">
+    <value>将断开当前 provider，并立即使用所选 provider 同步配置。云同步包包含配置和已登记凭据；如果远端已有配置，会先备份本地配置再应用远端配置。</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmPrimary" xml:space="preserve">
+    <value>切换并同步</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
   <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
     <value>上次同步：{0:g}</value>
   </data>

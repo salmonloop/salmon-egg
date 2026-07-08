@@ -659,6 +659,51 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncStatusFailed" xml:space="preserve">
     <value>Configuration cloud sync failed.</value>
   </data>
+  <data name="DataStorage_CloudSyncCredentialsSaved" xml:space="preserve">
+    <value>Credentials are saved for this provider. Blank password or key fields keep using the saved credentials.</value>
+  </data>
+  <data name="DataStorage_CloudSyncCredentialsMissing" xml:space="preserve">
+    <value>No credentials are saved for this provider. Fill in credentials before the first connection.</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrlRequired" xml:space="preserve">
+    <value>Enter the WebDAV file URL.</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavCredentialsRequired" xml:space="preserve">
+    <value>Enter the WebDAV password when a username is set, or keep using saved credentials.</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3EndpointRequired" xml:space="preserve">
+    <value>Enter the S3 endpoint.</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3BucketRequired" xml:space="preserve">
+    <value>Enter the S3 bucket.</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3CredentialsRequired" xml:space="preserve">
+    <value>Enter the S3 access key ID and secret access key.</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectOneDrive" xml:space="preserve">
+    <value>Authorize OneDrive</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectWebDav" xml:space="preserve">
+    <value>Connect WebDAV</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectS3" xml:space="preserve">
+    <value>Connect S3</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectSelected" xml:space="preserve">
+    <value>Connect selected provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmTitle" xml:space="preserve">
+    <value>Switch cloud sync provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmMessage" xml:space="preserve">
+    <value>This disconnects the current provider and immediately syncs configuration with the selected provider. The cloud package includes configuration and registered credentials; if remote configuration already exists, local configuration is backed up before remote configuration is applied.</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmPrimary" xml:space="preserve">
+    <value>Switch and sync</value>
+  </data>
+  <data name="DataStorage_CloudSyncSwitchConfirmCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
   <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
     <value>Last sync: {0:g}</value>
   </data>

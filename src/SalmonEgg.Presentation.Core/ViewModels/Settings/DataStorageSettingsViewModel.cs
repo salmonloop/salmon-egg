@@ -32,6 +32,8 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private const string S3ForcePathStyleOptionKey = "force_path_style";
     private const string S3AccessKeyIdSecretKey = "access_key_id";
     private const string S3SecretAccessKeySecretKey = "secret_access_key";
+    private const string DefaultS3Region = "us-east-1";
+    private const string DefaultS3ObjectKey = "config-sync/salmonegg-config.zip";
 
     private readonly IAppDataService _paths;
     private readonly IAppMaintenanceService _maintenance;
@@ -59,14 +61,24 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     public ObservableCollection<CloudConfigProviderOptionViewModel> CloudConfigProviders { get; } = new();
 
+    public bool HasActiveCloudConfigProvider =>
+        !string.IsNullOrWhiteSpace(Preferences.CloudConfigSync?.ProviderId);
+
+    public bool IsSelectedProviderDifferentFromActive =>
+        HasActiveCloudConfigProvider &&
+        !string.Equals(Preferences.CloudConfigSync.ProviderId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase);
+
     public bool IsCloudConfigSyncConfigured =>
-        IsOneDriveCloudConfigProviderSelected
+        !IsCloudConfigSyncBusy &&
+        (IsOneDriveCloudConfigProviderSelected
             ? GetSelectedProvider()?.IsConfigured == true
             : IsWebDavCloudConfigProviderSelected
-                ? !string.IsNullOrWhiteSpace(WebDavFileUrl)
-                : IsS3CloudConfigProviderSelected &&
-                  !string.IsNullOrWhiteSpace(S3Endpoint) &&
-                  !string.IsNullOrWhiteSpace(S3Bucket);
+                ? string.IsNullOrEmpty(WebDavValidationMessage)
+                : IsS3CloudConfigProviderSelected && string.IsNullOrEmpty(S3ValidationMessage));
+
+    public bool CanSyncCloudConfig => IsCloudConfigSyncEnabled && !IsCloudConfigSyncBusy;
+
+    public bool CanDisconnectCloudConfig => IsCloudConfigSyncEnabled && !IsCloudConfigSyncBusy;
 
     public bool IsOneDriveCloudConfigProviderSelected =>
         string.Equals(SelectedCloudConfigProviderId, OneDriveProviderId, StringComparison.OrdinalIgnoreCase);
@@ -77,10 +89,69 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     public bool IsS3CloudConfigProviderSelected =>
         string.Equals(SelectedCloudConfigProviderId, S3ProviderId, StringComparison.OrdinalIgnoreCase);
 
+    public string ConnectCloudConfigProviderButtonText => IsOneDriveCloudConfigProviderSelected
+        ? _localizer["DataStorage_CloudSyncConnectOneDrive"]
+        : IsWebDavCloudConfigProviderSelected
+            ? _localizer["DataStorage_CloudSyncConnectWebDav"]
+            : IsS3CloudConfigProviderSelected
+                ? _localizer["DataStorage_CloudSyncConnectS3"]
+                : _localizer["DataStorage_CloudSyncConnectSelected"];
+
+    public string CloudConfigProviderCredentialStatusText => IsOneDriveCloudConfigProviderSelected
+        ? string.Empty
+        : SelectedCloudConfigProviderHasStoredCredentials
+            ? _localizer["DataStorage_CloudSyncCredentialsSaved"]
+            : _localizer["DataStorage_CloudSyncCredentialsMissing"];
+
+    public bool SelectedCloudConfigProviderHasStoredCredentials => SelectedProviderHasStoredCredentials;
+
+    public string WebDavValidationMessage => IsWebDavCloudConfigProviderSelected && string.IsNullOrWhiteSpace(WebDavFileUrl)
+        ? _localizer["DataStorage_CloudSyncWebDavFileUrlRequired"]
+        : IsWebDavCloudConfigProviderSelected &&
+          !SelectedProviderHasStoredCredentials &&
+          !string.IsNullOrWhiteSpace(WebDavUsername) &&
+          string.IsNullOrEmpty(WebDavPassword)
+            ? _localizer["DataStorage_CloudSyncWebDavCredentialsRequired"]
+        : string.Empty;
+
+    public string S3ValidationMessage
+    {
+        get
+        {
+            if (!IsS3CloudConfigProviderSelected)
+            {
+                return string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(S3Endpoint))
+            {
+                return _localizer["DataStorage_CloudSyncS3EndpointRequired"];
+            }
+
+            if (string.IsNullOrWhiteSpace(S3Bucket))
+            {
+                return _localizer["DataStorage_CloudSyncS3BucketRequired"];
+            }
+
+            if (!SelectedProviderHasStoredCredentials &&
+                (string.IsNullOrWhiteSpace(S3AccessKeyId) || string.IsNullOrEmpty(S3SecretAccessKey)))
+            {
+                return _localizer["DataStorage_CloudSyncS3CredentialsRequired"];
+            }
+
+            return string.Empty;
+        }
+    }
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(CanSyncCloudConfig))]
+    [NotifyPropertyChangedFor(nameof(CanDisconnectCloudConfig))]
     private bool _isCloudConfigSyncBusy;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSyncCloudConfig))]
+    [NotifyPropertyChangedFor(nameof(CanDisconnectCloudConfig))]
     private bool _isCloudConfigSyncEnabled;
 
     [ObservableProperty]
@@ -88,10 +159,15 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOneDriveCloudConfigProviderSelected))]
     [NotifyPropertyChangedFor(nameof(IsWebDavCloudConfigProviderSelected))]
     [NotifyPropertyChangedFor(nameof(IsS3CloudConfigProviderSelected))]
+    [NotifyPropertyChangedFor(nameof(ConnectCloudConfigProviderButtonText))]
+    [NotifyPropertyChangedFor(nameof(CloudConfigProviderCredentialStatusText))]
+    [NotifyPropertyChangedFor(nameof(WebDavValidationMessage))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private string _selectedCloudConfigProviderId = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(WebDavValidationMessage))]
     private string _webDavFileUrl = string.Empty;
 
     [ObservableProperty]
@@ -102,26 +178,39 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private string _s3Endpoint = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private string _s3Bucket = string.Empty;
 
     [ObservableProperty]
-    private string _s3Region = "us-east-1";
+    private string _s3Region = DefaultS3Region;
 
     [ObservableProperty]
-    private string _s3ObjectKey = "config-sync/salmonegg-config.zip";
+    private string _s3ObjectKey = DefaultS3ObjectKey;
 
     [ObservableProperty]
     private bool _s3ForcePathStyle = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private string _s3AccessKeyId = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private string _s3SecretAccessKey = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedCloudConfigProviderHasStoredCredentials))]
+    [NotifyPropertyChangedFor(nameof(CloudConfigProviderCredentialStatusText))]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
+    private bool _selectedProviderHasStoredCredentials;
 
     [ObservableProperty]
     private string _cloudConfigSyncStatusText = string.Empty;
@@ -165,6 +254,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         ApplyS3Options(Preferences.CloudConfigSync);
         SelectedCloudConfigProviderId = ResolveInitialProviderId(Preferences.CloudConfigSync);
         ApplyCloudConfigSyncSettings(Preferences.CloudConfigSync);
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
     }
 
     [RelayCommand]
@@ -277,6 +367,22 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ConnectSelectedCloudConfigProviderAsync()
     {
+        if (IsCloudConfigSyncBusy)
+        {
+            return;
+        }
+
+        if (!IsCloudConfigSyncConfigured)
+        {
+            ShowCloudConfigValidationError();
+            return;
+        }
+
+        if (!await ConfirmProviderSwitchIfNeededAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
         if (IsWebDavCloudConfigProviderSelected)
         {
             await RunCloudSyncOperationAsync(ConnectWebDavCloudConfigProviderAsync);
@@ -298,12 +404,22 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SyncCloudConfigAsync()
     {
+        if (!CanSyncCloudConfig)
+        {
+            return;
+        }
+
         await RunCloudSyncOperationAsync(() => _cloudConfigSync.SyncNowAsync());
     }
 
     [RelayCommand]
     private async Task DisconnectCloudConfigAsync()
     {
+        if (!CanDisconnectCloudConfig)
+        {
+            return;
+        }
+
         await RunCloudSyncOperationAsync(() => _cloudConfigSync.DisconnectAsync());
     }
 
@@ -331,15 +447,62 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     partial void OnSelectedCloudConfigProviderIdChanged(string value)
     {
-        OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
-        OnPropertyChanged(nameof(IsOneDriveCloudConfigProviderSelected));
-        OnPropertyChanged(nameof(IsWebDavCloudConfigProviderSelected));
-        OnPropertyChanged(nameof(IsS3CloudConfigProviderSelected));
+        RefreshCloudConfigDerivedState();
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
     }
 
     partial void OnWebDavFileUrlChanged(string value)
     {
-        OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
+        RefreshCloudConfigDerivedState();
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnWebDavUsernameChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnWebDavPasswordChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
+    }
+
+    partial void OnS3EndpointChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnS3BucketChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnS3RegionChanged(string value)
+    {
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnS3ObjectKeyChanged(string value)
+    {
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnS3ForcePathStyleChanged(bool value)
+    {
+        _ = RefreshSelectedProviderConfigurationStatusAsync();
+    }
+
+    partial void OnS3AccessKeyIdChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
+    }
+
+    partial void OnS3SecretAccessKeyChanged(string value)
+    {
+        RefreshCloudConfigDerivedState();
     }
 
     private async Task<CloudConfigSyncResult> ConnectWebDavCloudConfigProviderAsync()
@@ -399,6 +562,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         try
         {
             IsCloudConfigSyncBusy = true;
+            RefreshCloudConfigDerivedState();
             CloudConfigSyncErrorText = string.Empty;
             var result = await operation();
             ApplyCloudConfigSyncResult(result);
@@ -412,7 +576,115 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         finally
         {
             IsCloudConfigSyncBusy = false;
+            RefreshCloudConfigDerivedState();
+            await RefreshSelectedProviderConfigurationStatusAsync().ConfigureAwait(true);
         }
+    }
+
+    private async Task<bool> ConfirmProviderSwitchIfNeededAsync()
+    {
+        if (!IsSelectedProviderDifferentFromActive)
+        {
+            return true;
+        }
+
+        var confirmed = await _ui.ConfirmAsync(
+            _localizer["DataStorage_CloudSyncSwitchConfirmTitle"],
+            _localizer["DataStorage_CloudSyncSwitchConfirmMessage"],
+            _localizer["DataStorage_CloudSyncSwitchConfirmPrimary"],
+            _localizer["DataStorage_CloudSyncSwitchConfirmCancel"]).ConfigureAwait(true);
+
+        return confirmed;
+    }
+
+    private void ShowCloudConfigValidationError()
+    {
+        var message = IsWebDavCloudConfigProviderSelected
+            ? WebDavValidationMessage
+            : IsS3CloudConfigProviderSelected
+                ? S3ValidationMessage
+                : string.Empty;
+
+        CloudConfigSyncErrorText = string.IsNullOrWhiteSpace(message)
+            ? _localizer["DataStorage_CloudSyncStatusNotConfigured"]
+            : message;
+        CloudConfigSyncStatusText = CloudConfigSyncErrorText;
+    }
+
+    private async Task RefreshSelectedProviderConfigurationStatusAsync()
+    {
+        var providerId = SelectedCloudConfigProviderId;
+        if (string.IsNullOrWhiteSpace(providerId) || IsOneDriveCloudConfigProviderSelected)
+        {
+            SelectedProviderHasStoredCredentials = true;
+            RefreshCloudConfigDerivedState();
+            return;
+        }
+
+        try
+        {
+            var status = await _cloudConfigSync.GetProviderConfigurationStatusAsync(
+                providerId,
+                CreateSelectedProviderOptions()).ConfigureAwait(true);
+            if (!string.Equals(providerId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            SelectedProviderHasStoredCredentials = status.HasStoredCredentials;
+            RefreshCloudConfigDerivedState();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cloud config provider configuration status refresh failed for provider {ProviderId}", providerId);
+            if (string.Equals(providerId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase))
+            {
+                SelectedProviderHasStoredCredentials = false;
+                RefreshCloudConfigDerivedState();
+            }
+        }
+    }
+
+    private IReadOnlyDictionary<string, string> CreateSelectedProviderOptions()
+    {
+        if (IsWebDavCloudConfigProviderSelected)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavFileUrlOptionKey] = WebDavFileUrl,
+                [WebDavUsernameOptionKey] = WebDavUsername
+            };
+        }
+
+        if (IsS3CloudConfigProviderSelected)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [S3EndpointOptionKey] = S3Endpoint,
+                [S3BucketOptionKey] = S3Bucket,
+                [S3RegionOptionKey] = S3Region,
+                [S3ObjectKeyOptionKey] = S3ObjectKey,
+                [S3ForcePathStyleOptionKey] = S3ForcePathStyle.ToString()
+            };
+        }
+
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void RefreshCloudConfigDerivedState()
+    {
+        OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
+        OnPropertyChanged(nameof(CanSyncCloudConfig));
+        OnPropertyChanged(nameof(CanDisconnectCloudConfig));
+        OnPropertyChanged(nameof(HasActiveCloudConfigProvider));
+        OnPropertyChanged(nameof(IsSelectedProviderDifferentFromActive));
+        OnPropertyChanged(nameof(IsOneDriveCloudConfigProviderSelected));
+        OnPropertyChanged(nameof(IsWebDavCloudConfigProviderSelected));
+        OnPropertyChanged(nameof(IsS3CloudConfigProviderSelected));
+        OnPropertyChanged(nameof(ConnectCloudConfigProviderButtonText));
+        OnPropertyChanged(nameof(CloudConfigProviderCredentialStatusText));
+        OnPropertyChanged(nameof(WebDavValidationMessage));
+        OnPropertyChanged(nameof(S3ValidationMessage));
     }
 
     private void ApplyCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
@@ -541,10 +813,10 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
         S3Endpoint = GetOptionValue(options, S3EndpointOptionKey);
         S3Bucket = GetOptionValue(options, S3BucketOptionKey);
-        S3Region = GetOptionValue(options, S3RegionOptionKey) is { Length: > 0 } region ? region : "us-east-1";
+        S3Region = GetOptionValue(options, S3RegionOptionKey) is { Length: > 0 } region ? region : DefaultS3Region;
         S3ObjectKey = GetOptionValue(options, S3ObjectKeyOptionKey) is { Length: > 0 } objectKey
             ? objectKey
-            : "config-sync/salmonegg-config.zip";
+            : DefaultS3ObjectKey;
         S3ForcePathStyle = GetOptionValue(options, S3ForcePathStyleOptionKey) is { Length: > 0 } forcePathStyle
             ? bool.TryParse(forcePathStyle, out var parsed) && parsed
             : true;
