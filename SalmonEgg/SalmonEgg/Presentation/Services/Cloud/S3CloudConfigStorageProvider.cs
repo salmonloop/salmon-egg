@@ -66,17 +66,7 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
         }
 
         var accessKeyId = GetValue(secrets, AccessKeyIdSecretKey).Trim();
-        if (!string.IsNullOrEmpty(accessKeyId))
-        {
-            await _secureStorage.SaveAsync(SecureStorageAccessKeyIdKey, accessKeyId).ConfigureAwait(false);
-        }
-
         var secretAccessKey = GetValue(secrets, SecretAccessKeySecretKey);
-        if (!string.IsNullOrEmpty(secretAccessKey))
-        {
-            await _secureStorage.SaveAsync(SecureStorageSecretAccessKeyKey, secretAccessKey).ConfigureAwait(false);
-        }
-
         var storedAccessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
         var storedSecretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(accessKeyId) && string.IsNullOrWhiteSpace(storedAccessKeyId))
@@ -87,6 +77,16 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
         if (string.IsNullOrEmpty(secretAccessKey) && string.IsNullOrEmpty(storedSecretAccessKey))
         {
             return CloudConfigProviderConfigurationResult.Failed("S3 secret access key is required.");
+        }
+
+        if (!string.IsNullOrEmpty(accessKeyId))
+        {
+            await _secureStorage.SaveAsync(SecureStorageAccessKeyIdKey, accessKeyId).ConfigureAwait(false);
+        }
+
+        if (!string.IsNullOrEmpty(secretAccessKey))
+        {
+            await _secureStorage.SaveAsync(SecureStorageSecretAccessKeyKey, secretAccessKey).ConfigureAwait(false);
         }
 
         return CloudConfigProviderConfigurationResult.Success();
@@ -210,9 +210,22 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
 
         var accessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false) ?? string.Empty;
         var secretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false) ?? string.Empty;
-        return TryCreateConfiguration(options, accessKeyId, secretAccessKey, out var configuration, out var validationError)
-            ? configuration!
-            : S3Configuration.NotConfigured(validationError);
+        if (!TryCreateConfiguration(options, accessKeyId, secretAccessKey, out var configuration, out var validationError))
+        {
+            return S3Configuration.NotConfigured(validationError);
+        }
+
+        if (string.IsNullOrWhiteSpace(accessKeyId))
+        {
+            return S3Configuration.NotConfigured("S3 access key ID is required.");
+        }
+
+        if (string.IsNullOrEmpty(secretAccessKey))
+        {
+            return S3Configuration.NotConfigured("S3 secret access key is required.");
+        }
+
+        return configuration!;
     }
 
     private static bool TryCreateConfiguration(

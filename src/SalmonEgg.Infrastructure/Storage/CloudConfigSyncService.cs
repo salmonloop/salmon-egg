@@ -75,6 +75,10 @@ public sealed class CloudConfigSyncService : ICloudConfigSyncService
         }
 
         var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
+        await TrySignOutPreviousProviderAsync(
+            settings.CloudConfigSync.ProviderId,
+            provider.Descriptor.ProviderId,
+            cancellationToken).ConfigureAwait(false);
         settings.CloudConfigSync = new CloudConfigSyncSettings
         {
             Enabled = true,
@@ -87,12 +91,40 @@ public sealed class CloudConfigSyncService : ICloudConfigSyncService
         return await SyncNowAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task TrySignOutPreviousProviderAsync(
+        string? previousProviderId,
+        string nextProviderId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(previousProviderId) ||
+            string.Equals(previousProviderId, nextProviderId, StringComparison.OrdinalIgnoreCase) ||
+            !TryGetProvider(previousProviderId, out var previousProvider))
+        {
+            return;
+        }
+
+        try
+        {
+            await previousProvider.SignOutAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to sign out previous cloud config provider {ProviderId}",
+                previousProvider.Descriptor.ProviderId);
+        }
+    }
+
     public async Task<CloudConfigSyncResult> ConfigureProviderAsync(
         string providerId,
         IReadOnlyDictionary<string, string> options,
         IReadOnlyDictionary<string, string> secrets,
         CancellationToken cancellationToken = default)
     {
+        options ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        secrets ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         if (!TryGetProvider(providerId, out var provider))
         {
             return CloudConfigSyncResult.NotConfigured(providerId);

@@ -196,10 +196,56 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         Assert.DoesNotContain("secret_access_key", settings.CloudConfigSync.ProviderOptions["s3"].Keys);
     }
 
+    [Fact]
+    public async Task ConfigureProviderAsync_WhenOptionsAndSecretsAreNull_PassesEmptyDictionaries()
+    {
+        var provider = new ConfigurableFakeProvider("s3", "S3 compatible");
+        var service = CreateService(provider);
+
+        var result = await service.ConfigureProviderAsync("s3", null!, null!);
+        var settings = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
+        Assert.Empty(provider.Secrets);
+        Assert.Empty(settings.CloudConfigSync.ProviderOptions["s3"]);
+    }
+
+    [Fact]
+    public async Task AuthorizeAndSyncAsync_WhenProviderChanges_SignsOutPreviousProvider()
+    {
+        await SaveEnabledSettingsAsync();
+        var previousProvider = new ConfigurableFakeProvider("onedrive", "OneDrive");
+        var nextProvider = new ConfigurableFakeProvider("s3", "S3 compatible");
+        var service = CreateService(previousProvider, nextProvider);
+
+        var result = await service.AuthorizeAndSyncAsync("s3");
+        var settings = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudConfigSyncStatus.Uploaded, result.Status);
+        Assert.Equal("s3", settings.CloudConfigSync.ProviderId);
+        Assert.Equal(1, previousProvider.SignOutCount);
+        Assert.Equal(0, nextProvider.SignOutCount);
+    }
+
+    [Fact]
+    public async Task AuthorizeAndSyncAsync_WhenProviderDoesNotChange_DoesNotSignOutCurrentProvider()
+    {
+        await SaveEnabledSettingsAsync();
+        var provider = new ConfigurableFakeProvider("onedrive", "OneDrive");
+        var service = CreateService(provider);
+
+        await service.AuthorizeAndSyncAsync("onedrive");
+
+        Assert.Equal(0, provider.SignOutCount);
+    }
+
     private CloudConfigSyncService CreateService(ICloudConfigStorageProvider provider)
+        => CreateService([provider]);
+
+    private CloudConfigSyncService CreateService(params ICloudConfigStorageProvider[] providers)
         => new(
             _appSettings,
-            new[] { provider },
+            providers,
             _packageService,
             new CloudConfigSyncStateStore(_fileStore, _appData),
             _configChangeSignal,
@@ -295,6 +341,8 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
 
         public Dictionary<string, string> Secrets { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public int SignOutCount { get; private set; }
+
         public CloudConfigProviderDescriptor Descriptor { get; }
 
         public Task<CloudConfigProviderConfigurationResult> ConfigureAsync(
@@ -313,7 +361,11 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         public Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(bool interactive, CancellationToken cancellationToken = default)
             => Task.FromResult(CloudConfigAuthorizationResult.Success());
 
-        public Task SignOutAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SignOutAsync(CancellationToken cancellationToken = default)
+        {
+            SignOutCount++;
+            return Task.CompletedTask;
+        }
 
         public Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<CloudConfigRemoteFile?>(null);
