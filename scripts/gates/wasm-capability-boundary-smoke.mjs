@@ -55,14 +55,17 @@ try {
       /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
       "data storage settings page");
 
+    await scrollToVisibleControl(
+      page,
+      { labels: ["打开缓存目录", "Open cache folder"], automationIds: ["DataStorage.OpenCacheFolder"] });
     const cacheFolderState = await waitForControlState(
       page,
-      { labels: [], automationIds: ["DataStorage.OpenCacheFolder"] },
+      { labels: ["打开缓存目录", "Open cache folder"], automationIds: ["DataStorage.OpenCacheFolder"] },
       "cache-folder affordance");
     if (cacheFolderState.enabled) {
       await expectControlDoesNotEscapePage(
         page,
-        { labels: [], automationIds: ["DataStorage.OpenCacheFolder"] },
+        { labels: ["打开缓存目录", "Open cache folder"], automationIds: ["DataStorage.OpenCacheFolder"] },
         /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/);
     }
 

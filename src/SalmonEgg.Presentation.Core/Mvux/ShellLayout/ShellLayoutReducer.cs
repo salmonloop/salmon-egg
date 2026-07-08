@@ -86,6 +86,14 @@ public static class ShellLayoutReducer
             // Entering minimal should start collapsed until the user explicitly opens the overlay pane.
             next = next with { IsMinimalPaneOpen = false };
         }
+        else if (previousMode != NavigationPaneDisplayMode.Expanded
+                 && nextMode == NavigationPaneDisplayMode.Expanded
+                 && state.UserNavOpenIntent == false)
+        {
+            // Closed overlay/compact events during startup or narrow layouts must not permanently
+            // suppress the native expanded-pane default after the viewport is known to be wide.
+            next = next with { UserNavOpenIntent = null, IsMinimalPaneOpen = false };
+        }
         else if (previousMode == NavigationPaneDisplayMode.Minimal && nextMode != NavigationPaneDisplayMode.Minimal)
         {
             // The transient minimal overlay state does not apply outside minimal mode.

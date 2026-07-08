@@ -28,6 +28,7 @@ public sealed class WindowMetricsProvider
         _window.Activated += OnActivated;
         if (_contentRoot != null)
         {
+            _contentRoot.Loaded += OnContentRootLoaded;
             _contentRoot.SizeChanged += OnContentRootSizeChanged;
         }
 
@@ -49,6 +50,7 @@ public sealed class WindowMetricsProvider
         }
         if (_contentRoot != null)
         {
+            _contentRoot.Loaded -= OnContentRootLoaded;
             _contentRoot.SizeChanged -= OnContentRootSizeChanged;
         }
 
@@ -78,6 +80,23 @@ public sealed class WindowMetricsProvider
         }
 
         ReportWindowMetrics(_window.Bounds.Width, _window.Bounds.Height);
+    }
+
+    private void OnContentRootLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_window is null || sender is not FrameworkElement root)
+        {
+            return;
+        }
+
+        ReportWindowMetrics(_window.Bounds.Width, _window.Bounds.Height);
+        _ = root.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_window is not null)
+            {
+                ReportWindowMetrics(_window.Bounds.Width, _window.Bounds.Height);
+            }
+        });
     }
 
     private void ReportTitleBarInsets()

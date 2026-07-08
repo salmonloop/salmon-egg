@@ -760,11 +760,11 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
 
-        Assert.Contains("FindName(selectorName) as ComboBox", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("AgentSelectorHost.XamlRoot", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ModeSelectorHost.XamlRoot", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ProjectSelectorHost.XamlRoot", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ModelSelectorHost.XamlRoot", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("FindName(selectorName) as ComboBox", code, StringComparison.Ordinal);
+        Assert.Contains("AgentSelectorHost,", code, StringComparison.Ordinal);
+        Assert.Contains("ModeSelectorHost,", code, StringComparison.Ordinal);
+        Assert.Contains("ProjectSelectorHost", code, StringComparison.Ordinal);
+        Assert.Contains("ModelSelectorHost", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1250,14 +1250,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void ChatInputArea_SelectorItems_DisableNativeComboBoxItemsFromViewModelProjection()
+    public void ChatInputArea_SelectorItems_KeepNativeComboBoxItemsHitTestable()
     {
         var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        var chatInputCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
 
-        Assert.Contains("x:Key=\"ComposerSelectorComboBoxItemStyle\"", chatInputXaml, StringComparison.Ordinal);
-        Assert.Contains("BasedOn=\"{StaticResource DefaultComboBoxItemStyle}\"", chatInputXaml, StringComparison.Ordinal);
-        Assert.Contains("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(chatInputXaml, "ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\""));
+        Assert.DoesNotContain("ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Contains("Opacity=\"{x:Bind IsSelectable, Mode=OneWay, Converter={StaticResource BoolToOpacityConverter}}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Contains("|| !item.IsSelectable", chatInputCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("e.AddedItems", chatInputCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("comboBox.SelectedIndex", chatInputCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("DataContext: ComposerSelectorItemViewModel", chatInputCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("FindName(selectorName)", chatInputCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("!ReferenceEquals(_openSelectorHost, comboBox)", chatInputCodeBehind, StringComparison.Ordinal);
     }
 
     [Fact]

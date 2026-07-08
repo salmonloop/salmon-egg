@@ -300,6 +300,13 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-codex",
+                Name = "Codex",
+                Transport = TransportType.Stdio,
+                StdioCommand = "codex"
+            });
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -1973,6 +1980,9 @@ public sealed class StartViewModelTests
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.Contains("Agent One", startViewModel.StartAgentSelectorProjection.DisplayItems.Select(item => item.DisplayName));
             Assert.Contains("Alpha Remote", startViewModel.StartProjectSelectorProjection.DisplayItems.Select(item => item.DisplayName));
+            var slots = startViewModel.ComposerSelectorSlots;
+            Assert.Contains(slots.Agent.Items, item => ReferenceEquals(item, slots.Agent.SelectedItem));
+            Assert.Contains(slots.Project.Items, item => ReferenceEquals(item, slots.Project.SelectedItem));
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally
@@ -2023,6 +2033,7 @@ public sealed class StartViewModelTests
             Assert.True(slots.Model.IsEnabled);
             Assert.Same(startViewModel.SelectStartModelDisplayCommand, slots.Model.SelectionCommand);
             Assert.Equal("claude-sonnet", slots.Model.SelectedItem?.SemanticValue);
+            Assert.Contains(slots.Model.Items, item => ReferenceEquals(item, slots.Model.SelectedItem));
         }
         finally
         {
@@ -2189,6 +2200,235 @@ public sealed class StartViewModelTests
             startViewModel.SelectStartModeDisplayCommand.Execute(staleItem);
 
             Assert.Same(originalMode, startViewModel.SelectedStartMode);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void StartAgentSelection_WhenSelectorIdentityIsStaleButProfileStillExists_SelectsProfile()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var staleItem = ComposerSelectorItemViewModel.Real(
+                ComposerSelectorKind.Agent,
+                "profile-remote",
+                "Remote",
+                "stale-connection-identity");
+
+            startViewModel.SelectStartAgentDisplayCommand.Execute(staleItem);
+
+            Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task AcpEnabled_ChangedWithSingleProfileWhileComposerLoaded_SelectsDefaultAgentWithoutProfileIntent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AcpEnabled = false;
+            var commands = new Mock<IAcpConnectionCommands>();
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var changedProperties = new List<string?>();
+            startViewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
+
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+
+            Assert.Contains(nameof(StartViewModel.ComposerSelectorSlots), changedProperties);
+            Assert.Contains(
+                startViewModel.ComposerSelectorSlots.Agent.Items,
+                item => string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal));
+            Assert.Null(chat.ViewModel.SelectedAcpProfile);
+
+            startViewModel.OnComposerLoaded();
+            preferences.AcpEnabled = true;
+
+            Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
+            await Task.Delay(100);
+            var connectionState = await chat.GetConnectionStateAsync();
+            Assert.Null(chat.ViewModel.SelectedProfileIntentId);
+            Assert.Null(connectionState.SelectedProfileIntentId);
+            Assert.Null(connectionState.ForegroundTransportProfileId);
+            VerifyNoProfileConnection(commands);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void AcpEnabled_ChangedWithSingleProfileWhileComposerUnloaded_DoesNotAutoSelectAgent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AcpEnabled = false;
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            _ = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+
+            preferences.AcpEnabled = true;
+
+            Assert.Null(chat.ViewModel.SelectedAcpProfile);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task AcpProfileList_AddSingleProfileWhileComposerLoadedAndAcpEnabled_SelectsDefaultAgentWithoutProfileIntent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AcpEnabled = true;
+            var commands = new Mock<IAcpConnectionCommands>();
+            using var chat = CreateChatViewModel(
+                syncContext,
+                preferences,
+                Mock.Of<ISessionManager>(),
+                acpConnectionCommands: commands.Object);
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+
+            startViewModel.OnComposerLoaded();
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+
+            Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
+            await Task.Delay(100);
+            var connectionState = await chat.GetConnectionStateAsync();
+            Assert.Null(chat.ViewModel.SelectedProfileIntentId);
+            Assert.Null(connectionState.SelectedProfileIntentId);
+            Assert.Null(connectionState.ForegroundTransportProfileId);
+            VerifyNoProfileConnection(commands);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void AcpProfileList_AddMultipleProfiles_DoesNotAutoSelectAgent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AcpEnabled = true;
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-one",
+                Name = "One",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            chat.ViewModel.SelectedAcpProfile = null;
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            _ = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-two",
+                Name = "Two",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3011/"
+            });
+
+            Assert.Null(chat.ViewModel.SelectedAcpProfile);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void AcpProfileList_AddSingleProfile_WhenAcpDisabled_DoesNotAutoSelectAgent()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            preferences.AcpEnabled = false;
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            _ = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-remote",
+                Name = "Remote",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+
+            Assert.Null(chat.ViewModel.SelectedAcpProfile);
         }
         finally
         {
@@ -3071,6 +3311,25 @@ public sealed class StartViewModelTests
         chatService.SetupGet(service => service.IsInitialized).Returns(true);
         chatService.SetupGet(service => service.SessionHistory).Returns(Array.Empty<SessionUpdateEntry>());
         return chatService;
+    }
+
+    private static void VerifyNoProfileConnection(Mock<IAcpConnectionCommands> commands)
+    {
+        commands.Verify(
+            command => command.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        commands.Verify(
+            command => command.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<AcpConnectionContext>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     private static async Task MakeStartDraftReadyAsync(

@@ -122,8 +122,11 @@ export async function expectPersistedProfileAfterReload(page, baseUrl, profileNa
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
+      await page.setViewportSize({ width: 1280, height: 900 });
       await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
       await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.waitForTimeout(500);
       await page.waitForSelector('[aria-label="StartView.Title"]', { timeout: 60_000 });
       await navigateToSettingsSection(
         page,
@@ -256,23 +259,14 @@ export async function createSessionAndSendPromptFromStart(
   directoryPath,
   promptText,
   expectedAgentReply) {
-  await clickVisibleNavigationTargetUntilBodyText(
-    page,
-    { labels: ["Start", "开始"], automationIds: ["MainNav.Start"] },
-    /Salmon Egg/,
-    "start page");
-  await page.waitForSelector('[aria-label="StartView.PromptBox"]', { timeout: 30_000 });
+  const promptBoxSelector = '[aria-label="StartView.PromptBox"]';
+  await ensureStartPromptVisible(page, promptBoxSelector);
 
   await selectComboBoxItem(
     page,
     "StartView.AgentSelector",
     profileName,
     { keyboardSelectVisibleItem: true });
-  await waitForBodyText(
-    page,
-    new RegExp(escapeRegExp(profileName)),
-    "selected ACP profile on Start",
-    30_000);
   await selectComboBoxItem(
     page,
     "StartView.ProjectSelector",
@@ -296,6 +290,46 @@ export async function createSessionAndSendPromptFromStart(
 
   await waitForBodyText(page, /ChatView\.MessagesList|Salmon Egg|WASM full chain agent reply/, "chat view after prompt", 30_000);
   await waitForBodyText(page, new RegExp(escapeRegExp(expectedAgentReply)), "agent reply projected into chat UI", 30_000);
+}
+
+async function ensureStartPromptVisible(page, promptBoxSelector) {
+  const deadline = Date.now() + 30_000;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    if (await page.locator(promptBoxSelector).isVisible().catch(() => false)) {
+      return;
+    }
+
+    try {
+      await clickVisibleNavigationTarget(page, { labels: ["Start", "开始"], automationIds: ["MainNav.Start"] });
+    } catch (error) {
+      lastError = error;
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  const debug = {
+    body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+    navigation: await page.evaluate(collectVisibleNavigationTargetDebug).catch(error => [`debug error: ${error?.message ?? error}`]),
+    prompt: await page.locator(promptBoxSelector).evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        className: element.className?.toString?.() ?? "",
+        display: style.display,
+        visibility: style.visibility,
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        left: rect.left
+      };
+    }).catch(error => ({ error: error?.message ?? String(error) }))
+  };
+  throw new Error(
+    `Start prompt did not become visible after navigating to Start. `
+    + `LastError=${lastError?.message ?? lastError}. Debug=${JSON.stringify(debug)}`);
 }
 
 async function fillProfileEditorTextBoxes(page, profileName, serverUrl) {

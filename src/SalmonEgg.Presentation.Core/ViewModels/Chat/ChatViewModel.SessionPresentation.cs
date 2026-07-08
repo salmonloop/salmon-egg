@@ -124,6 +124,7 @@ public partial class ChatViewModel
             OnPropertyChanged(nameof(SelectedProfileIntentId));
         }
 
+        _isSelectedAcpProfileDefaultProjection = false;
         var match = _profileSelectionResolver.ResolveById(_acpProfiles.Profiles, profileId);
         ApplyResolvedProfileSelection(
             match,
@@ -448,6 +449,7 @@ public partial class ChatViewModel
     {
         if (!_suppressStoreProfileProjection)
         {
+            _isSelectedAcpProfileDefaultProjection = false;
             var nextProfileIntentId = value?.Id;
             _pendingSelectedProfileIntentId = nextProfileIntentId;
             _hasPendingSelectedProfileIntent = true;

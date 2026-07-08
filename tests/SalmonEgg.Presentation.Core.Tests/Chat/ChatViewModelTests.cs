@@ -344,6 +344,8 @@ public partial class ChatViewModelTests
         Assert.False(projection.IsSubmitBlocked);
         Assert.Equal("code", projection.SelectedDisplayItem?.SemanticValue);
         Assert.Equal(SelectorPlaceholderKind.None, projection.PlaceholderKind);
+        var slots = fixture.ViewModel.ComposerSelectorSlots;
+        Assert.Contains(slots.Mode.Items, item => ReferenceEquals(item, slots.Mode.SelectedItem));
     }
 
     [Fact]
@@ -432,6 +434,7 @@ public partial class ChatViewModelTests
         Assert.True(slots.Model.IsEnabled);
         Assert.Same(viewModel.SelectChatModelDisplayCommand, slots.Model.SelectionCommand);
         Assert.Equal("claude-sonnet", slots.Model.SelectedItem?.SemanticValue);
+        Assert.Contains(slots.Model.Items, item => ReferenceEquals(item, slots.Model.SelectedItem));
     }
 
     [Fact]
@@ -3002,6 +3005,46 @@ public partial class ChatViewModelTests
         Assert.Equal("profile-a", connectionState.SelectedProfileIntentId);
         Assert.Null(fixture.ViewModel.SelectedAcpProfile);
         Assert.Null(fixture.Profiles.SelectedProfile);
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenRefreshIsInFlight_WaitsForLoadedProfiles()
+    {
+        var refreshStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRefreshCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .Returns(async () =>
+            {
+                refreshStarted.TrySetResult(null);
+                await allowRefreshCompletion.Task;
+                return new[] { profile };
+            });
+
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+        fixture.Preferences.LastSelectedServerId = "profile-a";
+
+        var refreshTask = fixture.Profiles.RefreshAsync();
+        await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var ensureTask = fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await Task.Delay(100);
+
+        Assert.False(ensureTask.IsCompleted);
+
+        allowRefreshCompletion.SetResult(null);
+        await ensureTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await refreshTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.AcpProfileList.Any(candidate => ReferenceEquals(candidate, profile))));
     }
 
     [Fact]

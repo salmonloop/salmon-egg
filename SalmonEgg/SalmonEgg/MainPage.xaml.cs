@@ -1163,7 +1163,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             NavVM.CurrentSelection,
             NavVM.IsSettingsSelected);
 
-        if (args is not NavigationViewDisplayModeChangedEventArgs)
+        if (args is not NavigationViewDisplayModeChangedEventArgs
+            && LayoutVM.NavPaneDisplayMode != SalmonEgg.Presentation.Core.Mvux.ShellLayout.NavigationPaneDisplayMode.Expanded)
         {
             BootLogDebug($"MainNav PanePresentationChanged: reporting pane intent senderPaneOpen={sender.IsPaneOpen} mode={LayoutVM.NavPaneDisplayMode}.");
             _ = _metricsSink.ReportNavPaneOpenIntent(sender.IsPaneOpen, source: "PanePresentationChanged");

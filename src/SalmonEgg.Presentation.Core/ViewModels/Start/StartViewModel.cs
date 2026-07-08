@@ -116,33 +116,45 @@ public sealed partial class StartViewModel : ObservableObject
     public SelectorProjectionResult StartProjectSelectorProjection => ResolveStartProjectSelectorProjection();
 
     public ComposerSelectorSlotsPresentation ComposerSelectorSlots
-        => new(
-            Agent: new(
-                IsVisible: true,
-                IsEnabled: true,
-                Items: StartAgentSelectorItems,
-                SelectedItem: SelectedStartAgentSelectorItem,
-                SelectionCommand: SelectStartAgentDisplayCommand),
-            Mode: new(
-                IsVisible: true,
-                IsEnabled: IsStartModeSelectorEnabled,
-                Items: StartModeSelectorItems,
-                SelectedItem: SelectedStartModeSelectorItem,
-                SelectionCommand: SelectStartModeDisplayCommand),
-            Project: new(
-                IsVisible: true,
-                IsEnabled: true,
-                Items: StartProjectSelectorItems,
-                SelectedItem: SelectedStartProjectSelectorItem,
-                SelectionCommand: SelectStartProjectDisplayCommand),
-            Model: Chat.HasNewSessionDraftModelSelector
-                ? new ComposerSelectorSlotPresentation(
+    {
+        get
+        {
+            var agentProjection = StartAgentSelectorProjection;
+            var modeProjection = StartModeSelectorProjection;
+            var projectProjection = StartProjectSelectorProjection;
+            var modelProjection = Chat.HasNewSessionDraftModelSelector
+                ? StartModelSelectorProjection
+                : null;
+
+            return new(
+                Agent: new(
                     IsVisible: true,
-                    IsEnabled: IsInputEnabled && StartModelSelectorProjection.IsEnabled,
-                    Items: StartModelSelectorItems,
-                    SelectedItem: SelectedStartModelSelectorItem,
-                    SelectionCommand: SelectStartModelDisplayCommand)
-                : ComposerSelectorSlotPresentation.Hidden());
+                    IsEnabled: true,
+                    Items: agentProjection.DisplayItems,
+                    SelectedItem: agentProjection.SelectedDisplayItem,
+                    SelectionCommand: SelectStartAgentDisplayCommand),
+                Mode: new(
+                    IsVisible: true,
+                    IsEnabled: IsStartModeSelectorEnabled,
+                    Items: modeProjection.DisplayItems,
+                    SelectedItem: modeProjection.SelectedDisplayItem,
+                    SelectionCommand: SelectStartModeDisplayCommand),
+                Project: new(
+                    IsVisible: true,
+                    IsEnabled: true,
+                    Items: projectProjection.DisplayItems,
+                    SelectedItem: projectProjection.SelectedDisplayItem,
+                    SelectionCommand: SelectStartProjectDisplayCommand),
+                Model: modelProjection is not null
+                    ? new ComposerSelectorSlotPresentation(
+                        IsVisible: true,
+                        IsEnabled: IsInputEnabled && modelProjection.IsEnabled,
+                        Items: modelProjection.DisplayItems,
+                        SelectedItem: modelProjection.SelectedDisplayItem,
+                        SelectionCommand: SelectStartModelDisplayCommand)
+                    : ComposerSelectorSlotPresentation.Hidden());
+        }
+    }
 
     public IReadOnlyList<ComposerSelectorItemViewModel> StartAgentSelectorItems
         => StartAgentSelectorProjection.DisplayItems;
@@ -307,6 +319,7 @@ public sealed partial class StartViewModel : ObservableObject
         ((INotifyCollectionChanged)_preferences.AgentRemoteDirectories).CollectionChanged += OnAgentRemoteDirectoriesChanged;
         _conversationCatalog.PropertyChanged += OnConversationCatalogPropertyChanged;
         Chat.PropertyChanged += OnChatPropertyChanged;
+        ((INotifyCollectionChanged)Chat.AcpProfileList).CollectionChanged += OnAcpProfilesChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModelOptions).CollectionChanged += OnStartModelOptionsChanged;
         ApplyPendingProjectIntent();
@@ -418,12 +431,14 @@ public sealed partial class StartViewModel : ObservableObject
             && !string.IsNullOrWhiteSpace(item.SemanticValue)
             && currentItems.Any(candidate =>
                 string.Equals(candidate.SemanticValue, item.SemanticValue, StringComparison.Ordinal)
-                && string.Equals(candidate.Identity, item.Identity, StringComparison.Ordinal));
+                && (expectedKind == ComposerSelectorKind.Agent
+                    || string.Equals(candidate.Identity, item.Identity, StringComparison.Ordinal)));
 
     public void OnComposerLoaded()
     {
         _isComposerLoaded = true;
         OnPropertyChanged(nameof(SelectedStartProjectId));
+        SelectSingleAvailableAgentIfNeeded();
         QueueEnsureNewSessionDraft();
     }
 
@@ -544,7 +559,7 @@ public sealed partial class StartViewModel : ObservableObject
             modeOptions,
             showRemoteDirectoryPrompt ? null : SelectedStartMode?.ModeId,
             !showRemoteDirectoryPrompt && Chat.IsNewSessionDraftReady,
-            !showRemoteDirectoryPrompt && (isConnectionInProgress || _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
+            !showRemoteDirectoryPrompt && !hasModeError && (isConnectionInProgress || _isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading),
             hasModeError,
             (!showRemoteDirectoryPrompt && StartModeOptions.Count > 0) || hasModeError,
             ResolveModeSelectorPlaceholderLabels(showRemoteDirectoryPrompt)));
@@ -669,6 +684,11 @@ public sealed partial class StartViewModel : ObservableObject
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
         }
+
+        if (string.Equals(e.PropertyName, nameof(AppPreferencesViewModel.AcpEnabled), StringComparison.Ordinal))
+        {
+            SelectSingleAvailableAgentIfNeeded();
+        }
     }
 
     private void OnNavigationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -737,8 +757,10 @@ public sealed partial class StartViewModel : ObservableObject
     private StartProjectOptionViewModel? ResolveSelectedProjectOption()
     {
         var selectedProjectId = SelectedStartProjectId;
-        var option = StartProjectOptions.FirstOrDefault(candidate =>
-            string.Equals(candidate.ProjectId, selectedProjectId, StringComparison.Ordinal));
+        var options = StartProjectOptions.ToArray();
+        var option = options.FirstOrDefault(candidate =>
+            candidate is not null
+            && string.Equals(candidate.ProjectId, selectedProjectId, StringComparison.Ordinal));
         if (option is not null)
         {
             return option;
@@ -906,14 +928,14 @@ public sealed partial class StartViewModel : ObservableObject
             return Chat.NewSessionDraftErrorMessage;
         }
 
-        if (_isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading || Chat.IsNewSessionDraftReady)
-        {
-            return string.Empty;
-        }
-
         if (Chat.HasConnectionError && !string.IsNullOrWhiteSpace(Chat.ConnectionErrorMessage))
         {
             return Chat.ConnectionErrorMessage!;
+        }
+
+        if (_isNewSessionDraftRefreshPending || Chat.IsNewSessionDraftLoading || Chat.IsNewSessionDraftReady)
+        {
+            return string.Empty;
         }
 
         return string.Empty;
@@ -1142,6 +1164,29 @@ public sealed partial class StartViewModel : ObservableObject
         RefreshAllSelectorProjections();
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanStartSessionAndSendUi));
+    }
+
+    private void OnAcpProfilesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RefreshStartProjectOptions();
+        StartSessionAndSendCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanStartSessionAndSendUi));
+        SelectSingleAvailableAgentIfNeeded();
+        if (_isComposerLoaded)
+        {
+            QueueEnsureNewSessionDraft();
+        }
+    }
+
+    private void SelectSingleAvailableAgentIfNeeded()
+    {
+        if (_isComposerLoaded
+            && _preferences.AcpEnabled
+            && Chat.SelectedAcpProfile is null
+            && Chat.AcpProfileList.Count == 1)
+        {
+            Chat.SelectProfileForDefaultProjection(Chat.AcpProfileList[0]);
+        }
     }
 
     private void RefreshStartModeProjection()

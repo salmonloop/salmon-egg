@@ -163,15 +163,20 @@ export const domHelperScript = `
     },
 
     collectVisibleComboBoxItems() {
+      const seenClickableItems = new Set();
       return Array.from(document.querySelectorAll("body *"))
         .map(element => {
+          const clickable = element.closest(".uno-comboboxitem,[role='option']") ?? element;
           const rect = element.getBoundingClientRect();
+          const clickRect = clickable.getBoundingClientRect();
           const style = getComputedStyle(element);
           const className = element.className?.toString?.() ?? "";
           return {
             element,
+            clickable,
             text: (element.textContent ?? "").trim(),
             rect,
+            clickRect,
             className,
             role: element.getAttribute("role") ?? "",
             display: style.display,
@@ -187,7 +192,9 @@ export const domHelperScript = `
           && candidate.rect.left >= -1
           && candidate.rect.top >= -1
           && candidate.rect.left <= innerWidth
-          && candidate.rect.top <= innerHeight)
+          && candidate.rect.top <= innerHeight
+          && !seenClickableItems.has(candidate.clickable)
+          && (seenClickableItems.add(candidate.clickable) || true))
         .sort((left, right) => (left.rect.top - right.rect.top) || (left.rect.left - right.rect.left));
     },
 
@@ -208,6 +215,8 @@ export const domHelperScript = `
         })
         .filter(candidate =>
           (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+          && candidate.role !== "option"
+          && !candidate.className.toLowerCase().includes("comboboxitem")
           && candidate.rect.width > 0
           && candidate.rect.height > 0
           && candidate.display !== "none"

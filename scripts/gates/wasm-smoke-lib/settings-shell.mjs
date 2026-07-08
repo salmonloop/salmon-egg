@@ -21,18 +21,22 @@ export async function navigateToSettingsSection(page, sectionTarget, bodyPattern
     page,
     settingsNavigationTarget,
     /常规|General|外观|Appearance|ACP Agent|ACP \/ Agent/,
-    "settings shell");
+    "settings shell",
+    { keyboardFallback: true });
 
   if (await page.evaluate(findVisibleNavigationTargetPoint, sectionTarget)) {
     await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
     return;
   }
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await waitForBodyText(page, /常规|General|外观|Appearance|ACP Agent|ACP \/ Agent/, "settings shell at mobile viewport");
-  await clickTopNavigationOverflow(page);
-  await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await waitForBodyText(page, /常规|General|外观|Appearance|ACP Agent|ACP \/ Agent/, "settings shell at mobile viewport");
+    await clickTopNavigationOverflow(page);
+    await clickVisibleNavigationTargetUntilBodyText(page, sectionTarget, bodyPattern, label);
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
 }
 
 export async function clickTopNavigationOverflowTargetUntilBodyText(page, targetOptions, pattern, label) {

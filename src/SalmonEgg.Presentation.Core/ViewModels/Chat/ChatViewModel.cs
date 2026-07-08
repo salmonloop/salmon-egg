@@ -193,6 +193,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private bool _suppressStoreProfileProjection;
     private bool _suppressStorePromptProjection;
     private bool _suppressProfileSyncFromStore;
+    private bool _isSelectedAcpProfileDefaultProjection;
     private bool _suppressModeSelectionDispatch;
     private string? _selectedProfileIntentIdFromStore;
     private string? _pendingSelectedProfileIntentId;
@@ -901,23 +902,33 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public SelectorProjectionResult ChatModelSelectorProjection => ResolveChatModelSelectorProjection();
 
     public ComposerSelectorSlotsPresentation ComposerSelectorSlots
-        => new(
-            Agent: ComposerSelectorSlotPresentation.Hidden(),
-            Mode: new(
-                IsVisible: true,
-                IsEnabled: AreComposerToolsEnabled,
-                Items: ChatModeSelectorItems,
-                SelectedItem: SelectedChatModeSelectorItem,
-                SelectionCommand: SelectChatModeDisplayCommand),
-            Project: ComposerSelectorSlotPresentation.Hidden(),
-            Model: string.IsNullOrWhiteSpace(_modelConfigId)
-                ? ComposerSelectorSlotPresentation.Hidden()
-                : new ComposerSelectorSlotPresentation(
+    {
+        get
+        {
+            var modeProjection = ChatModeSelectorProjection;
+            var modelProjection = string.IsNullOrWhiteSpace(_modelConfigId)
+                ? null
+                : ChatModelSelectorProjection;
+
+            return new(
+                Agent: ComposerSelectorSlotPresentation.Hidden(),
+                Mode: new(
                     IsVisible: true,
-                    IsEnabled: AreComposerToolsEnabled && ChatModelSelectorProjection.IsEnabled,
-                    Items: ChatModelSelectorItems,
-                    SelectedItem: SelectedChatModelSelectorItem,
-                    SelectionCommand: SelectChatModelDisplayCommand));
+                    IsEnabled: AreComposerToolsEnabled,
+                    Items: modeProjection.DisplayItems,
+                    SelectedItem: modeProjection.SelectedDisplayItem,
+                    SelectionCommand: SelectChatModeDisplayCommand),
+                Project: ComposerSelectorSlotPresentation.Hidden(),
+                Model: modelProjection is null
+                    ? ComposerSelectorSlotPresentation.Hidden()
+                    : new ComposerSelectorSlotPresentation(
+                        IsVisible: true,
+                        IsEnabled: AreComposerToolsEnabled && modelProjection.IsEnabled,
+                        Items: modelProjection.DisplayItems,
+                        SelectedItem: modelProjection.SelectedDisplayItem,
+                        SelectionCommand: SelectChatModelDisplayCommand));
+        }
+    }
 
     public IReadOnlyList<ComposerSelectorItemViewModel> ChatModeSelectorItems
         => ChatModeSelectorProjection.DisplayItems;
@@ -2674,14 +2685,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public async Task EnsureAcpProfilesLoadedAsync()
     {
-        if (_acpProfiles.IsLoading || _acpProfiles.Profiles.Count > 0)
+        if (_acpProfiles.Profiles.Count > 0)
         {
             return;
         }
 
         try
         {
-            await _acpProfiles.RefreshCommand.ExecuteAsync(null);
+            await _acpProfiles.RefreshAsync().ConfigureAwait(false);
             _suppressAcpProfileConnect = true;
             _suppressStoreProfileProjection = true;
             try
@@ -2694,8 +2705,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 _suppressAcpProfileConnect = false;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogWarning(ex, "Failed to ensure ACP profiles are loaded.");
         }
     }
 

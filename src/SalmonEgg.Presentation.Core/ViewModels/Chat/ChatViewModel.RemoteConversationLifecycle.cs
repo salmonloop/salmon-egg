@@ -107,7 +107,7 @@ public partial class ChatViewModel
             return _preferences.LastSelectedServerId;
         }
 
-        return SelectedAcpProfile?.Id;
+        return _isSelectedAcpProfileDefaultProjection ? null : SelectedAcpProfile?.Id;
     }
 
     public IReadOnlyList<McpServer> CurrentMcpServers => _currentMcpServers;
@@ -961,8 +961,21 @@ public partial class ChatViewModel
         ArgumentNullException.ThrowIfNull(profile);
 
         var selectedProfile = ResolveLoadedProfileSelection(profile);
+        _isSelectedAcpProfileDefaultProjection = false;
         _selectedProfileIntentIdFromStore = profile.Id;
         _selectedProfileIdFromStore = profile.Id;
+        ApplyResolvedProfileSelection(
+            selectedProfile,
+            suppressStoreProjection: true,
+            suppressProfileSyncFromStore: false);
+    }
+
+    private void ApplyDefaultSelectedProfileProjection(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var selectedProfile = ResolveLoadedProfileSelection(profile);
+        _isSelectedAcpProfileDefaultProjection = true;
         ApplyResolvedProfileSelection(
             selectedProfile,
             suppressStoreProjection: true,
@@ -1017,6 +1030,19 @@ public partial class ChatViewModel
         _ = SelectProfileForUserIntentAsync(profile);
     }
 
+    public void SelectProfileForDefaultProjection(ServerConfiguration profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            ApplyDefaultSelectedProfileProjection(profile);
+            return;
+        }
+
+        _uiDispatcher.Enqueue(() => ApplyDefaultSelectedProfileProjection(profile));
+    }
+
     public Task SelectProfileAsync(ServerConfiguration profile, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -1036,6 +1062,24 @@ public partial class ChatViewModel
         ArgumentNullException.ThrowIfNull(profile);
 
         var selectedProfile = ResolveLoadedProfileSelection(profile);
+        if (_isSelectedAcpProfileDefaultProjection
+            && string.Equals(SelectedAcpProfile?.Id, selectedProfile?.Id, StringComparison.Ordinal))
+        {
+            _isSelectedAcpProfileDefaultProjection = false;
+            _selectedProfileIntentIdFromStore = profile.Id;
+            _selectedProfileIdFromStore = profile.Id;
+            OnPropertyChanged(nameof(SelectedProfileIntentId));
+            ClearNewSessionDraftProjection();
+            _ = DispatchSelectedProfileIntentAsync(profile.Id);
+            if (selectedProfile is not null)
+            {
+                QueueSelectedProfileConnection(selectedProfile);
+            }
+
+            return;
+        }
+
+        _isSelectedAcpProfileDefaultProjection = false;
         SelectedAcpProfile = selectedProfile;
         _acpProfiles.SelectedProfile = selectedProfile;
     }
@@ -1963,7 +2007,7 @@ public partial class ChatViewModel
             return new AcpSessionRecoveryStartResult(
                 Task.FromException<AcpSessionRecoveryProjection>(
                     new InvalidOperationException("Cannot recover remote session without a working directory.")),
-                new( null, OwnsRecoveryLease: false, CancellationToken.None),
+                new(null, OwnsRecoveryLease: false, CancellationToken.None),
                 null,
                 null,
                 null,
@@ -2150,7 +2194,7 @@ public partial class ChatViewModel
             return new AcpSessionRecoveryStartResult(
                 Task.FromException<AcpSessionRecoveryProjection>(
                     new InvalidOperationException("Cannot recover remote session without a working directory.")),
-                new( null, OwnsRecoveryLease: false, CancellationToken.None),
+                new(null, OwnsRecoveryLease: false, CancellationToken.None),
                 null,
                 null,
                 null,
@@ -3266,7 +3310,8 @@ public partial class ChatViewModel
 
     private void ScheduleSessionSwitchOverlayDismissal(long activationVersion, string conversationId)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             DismissSessionSwitchOverlay(activationVersion, conversationId);
         });
     }

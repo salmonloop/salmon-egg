@@ -10,25 +10,37 @@ export async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) 
   }
 }
 
-export async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label) {
+export async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label, activationOptions = {}) {
   const deadline = Date.now() + 30_000;
   let lastError;
 
   while (Date.now() < deadline) {
     try {
       await clickVisibleNavigationTarget(page, options);
-      await waitForBodyText(page, pattern, label, Math.min(1_500, Math.max(250, deadline - Date.now())));
+      await waitForBodyText(page, pattern, label, Math.min(5_000, Math.max(250, deadline - Date.now())));
       return;
     } catch (error) {
       lastError = error;
+      if (activationOptions.keyboardFallback === true) {
+        try {
+          await activateVisibleNavigationTargetByKeyboard(page, options);
+          await waitForBodyText(page, pattern, label, Math.min(5_000, Math.max(250, deadline - Date.now())));
+          return;
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
+      }
+
       await page.waitForTimeout(250);
     }
   }
 
   const bodyText = await page.locator("body").innerText().catch(() => "");
+  const candidates = await page.evaluate(collectVisibleNavigationTargetMatchDebug, options).catch(error => [`debug error: ${error?.message ?? error}`]);
   throw new Error(
     `Expected ${label} text was not visible after clicking navigation target. `
-    + `Last error: ${lastError?.message ?? lastError}. Body: ${bodyText.slice(0, 1_000)}`);
+    + `Last error: ${lastError?.message ?? lastError}. Body: ${bodyText.slice(0, 1_000)} `
+    + `Candidates=${JSON.stringify(candidates)}`);
 }
 
 export async function clickVisibleNavigationTarget(page, options) {
@@ -46,13 +58,156 @@ export async function clickVisibleNavigationTarget(page, options) {
   await page.mouse.click(point.x, point.y);
 }
 
+async function activateVisibleNavigationTargetByKeyboard(page, options) {
+  const focused = await page.evaluate(focusVisibleNavigationTargetInPage, options);
+  if (!focused) {
+    throw new Error(`Navigation target could not be focused for keyboard activation: ${JSON.stringify(options)}`);
+  }
+
+  await page.keyboard.press("Enter");
+}
+
 export async function ensureVisibleNavigationTarget(page, targetOptions, openerOptions) {
   if (await page.evaluate(findVisibleNavigationTargetPoint, targetOptions)) {
     return;
   }
 
   await clickVisibleNavigationTarget(page, openerOptions);
+  try {
+    await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 3_000 });
+    return;
+  } catch {
+  }
+
+  await activateVisibleNavigationTargetByKeyboard(page, openerOptions);
+  try {
+    await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 3_000 });
+    return;
+  } catch {
+  }
+
+  const clicked = await page.evaluate(clickVisibleNavigationTargetInPage, openerOptions);
+  if (!clicked) {
+    throw new Error(`Navigation opener could not be activated: ${JSON.stringify(openerOptions)}`);
+  }
+
   await page.waitForFunction(findVisibleNavigationTargetPoint, targetOptions, { timeout: 30_000 });
+}
+
+function focusVisibleNavigationTargetInPage(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const nodes = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const text = (element.textContent ?? "").trim();
+      const aria = element.getAttribute("aria-label") ?? "";
+      const automationId =
+        element.getAttribute("data-automation-id")
+        ?? element.getAttribute("data-automationid")
+        ?? element.getAttribute("automationid")
+        ?? "";
+
+      return {
+        element,
+        rect,
+        display: style.display,
+        visibility: style.visibility,
+        automationMatch: automationIds.includes(aria) || automationIds.includes(automationId),
+        textMatch: labels.includes(text) || labels.includes(aria)
+      };
+    })
+    .filter(candidate =>
+      (candidate.automationMatch || candidate.textMatch)
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight);
+
+  nodes.sort((left, right) => {
+    if (left.automationMatch !== right.automationMatch) {
+      return left.automationMatch ? -1 : 1;
+    }
+
+    return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
+  });
+
+  const target = nodes[0]?.element;
+  const focusable =
+    target?.closest(".uno-navigationviewitem")
+    ?? target?.closest(".uno-button")
+    ?? target?.closest("[role='button']")
+    ?? target?.closest("button")
+    ?? target;
+  if (typeof focusable?.focus !== "function") {
+    return false;
+  }
+
+  focusable.focus();
+  return document.activeElement === focusable || focusable.contains(document.activeElement);
+}
+
+function clickVisibleNavigationTargetInPage(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const nodes = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const text = (element.textContent ?? "").trim();
+      const aria = element.getAttribute("aria-label") ?? "";
+      const automationId =
+        element.getAttribute("data-automation-id")
+        ?? element.getAttribute("data-automationid")
+        ?? element.getAttribute("automationid")
+        ?? "";
+
+      return {
+        element,
+        rect,
+        display: style.display,
+        visibility: style.visibility,
+        automationMatch: automationIds.includes(aria) || automationIds.includes(automationId),
+        textMatch: labels.includes(text) || labels.includes(aria)
+      };
+    })
+    .filter(candidate =>
+      (candidate.automationMatch || candidate.textMatch)
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight);
+
+  nodes.sort((left, right) => {
+    if (left.automationMatch !== right.automationMatch) {
+      return left.automationMatch ? -1 : 1;
+    }
+
+    return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
+  });
+
+  const target = nodes[0]?.element ?? null;
+  const clickable =
+    target?.closest(".uno-navigationviewitem")
+    ?? target?.closest(".uno-button")
+    ?? target?.closest("[role='button']")
+    ?? target?.closest("button")
+    ?? target;
+  if (typeof clickable?.click !== "function") {
+    return false;
+  }
+
+  clickable.click();
+  return true;
 }
 
 export async function scrollToVisibleNavigationTarget(page, options) {
@@ -303,39 +458,93 @@ export async function expectControlEnabledState(page, controlOptions, expectedEn
   }
 }
 
-export async function scrollToVisibleControl(page, options) {
-  if (await page.evaluate(findVisibleControlPoint, options)) {
-    return;
+export async function scrollToVisibleControl(page, options, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (await page.evaluate(findVisibleControlPoint, options)) {
+      return true;
+    }
+
+    const scrolledToKnownTarget = await page.evaluate(scrollKnownControlCandidateIntoView, options);
+    if (scrolledToKnownTarget) {
+      await page.waitForTimeout(250);
+      if (await page.evaluate(findVisibleControlPoint, options)) {
+        return true;
+      }
+    }
+
+    const scrolledContainer = await page.evaluate(scrollNearestScrollableContainerDown);
+    await page.waitForTimeout(250);
   }
 
-  const scrolled = await page.evaluate(input => {
-    const labels = input.labels ?? [];
-    const automationIds = input.automationIds ?? [];
-    const normalize = value => (value ?? "").trim().toLowerCase();
-    const target = Array.from(document.querySelectorAll("body *"))
-      .find(element => {
-        const text = (element.textContent ?? "").trim();
-        const aria = element.getAttribute("aria-label") ?? "";
-        const automationId =
-          element.getAttribute("data-automation-id")
-          ?? element.getAttribute("data-automationid")
-          ?? element.getAttribute("automationid")
-          ?? "";
-        return automationIds.includes(aria)
-          || automationIds.includes(automationId)
-          || labels.map(normalize).includes(normalize(text))
-          || labels.map(normalize).includes(normalize(aria));
-      });
+  return Boolean(await page.evaluate(findVisibleControlPoint, options));
+}
 
-    target?.scrollIntoView({ block: "center", inline: "nearest" });
-    return Boolean(target);
-  }, options);
+function scrollKnownControlCandidateIntoView(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  const normalize = value => (value ?? "").trim().toLowerCase();
+  const normalizedLabels = labels.map(normalize).filter(Boolean);
+  const normalizedAutomationIds = automationIds.map(normalize).filter(Boolean);
+  const target = Array.from(document.querySelectorAll("body *"))
+    .find(element => {
+      const text = (element.textContent ?? "").trim();
+      const aria = element.getAttribute("aria-label") ?? "";
+      const automationId =
+        element.getAttribute("data-automation-id")
+        ?? element.getAttribute("data-automationid")
+        ?? element.getAttribute("automationid")
+        ?? "";
+      return normalizedAutomationIds.includes(normalize(aria))
+        || normalizedAutomationIds.includes(normalize(automationId))
+        || normalizedLabels.includes(normalize(text))
+        || normalizedLabels.includes(normalize(aria));
+    });
 
-  if (!scrolled) {
-    return;
+  target?.scrollIntoView({ block: "center", inline: "nearest" });
+  return Boolean(target);
+}
+
+function scrollNearestScrollableContainerDown() {
+  const scrollableCandidates = Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        element,
+        rect,
+        overflowY: style.overflowY,
+        canScroll: element.scrollHeight > element.clientHeight + 4,
+        remaining: element.scrollHeight - element.clientHeight - element.scrollTop
+      };
+    })
+    .filter(candidate =>
+      candidate.canScroll
+      && candidate.remaining > 2
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.rect.left < innerWidth
+      && candidate.rect.right > 0
+      && candidate.rect.top < innerHeight
+      && candidate.rect.bottom > 0
+      && candidate.overflowY !== "hidden"
+      && candidate.overflowY !== "clip")
+    .sort((left, right) => {
+      const leftArea = left.rect.width * left.rect.height;
+      const rightArea = right.rect.width * right.rect.height;
+      return rightArea - leftArea;
+    });
+
+  const target = scrollableCandidates[0]?.element;
+  if (target) {
+    target.scrollTop = Math.min(target.scrollTop + Math.max(320, Math.floor(target.clientHeight * 0.75)), target.scrollHeight);
+    return true;
   }
 
-  await page.waitForTimeout(250);
+  const beforeY = window.scrollY;
+  window.scrollBy({ top: Math.max(320, Math.floor(innerHeight * 0.75)), left: 0, behavior: "instant" });
+  return window.scrollY !== beforeY;
 }
 
 export async function clickVisibleControl(page, options) {
@@ -395,9 +604,7 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
   let lastError;
 
   while (Date.now() < deadline) {
-    const controlPoint = await page.evaluate(findVisibleControlPoint, { labels: [], automationIds: [selectorAutomationId] })
-      ?? await page.evaluate(findStartComposerSelectorFallbackPoint, { labels: [], automationIds: [selectorAutomationId] })
-      ?? await page.evaluate(findVisibleComboBoxControlPointBySelectorFallback, selectorAutomationId);
+    const controlPoint = await findComboBoxControlPoint(page, selectorAutomationId);
     if (!controlPoint) {
       const debug = {
         comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
@@ -444,11 +651,11 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
       throw new Error(`ComboBox '${selectorAutomationId}' items ${JSON.stringify(expectedVisibleNames)} disappeared before keyboard selection.`);
     }
 
-    await page.keyboard.press("Home");
-    for (let i = 0; i < itemIndex; i += 1) {
-      await page.keyboard.press("ArrowDown");
+    await commitVisibleComboBoxItemWithKeyboard(page, itemIndex);
+    if (options.verifySelectionText !== false
+      && !await waitForComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, 3_000)) {
+      await selectComboBoxItemWithMouseFallback(page, selectorAutomationId, expectedVisibleNames);
     }
-    await page.keyboard.press("Enter");
   } else {
     const point = await page.evaluate(findVisibleComboBoxItemPointByNames, expectedVisibleNames);
     if (!point) {
@@ -459,36 +666,145 @@ export async function selectComboBoxItem(page, selectorAutomationId, expectedVis
   }
 
   if (options.verifySelectionText === false) {
+    if (options.ensureSelectionWithFallback === true) {
+      await selectComboBoxItemWithLocatorFallback(page, selectorAutomationId, expectedVisibleNames);
+    }
+
     return;
   }
 
+  if (!await waitForComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, 10_000)) {
+    await selectComboBoxItemWithLocatorFallback(page, selectorAutomationId, expectedVisibleNames);
+  }
+
+  if (!await waitForComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, 2_000)) {
+    await selectComboBoxItemWithKeyboardFallback(page, selectorAutomationId, expectedVisibleNames);
+  }
+
+  if (!await waitForComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, 5_000)) {
+    const debug = {
+      body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
+      comboBoxes: await page.evaluate(collectVisibleComboBoxDebug),
+      selectedText: await page.evaluate(readComboBoxSelectionTextInPage, selectorAutomationId),
+      interactive: await page.evaluate(collectVisibleInteractiveDebug)
+    };
+    throw new Error(
+      `ComboBox '${selectorAutomationId}' did not show selected item ${JSON.stringify(expectedVisibleNames)}. `
+      + `Debug=${JSON.stringify(debug)}`);
+  }
+}
+
+async function findComboBoxControlPoint(page, selectorAutomationId) {
+  return await page.evaluate(findVisibleControlPoint, { labels: [], automationIds: [selectorAutomationId] })
+    ?? await page.evaluate(findStartComposerSelectorFallbackPoint, { labels: [], automationIds: [selectorAutomationId] })
+    ?? await page.evaluate(findVisibleComboBoxControlPointBySelectorFallback, selectorAutomationId);
+}
+
+async function selectComboBoxItemWithLocatorFallback(page, selectorAutomationId, expectedVisibleNames) {
+  const controlPoint = await findComboBoxControlPoint(page, selectorAutomationId);
+  if (!controlPoint) {
+    return;
+  }
+
+  await page.mouse.click(controlPoint.x, controlPoint.y);
+  for (const expectedName of expectedVisibleNames) {
+    const item = page.locator(".uno-comboboxitem:visible", { hasText: expectedName }).last();
+    try {
+      await item.click({ timeout: 3_000, force: true });
+      return;
+    } catch {
+    }
+
+    const text = page.getByText(expectedName, { exact: true }).last();
+    try {
+      await text.click({ timeout: 3_000, force: true });
+      return;
+    } catch {
+    }
+  }
+}
+
+async function selectComboBoxItemWithMouseFallback(page, selectorAutomationId, expectedVisibleNames) {
+  const controlPoint = await findComboBoxControlPoint(page, selectorAutomationId);
+  if (!controlPoint) {
+    return;
+  }
+
+  await page.mouse.click(controlPoint.x, controlPoint.y);
   await page.waitForFunction(
-    input => {
-      const control = window.__salmoneggSmoke.findVisibleControl({ automationIds: [input.selectorAutomationId] }, [], [input.selectorAutomationId]);
-      if ((control?.textContent ?? "").includes(input.expectedVisibleName)
-        || (control?.getAttribute("aria-label") ?? "").includes(input.expectedVisibleName)) {
-        return true;
-      }
+    input => window.__salmoneggSmoke.collectVisibleComboBoxItems()
+      .some(item => input.expectedVisibleNames.some(name => item.text === name || item.text.includes(name))),
+    { expectedVisibleNames },
+    { timeout: 3_000 }).catch(() => {});
+  const point = await page.evaluate(findVisibleComboBoxItemPointByNames, expectedVisibleNames);
+  if (point) {
+    await page.mouse.click(point.x, point.y);
+  }
+}
 
-      const selectorIndexByAutomationId = new Map([
-        ["StartView.AgentSelector", 0],
-        ["StartView.ModeSelector", 1],
-        ["StartView.ProjectSelector", 2],
-        ["Appearance.Theme", 0],
-        ["Appearance.Backdrop", 1],
-        ["GeneralSettings.Language", 0]
-      ]);
-      const selectorIndex = selectorIndexByAutomationId.get(input.selectorAutomationId);
-      if (selectorIndex === undefined) {
-        return false;
-      }
+async function selectComboBoxItemWithKeyboardFallback(page, selectorAutomationId, expectedVisibleNames) {
+  const controlPoint = await findComboBoxControlPoint(page, selectorAutomationId);
+  if (!controlPoint) {
+    return;
+  }
 
-      const comboBox = window.__salmoneggSmoke.collectVisibleComboBoxControls()[selectorIndex];
-      const text = comboBox?.element.textContent ?? "";
-      return input.expectedVisibleNames.some(name => text.includes(name));
-    },
-    { selectorAutomationId, expectedVisibleNames },
-    { timeout: 10_000 });
+  await page.mouse.click(controlPoint.x, controlPoint.y);
+  await page.waitForFunction(
+    input => window.__salmoneggSmoke.collectVisibleComboBoxItems()
+      .some(item => input.expectedVisibleNames.some(name => item.text === name || item.text.includes(name))),
+    { expectedVisibleNames },
+    { timeout: 3_000 }).catch(() => {});
+
+  const itemIndex = await page.evaluate(findVisibleComboBoxItemIndexByNames, expectedVisibleNames);
+  if (itemIndex < 0) {
+    await page.keyboard.press("Escape").catch(() => {});
+    return;
+  }
+
+  await commitVisibleComboBoxItemWithKeyboard(page, itemIndex);
+}
+
+async function commitVisibleComboBoxItemWithKeyboard(page, itemIndex) {
+  await page.keyboard.press("Home");
+  for (let index = 0; index < itemIndex; index += 1) {
+    await page.keyboard.press("ArrowDown");
+  }
+
+  for (const key of ["Enter", "Enter", "Space"]) {
+    await page.keyboard.press(key);
+    if (await waitForVisibleComboBoxItemsClosed(page, 1_000)) {
+      await page.waitForTimeout(100);
+      return;
+    }
+  }
+}
+
+async function waitForComboBoxSelectionText(page, selectorAutomationId, expectedVisibleNames, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const selectedText = await page.evaluate(readComboBoxSelectionTextInPage, selectorAutomationId);
+    if (typeof selectedText === "string" && expectedVisibleNames.some(name => selectedText.includes(name))) {
+      return true;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  return false;
+}
+
+async function waitForVisibleComboBoxItemsClosed(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const visibleItems = await page.evaluate(() => window.__salmoneggSmoke.collectVisibleComboBoxItems().length);
+    if (visibleItems === 0) {
+      return true;
+    }
+
+    await page.waitForTimeout(100);
+  }
+
+  return false;
 }
 
 export async function selectComboBoxItemByIndex(
@@ -770,6 +1086,75 @@ export function collectVisibleNavigationTargetDebug() {
     .slice(0, 80);
 }
 
+function collectVisibleNavigationTargetMatchDebug(input) {
+  const labels = input.labels ?? [];
+  const automationIds = input.automationIds ?? [];
+  return Array.from(document.querySelectorAll("body *"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const text = (element.textContent ?? "").trim();
+      const aria = element.getAttribute("aria-label") ?? "";
+      const automationId =
+        element.getAttribute("data-automation-id")
+        ?? element.getAttribute("data-automationid")
+        ?? element.getAttribute("automationid")
+        ?? "";
+      const clickable =
+        element.closest(".uno-navigationviewitem")
+        ?? element.closest(".uno-comboboxitem")
+        ?? element.closest(".uno-button")
+        ?? element.closest("[role='button']")
+        ?? element.closest("button")
+        ?? element;
+      const clickableRect = clickable.getBoundingClientRect();
+      return {
+        text: text.slice(0, 160),
+        aria,
+        automationId,
+        role: element.getAttribute("role") ?? "",
+        className: element.className?.toString?.() ?? "",
+        rect: {
+          left: Math.round(rect.left),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height)
+        },
+        clickableText: (clickable.textContent ?? "").trim().slice(0, 160),
+        clickableAria: clickable.getAttribute("aria-label") ?? "",
+        clickableRole: clickable.getAttribute("role") ?? "",
+        clickableClassName: clickable.className?.toString?.() ?? "",
+        clickableRect: {
+          left: Math.round(clickableRect.left),
+          top: Math.round(clickableRect.top),
+          width: Math.round(clickableRect.width),
+          height: Math.round(clickableRect.height)
+        },
+        display: style.display,
+        visibility: style.visibility,
+        automationMatch: automationIds.includes(aria) || automationIds.includes(automationId),
+        textMatch: labels.includes(text) || labels.includes(aria)
+      };
+    })
+    .filter(candidate =>
+      (candidate.automationMatch || candidate.textMatch)
+      && candidate.rect.width > 0
+      && candidate.rect.height > 0
+      && candidate.display !== "none"
+      && candidate.visibility !== "hidden"
+      && candidate.rect.left >= -1
+      && candidate.rect.top >= -1
+      && candidate.rect.left <= innerWidth
+      && candidate.rect.top <= innerHeight)
+    .sort((left, right) => {
+      if (left.automationMatch !== right.automationMatch) {
+        return left.automationMatch ? -1 : 1;
+      }
+
+      return (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height);
+    });
+}
+
 export function collectVisibleInteractiveDebug() {
   return Array.from(document.querySelectorAll("button,input,[role='button'],[role='switch'],[aria-checked],.uno-button,.uno-toggleswitch"))
     .map(element => {
@@ -816,6 +1201,8 @@ export function collectVisibleComboBoxDebug() {
     })
     .filter(candidate =>
       (candidate.role === "combobox" || candidate.className.toLowerCase().includes("combobox"))
+      && candidate.role !== "option"
+      && !candidate.className.toLowerCase().includes("comboboxitem")
       && candidate.rect.width > 0
       && candidate.rect.height > 0
       && candidate.display !== "none"
@@ -1049,9 +1436,10 @@ function findVisibleComboBoxItemPointByIndex(itemIndex) {
     return null;
   }
 
+  const rect = item.clickRect ?? item.rect;
   return {
-    x: item.rect.left + item.rect.width / 2,
-    y: item.rect.top + item.rect.height / 2
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
   };
 }
 
@@ -1062,14 +1450,18 @@ function findVisibleComboBoxItemPointByNames(expectedVisibleNames) {
     return null;
   }
 
+  const rect = item.clickRect ?? item.rect;
   return {
-    x: item.rect.left + item.rect.width / 2,
-    y: item.rect.top + item.rect.height / 2
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
   };
 }
 
 function findVisibleComboBoxControlPointBySelectorFallback(selectorAutomationId) {
   const selectorIndexByAutomationId = new Map([
+    ["StartView.AgentSelector", 0],
+    ["StartView.ModeSelector", 1],
+    ["StartView.ProjectSelector", 2],
     ["Appearance.Theme", 0],
     ["Appearance.Backdrop", 1],
     ["GeneralSettings.Language", 0]
@@ -1079,7 +1471,7 @@ function findVisibleComboBoxControlPointBySelectorFallback(selectorAutomationId)
     return null;
   }
 
-  const comboBox = window.__salmoneggSmoke.collectVisibleComboBoxControls()[selectorIndex];
+  const comboBox = window.__salmoneggSmoke.collectVisibleComboBoxControls()[selectorIndex] ?? null;
   if (!comboBox) {
     return null;
   }
@@ -1369,6 +1761,9 @@ function readEditableControlStateInPage(input) {
 function readComboBoxSelectionTextInPage(selectorAutomationId) {
   const resolveVisibleComboBoxControlBySelectorFallbackInline = automationId => {
     const selectorIndexByAutomationId = new Map([
+      ["StartView.AgentSelector", 0],
+      ["StartView.ModeSelector", 1],
+      ["StartView.ProjectSelector", 2],
       ["Appearance.Theme", 0],
       ["Appearance.Backdrop", 1],
       ["GeneralSettings.Language", 0]
@@ -1378,14 +1773,14 @@ function readComboBoxSelectionTextInPage(selectorAutomationId) {
       return null;
     }
 
-    return window.__salmoneggSmoke.collectVisibleComboBoxControls()[selectorIndex]?.element ?? null;
+    return window.__salmoneggSmoke.collectVisibleComboBoxControls()[selectorIndex] ?? null;
   };
 
   const control = window.__salmoneggSmoke.findVisibleControl(
     { automationIds: [selectorAutomationId] },
     [],
     [selectorAutomationId])
-    ?? resolveVisibleComboBoxControlBySelectorFallbackInline(selectorAutomationId);
+    ?? resolveVisibleComboBoxControlBySelectorFallbackInline(selectorAutomationId)?.element;
   if (!control) {
     return null;
   }

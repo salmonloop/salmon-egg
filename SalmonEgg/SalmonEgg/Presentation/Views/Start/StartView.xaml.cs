@@ -2,8 +2,8 @@ using System;
 using System.Collections.Specialized;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.ViewModels.Start;
@@ -41,8 +41,9 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
 
         try
         {
+            var ensureAcpProfilesLoadedTask = ViewModel.Chat.EnsureAcpProfilesLoadedAsync();
             await ViewModel.Chat.RestoreConversationsAsync();
-            await ViewModel.Chat.EnsureAcpProfilesLoadedAsync();
+            await ensureAcpProfilesLoadedTask;
         }
         catch
         {

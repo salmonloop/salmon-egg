@@ -121,6 +121,24 @@ public class ShellLayoutReducerTests
     }
 
     [Fact]
+    public void Reducer_ExitCompactOrMinimalToExpanded_DoesNotPreserveClosedNativePaneIntent()
+    {
+        var compactClosed = ShellLayoutState.Default with
+        {
+            WindowMetrics = new WindowMetrics(800, 700, 800, 700),
+            UserNavOpenIntent = false
+        };
+
+        var expanded = ShellLayoutReducer.Reduce(
+            compactClosed,
+            new WindowMetricsChanged(1200, 700, 1200, 700));
+
+        Assert.Equal(NavigationPaneDisplayMode.Expanded, expanded.Snapshot.NavPaneDisplayMode);
+        Assert.Null(expanded.State.UserNavOpenIntent);
+        Assert.True(expanded.Snapshot.IsNavPaneOpen);
+    }
+
+    [Fact]
     public void Reducer_Toggle_Uses_CurrentOpenState()
     {
         var state = ShellLayoutState.Default with { WindowMetrics = new WindowMetrics(1200, 700, 1200, 700) };

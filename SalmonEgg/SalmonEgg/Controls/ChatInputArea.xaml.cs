@@ -10,11 +10,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using SalmonEgg.Presentation.Core.Services.Input;
-using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
+using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.ViewModels.Chat;
-using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 using WindowActivatedEventArgs = Microsoft.UI.Xaml.WindowActivatedEventArgs;
+using XamlFocusManager = Microsoft.UI.Xaml.Input.FocusManager;
 
 namespace SalmonEgg.Controls;
 
@@ -94,6 +94,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private bool _isImeComposing;
     private ComboBox? _openSelectorHost;
+    private bool _selectorCommandExecutedDuringOpen;
     private readonly List<(DependencyObject Target, DependencyProperty Property, long Token)> _focusRefreshCallbackTokens = [];
     private bool _focusRefreshCallbacksRegistered;
     private Button? _pendingActionBoundaryContinuationSource;
@@ -934,12 +935,12 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private IEnumerable<ComboBox> GetVisibleSelectors()
     {
-        return new[]
+        return new ComboBox?[]
             {
-                GetLoadedSelector(nameof(AgentSelectorHost)),
-                GetLoadedSelector(nameof(ModeSelectorHost)),
-                GetLoadedSelector(nameof(ModelSelectorHost)),
-                GetLoadedSelector(nameof(ProjectSelectorHost))
+                AgentSelectorHost,
+                ModeSelectorHost,
+                ModelSelectorHost,
+                ProjectSelectorHost
             }
             .Where(selector => selector is not null
                                && selector.XamlRoot is not null
@@ -948,9 +949,6 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
                                && selector.ActualHeight > 0
                                && selector.IsEnabled)!;
     }
-
-    private ComboBox? GetLoadedSelector(string selectorName)
-        => FindName(selectorName) as ComboBox;
 
     private void OnSlashCommandsListSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -964,56 +962,176 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 
     private void OnModeSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ExecuteSelectorCommand(sender, SelectorSlots.Mode.SelectionCommand);
+        ExecuteSelectorCommand(sender, e, SelectorSlots.Mode.SelectionCommand);
     }
 
     private void OnAgentSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ExecuteSelectorCommand(sender, SelectorSlots.Agent.SelectionCommand);
+        ExecuteSelectorCommand(sender, e, SelectorSlots.Agent.SelectionCommand);
     }
 
     private void OnProjectSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ExecuteSelectorCommand(sender, SelectorSlots.Project.SelectionCommand);
+        ExecuteSelectorCommand(sender, e, SelectorSlots.Project.SelectionCommand);
     }
 
     private void OnModelSelectorSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        ExecuteSelectorCommand(sender, SelectorSlots.Model.SelectionCommand);
+        ExecuteSelectorCommand(sender, e, SelectorSlots.Model.SelectionCommand);
     }
 
-    private static void ExecuteSelectorCommand(object sender, ICommand? command)
+    private void ExecuteSelectorCommand(object sender, SelectionChangedEventArgs e, ICommand? command)
     {
-        if (sender is not ComboBox comboBox
-            || command is null
-            || comboBox.SelectedItem is not ComposerSelectorItemViewModel item
+        if (sender is ComboBox comboBox
+            && !ReferenceEquals(_openSelectorHost, comboBox))
+        {
+            return;
+        }
+
+        _selectorCommandExecutedDuringOpen |= TryExecuteSelectorCommand(
+            ResolveSelectedSelectorItem(sender, e),
+            command);
+    }
+
+    private void ExecuteCurrentSelectorCommand(object sender, ICommand? command)
+    {
+        _selectorCommandExecutedDuringOpen |= TryExecuteSelectorCommand(
+            ResolveCurrentSelectorItem(sender),
+            command);
+    }
+
+    private static bool TryExecuteSelectorCommand(ComposerSelectorItemViewModel? item, ICommand? command)
+    {
+        if (command is null
+            || item is null
             || item.IsPlaceholder
             || !item.IsSelectable
             || string.IsNullOrWhiteSpace(item.SemanticValue))
         {
-            return;
+            return false;
         }
 
         if (command.CanExecute(item))
         {
             command.Execute(item);
+            return true;
         }
+
+        return false;
     }
+
+    private static ComposerSelectorItemViewModel? ResolveSelectedSelectorItem(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        var addedItem = e.AddedItems
+            .Select(ResolveSelectorItem)
+            .FirstOrDefault(item => item is not null);
+        if (addedItem is not null)
+        {
+            return addedItem;
+        }
+
+        if (sender is not ComboBox comboBox)
+        {
+            return null;
+        }
+
+        var selectedItem = ResolveSelectorItem(comboBox.SelectedItem);
+        if (selectedItem is not null)
+        {
+            return selectedItem;
+        }
+
+        if (comboBox.SelectedIndex >= 0
+            && comboBox.ItemsSource is IEnumerable<ComposerSelectorItemViewModel> typedItems)
+        {
+            return typedItems.ElementAtOrDefault(comboBox.SelectedIndex);
+        }
+
+        return comboBox.SelectedIndex >= 0 && comboBox.SelectedIndex < comboBox.Items.Count
+            ? ResolveSelectorItem(comboBox.Items[comboBox.SelectedIndex])
+            : null;
+    }
+
+    private static ComposerSelectorItemViewModel? ResolveCurrentSelectorItem(object sender)
+    {
+        if (sender is not ComboBox comboBox)
+        {
+            return null;
+        }
+
+        var selectedItem = ResolveSelectorItem(comboBox.SelectedItem);
+        if (selectedItem is not null)
+        {
+            return selectedItem;
+        }
+
+        if (comboBox.SelectedIndex >= 0
+            && comboBox.ItemsSource is IEnumerable<ComposerSelectorItemViewModel> typedItems)
+        {
+            return typedItems.ElementAtOrDefault(comboBox.SelectedIndex);
+        }
+
+        return comboBox.SelectedIndex >= 0 && comboBox.SelectedIndex < comboBox.Items.Count
+            ? ResolveSelectorItem(comboBox.Items[comboBox.SelectedIndex])
+            : null;
+    }
+
+    private static ComposerSelectorItemViewModel? ResolveSelectorItem(object? candidate)
+        => candidate switch
+        {
+            ComposerSelectorItemViewModel item => item,
+            FrameworkElement { DataContext: ComposerSelectorItemViewModel item } => item,
+            _ => null
+        };
 
     private void OnSelectorDropDownOpened(object sender, object e)
     {
         _openSelectorHost = sender as ComboBox;
+        _selectorCommandExecutedDuringOpen = false;
         SelectorDropDownOpened?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSelectorDropDownClosed(object sender, object e)
     {
+        if (!_selectorCommandExecutedDuringOpen && sender is ComboBox comboBox)
+        {
+            var command = ResolveSelectorCommand(comboBox);
+            if (command is not null)
+            {
+                _ = DispatcherQueue.TryEnqueue(() => ExecuteCurrentSelectorCommand(comboBox, command));
+            }
+        }
+
         if (ReferenceEquals(_openSelectorHost, sender))
         {
             _openSelectorHost = null;
         }
 
         SelectorDropDownClosed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private ICommand? ResolveSelectorCommand(ComboBox comboBox)
+    {
+        if (ReferenceEquals(comboBox, AgentSelectorHost))
+        {
+            return SelectorSlots.Agent.SelectionCommand;
+        }
+
+        if (ReferenceEquals(comboBox, ModeSelectorHost))
+        {
+            return SelectorSlots.Mode.SelectionCommand;
+        }
+
+        if (ReferenceEquals(comboBox, ProjectSelectorHost))
+        {
+            return SelectorSlots.Project.SelectionCommand;
+        }
+
+        return ReferenceEquals(comboBox, ModelSelectorHost)
+            ? SelectorSlots.Model.SelectionCommand
+            : null;
     }
 
     private ChatInputFocusContext ResolveFocusContext(DependencyObject? focusedElement)

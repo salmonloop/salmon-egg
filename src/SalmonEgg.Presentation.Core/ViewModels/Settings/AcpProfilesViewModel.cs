@@ -117,7 +117,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     public async Task RefreshIfEmptyAsync()
     {
-        if (Profiles.Count == 0 && !IsLoading)
+        if (Profiles.Count == 0)
         {
             await RefreshAsync().ConfigureAwait(false);
         }
@@ -174,11 +174,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
-        // Use semaphore to ensure mutual exclusivity and thread-safe check of loading state.
-        if (!await _refreshSemaphore.WaitAsync(0).ConfigureAwait(false))
-        {
-            return;
-        }
+        await _refreshSemaphore.WaitAsync().ConfigureAwait(false);
 
         try
         {
