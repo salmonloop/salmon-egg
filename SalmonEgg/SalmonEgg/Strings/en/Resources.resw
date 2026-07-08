@@ -1479,14 +1479,74 @@
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>Configuration cloud sync</value>
   </data>
-  <data name="DataStorage_CloudSyncOneDriveTitle.Text" xml:space="preserve">
-    <value>OneDrive</value>
+  <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
+    <value>Cloud sync provider</value>
   </data>
   <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
-    <value>Syncs the full configuration folder and saved credentials to OneDrive. Credentials are included in the cloud package.</value>
+    <value>Syncs the full configuration folder and saved credentials to the selected cloud provider. Credentials are included in the cloud package.</value>
   </data>
-  <data name="DataStorage_CloudSyncAuthorizeOneDrive.Content" xml:space="preserve">
-    <value>Authorize OneDrive</value>
+  <data name="DataStorage_CloudSyncProviderSelectionDescription.Text" xml:space="preserve">
+    <value>Only one provider can be active at a time; connecting a new provider replaces the current cloud sync target.</value>
+  </data>
+  <data name="DataStorage_CloudSyncProviderPicker.Header" xml:space="preserve">
+    <value>Provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrl.Header" xml:space="preserve">
+    <value>WebDAV file URL</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrl.PlaceholderText" xml:space="preserve">
+    <value>https://example.com/remote.php/dav/files/me/salmonegg-config.zip</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavUsername.Header" xml:space="preserve">
+    <value>WebDAV username</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavUsername.PlaceholderText" xml:space="preserve">
+    <value>Optional; fill in when authentication is required</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavPassword.Header" xml:space="preserve">
+    <value>WebDAV password or app password</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Endpoint.Header" xml:space="preserve">
+    <value>S3 endpoint</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Endpoint.PlaceholderText" xml:space="preserve">
+    <value>https://s3.example.com</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Bucket.Header" xml:space="preserve">
+    <value>Bucket</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Bucket.PlaceholderText" xml:space="preserve">
+    <value>salmonegg</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Region.Header" xml:space="preserve">
+    <value>Region</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Region.PlaceholderText" xml:space="preserve">
+    <value>us-east-1</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ObjectKey.Header" xml:space="preserve">
+    <value>Object key</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ObjectKey.PlaceholderText" xml:space="preserve">
+    <value>config-sync/salmonegg-config.zip</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.Header" xml:space="preserve">
+    <value>Use path-style URL</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.OffContent" xml:space="preserve">
+    <value>Virtual-hosted</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.OnContent" xml:space="preserve">
+    <value>Path-style</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3AccessKeyId.Header" xml:space="preserve">
+    <value>Access key ID</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3SecretAccessKey.Header" xml:space="preserve">
+    <value>Secret access key</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectSelected.Content" xml:space="preserve">
+    <value>Connect selected provider</value>
   </data>
   <data name="DataStorage_CloudSyncNow.Content" xml:space="preserve">
     <value>Sync now</value>

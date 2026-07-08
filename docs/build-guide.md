@@ -141,6 +141,8 @@ WASM 持久化与能力边界：
 - 当前已确认会持久化浏览器 IndexedDB-backed 文件系统的数据包括：应用设置、ACP profile YAML、其它走应用文件存储抽象的普通配置，以及 plaintext secure storage 中的配置相关凭据；
 - WASM 没有 OS-backed secure store，配置相关凭据会以普通应用文件形式持久化；
 - 配置云同步包会包含 config 目录和已登记的 ACP token/API key 等凭据，`secrets.json` 为明文内容；
+- 云同步当前支持 OneDrive、WebDAV 与 S3-compatible object storage，设置页一次只能连接一个 provider；WebDAV 的 URL/用户名和 S3 的 endpoint/bucket/region/object key 属于用户配置，WebDAV 密码与 S3 access key/secret key 走应用 secure storage；
+- OneDrive 应用注册配置通过 GitHub Actions 构建阶段注入：设置 `SALMONEGG_ONEDRIVE_CLIENT_ID`、`SALMONEGG_ONEDRIVE_TENANT_ID`、`SALMONEGG_ONEDRIVE_REDIRECT_URI`、`SALMONEGG_ONEDRIVE_SCOPES` 为 repository secrets 或 variables；workflow 会优先读取 secrets，空值时读取 variables，并写入程序集元数据；
 - WASM 不会向 ACP Server 声明 `clientCapabilities.fs`，也不会把 `terminal` 声明为 `true`；
 - 设置页中的本地目录打开/导出等桌面入口在 WASM 上必须保持受限。
 

@@ -22,6 +22,22 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
     protected override Control? GetSectionEntryFocusTarget()
         => DataStorageSaveLocalHistoryToggle;
 
+    private void OnWebDavPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            ViewModel.WebDavPassword = passwordBox.Password;
+        }
+    }
+
+    private void OnS3SecretAccessKeyChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            ViewModel.S3SecretAccessKey = passwordBox.Password;
+        }
+    }
+
     private async void OnClearCacheClick(object sender, RoutedEventArgs e)
     {
         var dialog = new ContentDialog

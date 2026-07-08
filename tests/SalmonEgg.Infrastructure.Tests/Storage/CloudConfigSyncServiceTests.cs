@@ -136,7 +136,67 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         Assert.Equal(1, persistence.FlushCount);
     }
 
-    private CloudConfigSyncService CreateService(FakeProvider provider)
+    [Fact]
+    public async Task ConfigureProviderAsync_WhenProviderIsConfigurable_PersistsOnlySanitizedOptions()
+    {
+        var provider = new ConfigurableFakeProvider();
+        var service = CreateService(provider);
+
+        var result = await service.ConfigureProviderAsync(
+            "webdav",
+            new Dictionary<string, string>
+            {
+                [" file_url "] = " https://dav.example.test/salmonegg-config.zip ",
+                ["username"] = " alice "
+            },
+            new Dictionary<string, string>
+            {
+                ["password"] = "app-password"
+            });
+        var settings = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
+        Assert.Equal("webdav", result.ProviderId);
+        Assert.Equal("https://dav.example.test/salmonegg-config.zip", settings.CloudConfigSync.ProviderOptions["webdav"]["file_url"]);
+        Assert.Equal("alice", settings.CloudConfigSync.ProviderOptions["webdav"]["username"]);
+        Assert.Equal("app-password", provider.Secrets["password"]);
+        Assert.DoesNotContain("password", settings.CloudConfigSync.ProviderOptions["webdav"].Keys);
+    }
+
+    [Fact]
+    public async Task ConfigureProviderAsync_WhenS3ProviderIsConfigurable_DoesNotPersistAccessSecrets()
+    {
+        var provider = new ConfigurableFakeProvider("s3", "S3 compatible");
+        var service = CreateService(provider);
+
+        var result = await service.ConfigureProviderAsync(
+            "s3",
+            new Dictionary<string, string>
+            {
+                ["endpoint"] = " https://s3.example.test ",
+                ["bucket"] = " salmonegg ",
+                ["region"] = " auto ",
+                ["object_key"] = " config-sync/salmonegg-config.zip ",
+                ["force_path_style"] = " true "
+            },
+            new Dictionary<string, string>
+            {
+                ["access_key_id"] = "access-key",
+                ["secret_access_key"] = "secret-key"
+            });
+        var settings = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
+        Assert.Equal("s3", result.ProviderId);
+        Assert.Equal("https://s3.example.test", settings.CloudConfigSync.ProviderOptions["s3"]["endpoint"]);
+        Assert.Equal("salmonegg", settings.CloudConfigSync.ProviderOptions["s3"]["bucket"]);
+        Assert.Equal("access-key", provider.Secrets["access_key_id"]);
+        Assert.Equal("secret-key", provider.Secrets["secret_access_key"]);
+        Assert.DoesNotContain("access_key_id", settings.CloudConfigSync.ProviderOptions["s3"].Keys);
+        Assert.DoesNotContain("secret_access_key", settings.CloudConfigSync.ProviderOptions["s3"].Keys);
+    }
+
+    private CloudConfigSyncService CreateService(ICloudConfigStorageProvider provider)
         => new(
             _appSettings,
             new[] { provider },
@@ -224,6 +284,42 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             UploadedContent = content;
             return Task.FromResult(UploadResult);
         }
+    }
+
+    private sealed class ConfigurableFakeProvider : IConfigurableCloudConfigStorageProvider
+    {
+        public ConfigurableFakeProvider(string providerId = "webdav", string displayName = "WebDAV")
+        {
+            Descriptor = new CloudConfigProviderDescriptor(providerId, displayName, true);
+        }
+
+        public Dictionary<string, string> Secrets { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public CloudConfigProviderDescriptor Descriptor { get; }
+
+        public Task<CloudConfigProviderConfigurationResult> ConfigureAsync(
+            IReadOnlyDictionary<string, string> options,
+            IReadOnlyDictionary<string, string> secrets,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var secret in secrets)
+            {
+                Secrets[secret.Key] = secret.Value;
+            }
+
+            return Task.FromResult(CloudConfigProviderConfigurationResult.Success());
+        }
+
+        public Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(bool interactive, CancellationToken cancellationToken = default)
+            => Task.FromResult(CloudConfigAuthorizationResult.Success());
+
+        public Task SignOutAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<CloudConfigRemoteFile?>(null);
+
+        public Task<CloudConfigUploadResult> UploadAsync(byte[] content, string? expectedETag, CancellationToken cancellationToken = default)
+            => Task.FromResult(CloudConfigUploadResult.Uploaded("etag"));
     }
 
     private sealed class RecordingFileSystemPersistence : IFileSystemPersistence

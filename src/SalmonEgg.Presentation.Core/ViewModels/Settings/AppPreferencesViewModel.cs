@@ -548,8 +548,36 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             Enabled = settings.Enabled,
             ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
-            IncludeSecrets = settings.IncludeSecrets
+            IncludeSecrets = settings.IncludeSecrets,
+            ProviderOptions = CloneProviderOptions(settings.ProviderOptions)
         };
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> CloneProviderOptions(
+        IReadOnlyDictionary<string, Dictionary<string, string>>? options)
+    {
+        var clone = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        if (options is null)
+        {
+            return clone;
+        }
+
+        foreach (var provider in options)
+        {
+            if (string.IsNullOrWhiteSpace(provider.Key) || provider.Value is null)
+            {
+                continue;
+            }
+
+            clone[provider.Key.Trim()] = provider.Value
+                .Where(option => !string.IsNullOrWhiteSpace(option.Key) && option.Value is not null)
+                .ToDictionary(
+                    option => option.Key.Trim(),
+                    option => option.Value.Trim(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        return clone;
     }
 
     private static List<AgentRemoteDirectory> NormalizeAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)

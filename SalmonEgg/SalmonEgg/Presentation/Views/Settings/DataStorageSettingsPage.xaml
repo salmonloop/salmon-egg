@@ -69,9 +69,11 @@
                                     </Grid.RowDefinitions>
 
                                     <StackPanel VerticalAlignment="Center" Spacing="4">
-                                        <TextBlock x:Uid="DataStorage_CloudSyncOneDriveTitle"
+                                        <TextBlock x:Uid="DataStorage_CloudSyncProviderTitle"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                         <TextBlock x:Uid="DataStorage_CloudSyncDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_CloudSyncProviderSelectionDescription"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncStatusText, Mode=OneWay}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
@@ -86,9 +88,56 @@
                                                 Spacing="8"
                                                 Margin="0,12,0,0"
                                                 HorizontalAlignment="Stretch">
-                                        <Button x:Uid="DataStorage_CloudSyncAuthorizeOneDrive"
-                                                AutomationProperties.AutomationId="DataStorage.CloudSync.AuthorizeOneDrive"
-                                                Command="{x:Bind ViewModel.AuthorizeOneDriveCloudSyncCommand}"
+                                        <ComboBox x:Uid="DataStorage_CloudSyncProviderPicker"
+                                                  AutomationProperties.AutomationId="DataStorage.CloudSync.ProviderPicker"
+                                                  ItemsSource="{x:Bind ViewModel.CloudConfigProviders, Mode=OneWay}"
+                                                  DisplayMemberPath="DisplayName"
+                                                  SelectedValuePath="ProviderId"
+                                                  SelectedValue="{x:Bind ViewModel.SelectedCloudConfigProviderId, Mode=TwoWay}"
+                                                  IsFocusEngagementEnabled="True"
+                                                  UseSystemFocusVisuals="True"
+                                                  HorizontalAlignment="Stretch"/>
+                                        <StackPanel Spacing="8"
+                                                    Visibility="{x:Bind ViewModel.IsWebDavCloudConfigProviderSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBox x:Uid="DataStorage_CloudSyncWebDavFileUrl"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavFileUrl"
+                                                     Text="{x:Bind ViewModel.WebDavFileUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBox x:Uid="DataStorage_CloudSyncWebDavUsername"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavUsername"
+                                                     Text="{x:Bind ViewModel.WebDavUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <PasswordBox x:Name="WebDavPasswordBox"
+                                                         x:Uid="DataStorage_CloudSyncWebDavPassword"
+                                                         AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavPassword"
+                                                         PasswordChanged="OnWebDavPasswordChanged"/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="8"
+                                                    Visibility="{x:Bind ViewModel.IsS3CloudConfigProviderSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBox x:Uid="DataStorage_CloudSyncS3Endpoint"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.S3Endpoint"
+                                                     Text="{x:Bind ViewModel.S3Endpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBox x:Uid="DataStorage_CloudSyncS3Bucket"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.S3Bucket"
+                                                     Text="{x:Bind ViewModel.S3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBox x:Uid="DataStorage_CloudSyncS3Region"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.S3Region"
+                                                     Text="{x:Bind ViewModel.S3Region, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBox x:Uid="DataStorage_CloudSyncS3ObjectKey"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.S3ObjectKey"
+                                                     Text="{x:Bind ViewModel.S3ObjectKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <ToggleSwitch x:Uid="DataStorage_CloudSyncS3ForcePathStyle"
+                                                          AutomationProperties.AutomationId="DataStorage.CloudSync.S3ForcePathStyle"
+                                                          IsOn="{x:Bind ViewModel.S3ForcePathStyle, Mode=TwoWay}"/>
+                                            <TextBox x:Uid="DataStorage_CloudSyncS3AccessKeyId"
+                                                     AutomationProperties.AutomationId="DataStorage.CloudSync.S3AccessKeyId"
+                                                     Text="{x:Bind ViewModel.S3AccessKeyId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <PasswordBox x:Name="S3SecretAccessKeyBox"
+                                                         x:Uid="DataStorage_CloudSyncS3SecretAccessKey"
+                                                         AutomationProperties.AutomationId="DataStorage.CloudSync.S3SecretAccessKey"
+                                                         PasswordChanged="OnS3SecretAccessKeyChanged"/>
+                                        </StackPanel>
+                                        <Button x:Uid="DataStorage_CloudSyncConnectSelected"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.ConnectSelected"
+                                                Command="{x:Bind ViewModel.ConnectSelectedCloudConfigProviderCommand}"
                                                 IsEnabled="{x:Bind ViewModel.IsCloudConfigSyncConfigured, Mode=OneWay}"
                                                 HorizontalAlignment="Stretch"/>
                                         <Button x:Uid="DataStorage_CloudSyncNow"

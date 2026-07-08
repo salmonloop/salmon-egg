@@ -79,11 +79,44 @@ public sealed class CloudConfigSyncService : ICloudConfigSyncService
         {
             Enabled = true,
             ProviderId = provider.Descriptor.ProviderId,
-            IncludeSecrets = true
+            IncludeSecrets = true,
+            ProviderOptions = settings.CloudConfigSync.ProviderOptions
         };
         await _appSettings.SaveAsync(settings).ConfigureAwait(false);
 
         return await SyncNowAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CloudConfigSyncResult> ConfigureProviderAsync(
+        string providerId,
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, string> secrets,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetProvider(providerId, out var provider))
+        {
+            return CloudConfigSyncResult.NotConfigured(providerId);
+        }
+
+        if (provider is IConfigurableCloudConfigStorageProvider configurable)
+        {
+            var configuration = await configurable.ConfigureAsync(options, secrets, cancellationToken).ConfigureAwait(false);
+            if (!configuration.Succeeded)
+            {
+                return CloudConfigSyncResult.Failed(provider.Descriptor.ProviderId, configuration.UserMessage ?? "Cloud provider configuration failed.");
+            }
+        }
+
+        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
+        settings.CloudConfigSync.ProviderOptions ??= new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        settings.CloudConfigSync.ProviderOptions[provider.Descriptor.ProviderId] = options
+            .Where(option => !string.IsNullOrWhiteSpace(option.Key) && option.Value is not null)
+            .ToDictionary(
+                option => option.Key.Trim(),
+                option => option.Value.Trim(),
+                StringComparer.OrdinalIgnoreCase);
+        await _appSettings.SaveAsync(settings).ConfigureAwait(false);
+        return new CloudConfigSyncResult(CloudConfigSyncStatus.Disabled, provider.Descriptor.ProviderId);
     }
 
     public async Task<CloudConfigSyncResult> SyncNowAsync(CancellationToken cancellationToken = default)

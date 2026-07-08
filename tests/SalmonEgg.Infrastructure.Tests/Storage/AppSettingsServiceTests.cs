@@ -68,7 +68,23 @@ public sealed class AppSettingsServiceTests : IDisposable
             {
                 Enabled = true,
                 ProviderId = "onedrive",
-                IncludeSecrets = true
+                IncludeSecrets = true,
+                ProviderOptions = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["webdav"] = new(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["file_url"] = " https://dav.example.test/salmonegg-config.zip ",
+                        ["username"] = " alice "
+                    },
+                    ["s3"] = new(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["endpoint"] = " https://s3.example.test ",
+                        ["bucket"] = " salmonegg ",
+                        ["region"] = " auto ",
+                        ["object_key"] = " config-sync/salmonegg-config.zip ",
+                        ["force_path_style"] = " true "
+                    }
+                }
             }
         });
 
@@ -80,6 +96,13 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.True(loaded.CloudConfigSync.Enabled);
         Assert.Equal("onedrive", loaded.CloudConfigSync.ProviderId);
         Assert.True(loaded.CloudConfigSync.IncludeSecrets);
+        Assert.Equal("https://dav.example.test/salmonegg-config.zip", loaded.CloudConfigSync.ProviderOptions["webdav"]["file_url"]);
+        Assert.Equal("alice", loaded.CloudConfigSync.ProviderOptions["webdav"]["username"]);
+        Assert.Equal("https://s3.example.test", loaded.CloudConfigSync.ProviderOptions["s3"]["endpoint"]);
+        Assert.Equal("salmonegg", loaded.CloudConfigSync.ProviderOptions["s3"]["bucket"]);
+        Assert.Equal("auto", loaded.CloudConfigSync.ProviderOptions["s3"]["region"]);
+        Assert.Equal("config-sync/salmonegg-config.zip", loaded.CloudConfigSync.ProviderOptions["s3"]["object_key"]);
+        Assert.Equal("true", loaded.CloudConfigSync.ProviderOptions["s3"]["force_path_style"]);
     }
 
     [Fact]

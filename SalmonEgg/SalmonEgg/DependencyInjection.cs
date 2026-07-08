@@ -348,6 +348,8 @@ public static class DependencyInjection
         services.AddSingleton<ConfigSyncPackageService>();
         services.AddSingleton<CloudConfigSyncStateStore>();
         services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
+        services.AddSingleton<ICloudConfigStorageProvider, WebDavCloudConfigStorageProvider>();
+        services.AddSingleton<ICloudConfigStorageProvider, S3CloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigSyncService, CloudConfigSyncService>();
 
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));

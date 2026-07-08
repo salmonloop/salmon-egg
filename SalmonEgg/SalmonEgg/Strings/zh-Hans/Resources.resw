@@ -1374,14 +1374,74 @@
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>配置云同步</value>
   </data>
-  <data name="DataStorage_CloudSyncOneDriveTitle.Text" xml:space="preserve">
-    <value>OneDrive</value>
+  <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
+    <value>云同步 provider</value>
   </data>
   <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
-    <value>将完整配置目录和已保存凭据同步到 OneDrive。凭据会包含在云端配置包中。</value>
+    <value>将完整配置目录和已保存凭据同步到所选云端。凭据会包含在云端配置包中。</value>
   </data>
-  <data name="DataStorage_CloudSyncAuthorizeOneDrive.Content" xml:space="preserve">
-    <value>授权 OneDrive</value>
+  <data name="DataStorage_CloudSyncProviderSelectionDescription.Text" xml:space="preserve">
+    <value>一次只能启用一个 provider；连接新的 provider 会替换当前云同步目标。</value>
+  </data>
+  <data name="DataStorage_CloudSyncProviderPicker.Header" xml:space="preserve">
+    <value>Provider</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrl.Header" xml:space="preserve">
+    <value>WebDAV 文件 URL</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrl.PlaceholderText" xml:space="preserve">
+    <value>https://example.com/remote.php/dav/files/me/salmonegg-config.zip</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavUsername.Header" xml:space="preserve">
+    <value>WebDAV 用户名</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavUsername.PlaceholderText" xml:space="preserve">
+    <value>可选；需要认证时填写</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavPassword.Header" xml:space="preserve">
+    <value>WebDAV 密码或应用密码</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Endpoint.Header" xml:space="preserve">
+    <value>S3 Endpoint</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Endpoint.PlaceholderText" xml:space="preserve">
+    <value>https://s3.example.com</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Bucket.Header" xml:space="preserve">
+    <value>Bucket</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Bucket.PlaceholderText" xml:space="preserve">
+    <value>salmonegg</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Region.Header" xml:space="preserve">
+    <value>Region</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3Region.PlaceholderText" xml:space="preserve">
+    <value>us-east-1</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ObjectKey.Header" xml:space="preserve">
+    <value>对象 Key</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ObjectKey.PlaceholderText" xml:space="preserve">
+    <value>config-sync/salmonegg-config.zip</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.Header" xml:space="preserve">
+    <value>使用 path-style URL</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.OffContent" xml:space="preserve">
+    <value>Virtual-hosted</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3ForcePathStyle.OnContent" xml:space="preserve">
+    <value>Path-style</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3AccessKeyId.Header" xml:space="preserve">
+    <value>Access Key ID</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3SecretAccessKey.Header" xml:space="preserve">
+    <value>Secret Access Key</value>
+  </data>
+  <data name="DataStorage_CloudSyncConnectSelected.Content" xml:space="preserve">
+    <value>连接所选 provider</value>
   </data>
   <data name="DataStorage_CloudSyncNow.Content" xml:space="preserve">
     <value>立即同步</value>

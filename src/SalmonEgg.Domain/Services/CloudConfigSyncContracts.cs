@@ -52,6 +52,13 @@ public sealed record CloudConfigAuthorizationResult(
     public static CloudConfigAuthorizationResult Failed(string message) => new(false, false, message);
 }
 
+public sealed record CloudConfigProviderConfigurationResult(bool Succeeded, string? UserMessage = null)
+{
+    public static CloudConfigProviderConfigurationResult Success() => new(true);
+
+    public static CloudConfigProviderConfigurationResult Failed(string message) => new(false, message);
+}
+
 public sealed record CloudConfigRemoteFile(byte[] Content, string? ETag, DateTimeOffset? LastModifiedUtc);
 
 public enum CloudConfigUploadStatus
@@ -87,6 +94,14 @@ public interface ICloudConfigStorageProvider
         CancellationToken cancellationToken = default);
 }
 
+public interface IConfigurableCloudConfigStorageProvider : ICloudConfigStorageProvider
+{
+    Task<CloudConfigProviderConfigurationResult> ConfigureAsync(
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, string> secrets,
+        CancellationToken cancellationToken = default);
+}
+
 public interface ICloudConfigSyncService
 {
     IReadOnlyList<CloudConfigProviderDescriptor> Providers { get; }
@@ -94,6 +109,12 @@ public interface ICloudConfigSyncService
     Task<CloudConfigSyncResult> InitializeAsync(CancellationToken cancellationToken = default);
 
     Task<CloudConfigSyncResult> AuthorizeAndSyncAsync(string providerId, CancellationToken cancellationToken = default);
+
+    Task<CloudConfigSyncResult> ConfigureProviderAsync(
+        string providerId,
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, string> secrets,
+        CancellationToken cancellationToken = default);
 
     Task<CloudConfigSyncResult> SyncNowAsync(CancellationToken cancellationToken = default);
 

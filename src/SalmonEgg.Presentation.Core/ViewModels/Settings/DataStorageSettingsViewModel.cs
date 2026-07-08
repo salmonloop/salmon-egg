@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +19,20 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public partial class DataStorageSettingsViewModel : ObservableObject
 {
+    private const string OneDriveProviderId = "onedrive";
+    private const string WebDavProviderId = "webdav";
+    private const string S3ProviderId = "s3";
+    private const string WebDavFileUrlOptionKey = "file_url";
+    private const string WebDavUsernameOptionKey = "username";
+    private const string WebDavPasswordSecretKey = "password";
+    private const string S3EndpointOptionKey = "endpoint";
+    private const string S3BucketOptionKey = "bucket";
+    private const string S3RegionOptionKey = "region";
+    private const string S3ObjectKeyOptionKey = "object_key";
+    private const string S3ForcePathStyleOptionKey = "force_path_style";
+    private const string S3AccessKeyIdSecretKey = "access_key_id";
+    private const string S3SecretAccessKeySecretKey = "secret_access_key";
+
     private readonly IAppDataService _paths;
     private readonly IAppMaintenanceService _maintenance;
     private readonly IDiagnosticsBundleService _diagnostics;
@@ -41,14 +57,71 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     public bool CanExportLocalFiles => _capabilities.SupportsLocalFileExport;
 
+    public ObservableCollection<CloudConfigProviderOptionViewModel> CloudConfigProviders { get; } = new();
+
     public bool IsCloudConfigSyncConfigured =>
-        _cloudConfigSync.Providers.Any(provider => provider.ProviderId == "onedrive" && provider.IsConfigured);
+        IsOneDriveCloudConfigProviderSelected
+            ? GetSelectedProvider()?.IsConfigured == true
+            : IsWebDavCloudConfigProviderSelected
+                ? !string.IsNullOrWhiteSpace(WebDavFileUrl)
+                : IsS3CloudConfigProviderSelected &&
+                  !string.IsNullOrWhiteSpace(S3Endpoint) &&
+                  !string.IsNullOrWhiteSpace(S3Bucket);
+
+    public bool IsOneDriveCloudConfigProviderSelected =>
+        string.Equals(SelectedCloudConfigProviderId, OneDriveProviderId, StringComparison.OrdinalIgnoreCase);
+
+    public bool IsWebDavCloudConfigProviderSelected =>
+        string.Equals(SelectedCloudConfigProviderId, WebDavProviderId, StringComparison.OrdinalIgnoreCase);
+
+    public bool IsS3CloudConfigProviderSelected =>
+        string.Equals(SelectedCloudConfigProviderId, S3ProviderId, StringComparison.OrdinalIgnoreCase);
 
     [ObservableProperty]
     private bool _isCloudConfigSyncBusy;
 
     [ObservableProperty]
     private bool _isCloudConfigSyncEnabled;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(IsOneDriveCloudConfigProviderSelected))]
+    [NotifyPropertyChangedFor(nameof(IsWebDavCloudConfigProviderSelected))]
+    [NotifyPropertyChangedFor(nameof(IsS3CloudConfigProviderSelected))]
+    private string _selectedCloudConfigProviderId = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    private string _webDavFileUrl = string.Empty;
+
+    [ObservableProperty]
+    private string _webDavUsername = string.Empty;
+
+    [ObservableProperty]
+    private string _webDavPassword = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    private string _s3Endpoint = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    private string _s3Bucket = string.Empty;
+
+    [ObservableProperty]
+    private string _s3Region = "us-east-1";
+
+    [ObservableProperty]
+    private string _s3ObjectKey = "config-sync/salmonegg-config.zip";
+
+    [ObservableProperty]
+    private bool _s3ForcePathStyle = true;
+
+    [ObservableProperty]
+    private string _s3AccessKeyId = string.Empty;
+
+    [ObservableProperty]
+    private string _s3SecretAccessKey = string.Empty;
 
     [ObservableProperty]
     private string _cloudConfigSyncStatusText = string.Empty;
@@ -87,6 +160,10 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        InitializeCloudConfigProviders();
+        ApplyWebDavOptions(Preferences.CloudConfigSync);
+        ApplyS3Options(Preferences.CloudConfigSync);
+        SelectedCloudConfigProviderId = ResolveInitialProviderId(Preferences.CloudConfigSync);
         ApplyCloudConfigSyncSettings(Preferences.CloudConfigSync);
     }
 
@@ -198,9 +275,24 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task AuthorizeOneDriveCloudSyncAsync()
+    private async Task ConnectSelectedCloudConfigProviderAsync()
     {
-        await RunCloudSyncOperationAsync(() => _cloudConfigSync.AuthorizeAndSyncAsync("onedrive"));
+        if (IsWebDavCloudConfigProviderSelected)
+        {
+            await RunCloudSyncOperationAsync(ConnectWebDavCloudConfigProviderAsync);
+            return;
+        }
+
+        if (IsS3CloudConfigProviderSelected)
+        {
+            await RunCloudSyncOperationAsync(ConnectS3CloudConfigProviderAsync);
+            return;
+        }
+
+        var providerId = string.IsNullOrWhiteSpace(SelectedCloudConfigProviderId)
+            ? OneDriveProviderId
+            : SelectedCloudConfigProviderId;
+        await RunCloudSyncOperationAsync(() => _cloudConfigSync.AuthorizeAndSyncAsync(providerId));
     }
 
     [RelayCommand]
@@ -237,6 +329,71 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private Task NotifyLocalFileExportUnsupportedAsync()
         => _ui.ShowInfoAsync(_localizer["Platform_LocalFileExportUnsupported"]);
 
+    partial void OnSelectedCloudConfigProviderIdChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
+        OnPropertyChanged(nameof(IsOneDriveCloudConfigProviderSelected));
+        OnPropertyChanged(nameof(IsWebDavCloudConfigProviderSelected));
+        OnPropertyChanged(nameof(IsS3CloudConfigProviderSelected));
+    }
+
+    partial void OnWebDavFileUrlChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
+    }
+
+    private async Task<CloudConfigSyncResult> ConnectWebDavCloudConfigProviderAsync()
+    {
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [WebDavFileUrlOptionKey] = WebDavFileUrl,
+            [WebDavUsernameOptionKey] = WebDavUsername
+        };
+        var secrets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(WebDavPassword))
+        {
+            secrets[WebDavPasswordSecretKey] = WebDavPassword;
+        }
+
+        var configuration = await _cloudConfigSync.ConfigureProviderAsync(WebDavProviderId, options, secrets);
+        if (configuration.Status == CloudConfigSyncStatus.Failed || configuration.Status == CloudConfigSyncStatus.NotConfigured)
+        {
+            return configuration;
+        }
+
+        return await _cloudConfigSync.AuthorizeAndSyncAsync(WebDavProviderId);
+    }
+
+    private async Task<CloudConfigSyncResult> ConnectS3CloudConfigProviderAsync()
+    {
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [S3EndpointOptionKey] = S3Endpoint,
+            [S3BucketOptionKey] = S3Bucket,
+            [S3RegionOptionKey] = S3Region,
+            [S3ObjectKeyOptionKey] = S3ObjectKey,
+            [S3ForcePathStyleOptionKey] = S3ForcePathStyle.ToString()
+        };
+        var secrets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(S3AccessKeyId))
+        {
+            secrets[S3AccessKeyIdSecretKey] = S3AccessKeyId;
+        }
+
+        if (!string.IsNullOrEmpty(S3SecretAccessKey))
+        {
+            secrets[S3SecretAccessKeySecretKey] = S3SecretAccessKey;
+        }
+
+        var configuration = await _cloudConfigSync.ConfigureProviderAsync(S3ProviderId, options, secrets);
+        if (configuration.Status == CloudConfigSyncStatus.Failed || configuration.Status == CloudConfigSyncStatus.NotConfigured)
+        {
+            return configuration;
+        }
+
+        return await _cloudConfigSync.AuthorizeAndSyncAsync(S3ProviderId);
+    }
+
     private async Task RunCloudSyncOperationAsync(Func<Task<CloudConfigSyncResult>> operation)
     {
         try
@@ -261,6 +418,9 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private void ApplyCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
     {
         IsCloudConfigSyncEnabled = settings?.Enabled == true;
+        ApplyWebDavOptions(settings);
+        ApplyS3Options(settings);
+        SelectedCloudConfigProviderId = ResolveInitialProviderId(settings);
         CloudConfigSyncStatusText = IsCloudConfigSyncEnabled
             ? _localizer["DataStorage_CloudSyncStatusEnabled"]
             : _localizer["DataStorage_CloudSyncStatusDisabled"];
@@ -299,9 +459,125 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         Preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
         {
             Enabled = IsCloudConfigSyncEnabled,
-            ProviderId = IsCloudConfigSyncEnabled ? result.ProviderId ?? "onedrive" : string.Empty,
-            IncludeSecrets = true
+            ProviderId = IsCloudConfigSyncEnabled ? result.ProviderId ?? SelectedCloudConfigProviderId : string.Empty,
+            IncludeSecrets = true,
+            ProviderOptions = CreateProviderOptionsSnapshot()
         });
+    }
+
+    private Dictionary<string, Dictionary<string, string>> CreateProviderOptionsSnapshot()
+    {
+        var options = CloneProviderOptions(Preferences.CloudConfigSync?.ProviderOptions);
+        if (!string.IsNullOrWhiteSpace(WebDavFileUrl) || !string.IsNullOrWhiteSpace(WebDavUsername))
+        {
+            options[WebDavProviderId] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavFileUrlOptionKey] = WebDavFileUrl.Trim(),
+                [WebDavUsernameOptionKey] = WebDavUsername.Trim()
+            };
+        }
+
+        if (!string.IsNullOrWhiteSpace(S3Endpoint) || !string.IsNullOrWhiteSpace(S3Bucket))
+        {
+            options[S3ProviderId] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [S3EndpointOptionKey] = S3Endpoint.Trim(),
+                [S3BucketOptionKey] = S3Bucket.Trim(),
+                [S3RegionOptionKey] = S3Region.Trim(),
+                [S3ObjectKeyOptionKey] = S3ObjectKey.Trim(),
+                [S3ForcePathStyleOptionKey] = S3ForcePathStyle.ToString()
+            };
+        }
+
+        return options;
+    }
+
+    private void InitializeCloudConfigProviders()
+    {
+        CloudConfigProviders.Clear();
+        foreach (var provider in (_cloudConfigSync.Providers ?? []).OrderBy(provider => provider.DisplayName, StringComparer.OrdinalIgnoreCase))
+        {
+            CloudConfigProviders.Add(new CloudConfigProviderOptionViewModel(
+                provider.ProviderId,
+                provider.DisplayName,
+                provider.IsConfigured));
+        }
+    }
+
+    private CloudConfigProviderOptionViewModel? GetSelectedProvider()
+        => CloudConfigProviders.FirstOrDefault(provider =>
+            string.Equals(provider.ProviderId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase));
+
+    private string ResolveInitialProviderId(CloudConfigSyncSettings? settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings?.ProviderId) &&
+            CloudConfigProviders.Any(provider => string.Equals(provider.ProviderId, settings.ProviderId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return settings.ProviderId.Trim();
+        }
+
+        return CloudConfigProviders.FirstOrDefault()?.ProviderId ?? string.Empty;
+    }
+
+    private void ApplyWebDavOptions(CloudConfigSyncSettings? settings)
+    {
+        if (settings?.ProviderOptions is null ||
+            !settings.ProviderOptions.TryGetValue(WebDavProviderId, out var options))
+        {
+            return;
+        }
+
+        WebDavFileUrl = GetOptionValue(options, WebDavFileUrlOptionKey);
+        WebDavUsername = GetOptionValue(options, WebDavUsernameOptionKey);
+    }
+
+    private void ApplyS3Options(CloudConfigSyncSettings? settings)
+    {
+        if (settings?.ProviderOptions is null ||
+            !settings.ProviderOptions.TryGetValue(S3ProviderId, out var options))
+        {
+            return;
+        }
+
+        S3Endpoint = GetOptionValue(options, S3EndpointOptionKey);
+        S3Bucket = GetOptionValue(options, S3BucketOptionKey);
+        S3Region = GetOptionValue(options, S3RegionOptionKey) is { Length: > 0 } region ? region : "us-east-1";
+        S3ObjectKey = GetOptionValue(options, S3ObjectKeyOptionKey) is { Length: > 0 } objectKey
+            ? objectKey
+            : "config-sync/salmonegg-config.zip";
+        S3ForcePathStyle = GetOptionValue(options, S3ForcePathStyleOptionKey) is { Length: > 0 } forcePathStyle
+            ? bool.TryParse(forcePathStyle, out var parsed) && parsed
+            : true;
+    }
+
+    private static string GetOptionValue(IReadOnlyDictionary<string, string> options, string key)
+        => options.FirstOrDefault(option => string.Equals(option.Key, key, StringComparison.OrdinalIgnoreCase)).Value ?? string.Empty;
+
+    private static Dictionary<string, Dictionary<string, string>> CloneProviderOptions(
+        IReadOnlyDictionary<string, Dictionary<string, string>>? options)
+    {
+        var clone = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        if (options is null)
+        {
+            return clone;
+        }
+
+        foreach (var provider in options)
+        {
+            if (string.IsNullOrWhiteSpace(provider.Key) || provider.Value is null)
+            {
+                continue;
+            }
+
+            clone[provider.Key.Trim()] = provider.Value
+                .Where(option => !string.IsNullOrWhiteSpace(option.Key) && option.Value is not null)
+                .ToDictionary(
+                    option => option.Key.Trim(),
+                    option => option.Value.Trim(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        return clone;
     }
 
     private async Task OpenExportResultOrNotifyAsync(SessionExportResult result)
@@ -333,4 +609,20 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             : timestamp.ToUniversalTime();
         return new DateTimeOffset(utc);
     }
+}
+
+public sealed class CloudConfigProviderOptionViewModel
+{
+    public CloudConfigProviderOptionViewModel(string providerId, string displayName, bool isConfigured)
+    {
+        ProviderId = providerId?.Trim() ?? string.Empty;
+        DisplayName = string.IsNullOrWhiteSpace(displayName) ? ProviderId : displayName.Trim();
+        IsConfigured = isConfigured;
+    }
+
+    public string ProviderId { get; }
+
+    public string DisplayName { get; }
+
+    public bool IsConfigured { get; }
 }

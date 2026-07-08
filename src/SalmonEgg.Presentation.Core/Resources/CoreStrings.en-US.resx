@@ -633,31 +633,31 @@ Create the corresponding Markdown file in:
     <value>I ran into some errors. Analyze them and help fix them.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusEnabled" xml:space="preserve">
-    <value>OneDrive configuration sync is enabled.</value>
+    <value>Configuration cloud sync is enabled.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusDisabled" xml:space="preserve">
-    <value>OneDrive configuration sync is not enabled.</value>
+    <value>Configuration cloud sync is not enabled.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusUploaded" xml:space="preserve">
-    <value>Local configuration was uploaded to OneDrive.</value>
+    <value>Local configuration was uploaded to the cloud.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusRestored" xml:space="preserve">
-    <value>Configuration was restored from OneDrive.</value>
+    <value>Configuration was restored from the cloud.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusConflict" xml:space="preserve">
-    <value>Remote changes were detected. OneDrive configuration was applied and a local backup was kept.</value>
+    <value>Remote changes were detected. Cloud configuration was applied and a local backup was kept.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusNotConfigured" xml:space="preserve">
-    <value>OneDrive app registration is not configured.</value>
+    <value>The selected cloud sync provider is not configured.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusNotAuthorized" xml:space="preserve">
-    <value>OneDrive authorization is required.</value>
+    <value>The selected cloud sync provider needs authorization.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusSignedOut" xml:space="preserve">
-    <value>OneDrive configuration sync was disconnected.</value>
+    <value>Configuration cloud sync was disconnected.</value>
   </data>
   <data name="DataStorage_CloudSyncStatusFailed" xml:space="preserve">
-    <value>OneDrive configuration sync failed.</value>
+    <value>Configuration cloud sync failed.</value>
   </data>
   <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
     <value>Last sync: {0:g}</value>

@@ -185,7 +185,8 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             Enabled = yaml.Enabled,
             ProviderId = yaml.ProviderId?.Trim() ?? string.Empty,
-            IncludeSecrets = yaml.IncludeSecrets
+            IncludeSecrets = yaml.IncludeSecrets,
+            ProviderOptions = CloneProviderOptions(yaml.ProviderOptions)
         };
     }
 
@@ -200,7 +201,39 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             Enabled = settings.Enabled,
             ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
-            IncludeSecrets = settings.IncludeSecrets
+            IncludeSecrets = settings.IncludeSecrets,
+            ProviderOptions = CloneProviderOptions(settings.ProviderOptions)
         };
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> CloneProviderOptions(
+        IReadOnlyDictionary<string, Dictionary<string, string>>? options)
+    {
+        var clone = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        if (options is null)
+        {
+            return clone;
+        }
+
+        foreach (var provider in options)
+        {
+            if (string.IsNullOrWhiteSpace(provider.Key) || provider.Value is null)
+            {
+                continue;
+            }
+
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var option in provider.Value)
+            {
+                if (!string.IsNullOrWhiteSpace(option.Key) && option.Value is not null)
+                {
+                    values[option.Key.Trim()] = option.Value.Trim();
+                }
+            }
+
+            clone[provider.Key.Trim()] = values;
+        }
+
+        return clone;
     }
 }
