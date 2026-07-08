@@ -153,7 +153,7 @@ scripts/gates/verify-linux-desktop-runtime.sh publish/linux-desktop
 该 gate 会检查 `publish/linux-desktop/SalmonEgg`、`xvfb-run`、WebKitGTK、JavaScriptCoreGTK，并在 Xvfb 下启动本次 publish 产物。缺少运行库、Skia/freetype native crash、`DllNotFoundException`、`EntryPointNotFoundException` 或未处理异常都会失败。纯 headless X11 缺少 EWMH window manager 时的窗口状态警告不作为应用启动失败处理。
 
 #### Skia Desktop GUI smoke gate
-Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射且像素非空；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证 XAML 主窗口已经完成 shell 初始内容激活，不把测试探针带入 Release：
+Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证 XAML 主窗口已经完成 shell 初始内容激活，不把测试探针带入 Release：
 
 ```bash
 scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
@@ -163,7 +163,7 @@ scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
-- Skia Desktop GUI readiness：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness；Linux 还验证 X11 窗口映射和非空像素。
+- Skia Desktop GUI readiness：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：

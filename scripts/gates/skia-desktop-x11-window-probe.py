@@ -10,6 +10,9 @@ IS_VIEWABLE = 2
 XA_CARDINAL = 6
 ANY_PROPERTY_TYPE = 0
 Z_PIXMAP = 2
+REVERT_TO_PARENT = 2
+CURRENT_TIME = 0
+XK_TAB = 0xFF09
 
 
 class XWindowAttributes(ctypes.Structure):
@@ -101,7 +104,44 @@ def configure_x11():
     x11.XGetPixel.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
     x11.XGetPixel.restype = ctypes.c_ulong
     x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    x11.XSetInputFocus.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_ulong,
+        ctypes.c_int,
+        ctypes.c_ulong,
+    ]
+    x11.XGetInputFocus.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_ulong),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    x11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    x11.XKeysymToKeycode.restype = ctypes.c_uint
+    try:
+        x11.XDestroyImage.argtypes = [ctypes.c_void_p]
+    except AttributeError:
+        pass
     return x11
+
+
+def configure_xtst():
+    xtst = ctypes.CDLL("libXtst.so.6")
+    xtst.XTestQueryExtension.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    xtst.XTestQueryExtension.restype = ctypes.c_int
+    xtst.XTestFakeKeyEvent.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_uint,
+        ctypes.c_int,
+        ctypes.c_ulong,
+    ]
+    xtst.XTestFakeKeyEvent.restype = ctypes.c_int
+    return xtst
 
 
 def fetch_name(x11, display, window):
@@ -201,7 +241,7 @@ def get_viewable_windows(x11, display, root, target_pid, min_width, min_height):
         score = attributes.width * attributes.height
         if window_pid == target_pid:
             score += 10_000_000_000
-        if "SalmonEgg" in name:
+        if "SalmonEgg" in name or "Salmon Egg" in name:
             score += 1_000_000_000
 
         candidates.append((score, window, attributes, name, window_pid))
@@ -224,18 +264,76 @@ def sample_distinct_pixels(x11, display, window, width, height):
     if not image:
         return 0
 
-    samples = set()
-    columns = min(15, max(1, width))
-    rows = min(15, max(1, height))
-    for row in range(rows):
-        y = min(height - 1, int((row + 0.5) * height / rows))
-        for column in range(columns):
-            x = min(width - 1, int((column + 0.5) * width / columns))
-            samples.add(int(x11.XGetPixel(image, x, y)))
-            if len(samples) >= 3:
-                return len(samples)
+    try:
+        samples = set()
+        columns = min(15, max(1, width))
+        rows = min(15, max(1, height))
+        for row in range(rows):
+            y = min(height - 1, int((row + 0.5) * height / rows))
+            for column in range(columns):
+                x = min(width - 1, int((column + 0.5) * width / columns))
+                samples.add(int(x11.XGetPixel(image, x, y)))
+                if len(samples) >= 3:
+                    return len(samples)
 
-    return len(samples)
+        return len(samples)
+    finally:
+        if hasattr(x11, "XDestroyImage"):
+            x11.XDestroyImage(image)
+
+
+def is_window_or_descendant(x11, display, ancestor, candidate):
+    if candidate == ancestor:
+        return True
+
+    return candidate in enumerate_windows(x11, display, ancestor)
+
+
+def describe_focus_target(x11, display):
+    focus = ctypes.c_ulong()
+    revert_to = ctypes.c_int()
+    x11.XGetInputFocus(display, ctypes.byref(focus), ctypes.byref(revert_to))
+    return focus.value, revert_to.value
+
+
+def verify_focus_and_keyboard_input(x11, display, window):
+    xtst = configure_xtst()
+    event_base = ctypes.c_int()
+    error_base = ctypes.c_int()
+    major_version = ctypes.c_int()
+    minor_version = ctypes.c_int()
+    if xtst.XTestQueryExtension(
+        display,
+        ctypes.byref(event_base),
+        ctypes.byref(error_base),
+        ctypes.byref(major_version),
+        ctypes.byref(minor_version),
+    ) == 0:
+        return False, "XTEST extension is unavailable"
+
+    x11.XSetInputFocus(display, window, REVERT_TO_PARENT, CURRENT_TIME)
+    x11.XSync(display, 0)
+
+    focus, _ = describe_focus_target(x11, display)
+    if not is_window_or_descendant(x11, display, window, focus):
+        return False, f"focus=0x{focus:x}"
+
+    keycode = x11.XKeysymToKeycode(display, XK_TAB)
+    if keycode == 0:
+        return False, "Tab keysym did not resolve to an X11 keycode"
+
+    if xtst.XTestFakeKeyEvent(display, keycode, 1, 0) == 0:
+        return False, "XTest key press injection failed"
+
+    if xtst.XTestFakeKeyEvent(display, keycode, 0, 0) == 0:
+        return False, "XTest key release injection failed"
+
+    x11.XSync(display, 0)
+    focus, _ = describe_focus_target(x11, display)
+    if not is_window_or_descendant(x11, display, window, focus):
+        return False, f"focus after key input=0x{focus:x}"
+
+    return True, f"focus=0x{focus:x} xTestKeycode={keycode}"
 
 
 def probe(args):
@@ -274,6 +372,17 @@ def probe(args):
                     f"distinctPixels={distinct_pixels}"
                 )
                 if distinct_pixels >= args.min_distinct_pixels:
+                    if args.require_focus_input:
+                        input_ok, input_description = verify_focus_and_keyboard_input(
+                            x11,
+                            display,
+                            window,
+                        )
+                        last_description = f"{last_description} {input_description}"
+                        if not input_ok:
+                            time.sleep(0.2)
+                            continue
+
                     print(last_description)
                     return 0
 
@@ -293,6 +402,7 @@ def main():
     parser.add_argument("--min-width", type=int, default=320)
     parser.add_argument("--min-height", type=int, default=240)
     parser.add_argument("--min-distinct-pixels", type=int, default=2)
+    parser.add_argument("--require-focus-input", action="store_true")
     args = parser.parse_args()
     return probe(args)
 

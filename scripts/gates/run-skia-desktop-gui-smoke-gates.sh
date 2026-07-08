@@ -48,6 +48,7 @@ APPDATA_ROOT="$(mktemp -d -t salmonegg-skia-gui-appdata.XXXXXX)"
 STDOUT_LOG="$(mktemp -t salmonegg-skia-gui-smoke.XXXXXX.log)"
 XVFB_LOG="$(mktemp -t salmonegg-skia-gui-xvfb.XXXXXX.log)"
 X11_PROBE_LOG="$(mktemp -t salmonegg-skia-gui-x11-probe.XXXXXX.log)"
+X11_INPUT_PROBE_LOG="$(mktemp -t salmonegg-skia-gui-x11-input-probe.XXXXXX.log)"
 BOOT_LOG="${APPDATA_ROOT}/boot.log"
 APP_PID=""
 XVFB_PID=""
@@ -194,8 +195,24 @@ if grep -Eiq 'FT_Get_BDF_Property|DllNotFoundException|EntryPointNotFoundExcepti
   exit 1
 fi
 
+if [ "${OS_NAME}" = "Linux" ]; then
+  if ! "${PYTHON_BIN}" "${X11_PROBE}" \
+      --display "${SMOKE_DISPLAY}" \
+      --pid "${APP_PID}" \
+      --timeout 10 \
+      --require-focus-input \
+      >"${X11_INPUT_PROBE_LOG}" 2>&1; then
+    cat "${STDOUT_LOG}" >&2
+    cat "${X11_INPUT_PROBE_LOG}" >&2
+    cat "${BOOT_LOG}" >&2
+    echo "Skia Desktop GUI smoke did not expose a focusable X11 window that accepts synthetic keyboard input." >&2
+    exit 1
+  fi
+fi
+
 echo "[gate] Skia Desktop GUI smoke passed"
 echo "[gate] Smoke log=${STDOUT_LOG}"
 if [ "${OS_NAME}" = "Linux" ]; then
   echo "[gate] X11 probe log=${X11_PROBE_LOG}"
+  echo "[gate] X11 input probe log=${X11_INPUT_PROBE_LOG}"
 fi
