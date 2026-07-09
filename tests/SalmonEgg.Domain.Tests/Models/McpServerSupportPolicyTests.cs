@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Models;

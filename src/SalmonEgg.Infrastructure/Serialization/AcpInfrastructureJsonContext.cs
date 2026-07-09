@@ -13,30 +13,7 @@ namespace SalmonEgg.Infrastructure.Serialization;
 [JsonSerializable(typeof(AcpMessage))]
 [JsonSerializable(typeof(AcpError))]
 [JsonSerializable(typeof(JsonElement))]
-[JsonSerializable(typeof(PermissionOutcomeResult))]
-[JsonSerializable(typeof(ReadTextFileResult))]
 [JsonSerializable(typeof(DiagnosticsSnapshot))]
 internal partial class AcpInfrastructureJsonContext : JsonSerializerContext
 {
-}
-
-internal sealed class PermissionOutcomeResult
-{
-    [JsonPropertyName("outcome")]
-    public PermissionOutcome Outcome { get; set; } = new();
-}
-
-internal sealed class PermissionOutcome
-{
-    [JsonPropertyName("outcome")]
-    public string Outcome { get; set; } = string.Empty;
-
-    [JsonPropertyName("optionId")]
-    public string? OptionId { get; set; }
-}
-
-internal sealed class ReadTextFileResult
-{
-    [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
 }

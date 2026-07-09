@@ -17,7 +17,7 @@ public sealed class PermissionArchitectureSourceTests
     [Fact]
     public void AcpPermissionFlow_DoesNotDependOnLegacyLocalPermissionManager()
     {
-        var acpClientSource = LoadRepoFile("src", "SalmonEgg.Infrastructure", "Client", "AcpClient.cs");
+        var acpClientSource = LoadRepoFile("src", "SalmonEgg.Acp", "Client", "AcpClient.cs");
         var dependencyInjectionSource = LoadRepoFile("SalmonEgg", "SalmonEgg", "DependencyInjection.cs");
 
         Assert.DoesNotContain("IPermissionManager", acpClientSource, StringComparison.Ordinal);

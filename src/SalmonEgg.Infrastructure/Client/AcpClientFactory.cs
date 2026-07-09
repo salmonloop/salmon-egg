@@ -29,11 +29,11 @@ public sealed class AcpClientFactory : IAcpClientFactory
     }
 
     public IAcpClient CreateClient(ITransport transport)
-        => new AcpClient(
-            transport ?? throw new ArgumentNullException(nameof(transport)),
+        => new SalmonEgg.Acp.Client.AcpClient(
+            new DomainAcpTransportAdapter(transport ?? throw new ArgumentNullException(nameof(transport))),
             _messageParser,
             _messageValidator,
-            _errorLogger,
-            _sessionManager,
+            new DomainAcpClientLogger(_errorLogger),
+            new DomainAcpClientSessionStore(_sessionManager),
             _terminalSessionManager);
 }

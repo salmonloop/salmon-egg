@@ -45,13 +45,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
-            var client = new AcpClient(
-                _transportMock.Object,
-                parser,
-                null,
-                _errorLoggerMock.Object,
-                sessionManager: sessionManager,
-                terminalSessionManager: terminalSessionManager);
+            var client = CreateClient(parser, terminalSessionManager, sessionManager);
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
@@ -71,6 +65,18 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             return client;
         }
+
+        private AcpClient CreateClient(
+            MessageParser parser,
+            ITerminalSessionManager? terminalSessionManager = null,
+            ISessionManager? sessionManager = null)
+            => new(
+                new DomainAcpTransportAdapter(_transportMock.Object),
+                parser,
+                null,
+                new DomainAcpClientLogger(_errorLoggerMock.Object),
+                sessionManager is null ? null : new DomainAcpClientSessionStore(sessionManager),
+                terminalSessionManager);
 
 
         [Fact]
@@ -370,7 +376,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task InitializeAsync_SendsAskUserCapabilityMetadataInClientCapabilities()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
             string? sentInitialize = null;
 
             var initResponse = new InitializeResponse(
@@ -407,7 +413,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task InitializeAsync_WhenServerProtocolIsOlder_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
 
             var initResponse = new InitializeResponse(
                 0,
@@ -431,7 +437,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task InitializeAsync_WhenDisconnectedBeforeResponse_CancelsPendingInitialize()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
             var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _transportMock
@@ -482,7 +488,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     t => t.ErrorOccurred += null,
                     new TransportErrorEventArgs("无法启动进程：stdio command not found")))
                 .ReturnsAsync(false);
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
@@ -506,7 +512,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                         new InvalidOperationException(
                             "Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS."))))
                 .ReturnsAsync(false);
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
@@ -524,7 +530,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var parser = new MessageParser();
             var isConnected = true;
             _transportMock.SetupGet(t => t.IsConnected).Returns(() => isConnected);
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
             var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _transportMock
@@ -609,7 +615,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task InitializeAsync_WhenServerProtocolIsNewer_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -640,7 +646,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public void TransportErrors_ForStdioBridgeFailures_ShouldAppendSshGuidance()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
             string? receivedError = null;
             client.ErrorOccurred += (_, error) => receivedError = error;
 
@@ -660,7 +666,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public void TransportErrors_WhenAgentStderrDiagnostic_ShouldNotPublishUserError()
         {
             var parser = new MessageParser();
-            var client = new AcpClient(_transportMock.Object, parser, null, _errorLoggerMock.Object);
+            var client = CreateClient(parser);
             var receivedErrors = new List<string>();
             client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
 
@@ -1214,12 +1220,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         {
             var parser = new MessageParser();
             var sessionManager = new SessionManager();
-            var client = new AcpClient(
-                _transportMock.Object,
-                parser,
-                null,
-                _errorLoggerMock.Object,
-                sessionManager);
+            var client = CreateClient(parser, sessionManager: sessionManager);
 
             SetupJsonRpcResponse(
                 "initialize",
@@ -1397,12 +1398,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var sessionManager = new SessionManager();
             await sessionManager.CreateSessionAsync("remote-1", AbsoluteCwd);
 
-            var client = new AcpClient(
-                _transportMock.Object,
-                parser,
-                null,
-                _errorLoggerMock.Object,
-                sessionManager);
+            var client = CreateClient(parser, sessionManager: sessionManager);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))

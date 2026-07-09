@@ -70,6 +70,8 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(AskUserQuestion))]
 [JsonSerializable(typeof(AskUserOption))]
 [JsonSerializable(typeof(AskUserResponse))]
+[JsonSerializable(typeof(PermissionOutcomeResult))]
+[JsonSerializable(typeof(ReadTextFileResult))]
 [JsonSerializable(typeof(SessionUpdateParams))]
 [JsonSerializable(typeof(SessionUpdate))]
 [JsonSerializable(typeof(AgentMessageUpdate))]

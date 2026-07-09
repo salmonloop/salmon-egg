@@ -1,0 +1,131 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using SalmonEgg.Acp.Client;
+using SalmonEgg.Domain.Interfaces.Transport;
+using SalmonEgg.Domain.Services;
+using SalmonEgg.Infrastructure.Logging;
+
+namespace SalmonEgg.Infrastructure.Client;
+
+internal sealed class DomainAcpTransportAdapter : IAcpTransport
+{
+    private readonly ITransport _inner;
+
+    public DomainAcpTransportAdapter(ITransport inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _inner.MessageReceived += OnMessageReceived;
+        _inner.ErrorOccurred += OnErrorOccurred;
+    }
+
+    public event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
+
+    public event EventHandler<AcpTransportErrorEventArgs>? ErrorOccurred;
+
+    public bool IsConnected => _inner.IsConnected;
+
+    public Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
+        => _inner.ConnectAsync(cancellationToken);
+
+    public Task<bool> DisconnectAsync()
+        => _inner.DisconnectAsync();
+
+    public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
+        => _inner.SendMessageAsync(message, cancellationToken);
+
+    private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
+    {
+        MessageReceived?.Invoke(
+            this,
+            new AcpTransportMessageReceivedEventArgs(e.Message, e.ReceivedAt));
+    }
+
+    private void OnErrorOccurred(object? sender, TransportErrorEventArgs e)
+    {
+        ErrorOccurred?.Invoke(
+            this,
+            new AcpTransportErrorEventArgs(
+                e.ErrorMessage,
+                e.Exception,
+                MapErrorKind(e.Kind)));
+    }
+
+    private static AcpTransportErrorKind MapErrorKind(TransportErrorKind kind)
+        => kind switch
+        {
+            TransportErrorKind.AgentStderr => AcpTransportErrorKind.AgentStderr,
+            TransportErrorKind.ProcessStartFailed => AcpTransportErrorKind.ProcessStartFailed,
+            TransportErrorKind.ProcessExited => AcpTransportErrorKind.ProcessExited,
+            TransportErrorKind.SendFailed => AcpTransportErrorKind.SendFailed,
+            TransportErrorKind.StdoutReadFailed => AcpTransportErrorKind.StdoutReadFailed,
+            TransportErrorKind.StderrReadFailed => AcpTransportErrorKind.StderrReadFailed,
+            TransportErrorKind.DisconnectFailed => AcpTransportErrorKind.DisconnectFailed,
+            TransportErrorKind.NotConnected => AcpTransportErrorKind.NotConnected,
+            _ => AcpTransportErrorKind.General
+        };
+}
+
+internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
+{
+    private readonly ISessionManager _inner;
+
+    public DomainAcpClientSessionStore(ISessionManager inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    }
+
+    public bool ContainsSession(string sessionId)
+        => _inner.GetSession(sessionId) is not null;
+
+    public async Task CreateSessionAsync(string sessionId, string? cwd = null)
+    {
+        await _inner.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
+    }
+
+    public bool RemoveSession(string sessionId)
+        => _inner.RemoveSession(sessionId);
+
+    public bool UpdateCurrentMode(string sessionId, string modeId)
+        => _inner.UpdateSession(sessionId, session =>
+        {
+            session.Mode.CurrentModeId = modeId;
+        });
+
+    public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        => _inner.CancelSessionAsync(sessionId, reason);
+}
+
+internal sealed class DomainAcpClientLogger : IAcpClientLogger
+{
+    private readonly IErrorLogger _inner;
+
+    public DomainAcpClientLogger(IErrorLogger inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    }
+
+    public void Log(
+        AcpClientLogLevel level,
+        string code,
+        string message,
+        string? source = null,
+        Exception? exception = null)
+    {
+        _inner.LogError(new ErrorLogEntry(
+            code,
+            message,
+            MapSeverity(level),
+            source,
+            exception: exception));
+    }
+
+    private static ErrorSeverity MapSeverity(AcpClientLogLevel level)
+        => level switch
+        {
+            AcpClientLogLevel.Trace => ErrorSeverity.Info,
+            AcpClientLogLevel.Information => ErrorSeverity.Info,
+            AcpClientLogLevel.Warning => ErrorSeverity.Warning,
+            _ => ErrorSeverity.Error
+        };
+}

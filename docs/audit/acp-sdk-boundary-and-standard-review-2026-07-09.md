@@ -29,6 +29,9 @@ Moved in this step:
 - Protocol source-generated serialization moved into `SalmonEgg.Acp.Serialization.AcpJsonContext`; Infrastructure keeps only `AcpInfrastructureJsonContext` for legacy `AcpMessage` and app-local callback payloads.
 - ACP client and capability contracts moved into `SalmonEgg.Acp.Client`; `IAcpClientFactory` stays in Domain because it accepts the app-local transport interface.
 - Permission request option payloads moved into `SalmonEgg.Acp.Protocol`.
+- ACP client runtime moved into `SalmonEgg.Acp.Client.AcpClient`. SDK-facing host seams are now `IAcpTransport`, `IAcpClientSessionStore`, `IAcpTerminalSessionManager`, and `IAcpClientLogger`; Infrastructure owns only adapters from app-local transport, session, terminal, and logging services.
+- MCP server support validation moved into `SalmonEgg.Acp.Mcp`; Domain keeps only app-local MCP settings/catalog state.
+- Client callback response payloads for permission outcome and `fs/read_text_file` now serialize through `AcpJsonContext`.
 
 Guard coverage:
 
@@ -39,7 +42,9 @@ Guard coverage:
   - fails if Domain reintroduces `Models/JsonRpc`, `Models/Content`, `Models/Plan`, or `Models/Tool`,
   - fails if Domain or Infrastructure reintroduces the JSON-RPC parser/validator or protocol `AcpJsonContext`,
   - fails if Domain reintroduces ACP client/capability contracts or permission option payloads,
+  - fails if Infrastructure reintroduces the ACP client runtime,
   - fails if Domain reintroduces `Models/Mcp/McpServerConfig.cs`,
+  - fails if Domain reintroduces MCP support validation policy,
   - fails if Domain session state reintroduces `StopReason`,
   - fails if SDK MCP wire payloads contain app-local `Enabled` state,
   - requires Domain to reference `SalmonEgg.Acp`.
@@ -77,9 +82,12 @@ No new ACP schema violation was found in this review pass.
 
 ## Remaining SDK Extraction Work
 
-Do not mark the SDK extraction complete until these are moved or adapted behind SDK-facing abstractions:
+The transport-independent client runtime is now in `SalmonEgg.Acp`. Desktop stdio, UI capability probing, storage, profile configuration, and Domain session projection remain outside the SDK behind host interfaces.
 
-1. Move transport-independent client logic into `SalmonEgg.Acp`; keep desktop stdio, UI capability probing, storage, and profile configuration outside the SDK.
-2. Add packaging verification with `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
+Before publishing the SDK package, keep these gates in the release checklist:
 
-The current commit is intentionally only the first safe boundary cut, not the final SDK extraction.
+1. `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
+2. SDK source scan: no `SalmonEgg.Domain`, `SalmonEgg.Application`, `SalmonEgg.Infrastructure`, or `SalmonEgg.Presentation` references.
+3. App integration tests through `AcpClientFactory`, to ensure host adapters still project transport errors, session cache updates, terminal capability failures, and permission/file-system callbacks.
+
+Dependency note from this pass: no package upgrade was kept. `FluentValidation 12.x` was not upgraded because `SalmonEgg.Application` still targets `netstandard2.1`; upgrading it would require a target framework policy change first. `xunit.runner.visualstudio 3.1.5` was tested and rejected because `Presentation.Core.Tests` hung in VSTest/adapter execution under the current xUnit v2 test suite.

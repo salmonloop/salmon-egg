@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
-using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 
-namespace SalmonEgg.Domain.Models.Mcp
+namespace SalmonEgg.Acp.Mcp
 {
     public sealed class McpServerSupportResult
     {

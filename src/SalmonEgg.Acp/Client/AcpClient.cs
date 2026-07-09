@@ -13,15 +13,7 @@ using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
-using SalmonEgg.Domain.Interfaces.Transport;
-using SalmonEgg.Domain.Models.Mcp;
-using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Services;
-using SalmonEgg.Domain.Services.Security;
-using SalmonEgg.Infrastructure.Serialization;
-using SalmonEgg.Infrastructure.Logging;
-using SalmonEgg.Acp.Client;
-namespace SalmonEgg.Infrastructure.Client
+namespace SalmonEgg.Acp.Client
 {
     /// <summary>
     /// ACP 客户端核心实现。
@@ -29,18 +21,44 @@ namespace SalmonEgg.Infrastructure.Client
     /// </summary>
     public class AcpClient : IAcpClient, IDisposable
     {
-        private sealed record PendingInboundRequest(
-            string Method,
-            object? MessageId,
-            string? SessionId = null,
-            AskUserRequest? AskUserRequest = null);
-        private readonly ITransport _transport;
+        private sealed class PendingInboundRequest
+        {
+            public PendingInboundRequest(
+                string method,
+                object? messageId,
+                string? sessionId = null,
+                AskUserRequest? askUserRequest = null)
+            {
+                Method = method;
+                MessageId = messageId;
+                SessionId = sessionId;
+                AskUserRequest = askUserRequest;
+            }
+
+            public string Method { get; }
+
+            public object? MessageId { get; }
+
+            public string? SessionId { get; }
+
+            public AskUserRequest? AskUserRequest { get; }
+
+            public PendingInboundRequest WithSessionId(string sessionId)
+                => new(Method, MessageId, sessionId, AskUserRequest);
+
+            public PendingInboundRequest WithAskUserRequest(AskUserRequest request)
+                => new(
+                    string.IsNullOrWhiteSpace(Method) ? ClientCapabilityMetadata.AskUserExtensionMethod : Method,
+                    MessageId,
+                    request.SessionId,
+                    request);
+        }
+        private readonly IAcpTransport _transport;
         private readonly IMessageParser _parser;
         private readonly IMessageValidator _validator;
-        private readonly ISessionManager _sessionManager;
-        private readonly IPathValidator _pathValidator;
-        private readonly ITerminalSessionManager _terminalSessionManager;
-        private readonly IErrorLogger _errorLogger;
+        private readonly IAcpClientSessionStore _sessionStore;
+        private readonly IAcpTerminalSessionManager _terminalSessionManager;
+        private readonly IAcpClientLogger _logger;
 
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pendingRequests = new();
@@ -132,20 +150,19 @@ namespace SalmonEgg.Infrastructure.Client
         /// <param name="parser">消息解析器（可选）</param>
         /// <param name="validator">消息验证器（可选）</param>
         public AcpClient(
-            ITransport transport,
+            IAcpTransport transport,
             IMessageParser? parser = null,
             IMessageValidator? validator = null,
-            IErrorLogger? errorLogger = null,
-            ISessionManager? sessionManager = null,
-            ITerminalSessionManager? terminalSessionManager = null)
+            IAcpClientLogger? logger = null,
+            IAcpClientSessionStore? sessionStore = null,
+            IAcpTerminalSessionManager? terminalSessionManager = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _parser = parser ?? new MessageParser();
             _validator = validator ?? new MessageValidator();
-            _sessionManager = sessionManager ?? new Services.SessionManager();
-            _pathValidator = new Services.Security.PathValidator();
-            _terminalSessionManager = terminalSessionManager ?? new Services.UnsupportedTerminalSessionManager();
-            _errorLogger = errorLogger ?? new Logging.ErrorLogger();
+            _sessionStore = sessionStore ?? new InMemoryAcpClientSessionStore();
+            _terminalSessionManager = terminalSessionManager ?? new UnsupportedAcpTerminalSessionManager();
+            _logger = logger ?? new NullAcpClientLogger();
 
             // 注册传输层事件
             _transport.MessageReceived += OnMessageReceived;
@@ -256,9 +273,9 @@ namespace SalmonEgg.Infrastructure.Client
             // A session/update notification can arrive before the session/new response and
             // create the local tracking entry first. The response is authoritative, but the
             // local cache write must remain idempotent.
-            if (_sessionManager.GetSession(sessionNewResponse.SessionId) is null)
+            if (!_sessionStore.ContainsSession(sessionNewResponse.SessionId))
             {
-                await _sessionManager.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
+                await _sessionStore.CreateSessionAsync(sessionNewResponse.SessionId, @params.Cwd).ConfigureAwait(false);
             }
 
             return sessionNewResponse;
@@ -272,11 +289,11 @@ namespace SalmonEgg.Infrastructure.Client
             EnsureInitialized();
             if (!SupportsSessionLoad)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "SESSION_LOAD_UNSUPPORTED",
                     "Agent does not support session/load capability",
-                    ErrorSeverity.Info,
-                    nameof(LoadSessionAsync)));
+                    nameof(LoadSessionAsync));
 
                 return SessionLoadResponse.Completed;
             }
@@ -316,11 +333,11 @@ namespace SalmonEgg.Infrastructure.Client
             EnsureInitialized();
             if (!SupportsSessionResume)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "SESSION_RESUME_UNSUPPORTED",
                     "Agent does not support session/resume capability",
-                    ErrorSeverity.Info,
-                    nameof(ResumeSessionAsync)));
+                    nameof(ResumeSessionAsync));
 
                 return SessionResumeResponse.Completed;
             }
@@ -361,13 +378,13 @@ namespace SalmonEgg.Infrastructure.Client
 
             if (!SupportsSessionClose)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "SESSION_CLOSE_UNSUPPORTED",
                     "Agent does not support session/close capability",
-                    ErrorSeverity.Info,
-                    nameof(CloseSessionAsync)));
+                    nameof(CloseSessionAsync));
 
-                _sessionManager.RemoveSession(@params.SessionId);
+                _sessionStore.RemoveSession(@params.SessionId);
                 return SessionCloseResponse.Completed;
             }
 
@@ -386,13 +403,13 @@ namespace SalmonEgg.Infrastructure.Client
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
-                _sessionManager.RemoveSession(@params.SessionId);
+                _sessionStore.RemoveSession(@params.SessionId);
                 return SessionCloseResponse.Completed;
             }
 
             var sessionCloseResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionCloseResponse);
 
-            _sessionManager.RemoveSession(@params.SessionId);
+            _sessionStore.RemoveSession(@params.SessionId);
             return sessionCloseResponse ?? SessionCloseResponse.Completed;
         }
 
@@ -405,11 +422,11 @@ namespace SalmonEgg.Infrastructure.Client
 
             if (!SupportsSessionDelete)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "SESSION_DELETE_UNSUPPORTED",
                     "Agent does not support session/delete capability",
-                    ErrorSeverity.Info,
-                    nameof(DeleteSessionAsync)));
+                    nameof(DeleteSessionAsync));
 
                 return SessionDeleteResponse.Completed;
             }
@@ -429,13 +446,13 @@ namespace SalmonEgg.Infrastructure.Client
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
-                _sessionManager.RemoveSession(@params.SessionId);
+                _sessionStore.RemoveSession(@params.SessionId);
                 return SessionDeleteResponse.Completed;
             }
 
             var sessionDeleteResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionDeleteResponse);
 
-            _sessionManager.RemoveSession(@params.SessionId);
+            _sessionStore.RemoveSession(@params.SessionId);
             return sessionDeleteResponse ?? SessionDeleteResponse.Completed;
         }
 
@@ -449,11 +466,11 @@ namespace SalmonEgg.Infrastructure.Client
 
             if (!SupportsSessionList)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "SESSION_LIST_UNSUPPORTED",
                     "Agent does not support session/list capability",
-                    ErrorSeverity.Info,
-                    nameof(ListSessionsAsync)));
+                    nameof(ListSessionsAsync));
 
                 return new SessionListResponse();
             }
@@ -488,8 +505,7 @@ namespace SalmonEgg.Infrastructure.Client
             EnsureInitialized();
 
             // 检查会话是否存在
-            var session = _sessionManager.GetSession(@params.SessionId);
-            if (session == null)
+            if (!_sessionStore.ContainsSession(@params.SessionId))
             {
                 throw new AcpException(JsonRpcErrorCode.SessionNotFound, $"Session '{@params.SessionId}' not found");
             }
@@ -543,10 +559,7 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             // 更新会话模式
-            _sessionManager.UpdateSession(@params.SessionId, session =>
-            {
-                session.Mode.CurrentModeId = @params.ModeId;
-            });
+            _sessionStore.UpdateCurrentMode(@params.SessionId, @params.ModeId);
 
             return setModeResponse;
         }
@@ -598,7 +611,7 @@ namespace SalmonEgg.Infrastructure.Client
             await CancelPendingInboundRequestsForSessionAsync(@params.SessionId).ConfigureAwait(false);
 
             // 更新会话状态
-            await _sessionManager.CancelSessionAsync(@params.SessionId, @params.Reason).ConfigureAwait(false);
+            await _sessionStore.CancelSessionAsync(@params.SessionId, @params.Reason).ConfigureAwait(false);
 
             return new SessionCancelResponse(success: true);
         }
@@ -745,7 +758,7 @@ namespace SalmonEgg.Infrastructure.Client
 
             var response = new JsonRpcResponse(
                 messageId,
-                ToElement(outcomePayload, AcpInfrastructureJsonContext.Default.PermissionOutcomeResult));
+                ToElement(outcomePayload, AcpJsonContext.Default.PermissionOutcomeResult));
             return await SendResponseAsync(response).ConfigureAwait(false);
         }
 
@@ -771,7 +784,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 result = ToElement(
                     new ReadTextFileResult { Content = content ?? string.Empty },
-                    AcpInfrastructureJsonContext.Default.ReadTextFileResult);
+                    AcpJsonContext.Default.ReadTextFileResult);
             }
             else
             {
@@ -857,7 +870,12 @@ namespace SalmonEgg.Infrastructure.Client
             }
             catch (Exception ex)
             {
-                _errorLogger.LogError(new ErrorLogEntry("REQ_ERROR", $"[AcpClient.SendRequestAsync] Request {requestIdStr} failed: {ex.Message}", ErrorSeverity.Error, "SendRequestAsync", null, ex));
+                _logger.Log(
+                    AcpClientLogLevel.Error,
+                    "REQ_ERROR",
+                    $"[AcpClient.SendRequestAsync] Request {requestIdStr} failed: {ex.Message}",
+                    "SendRequestAsync",
+                    ex);
                 throw;
             }
             finally
@@ -906,7 +924,7 @@ namespace SalmonEgg.Infrastructure.Client
         /// <summary>
         /// 处理消息接收事件。
         /// </summary>
-        private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
+        private void OnMessageReceived(object? sender, AcpTransportMessageReceivedEventArgs e)
         {
             try
             {
@@ -1665,7 +1683,7 @@ namespace SalmonEgg.Infrastructure.Client
 
             while (_pendingInboundRequests.TryGetValue(idStr, out var existing))
             {
-                var updated = existing with { SessionId = sessionId };
+                var updated = existing.WithSessionId(sessionId);
                 if (_pendingInboundRequests.TryUpdate(idStr, updated, existing))
                 {
                     return;
@@ -1683,29 +1701,24 @@ namespace SalmonEgg.Infrastructure.Client
             _pendingInboundRequests.AddOrUpdate(
                 idStr,
                 _ => new PendingInboundRequest(
-                    Method: ClientCapabilityMetadata.AskUserExtensionMethod,
-                    MessageId: null,
-                    SessionId: request.SessionId,
-                    AskUserRequest: request),
-                (_, existing) => existing with
-                {
-                    Method = string.IsNullOrWhiteSpace(existing.Method) ? ClientCapabilityMetadata.AskUserExtensionMethod : existing.Method,
-                    SessionId = request.SessionId,
-                    AskUserRequest = request
-                });
+                    ClientCapabilityMetadata.AskUserExtensionMethod,
+                    null,
+                    request.SessionId,
+                    request),
+                (_, existing) => existing.WithAskUserRequest(request));
         }
 
         /// <summary>
         /// 处理传输错误事件。
         /// </summary>
-        private void OnTransportError(object? sender, TransportErrorEventArgs e)
+        private void OnTransportError(object? sender, AcpTransportErrorEventArgs e)
         {
-            if (e.Kind == TransportErrorKind.AgentStderr)
+            if (e.Kind == AcpTransportErrorKind.AgentStderr)
             {
-                _errorLogger.LogError(new ErrorLogEntry(
+                _logger.Log(
+                    AcpClientLogLevel.Information,
                     "AGENT_STDERR",
-                    e.ErrorMessage,
-                    ErrorSeverity.Info));
+                    e.ErrorMessage);
                 return;
             }
 
@@ -1723,11 +1736,11 @@ namespace SalmonEgg.Infrastructure.Client
         /// </summary>
         private void OnErrorOccurred(string errorMessage)
         {
-            _errorLogger.LogError(new ErrorLogEntry("CLIENT_ERROR", errorMessage, ErrorSeverity.Error));
+            _logger.Log(AcpClientLogLevel.Error, "CLIENT_ERROR", errorMessage);
             ErrorOccurred?.Invoke(this, errorMessage);
         }
 
-        private static string EnrichTransportErrorMessage(string errorMessage, TransportErrorKind kind)
+        private static string EnrichTransportErrorMessage(string errorMessage, AcpTransportErrorKind kind)
         {
             if (string.IsNullOrWhiteSpace(errorMessage))
             {
@@ -1747,11 +1760,11 @@ namespace SalmonEgg.Infrastructure.Client
                 : errorMessage + sshBridgeGuidance;
         }
 
-        private static bool ShouldAppendStdioBridgeGuidance(string errorMessage, TransportErrorKind kind)
+        private static bool ShouldAppendStdioBridgeGuidance(string errorMessage, AcpTransportErrorKind kind)
         {
-            return kind is TransportErrorKind.ProcessStartFailed
-                    or TransportErrorKind.ProcessExited
-                    or TransportErrorKind.StdoutReadFailed
+            return kind is AcpTransportErrorKind.ProcessStartFailed
+                    or AcpTransportErrorKind.ProcessExited
+                    or AcpTransportErrorKind.StdoutReadFailed
                 || errorMessage.Contains("stdout", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -1806,7 +1819,7 @@ namespace SalmonEgg.Infrastructure.Client
 
         private void ValidateRequiredAbsolutePath(string? path, string fieldName, string methodName)
         {
-            if (string.IsNullOrWhiteSpace(path) || !_pathValidator.IsAbsolutePath(path))
+            if (string.IsNullOrWhiteSpace(path) || !ProtocolPathRules.IsAbsolutePath(path))
             {
                 throw new AcpException(
                     JsonRpcErrorCode.InvalidParams,
@@ -1855,7 +1868,7 @@ namespace SalmonEgg.Infrastructure.Client
                         "Invalid session/list response: sessionId is required.");
                 }
 
-                if (string.IsNullOrWhiteSpace(session.Cwd) || !_pathValidator.IsAbsolutePath(session.Cwd))
+                if (string.IsNullOrWhiteSpace(session.Cwd) || !ProtocolPathRules.IsAbsolutePath(session.Cwd))
                 {
                     throw new AcpException(
                         JsonRpcErrorCode.ParseError,
@@ -1870,7 +1883,7 @@ namespace SalmonEgg.Infrastructure.Client
                 for (var i = 0; i < session.AdditionalDirectories.Count; i++)
                 {
                     if (string.IsNullOrWhiteSpace(session.AdditionalDirectories[i])
-                        || !_pathValidator.IsAbsolutePath(session.AdditionalDirectories[i]))
+                        || !ProtocolPathRules.IsAbsolutePath(session.AdditionalDirectories[i]))
                     {
                         throw new AcpException(
                             JsonRpcErrorCode.ParseError,
