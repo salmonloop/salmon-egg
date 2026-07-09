@@ -11,6 +11,11 @@ namespace SalmonEgg.Domain.Models.Protocol
         public static ClientCapabilities Create()
             // Keep fs/terminal implementations internal for now and avoid advertising them
             // until the product is ready to expose the UX contract to agents.
-            => new(meta: ClientCapabilityMetadata.CreateDefault());
+            => new(
+                session: new ClientSessionCapabilities
+                {
+                    ConfigOptions = new SessionConfigOptionsCapabilities()
+                },
+                meta: ClientCapabilityMetadata.CreateDefault());
     }
 }

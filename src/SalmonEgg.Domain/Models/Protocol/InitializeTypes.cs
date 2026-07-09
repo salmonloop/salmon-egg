@@ -119,6 +119,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public bool? Terminal { get; set; }
 
         /// <summary>
+        /// 会话相关客户端能力。
+        /// </summary>
+        [JsonPropertyName("session")]
+        public ClientSessionCapabilities? Session { get; set; }
+
+        /// <summary>
         /// 扩展字段（_meta），用于声明自定义客户端能力。
         /// </summary>
         [JsonPropertyName("_meta")]
@@ -136,14 +142,17 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="fs">文件系统能力</param>
         /// <param name="terminal">终端能力</param>
+        /// <param name="session">会话能力</param>
         /// <param name="meta">扩展能力元数据</param>
         public ClientCapabilities(
             FsCapability? fs = null,
             bool? terminal = null,
+            ClientSessionCapabilities? session = null,
             Dictionary<string, object?>? meta = null)
         {
             Fs = fs;
             Terminal = terminal;
+            Session = session;
             Meta = meta;
         }
 
@@ -190,6 +199,27 @@ namespace SalmonEgg.Domain.Models.Protocol
                 JsonElement { ValueKind: JsonValueKind.False } => false,
                 _ => false
             };
+    }
+
+    /// <summary>
+    /// 客户端会话能力。
+    /// </summary>
+    public class ClientSessionCapabilities
+    {
+        [JsonPropertyName("configOptions")]
+        public SessionConfigOptionsCapabilities? ConfigOptions { get; set; }
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    /// <summary>
+    /// 客户端会话配置选项能力。
+    /// </summary>
+    public class SessionConfigOptionsCapabilities
+    {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
@@ -361,6 +391,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public SessionCapabilities? SessionCapabilities { get; set; }
 
         /// <summary>
+        /// 认证相关能力。
+        /// </summary>
+        [JsonPropertyName("auth")]
+        public AgentAuthCapabilities? Auth { get; set; }
+
+        /// <summary>
         /// 创建新的 AgentCapabilities 实例。
         /// </summary>
         public AgentCapabilities()
@@ -374,16 +410,19 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="loadSession">是否支持会话加载</param>
         /// <param name="mcpCapabilities">MCP 能力</param>
         /// <param name="sessionCapabilities">会话能力</param>
+        /// <param name="auth">认证能力</param>
         public AgentCapabilities(
             PromptCapabilities? promptCapabilities = null,
             bool? loadSession = null,
             McpCapabilities? mcpCapabilities = null,
-            SessionCapabilities? sessionCapabilities = null)
+            SessionCapabilities? sessionCapabilities = null,
+            AgentAuthCapabilities? auth = null)
         {
             PromptCapabilities = promptCapabilities;
             LoadSession = loadSession;
             McpCapabilities = mcpCapabilities;
             SessionCapabilities = sessionCapabilities;
+            Auth = auth;
         }
 
         /// <summary>
@@ -417,9 +456,24 @@ namespace SalmonEgg.Domain.Models.Protocol
         public bool SupportsSessionClose => SessionCapabilities?.Close != null;
 
         /// <summary>
+        /// 判断是否支持会话删除。
+        /// </summary>
+        public bool SupportsSessionDelete => SessionCapabilities?.Delete != null;
+
+        /// <summary>
+        /// 判断是否支持 additionalDirectories。
+        /// </summary>
+        public bool SupportsSessionAdditionalDirectories => SessionCapabilities?.AdditionalDirectories != null;
+
+        /// <summary>
         /// 判断是否支持会话列表。
         /// </summary>
         public bool SupportsSessionList => SessionCapabilities?.List != null;
+
+        /// <summary>
+        /// 判断是否支持登出。
+        /// </summary>
+        public bool SupportsLogout => Auth?.Logout != null;
 
         /// <summary>
         /// 判断是否支持 HTTP 传输。
@@ -430,6 +484,27 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 判断是否支持 SSE 传输。
         /// </summary>
         public bool SupportsSse => McpCapabilities?.Sse ?? false;
+    }
+
+    /// <summary>
+    /// Agent 认证能力。
+    /// </summary>
+    public class AgentAuthCapabilities
+    {
+        [JsonPropertyName("logout")]
+        public LogoutCapabilities? Logout { get; set; }
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    /// <summary>
+    /// Logout 方法能力。
+    /// </summary>
+    public class LogoutCapabilities
+    {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
@@ -547,6 +622,21 @@ namespace SalmonEgg.Domain.Models.Protocol
         public SessionCloseCapabilities? Close { get; set; }
 
         /// <summary>
+        /// 是否支持会话删除功能。
+        /// </summary>
+        [JsonPropertyName("delete")]
+        public SessionDeleteCapabilities? Delete { get; set; }
+
+        /// <summary>
+        /// 是否支持 additionalDirectories。
+        /// </summary>
+        [JsonPropertyName("additionalDirectories")]
+        public SessionAdditionalDirectoriesCapabilities? AdditionalDirectories { get; set; }
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionCapabilities 实例。
         /// </summary>
         public SessionCapabilities()
@@ -559,6 +649,9 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// </summary>
     public class SessionListCapabilities
     {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 创建新的 SessionListCapabilities 实例。
         /// </summary>
@@ -572,6 +665,9 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// </summary>
     public class SessionResumeCapabilities
     {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 创建新的 SessionResumeCapabilities 实例。
         /// </summary>
@@ -585,11 +681,32 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// </summary>
     public class SessionCloseCapabilities
     {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 创建新的 SessionCloseCapabilities 实例。
         /// </summary>
         public SessionCloseCapabilities()
         {
         }
+    }
+
+    /// <summary>
+    /// 会话删除能力类。
+    /// </summary>
+    public class SessionDeleteCapabilities
+    {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    /// <summary>
+    /// additionalDirectories 能力类。
+    /// </summary>
+    public class SessionAdditionalDirectoriesCapabilities
+    {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
     }
 }

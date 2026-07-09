@@ -747,6 +747,9 @@ public sealed class ChatServiceSessionTests
         public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new SessionCloseResponse());
 
+        public Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionDeleteResponse());
+
         public Task<SessionListResponse> ListSessionsAsync(SessionListParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new SessionListResponse());
 
@@ -764,6 +767,9 @@ public sealed class ChatServiceSessionTests
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new AuthenticateResponse());
+
+        public Task<LogoutResponse> LogoutAsync(LogoutParams @params, CancellationToken cancellationToken = default)
+            => Task.FromResult(new LogoutResponse());
 
         public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
             => Task.FromResult(true);

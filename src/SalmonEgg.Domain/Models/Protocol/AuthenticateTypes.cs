@@ -15,6 +15,10 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("methodId")]
         public string MethodId { get; set; } = string.Empty;
 
+        [JsonPropertyName("_meta")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 创建新的 AuthenticateParams 实例。
         /// </summary>
@@ -40,6 +44,28 @@ namespace SalmonEgg.Domain.Models.Protocol
         [JsonPropertyName("_meta")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    /// <summary>
+    /// Logout 方法的请求参数。
+    /// </summary>
+    public class LogoutParams
+    {
+        [JsonPropertyName("_meta")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, object?>? Meta { get; set; }
+    }
+
+    /// <summary>
+    /// Logout 方法的响应。
+    /// </summary>
+    public class LogoutResponse
+    {
+        [JsonPropertyName("_meta")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        public static readonly LogoutResponse Completed = new LogoutResponse();
     }
 
     /// <summary>

@@ -11,6 +11,9 @@ public class SessionListParams
     [JsonPropertyName("cursor")]
     public string? Cursor { get; set; }
 
+    [JsonPropertyName("_meta")]
+    public Dictionary<string, object?>? Meta { get; set; }
+
     [JsonExtensionData]
     public Dictionary<string, object?>? ExtraParams { get; set; }
 }
@@ -22,6 +25,9 @@ public class SessionListResponse
 
     [JsonPropertyName("nextCursor")]
     public string? NextCursor { get; set; }
+
+    [JsonPropertyName("_meta")]
+    public Dictionary<string, object?>? Meta { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, object?>? ExtraData { get; set; }
@@ -43,6 +49,9 @@ public class AgentSessionInfo
 
     [JsonPropertyName("updatedAt")]
     public string? UpdatedAt { get; set; }
+
+    [JsonPropertyName("additionalDirectories")]
+    public List<string>? AdditionalDirectories { get; set; }
 
     [JsonPropertyName("_meta")]
     public Dictionary<string, object?>? Meta { get; set; }

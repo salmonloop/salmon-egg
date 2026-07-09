@@ -161,6 +161,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public List<McpServer> McpServers { get; set; } = new List<McpServer>();
 
         /// <summary>
+        /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
+        /// </summary>
+        [JsonPropertyName("additionalDirectories")]
+        public List<string>? AdditionalDirectories { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionLoadParams 实例。
         /// </summary>
         public SessionLoadParams()
@@ -173,11 +179,17 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
-        public SessionLoadParams(string sessionId, string cwd, List<McpServer>? mcpServers = null)
+        /// <param name="additionalDirectories">附加工作目录</param>
+        public SessionLoadParams(
+            string sessionId,
+            string cwd,
+            List<McpServer>? mcpServers = null,
+            List<string>? additionalDirectories = null)
         {
             SessionId = sessionId;
             Cwd = cwd;
             McpServers = mcpServers ?? new List<McpServer>();
+            AdditionalDirectories = additionalDirectories;
         }
     }
 
@@ -250,6 +262,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public List<McpServer> McpServers { get; set; } = new List<McpServer>();
 
         /// <summary>
+        /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
+        /// </summary>
+        [JsonPropertyName("additionalDirectories")]
+        public List<string>? AdditionalDirectories { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionResumeParams 实例。
         /// </summary>
         public SessionResumeParams()
@@ -262,11 +280,17 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
-        public SessionResumeParams(string sessionId, string cwd, List<McpServer>? mcpServers = null)
+        /// <param name="additionalDirectories">附加工作目录</param>
+        public SessionResumeParams(
+            string sessionId,
+            string cwd,
+            List<McpServer>? mcpServers = null,
+            List<string>? additionalDirectories = null)
         {
             SessionId = sessionId;
             Cwd = cwd;
             McpServers = mcpServers ?? new List<McpServer>();
+            AdditionalDirectories = additionalDirectories;
         }
     }
 
@@ -347,6 +371,9 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// </summary>
     public class SessionCloseResponse
     {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
         /// <summary>
         /// 创建新的 SessionCloseResponse 实例。
         /// </summary>
@@ -358,6 +385,42 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// 表示关闭完成的静态实例。
         /// </summary>
         public static readonly SessionCloseResponse Completed = new SessionCloseResponse();
+    }
+
+    /// <summary>
+    /// Session/Delete 方法的请求参数。
+    /// 用于删除 session/list 中的已有会话。
+    /// </summary>
+    public class SessionDeleteParams
+    {
+        /// <summary>
+        /// 会话 ID（必填）。
+        /// </summary>
+        [JsonPropertyName("sessionId")]
+        public string SessionId { get; set; } = string.Empty;
+
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        public SessionDeleteParams()
+        {
+        }
+
+        public SessionDeleteParams(string sessionId)
+        {
+            SessionId = sessionId;
+        }
+    }
+
+    /// <summary>
+    /// Session/Delete 方法的响应。
+    /// </summary>
+    public class SessionDeleteResponse
+    {
+        [JsonPropertyName("_meta")]
+        public Dictionary<string, object?>? Meta { get; set; }
+
+        public static readonly SessionDeleteResponse Completed = new SessionDeleteResponse();
     }
 
     /// <summary>

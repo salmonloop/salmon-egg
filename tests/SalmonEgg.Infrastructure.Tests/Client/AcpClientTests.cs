@@ -91,6 +91,45 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LogoutAsync_WhenAgentDoesNotSupportLogout_ThrowsWithoutSendingRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LogoutAsync(new LogoutParams()));
+
+            Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("logout"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task LogoutAsync_WhenSupported_SendsStandardLogoutRequest()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(auth: new AgentAuthCapabilities
+                {
+                    Logout = new LogoutCapabilities()
+                }));
+
+            SetupJsonRpcResponse(
+                "logout",
+                ElementFromJson("{}"),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            var result = await client.LogoutAsync(new LogoutParams());
+
+            Assert.NotNull(result);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            Assert.Equal("logout", document.RootElement.GetProperty("method").GetString());
+            Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("params").ValueKind);
+        }
+
+        [Fact]
         public async Task CreateSessionAsync_SlowButValidResponse_CompletesWhenResponseEventuallyArrives()
         {
             var parser = new MessageParser();
@@ -218,6 +257,54 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var @params = document.RootElement.GetProperty("params");
             Assert.Equal(JsonValueKind.Array, @params.GetProperty("mcpServers").ValueKind);
             Assert.Equal(0, @params.GetProperty("mcpServers").GetArrayLength());
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenAdditionalDirectoriesUnsupported_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.CreateSessionAsync(new SessionNewParams(
+                    AbsoluteCwd,
+                    additionalDirectories: [Path.Combine(AbsoluteCwd, "extra")])));
+
+            Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
+            Assert.Contains("additionalDirectories", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenAdditionalDirectoriesSupported_SendsStandardArray()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var additionalDirectory = Path.Combine(AbsoluteCwd, "extra");
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
+                }));
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.CreateSessionAsync(new SessionNewParams(
+                AbsoluteCwd,
+                additionalDirectories: [additionalDirectory]));
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var additionalDirectories = document.RootElement
+                .GetProperty("params")
+                .GetProperty("additionalDirectories");
+            Assert.Equal(JsonValueKind.Array, additionalDirectories.ValueKind);
+            Assert.Equal(additionalDirectory, additionalDirectories[0].GetString());
         }
 
         [Fact]
@@ -803,6 +890,39 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionAsync_WhenAdditionalDirectoriesSupported_SendsStandardArray()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var additionalDirectory = Path.Combine(AbsoluteCwd, "extra-load");
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(
+                    loadSession: true,
+                    sessionCapabilities: new SessionCapabilities
+                    {
+                        AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
+                    }));
+
+            SetupJsonRpcResponse(
+                "session/load",
+                JsonSerializer.SerializeToElement<object?>(null, parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.LoadSessionAsync(new SessionLoadParams(
+                "session-123",
+                AbsoluteCwd,
+                additionalDirectories: [additionalDirectory]));
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var additionalDirectories = document.RootElement
+                .GetProperty("params")
+                .GetProperty("additionalDirectories");
+            Assert.Equal(additionalDirectory, additionalDirectories[0].GetString());
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_ParsesModesAndConfigOptionsFromResponse()
         {
             var parser = new MessageParser();
@@ -1026,6 +1146,29 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         }
 
         [Fact]
+        public async Task ResumeSessionAsync_WhenAdditionalDirectoryIsRelative_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities(),
+                    AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities()
+                }));
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() =>
+                client.ResumeSessionAsync(new SessionResumeParams(
+                    "session-123",
+                    AbsoluteCwd,
+                    additionalDirectories: ["relative-extra"])));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            Assert.Contains("additionalDirectories[0]", ex.Message);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task CloseSessionAsync_WhenAgentDoesNotSupportSessionClose_DoesNotSendProtocolRequest()
         {
             var client = await CreateInitializedClientAsync(
@@ -1109,6 +1252,47 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             await client.CloseSessionAsync(new SessionCloseParams("session-123"));
 
             Assert.Null(sessionManager.GetSession("session-123"));
+        }
+
+        [Fact]
+        public async Task DeleteSessionAsync_WhenAgentDoesNotSupportSessionDelete_DoesNotSendProtocolRequest()
+        {
+            var client = await CreateInitializedClientAsync();
+
+            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"));
+
+            Assert.Same(SessionDeleteResponse.Completed, result);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/delete"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task DeleteSessionAsync_WhenSupported_SendsStandardSessionDelete()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Delete = new SessionDeleteCapabilities()
+                }));
+
+            SetupJsonRpcResponse(
+                "session/delete",
+                ElementFromJson("{}"),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"));
+
+            Assert.NotNull(result);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+
+            using var document = JsonDocument.Parse(requestJson);
+            Assert.Equal("session/delete", document.RootElement.GetProperty("method").GetString());
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
         }
 
         [Theory]

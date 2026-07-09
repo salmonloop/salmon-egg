@@ -42,6 +42,21 @@ public sealed class AcpJsonContextTests
         var capabilities = JsonSerializer.Deserialize(
             capabilitiesJson,
             AcpJsonContext.Default.ClientCapabilities);
+        var agentCapabilitiesJson = JsonSerializer.Serialize(
+            new AgentCapabilities(
+                sessionCapabilities: new SessionCapabilities
+                {
+                    AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities(),
+                    Delete = new SessionDeleteCapabilities()
+                },
+                auth: new AgentAuthCapabilities
+                {
+                    Logout = new LogoutCapabilities()
+                }),
+            AcpJsonContext.Default.AgentCapabilities);
+        var agentCapabilities = JsonSerializer.Deserialize(
+            agentCapabilitiesJson,
+            AcpJsonContext.Default.AgentCapabilities);
         var currentModeJson = JsonSerializer.Serialize(
             new SessionUpdateParams("session-1", new CurrentModeUpdate("code")),
             AcpJsonContext.Default.SessionUpdateParams);
@@ -53,6 +68,10 @@ public sealed class AcpJsonContextTests
         Assert.NotNull(setModeResponse);
         Assert.NotNull(capabilities);
         Assert.True(capabilities!.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod));
+        Assert.NotNull(capabilities.Session?.ConfigOptions);
+        Assert.True(agentCapabilities!.SupportsSessionAdditionalDirectories);
+        Assert.True(agentCapabilities.SupportsSessionDelete);
+        Assert.True(agentCapabilities.SupportsLogout);
         Assert.IsType<CurrentModeUpdate>(currentMode!.Update);
         Assert.Equal("code", ((CurrentModeUpdate)currentMode.Update).ModeId);
     }
@@ -76,6 +95,12 @@ public sealed class AcpJsonContextTests
         var setModeResponseJson = JsonSerializer.Serialize(
             new SessionSetModeResponse(),
             AcpJsonContext.Default.SessionSetModeResponse);
+        var deleteResponseJson = JsonSerializer.Serialize(
+            new SessionDeleteResponse(),
+            AcpJsonContext.Default.SessionDeleteResponse);
+        var logoutResponseJson = JsonSerializer.Serialize(
+            new LogoutResponse(),
+            AcpJsonContext.Default.LogoutResponse);
 
         using var promptDocument = JsonDocument.Parse(promptJson);
         using var promptResponseDocument = JsonDocument.Parse(promptResponseJson);
@@ -89,6 +114,8 @@ public sealed class AcpJsonContextTests
         Assert.False(promptDocument.RootElement.TryGetProperty("messageId", out _));
         Assert.False(promptResponseDocument.RootElement.TryGetProperty("userMessageId", out _));
         Assert.False(setModeResponseDocument.RootElement.TryGetProperty("modeId", out _));
+        Assert.Equal("{}", deleteResponseJson);
+        Assert.Equal("{}", logoutResponseJson);
         var update = currentModeDocument.RootElement.GetProperty("update");
         Assert.Equal("code", update.GetProperty("currentModeId").GetString());
         Assert.False(update.TryGetProperty("modeId", out _));

@@ -25,6 +25,12 @@ namespace SalmonEgg.Domain.Models.Protocol
         public List<McpServer> McpServers { get; set; } = new List<McpServer>();
 
         /// <summary>
+        /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
+        /// </summary>
+        [JsonPropertyName("additionalDirectories")]
+        public List<string>? AdditionalDirectories { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionNewParams 实例。
         /// </summary>
         public SessionNewParams()
@@ -36,10 +42,15 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// </summary>
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
-        public SessionNewParams(string cwd, List<McpServer>? mcpServers = null)
+        /// <param name="additionalDirectories">附加工作目录</param>
+        public SessionNewParams(
+            string cwd,
+            List<McpServer>? mcpServers = null,
+            List<string>? additionalDirectories = null)
         {
             Cwd = cwd;
             McpServers = mcpServers ?? new List<McpServer>();
+            AdditionalDirectories = additionalDirectories;
         }
     }
 

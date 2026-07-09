@@ -59,6 +59,9 @@ namespace SalmonEgg.Infrastructure.Client
         private bool SupportsSessionLoad => _agentCapabilities?.SupportsSessionLoading == true;
         private bool SupportsSessionResume => _agentCapabilities?.SupportsSessionResume == true;
         private bool SupportsSessionClose => _agentCapabilities?.SupportsSessionClose == true;
+        private bool SupportsSessionDelete => _agentCapabilities?.SupportsSessionDelete == true;
+        private bool SupportsSessionAdditionalDirectories => _agentCapabilities?.SupportsSessionAdditionalDirectories == true;
+        private bool SupportsLogout => _agentCapabilities?.SupportsLogout == true;
 
         /// <summary>
         /// 初始化事件。
@@ -227,6 +230,7 @@ namespace SalmonEgg.Infrastructure.Client
         {
             EnsureInitialized();
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/new");
+            ValidateAdditionalDirectories(@params.AdditionalDirectories, "session/new");
             EnsureMcpServersSupported(@params.McpServers, "session/new");
 
             var request = new JsonRpcRequest(
@@ -276,6 +280,7 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/load");
+            ValidateAdditionalDirectories(@params.AdditionalDirectories, "session/load");
             EnsureMcpServersSupported(@params.McpServers, "session/load");
 
             var request = new JsonRpcRequest(
@@ -319,6 +324,7 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             ValidateRequiredAbsolutePath(@params.Cwd, "cwd", "session/resume");
+            ValidateAdditionalDirectories(@params.AdditionalDirectories, "session/resume");
             EnsureMcpServersSupported(@params.McpServers, "session/resume");
 
             var request = new JsonRpcRequest(
@@ -386,6 +392,49 @@ namespace SalmonEgg.Infrastructure.Client
 
             _sessionManager.RemoveSession(@params.SessionId);
             return sessionCloseResponse ?? SessionCloseResponse.Completed;
+        }
+
+        /// <summary>
+        /// 删除远端 Agent 会话。
+        /// </summary>
+        public async Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (!SupportsSessionDelete)
+            {
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "SESSION_DELETE_UNSUPPORTED",
+                    "Agent does not support session/delete capability",
+                    ErrorSeverity.Info,
+                    nameof(DeleteSessionAsync)));
+
+                return SessionDeleteResponse.Completed;
+            }
+
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "session/delete",
+                ToElement(@params, AcpJsonContext.Default.SessionDeleteParams));
+
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (response.IsError)
+            {
+                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+            }
+
+            if (!response.Result.HasValue ||
+                response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                _sessionManager.RemoveSession(@params.SessionId);
+                return SessionDeleteResponse.Completed;
+            }
+
+            var sessionDeleteResponse = FromElement(response.Result.Value, AcpJsonContext.Default.SessionDeleteResponse);
+
+            _sessionManager.RemoveSession(@params.SessionId);
+            return sessionDeleteResponse ?? SessionDeleteResponse.Completed;
         }
 
         /// <summary>
@@ -578,6 +627,42 @@ namespace SalmonEgg.Infrastructure.Client
             }
 
             return authResponse;
+        }
+
+        /// <summary>
+        /// 登出当前认证状态。
+        /// </summary>
+        public async Task<LogoutResponse> LogoutAsync(LogoutParams @params, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (!SupportsLogout)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.MethodNotAllowed,
+                    "Agent does not support logout capability");
+            }
+
+            var request = new JsonRpcRequest(
+                Interlocked.Increment(ref _nextMessageId),
+                "logout",
+                ToElement(@params, AcpJsonContext.Default.LogoutParams));
+
+            var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+            if (response.IsError)
+            {
+                throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
+            }
+
+            if (!response.Result.HasValue ||
+                response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return LogoutResponse.Completed;
+            }
+
+            return FromElement(response.Result.Value, AcpJsonContext.Default.LogoutResponse)
+                ?? LogoutResponse.Completed;
         }
 
         /// <summary>
@@ -1737,6 +1822,26 @@ namespace SalmonEgg.Infrastructure.Client
             ValidateRequiredAbsolutePath(path, fieldName, methodName);
         }
 
+        private void ValidateAdditionalDirectories(IReadOnlyList<string>? paths, string methodName)
+        {
+            if (paths is null || paths.Count == 0)
+            {
+                return;
+            }
+
+            if (!SupportsSessionAdditionalDirectories)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.MethodNotAllowed,
+                    $"{methodName} cannot include additionalDirectories because the agent does not advertise sessionCapabilities.additionalDirectories.");
+            }
+
+            for (var i = 0; i < paths.Count; i++)
+            {
+                ValidateRequiredAbsolutePath(paths[i], $"additionalDirectories[{i}]", methodName);
+            }
+        }
+
         private void ValidateSessionListResponse(SessionListResponse response)
         {
             foreach (var session in response.Sessions)
@@ -1753,6 +1858,22 @@ namespace SalmonEgg.Infrastructure.Client
                     throw new AcpException(
                         JsonRpcErrorCode.ParseError,
                         $"Invalid session/list response: session '{session.SessionId}' must include an absolute cwd.");
+                }
+
+                if (session.AdditionalDirectories is null)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < session.AdditionalDirectories.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(session.AdditionalDirectories[i])
+                        || !_pathValidator.IsAbsolutePath(session.AdditionalDirectories[i]))
+                    {
+                        throw new AcpException(
+                            JsonRpcErrorCode.ParseError,
+                            $"Invalid session/list response: session '{session.SessionId}' additionalDirectories[{i}] must be an absolute path.");
+                    }
                 }
             }
         }

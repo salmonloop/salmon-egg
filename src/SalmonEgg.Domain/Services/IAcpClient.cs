@@ -123,6 +123,15 @@ namespace SalmonEgg.Domain.Services
         Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// 删除远端 Agent 会话。
+        /// 发送 session/delete 请求。
+        /// </summary>
+        /// <param name="params">删除会话参数</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>删除会话响应</returns>
+        Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 列出远端 Agent 支持的会话列表。
         /// 发送 session/list 请求并等待 Agent 响应。
         /// </summary>
@@ -175,6 +184,15 @@ namespace SalmonEgg.Domain.Services
         /// <param name="cancellationToken">取消令牌</param>
         /// <returns>认证响应</returns>
         Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 登出当前认证状态。
+        /// 发送 logout 请求。
+        /// </summary>
+        /// <param name="params">登出参数</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>登出响应</returns>
+        Task<LogoutResponse> LogoutAsync(LogoutParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 响应权限请求。
