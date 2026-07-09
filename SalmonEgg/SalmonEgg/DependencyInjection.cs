@@ -8,9 +8,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Application.Services;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Application.UseCases;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
@@ -21,7 +19,6 @@ using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Logging;
 using SalmonEgg.Infrastructure.Network;
-using SalmonEgg.Infrastructure.Serialization;
 using SalmonEgg.Infrastructure.Services;
 using SalmonEgg.Infrastructure.Storage;
 using SalmonEgg.Infrastructure.Transport;
@@ -117,9 +114,6 @@ public static class DependencyInjection
 
     private static void RegisterDomainServices(IServiceCollection services)
     {
-        // ACP Protocol Services
-        services.AddSingleton<IAcpProtocolService, AcpMessageParser>();
-
         // Message Parser and Validator
         services.AddSingleton<IMessageParser, MessageParser>();
         services.AddSingleton<IMessageValidator, MessageValidator>();
@@ -133,24 +127,6 @@ public static class DependencyInjection
         // Error Logger
         services.AddSingleton<IErrorLogger, ErrorLogger>();
 
-        // Connection Manager (factory method supporting dynamic transport selection)
-        services.AddSingleton<IConnectionManager>(sp =>
-            {
-                var protocolService = sp.GetRequiredService<IAcpProtocolService>();
-                var logger = sp.GetRequiredService<Serilog.ILogger>();
-
-                Infrastructure.Network.ITransport TransportFactory(TransportType type)
-                {
-                    var l = sp.GetRequiredService<Serilog.ILogger>();
-                    return type switch
-                    {
-                        TransportType.HttpSse => new HttpSseTransport(l),
-                        _ => new WebSocketTransport(l)
-                    };
-                }
-
-                return new ConnectionManager(protocolService, logger, TransportFactory);
-            });
     }
 
     private static void RegisterInfrastructureServices(IServiceCollection services)
@@ -405,12 +381,6 @@ public static class DependencyInjection
             return new ShellLayoutStore(state, snapshot, initialState, initialSnapshot);
         });
         services.AddSingleton<IShellLayoutMetricsSink, ShellLayoutMetricsSink>();
-        services.AddTransient<ConnectToServerUseCase>();
-        services.AddTransient<DisconnectUseCase>();
-        services.AddTransient<SendMessageUseCase>();
-        services.AddSingleton<IConnectionService, ConnectionService>();
-        services.AddSingleton<IMessageService, MessageService>();
-
         var chatServiceDecorator = CreateChatServiceDecorator();
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();

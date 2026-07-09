@@ -32,6 +32,7 @@ Moved in this step:
 - ACP client runtime moved into `SalmonEgg.Acp.Client.AcpClient`. SDK-facing host seams are now `IAcpTransport`, `IAcpClientSessionStore`, `IAcpTerminalSessionManager`, and `IAcpClientLogger`; Infrastructure owns only adapters from app-local transport, session, terminal, and logging services.
 - MCP server support validation moved into `SalmonEgg.Acp.Mcp`; Domain keeps only app-local MCP settings/catalog state.
 - Client callback response payloads for permission outcome and `fs/read_text_file` now serialize through `AcpJsonContext`.
+- The legacy non-JSON-RPC `AcpMessage` / `IAcpProtocolService` / `ConnectionManager` stack was removed from Domain, Application, Infrastructure, DI, and tests. It used string `ProtocolVersion = "1.0"` and a non-standard `type: request/response/notification/initialize` envelope, so keeping it would have preserved an obsolete ACP-shaped runtime path.
 
 Guard coverage:
 
@@ -45,6 +46,8 @@ Guard coverage:
   - fails if Infrastructure reintroduces the ACP client runtime,
   - fails if Domain reintroduces `Models/Mcp/McpServerConfig.cs`,
   - fails if Domain reintroduces MCP support validation policy,
+  - fails if Domain or Infrastructure reintroduces the legacy `AcpMessage` / `IAcpProtocolService` / `ConnectionManager` stack,
+  - fails if DI re-registers the legacy ACP parser or connection manager,
   - fails if Domain session state reintroduces `StopReason`,
   - fails if SDK MCP wire payloads contain app-local `Enabled` state,
   - requires Domain to reference `SalmonEgg.Acp`.

@@ -46,7 +46,17 @@ public sealed class AcpSdkBoundaryTests
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\Security\PermissionOption.cs")), Is.False);
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerConfig.cs")), Is.False);
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerSupportPolicy.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\AcpMessage.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\AcpError.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\IAcpProtocolService.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\IConnectionManager.cs")), Is.False);
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Client\AcpClient.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\AcpMessageParser.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Network\ConnectionManager.cs")), Is.False);
+        Assert.That(LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"), Does.Not.Contain("IAcpProtocolService"));
+        Assert.That(LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"), Does.Not.Contain("IConnectionManager"));
+        Assert.That(LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"), Does.Not.Contain("AcpMessageParser"));
+        Assert.That(LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"), Does.Not.Contain("ConnectionManager("));
         Assert.That(LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"), Does.Not.Contain("public bool Enabled"));
         Assert.That(LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"), Does.Not.Contain("enum StopReason"));
         Assert.That(LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"), Does.Contain("enum StopReason"));

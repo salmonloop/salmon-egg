@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Diagnostics;
 
 namespace SalmonEgg.Infrastructure.Serialization;
@@ -10,8 +9,6 @@ namespace SalmonEgg.Infrastructure.Serialization;
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     AllowOutOfOrderMetadataProperties = true)]
-[JsonSerializable(typeof(AcpMessage))]
-[JsonSerializable(typeof(AcpError))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(DiagnosticsSnapshot))]
 internal partial class AcpInfrastructureJsonContext : JsonSerializerContext
