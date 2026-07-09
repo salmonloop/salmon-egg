@@ -149,6 +149,8 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
         var client = GetGraphClient();
         try
         {
+            await EnsureRemoteFolderAsync(client, cancellationToken).ConfigureAwait(false);
+
             using var input = new MemoryStream(content, writable: false);
             var request = CreateRequest(Method.PUT, CreateContentUrl());
             request.SetStreamContent(input, "application/zip");
@@ -173,6 +175,74 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
         catch (Exception ex)
         {
             return CloudConfigUploadResult.Failed(ex.Message);
+        }
+    }
+
+    private static async Task EnsureRemoteFolderAsync(GraphServiceClient client, CancellationToken cancellationToken)
+    {
+        var directoryPath = GetDirectoryPath(RemotePath);
+        if (string.IsNullOrWhiteSpace(directoryPath))
+        {
+            return;
+        }
+
+        var currentPath = string.Empty;
+        foreach (var segment in directoryPath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parentPath = currentPath;
+            currentPath = string.IsNullOrEmpty(currentPath) ? segment : currentPath + "/" + segment;
+            await EnsureRemoteFolderSegmentAsync(client, currentPath, parentPath, segment, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task EnsureRemoteFolderSegmentAsync(
+        GraphServiceClient client,
+        string folderPath,
+        string parentPath,
+        string folderName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existing = await client.RequestAdapter.SendAsync(
+                    CreateRequest(Method.GET, CreateItemUrl(folderPath)),
+                    DriveItem.CreateFromDiscriminatorValue,
+                    CreateErrorMapping(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (existing?.Folder is not null)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("OneDrive path '" + folderPath + "' exists but is not a folder.");
+        }
+        catch (Exception ex) when (IsNotFound(ex))
+        {
+        }
+
+        try
+        {
+            var folder = new DriveItem
+            {
+                Name = folderName,
+                Folder = new Folder(),
+                AdditionalData = new Dictionary<string, object>
+                {
+                    ["@microsoft.graph.conflictBehavior"] = "fail"
+                }
+            };
+            var request = CreateRequest(Method.POST, CreateChildrenUrl(parentPath));
+            request.SetContentFromParsable(client.RequestAdapter, "application/json", folder);
+            await client.RequestAdapter.SendAsync(
+                    request,
+                    DriveItem.CreateFromDiscriminatorValue,
+                    CreateErrorMapping(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsAlreadyExists(ex))
+        {
         }
     }
 
@@ -241,6 +311,9 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
     private static bool IsPreconditionFailed(Exception ex) =>
         ContainsStatusCode(ex, 412) || ContainsText(ex, "precondition");
 
+    private static bool IsAlreadyExists(Exception ex) =>
+        ContainsStatusCode(ex, 409) || ContainsText(ex, "nameAlreadyExists");
+
     private static bool ContainsStatusCode(Exception ex, int statusCode) =>
         (ex is ApiException apiException && apiException.ResponseStatusCode == statusCode) ||
         ex.Message.Contains(statusCode.ToString(CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase);
@@ -255,13 +328,26 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
             URI = new Uri(url)
         };
 
-    private static string CreateItemUrl() =>
-        "https://graph.microsoft.com/v1.0/me/drive/special/approot:/" + EscapePath(RemotePath);
+    private static string CreateItemUrl() => CreateItemUrl(RemotePath);
+
+    private static string CreateItemUrl(string path) =>
+        "https://graph.microsoft.com/v1.0/me/drive/special/approot:/" + EscapePath(path);
 
     private static string CreateContentUrl() => CreateItemUrl() + ":/content";
 
+    private static string CreateChildrenUrl(string parentPath) =>
+        string.IsNullOrWhiteSpace(parentPath)
+            ? "https://graph.microsoft.com/v1.0/me/drive/special/approot/children"
+            : CreateItemUrl(parentPath) + ":/children";
+
     private static string EscapePath(string path) =>
         string.Join("/", path.Split('/').Select(Uri.EscapeDataString));
+
+    private static string GetDirectoryPath(string path)
+    {
+        var index = path.LastIndexOf('/');
+        return index < 0 ? string.Empty : path.Substring(0, index);
+    }
 
     private static Dictionary<string, ParsableFactory<IParsable>> CreateErrorMapping() => new();
 

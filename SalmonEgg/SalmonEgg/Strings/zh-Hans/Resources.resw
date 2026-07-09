@@ -1393,7 +1393,7 @@
     <value>https://example.com/remote.php/dav/files/me/config-sync/</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFolderUrlDescription.Text" xml:space="preserve">
-    <value>只填写 WebDAV 文件夹路径。SalmonEgg 会在该文件夹内使用默认文件名 salmonegg-config.zip。</value>
+    <value>只填写 WebDAV 文件夹路径。SalmonEgg 会使用默认文件名 salmonegg-config.zip；服务端允许时会自动创建缺失文件夹。</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavUsername.Header" xml:space="preserve">
     <value>WebDAV 用户名</value>

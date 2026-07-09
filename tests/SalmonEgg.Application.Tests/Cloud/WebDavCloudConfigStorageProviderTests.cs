@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -116,6 +117,60 @@ public sealed class WebDavCloudConfigStorageProviderTests
     }
 
     [Fact]
+    public async Task UploadAsync_WhenDirectoryDoesNotExist_CreatesCollectionAndRetriesPut()
+    {
+        await using var server = await WebDavSmokeServer.StartAsync(
+            "/dav/config/salmonegg-config.zip",
+            "alice",
+            "app-password",
+            existingCollections: ["/", "/dav/"]);
+        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+
+        await provider.ConfigureAsync(
+            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
+            });
+        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null);
+
+        Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
+        Assert.Equal(
+            ["PUT /dav/config/salmonegg-config.zip", "MKCOL /dav/config/", "PUT /dav/config/salmonegg-config.zip"],
+            server.Requests.Select(request => request.Method + " " + request.Path));
+    }
+
+    [Fact]
+    public async Task UploadAsync_WhenNestedDirectoryDoesNotExist_CreatesMissingParentsBeforeRetryingPut()
+    {
+        await using var server = await WebDavSmokeServer.StartAsync(
+            "/dav/config/nested/salmonegg-config.zip",
+            "alice",
+            "app-password",
+            existingCollections: ["/", "/dav/"]);
+        var provider = CreateProvider(server.CreateUrl("dav/config/nested/"));
+
+        await provider.ConfigureAsync(
+            CreateOptions(server.CreateUrl("dav/config/nested/"), "alice"),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
+            });
+        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null);
+
+        Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
+        Assert.Equal(
+            [
+                "PUT /dav/config/nested/salmonegg-config.zip",
+                "MKCOL /dav/config/nested/",
+                "MKCOL /dav/config/",
+                "MKCOL /dav/config/nested/",
+                "PUT /dav/config/nested/salmonegg-config.zip"
+            ],
+            server.Requests.Select(request => request.Method + " " + request.Path));
+    }
+
+    [Fact]
     public async Task UploadAsync_WhenCredentialsAreRejected_ReturnsForbiddenAfterUsingResolvedPackagePath()
     {
         await using var server = await WebDavSmokeServer.StartAsync(
@@ -206,6 +261,7 @@ public sealed class WebDavCloudConfigStorageProviderTests
         private readonly HttpListener _listener;
         private readonly string _expectedPath;
         private readonly string _expectedAuthorization;
+        private readonly HashSet<string> _existingCollections;
         private readonly Task _listenTask;
         private readonly ConcurrentQueue<WebDavRequest> _requests = new();
 
@@ -214,12 +270,17 @@ public sealed class WebDavCloudConfigStorageProviderTests
             Uri baseUri,
             string expectedPath,
             string username,
-            string password)
+            string password,
+            IEnumerable<string> existingCollections)
         {
             _listener = listener;
             BaseUri = baseUri;
             _expectedPath = expectedPath;
             _expectedAuthorization = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes(username + ":" + password));
+            _existingCollections = existingCollections
+                .Append("/")
+                .Select(NormalizeCollectionPath)
+                .ToHashSet(StringComparer.Ordinal);
             _listenTask = Task.Run(ListenAsync);
         }
 
@@ -227,14 +288,19 @@ public sealed class WebDavCloudConfigStorageProviderTests
 
         public IReadOnlyCollection<WebDavRequest> Requests => _requests.ToArray();
 
-        public static Task<WebDavSmokeServer> StartAsync(string expectedPath, string username, string password)
+        public static Task<WebDavSmokeServer> StartAsync(
+            string expectedPath,
+            string username,
+            string password,
+            IEnumerable<string>? existingCollections = null)
         {
             var port = GetFreeTcpPort();
             var baseUri = new Uri("http://127.0.0.1:" + port.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/");
             var listener = new HttpListener();
             listener.Prefixes.Add(baseUri.AbsoluteUri);
             listener.Start();
-            return Task.FromResult(new WebDavSmokeServer(listener, baseUri, expectedPath, username, password));
+            existingCollections ??= new[] { GetParentCollectionPath(expectedPath) };
+            return Task.FromResult(new WebDavSmokeServer(listener, baseUri, expectedPath, username, password, existingCollections));
         }
 
         public string CreateUrl(string relativePath) => new Uri(BaseUri, relativePath).AbsoluteUri;
@@ -296,9 +362,12 @@ public sealed class WebDavCloudConfigStorageProviderTests
 
             if (!string.Equals(request.Path, _expectedPath, StringComparison.Ordinal))
             {
-                context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
-                context.Response.Close();
-                return;
+                if (!string.Equals(request.Method, "MKCOL", StringComparison.Ordinal))
+                {
+                    context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+                    context.Response.Close();
+                    return;
+                }
             }
 
             if (string.Equals(request.Method, "GET", StringComparison.Ordinal))
@@ -312,6 +381,12 @@ public sealed class WebDavCloudConfigStorageProviderTests
                 return;
             }
 
+            if (string.Equals(request.Method, "MKCOL", StringComparison.Ordinal))
+            {
+                HandleMkCol(context, request.Path);
+                return;
+            }
+
             if (!string.Equals(request.Method, "PUT", StringComparison.Ordinal))
             {
                 context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
@@ -319,9 +394,60 @@ public sealed class WebDavCloudConfigStorageProviderTests
                 return;
             }
 
+            if (!_existingCollections.Contains(GetParentCollectionPath(request.Path)))
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+                context.Response.Close();
+                return;
+            }
+
             context.Response.StatusCode = (int)HttpStatusCode.Created;
             context.Response.Headers["ETag"] = "\"smoke-etag\"";
             context.Response.Close();
+        }
+
+        private void HandleMkCol(HttpListenerContext context, string rawPath)
+        {
+            var collectionPath = NormalizeCollectionPath(rawPath);
+            if (_existingCollections.Contains(collectionPath))
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
+                context.Response.Close();
+                return;
+            }
+
+            if (!_existingCollections.Contains(GetParentCollectionPath(collectionPath)))
+            {
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+                context.Response.Close();
+                return;
+            }
+
+            _existingCollections.Add(collectionPath);
+            context.Response.StatusCode = (int)HttpStatusCode.Created;
+            context.Response.Close();
+        }
+
+        private static string NormalizeCollectionPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.Equals(path, "/", StringComparison.Ordinal))
+            {
+                return "/";
+            }
+
+            return path.EndsWith("/", StringComparison.Ordinal) ? path : path + "/";
+        }
+
+        private static string GetParentCollectionPath(string path)
+        {
+            var value = path.TrimEnd('/');
+            if (string.IsNullOrEmpty(value) || string.Equals(value, "/", StringComparison.Ordinal))
+            {
+                return "/";
+            }
+
+            var index = value.LastIndexOf('/');
+            return index <= 0 ? "/" : value.Substring(0, index + 1);
         }
 
         private static int GetFreeTcpPort()

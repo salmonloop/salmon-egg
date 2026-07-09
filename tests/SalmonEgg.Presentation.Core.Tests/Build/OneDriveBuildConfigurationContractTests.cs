@@ -57,6 +57,23 @@ public sealed class OneDriveBuildConfigurationContractTests
     }
 
     [Fact]
+    public void OneDriveProvider_CreatesRemoteFolderBeforeUploadingPackage()
+    {
+        var provider = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Cloud\OneDriveCloudConfigStorageProvider.cs");
+
+        Assert.Contains("EnsureRemoteFolderAsync", provider, StringComparison.Ordinal);
+        Assert.Contains("CreateChildrenUrl", provider, StringComparison.Ordinal);
+        Assert.Contains("@microsoft.graph.conflictBehavior", provider, StringComparison.Ordinal);
+
+        var ensureFolder = provider.IndexOf("await EnsureRemoteFolderAsync", StringComparison.Ordinal);
+        var uploadRequest = provider.IndexOf("var request = CreateRequest(Method.PUT, CreateContentUrl())", StringComparison.Ordinal);
+        Assert.True(
+            ensureFolder >= 0 && ensureFolder < uploadRequest,
+            "OneDrive upload must ensure the app-folder child path exists before PUT content.");
+    }
+
+    [Fact]
     public void GitHubActions_InjectOneDriveBuildEnvironmentFromSecretsOrVariables()
     {
         var workflowPaths = Directory.EnumerateFiles(

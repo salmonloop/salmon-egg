@@ -11,7 +11,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Infrastructure.Storage;
 
@@ -23,6 +22,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
     public const string PasswordSecretKey = "password";
 
     private const string SecureStoragePasswordKey = "salmonegg/cloud-sync/webdav/password";
+    private static readonly HttpMethod MkColMethod = new("MKCOL");
 
     private readonly IAppSettingsService _appSettings;
     private readonly ISecureStorage _secureStorage;
@@ -50,7 +50,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         IReadOnlyDictionary<string, string> secrets,
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetNormalizedFileUrl(options, out _, out var validationError))
+        if (!TryGetNormalizedFileUrl(options, out _, out _, out var validationError))
         {
             return CloudConfigProviderConfigurationResult.Failed(validationError);
         }
@@ -73,7 +73,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         IReadOnlyDictionary<string, string> options,
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetNormalizedFileUrl(options, out _, out var validationError))
+        if (!TryGetNormalizedFileUrl(options, out _, out _, out var validationError))
         {
             return CloudConfigProviderConfigurationStatus.Missing(validationError);
         }
@@ -155,18 +155,38 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
 
         try
         {
-            using var request = CreateRequest(HttpMethod.Put, configuration);
-            request.Content = new ByteArrayContent(content);
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-            if (!string.IsNullOrWhiteSpace(expectedETag))
-            {
-                request.Headers.TryAddWithoutValidation("If-Match", expectedETag);
-            }
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            using var response = await SendUploadRequestAsync(configuration, content, expectedETag, cancellationToken)
+                .ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.PreconditionFailed)
             {
                 return CloudConfigUploadResult.PreconditionFailed("WebDAV config package changed remotely.");
+            }
+
+            if (IsMissingCollectionStatus(response.StatusCode))
+            {
+                var creation = await EnsureRemoteCollectionAsync(configuration, cancellationToken).ConfigureAwait(false);
+                if (!creation.Succeeded)
+                {
+                    return CloudConfigUploadResult.Failed(creation.UserMessage);
+                }
+
+                using var retryResponse = await SendUploadRequestAsync(configuration, content, expectedETag, cancellationToken)
+                    .ConfigureAwait(false);
+                if (retryResponse.StatusCode == HttpStatusCode.PreconditionFailed)
+                {
+                    return CloudConfigUploadResult.PreconditionFailed("WebDAV config package changed remotely.");
+                }
+
+                if (!retryResponse.IsSuccessStatusCode)
+                {
+                    return CloudConfigUploadResult.Failed(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            "WebDAV upload failed with status {0}.",
+                            (int)retryResponse.StatusCode));
+                }
+
+                return CloudConfigUploadResult.Uploaded(retryResponse.Headers.ETag?.Tag);
             }
 
             if (!response.IsSuccessStatusCode)
@@ -186,9 +206,107 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         }
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, WebDavConfiguration configuration)
+    private async Task<HttpResponseMessage> SendUploadRequestAsync(
+        WebDavConfiguration configuration,
+        byte[] content,
+        string? expectedETag,
+        CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(method, configuration.FileUrl);
+        using var request = CreateRequest(HttpMethod.Put, configuration.FileUrl!, configuration);
+        request.Content = new ByteArrayContent(content);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
+        if (!string.IsNullOrWhiteSpace(expectedETag))
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", expectedETag);
+        }
+
+        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<WebDavCollectionCreationResult> EnsureRemoteCollectionAsync(
+        WebDavConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        return await EnsureRemoteCollectionAsync(configuration.DirectoryUrl!, configuration, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<WebDavCollectionCreationResult> EnsureRemoteCollectionAsync(
+        Uri collectionUrl,
+        WebDavConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var creation = await TryCreateCollectionAsync(collectionUrl, configuration, cancellationToken).ConfigureAwait(false);
+        if (creation.Status is WebDavCollectionCreationStatus.Created or WebDavCollectionCreationStatus.AlreadyExists)
+        {
+            return WebDavCollectionCreationResult.Success();
+        }
+
+        if (creation.Status != WebDavCollectionCreationStatus.MissingParent)
+        {
+            return WebDavCollectionCreationResult.Failed(creation.UserMessage);
+        }
+
+        var parent = GetParentCollectionUrl(collectionUrl);
+        if (parent is null)
+        {
+            return WebDavCollectionCreationResult.Failed(creation.UserMessage);
+        }
+
+        var parentCreation = await EnsureRemoteCollectionAsync(parent, configuration, cancellationToken).ConfigureAwait(false);
+        if (!parentCreation.Succeeded)
+        {
+            return parentCreation;
+        }
+
+        creation = await TryCreateCollectionAsync(collectionUrl, configuration, cancellationToken).ConfigureAwait(false);
+        return creation.Status is WebDavCollectionCreationStatus.Created or WebDavCollectionCreationStatus.AlreadyExists
+            ? WebDavCollectionCreationResult.Success()
+            : WebDavCollectionCreationResult.Failed(creation.UserMessage);
+    }
+
+    private async Task<WebDavCollectionCreationAttempt> TryCreateCollectionAsync(
+        Uri collectionUrl,
+        WebDavConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(MkColMethod, collectionUrl, configuration);
+        using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK or HttpStatusCode.NoContent)
+        {
+            return WebDavCollectionCreationAttempt.Created();
+        }
+
+        if (response.StatusCode == HttpStatusCode.MethodNotAllowed)
+        {
+            return WebDavCollectionCreationAttempt.AlreadyExists();
+        }
+
+        if (IsMissingCollectionStatus(response.StatusCode))
+        {
+            return WebDavCollectionCreationAttempt.MissingParent(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "WebDAV folder creation failed with status {0}.",
+                    (int)response.StatusCode));
+        }
+
+        return WebDavCollectionCreationAttempt.Failed(
+            string.Format(
+                CultureInfo.InvariantCulture,
+                "WebDAV folder creation failed with status {0}.",
+                (int)response.StatusCode));
+    }
+
+    private static bool IsMissingCollectionStatus(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict;
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, WebDavConfiguration configuration)
+        => CreateRequest(method, configuration.FileUrl!, configuration);
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, Uri requestUri, WebDavConfiguration configuration)
+    {
+        var request = new HttpRequestMessage(method, requestUri);
         if (!string.IsNullOrWhiteSpace(configuration.Username))
         {
             var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(configuration.Username + ":" + configuration.Password));
@@ -206,7 +324,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
             return WebDavConfiguration.NotConfigured("WebDAV folder URL is required.");
         }
 
-        if (!TryGetNormalizedFileUrl(options, out var fileUrl, out var validationError))
+        if (!TryGetNormalizedFileUrl(options, out var fileUrl, out var directoryUrl, out var validationError))
         {
             return WebDavConfiguration.NotConfigured(validationError);
         }
@@ -218,15 +336,17 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
             return WebDavConfiguration.NotConfigured("WebDAV password is required when a username is set.");
         }
 
-        return new WebDavConfiguration(fileUrl!, username, password, null);
+        return new WebDavConfiguration(fileUrl!, directoryUrl!, username, password, null);
     }
 
     private static bool TryGetNormalizedFileUrl(
         IReadOnlyDictionary<string, string> options,
         out Uri? fileUrl,
+        out Uri? directoryUrl,
         out string errorMessage)
     {
         fileUrl = null;
+        directoryUrl = null;
         var value = GetValue(options, FileUrlOptionKey).Trim();
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -241,21 +361,27 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
             return false;
         }
 
-        fileUrl = ResolvePackageFileUrl(uri);
+        directoryUrl = ResolveCollectionUrl(uri);
+        fileUrl = ResolvePackageFileUrl(directoryUrl);
         errorMessage = string.Empty;
         return true;
     }
 
-    private static Uri ResolvePackageFileUrl(Uri directoryUrl)
+    private static Uri ResolveCollectionUrl(Uri uri)
     {
-        var lastSegment = directoryUrl.Segments.Length == 0
+        var lastSegment = uri.Segments.Length == 0
             ? string.Empty
-            : Uri.UnescapeDataString(directoryUrl.Segments[^1].Trim('/'));
+            : Uri.UnescapeDataString(uri.Segments[^1].Trim('/'));
         if (string.Equals(lastSegment, CloudConfigSyncDefaults.RemotePackageFileName, StringComparison.OrdinalIgnoreCase))
         {
-            return directoryUrl;
+            return GetParentCollectionUrl(uri) ?? EnsureTrailingSlash(uri);
         }
 
+        return EnsureTrailingSlash(uri);
+    }
+
+    private static Uri ResolvePackageFileUrl(Uri directoryUrl)
+    {
         var builder = new UriBuilder(directoryUrl);
         var path = string.IsNullOrEmpty(builder.Path) ? "/" : builder.Path;
         if (!path.EndsWith("/", StringComparison.Ordinal))
@@ -267,14 +393,74 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         return builder.Uri;
     }
 
+    private static Uri EnsureTrailingSlash(Uri uri)
+    {
+        var builder = new UriBuilder(uri);
+        var path = string.IsNullOrEmpty(builder.Path) ? "/" : builder.Path;
+        if (!path.EndsWith("/", StringComparison.Ordinal))
+        {
+            builder.Path = path + "/";
+        }
+
+        return builder.Uri;
+    }
+
+    private static Uri? GetParentCollectionUrl(Uri collectionUrl)
+    {
+        var builder = new UriBuilder(collectionUrl);
+        var path = builder.Path.TrimEnd('/');
+        if (string.IsNullOrEmpty(path) || string.Equals(path, "/", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var index = path.LastIndexOf('/');
+        builder.Path = index <= 0 ? "/" : path.Substring(0, index + 1);
+        return builder.Uri;
+    }
+
     private static string GetValue(IReadOnlyDictionary<string, string> values, string key)
         => values.FirstOrDefault(value => string.Equals(value.Key, key, StringComparison.OrdinalIgnoreCase)).Value ?? string.Empty;
 
-    private sealed record WebDavConfiguration(Uri? FileUrl, string Username, string Password, string? ErrorMessage)
+    private enum WebDavCollectionCreationStatus
     {
-        public bool IsConfigured => FileUrl is not null && string.IsNullOrEmpty(ErrorMessage);
+        Created,
+        AlreadyExists,
+        MissingParent,
+        Failed
+    }
+
+    private sealed record WebDavCollectionCreationAttempt(
+        WebDavCollectionCreationStatus Status,
+        string UserMessage)
+    {
+        public static WebDavCollectionCreationAttempt Created() => new(WebDavCollectionCreationStatus.Created, string.Empty);
+
+        public static WebDavCollectionCreationAttempt AlreadyExists() => new(WebDavCollectionCreationStatus.AlreadyExists, string.Empty);
+
+        public static WebDavCollectionCreationAttempt MissingParent(string message) =>
+            new(WebDavCollectionCreationStatus.MissingParent, message);
+
+        public static WebDavCollectionCreationAttempt Failed(string message) => new(WebDavCollectionCreationStatus.Failed, message);
+    }
+
+    private sealed record WebDavCollectionCreationResult(bool Succeeded, string UserMessage)
+    {
+        public static WebDavCollectionCreationResult Success() => new(true, string.Empty);
+
+        public static WebDavCollectionCreationResult Failed(string message) => new(false, message);
+    }
+
+    private sealed record WebDavConfiguration(Uri? FileUrl, Uri? DirectoryUrl, string Username, string Password, string? ErrorMessage)
+    {
+        public bool IsConfigured => FileUrl is not null && DirectoryUrl is not null && string.IsNullOrEmpty(ErrorMessage);
 
         public static WebDavConfiguration NotConfigured(string? errorMessage) =>
-            new(null, string.Empty, string.Empty, string.IsNullOrWhiteSpace(errorMessage) ? "WebDAV configuration is incomplete." : errorMessage);
+            new(
+                null,
+                null,
+                string.Empty,
+                string.Empty,
+                string.IsNullOrWhiteSpace(errorMessage) ? "WebDAV configuration is incomplete." : errorMessage);
     }
 }
