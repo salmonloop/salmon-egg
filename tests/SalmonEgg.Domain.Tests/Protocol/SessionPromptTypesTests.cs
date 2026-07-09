@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using NUnit.Framework;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
 

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Tool
+namespace SalmonEgg.Acp.Tool
 {
     /// <summary>
     /// Represents a file location affected by a tool call.

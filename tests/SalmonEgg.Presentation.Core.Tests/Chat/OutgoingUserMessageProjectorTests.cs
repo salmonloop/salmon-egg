@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using Xunit;

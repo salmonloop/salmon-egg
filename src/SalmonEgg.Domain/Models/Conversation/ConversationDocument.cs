@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using SalmonEgg.Domain.Models.Tool;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Tool;
+using SalmonEgg.Acp.Plan;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {

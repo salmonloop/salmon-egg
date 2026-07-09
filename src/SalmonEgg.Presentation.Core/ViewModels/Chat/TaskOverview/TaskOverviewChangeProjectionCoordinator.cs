@@ -1,5 +1,5 @@
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 

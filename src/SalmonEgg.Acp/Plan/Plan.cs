@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Plan
+namespace SalmonEgg.Acp.Plan
 {
     /// <summary>
     /// 计划类。

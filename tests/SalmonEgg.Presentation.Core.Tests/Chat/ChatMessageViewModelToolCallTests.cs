@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -43,8 +43,8 @@ public sealed class ChatMessageViewModelToolCallTests
             toolCallId: "call-2",
             rawInput: null,
             rawOutput: null,
-            kind: Domain.Models.Tool.ToolCallKind.Execute,
-            status: Domain.Models.Tool.ToolCallStatus.InProgress,
+            kind: SalmonEgg.Acp.Tool.ToolCallKind.Execute,
+            status: SalmonEgg.Acp.Tool.ToolCallStatus.InProgress,
             title: "Running tests");
 
         Assert.False(vm.HasToolCallJson);
@@ -59,8 +59,8 @@ public sealed class ChatMessageViewModelToolCallTests
             toolCallId: "call-3",
             rawInput: null,
             rawOutput: null,
-            kind: Domain.Models.Tool.ToolCallKind.Execute,
-            status: Domain.Models.Tool.ToolCallStatus.Cancelled,
+            kind: SalmonEgg.Acp.Tool.ToolCallKind.Execute,
+            status: SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled,
             title: "Running tests");
 
         Assert.True(vm.IsToolCallCancelled);

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;

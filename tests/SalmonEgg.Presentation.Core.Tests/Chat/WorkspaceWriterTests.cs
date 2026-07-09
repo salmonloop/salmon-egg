@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;

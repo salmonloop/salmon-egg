@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.PlanPanel;
 using SalmonEgg.Presentation.ViewModels.Chat;
 

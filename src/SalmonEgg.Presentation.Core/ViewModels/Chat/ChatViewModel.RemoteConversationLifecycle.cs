@@ -24,7 +24,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;

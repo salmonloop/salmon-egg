@@ -1,4 +1,4 @@
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using Xunit;

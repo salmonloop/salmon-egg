@@ -2,7 +2,7 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Tool
+namespace SalmonEgg.Acp.Tool
 {
     /// <summary>
     /// 工具调用的状态枚举。

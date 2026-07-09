@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 
-namespace SalmonEgg.Domain.Models.Content
+namespace SalmonEgg.Acp.Content
 {
     /// <summary>
     /// 资源内容块。

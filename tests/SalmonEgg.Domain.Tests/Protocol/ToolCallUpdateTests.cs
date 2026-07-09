@@ -1,7 +1,7 @@
 using System.Text.Json;
 using NUnit.Framework;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Tool;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Tool;
+using SalmonEgg.Acp.Content;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 

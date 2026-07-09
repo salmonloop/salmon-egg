@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 

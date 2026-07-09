@@ -24,7 +24,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
@@ -995,15 +995,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         => _taskOverviewPanelStatePresenter.Present(
             PlanEntries.Count,
             TaskOverviewChanges.Count,
-            PlanEntries.Count(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.InProgress),
-            PlanEntries.Count(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.Pending),
-            PlanEntries.Count(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.Completed));
+            PlanEntries.Count(static entry => entry.Status == SalmonEgg.Acp.Plan.PlanEntryStatus.InProgress),
+            PlanEntries.Count(static entry => entry.Status == SalmonEgg.Acp.Plan.PlanEntryStatus.Pending),
+            PlanEntries.Count(static entry => entry.Status == SalmonEgg.Acp.Plan.PlanEntryStatus.Completed));
 
     public string TaskOverviewCurrentPlanContent => ResolveTaskOverviewCurrentPlanEntry()?.Content ?? string.Empty;
 
-    public Domain.Models.Plan.PlanEntryStatus? TaskOverviewCurrentPlanStatus => ResolveTaskOverviewCurrentPlanEntry()?.Status;
+    public SalmonEgg.Acp.Plan.PlanEntryStatus? TaskOverviewCurrentPlanStatus => ResolveTaskOverviewCurrentPlanEntry()?.Status;
 
-    public Domain.Models.Plan.PlanEntryPriority? TaskOverviewCurrentPlanPriority => ResolveTaskOverviewCurrentPlanEntry()?.Priority;
+    public SalmonEgg.Acp.Plan.PlanEntryPriority? TaskOverviewCurrentPlanPriority => ResolveTaskOverviewCurrentPlanEntry()?.Priority;
 
     public bool ShouldShowTaskOverviewCurrentPlan => ResolveTaskOverviewCurrentPlanEntry() is not null;
 
@@ -3492,15 +3492,15 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     }
 
     private PlanEntryViewModel? ResolveTaskOverviewCurrentPlanEntry()
-        => PlanEntries.FirstOrDefault(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.InProgress)
-            ?? PlanEntries.FirstOrDefault(static entry => entry.Status == Domain.Models.Plan.PlanEntryStatus.Pending);
+        => PlanEntries.FirstOrDefault(static entry => entry.Status == SalmonEgg.Acp.Plan.PlanEntryStatus.InProgress)
+            ?? PlanEntries.FirstOrDefault(static entry => entry.Status == SalmonEgg.Acp.Plan.PlanEntryStatus.Pending);
 
     private IReadOnlyList<PlanEntryViewModel> ResolveTaskOverviewVisiblePlanEntries()
     {
         var current = ResolveTaskOverviewCurrentPlanEntry();
         var visible = PlanEntries
             .Where(entry => !ReferenceEquals(entry, current))
-            .Where(static entry => entry.Status != Domain.Models.Plan.PlanEntryStatus.Completed)
+            .Where(static entry => entry.Status != SalmonEgg.Acp.Plan.PlanEntryStatus.Completed)
             .Take(TaskOverviewPlanPreviewLimit)
             .ToArray();
 

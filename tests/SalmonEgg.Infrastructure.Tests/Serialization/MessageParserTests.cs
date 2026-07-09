@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Infrastructure.Serialization;
 
 namespace SalmonEgg.Infrastructure.Tests.Serialization;
@@ -481,7 +481,7 @@ public class MessageParserTests
         var update = Assert.IsType<ToolCallStatusUpdate>(updateParams!.Update);
         Assert.Equal("call-meta-1", update.ToolCallId);
         Assert.Equal("Run command", update.Title);
-        Assert.Equal(Domain.Models.Tool.ToolCallStatus.Completed, update.Status);
+        Assert.Equal(SalmonEgg.Acp.Tool.ToolCallStatus.Completed, update.Status);
     }
 
     [Fact]

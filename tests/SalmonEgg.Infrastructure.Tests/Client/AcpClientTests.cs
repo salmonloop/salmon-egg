@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Moq;
 using SalmonEgg.Domain.Interfaces.Transport;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Protocol;
@@ -1561,7 +1561,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal("sess-meta-runtime", published!.SessionId);
             var update = Assert.IsType<ToolCallStatusUpdate>(published.Update);
             Assert.Equal("call-runtime-1", update.ToolCallId);
-            Assert.Equal(Domain.Models.Tool.ToolCallStatus.Completed, update.Status);
+            Assert.Equal(SalmonEgg.Acp.Tool.ToolCallStatus.Completed, update.Status);
         }
 
         [Fact]

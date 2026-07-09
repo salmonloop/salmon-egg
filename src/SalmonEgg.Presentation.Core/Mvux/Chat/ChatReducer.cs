@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using System.Text.Json;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;

@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Plan;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -65,11 +65,11 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
-        private Domain.Models.Tool.ToolCallKind? _toolCallKind;
+        private SalmonEgg.Acp.Tool.ToolCallKind? _toolCallKind;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ShouldShowToolCallPill))]
-        private Domain.Models.Tool.ToolCallStatus? _toolCallStatus;
+        private SalmonEgg.Acp.Tool.ToolCallStatus? _toolCallStatus;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasToolCallJson))]
@@ -506,10 +506,10 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         private void UpdateToolCallState()
         {
-            IsToolCallInProgress = ToolCallStatus is Domain.Models.Tool.ToolCallStatus.InProgress or Domain.Models.Tool.ToolCallStatus.Pending;
-            IsToolCallCompleted = ToolCallStatus == Domain.Models.Tool.ToolCallStatus.Completed;
-            IsToolCallFailed = ToolCallStatus == Domain.Models.Tool.ToolCallStatus.Failed;
-            IsToolCallCancelled = ToolCallStatus == Domain.Models.Tool.ToolCallStatus.Cancelled;
+            IsToolCallInProgress = ToolCallStatus is SalmonEgg.Acp.Tool.ToolCallStatus.InProgress or SalmonEgg.Acp.Tool.ToolCallStatus.Pending;
+            IsToolCallCompleted = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Completed;
+            IsToolCallFailed = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Failed;
+            IsToolCallCancelled = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled;
         }
 
         private void RefreshToolCallDetails()
@@ -561,7 +561,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             RefreshToolCallDetails();
         }
 
-        partial void OnToolCallStatusChanged(Domain.Models.Tool.ToolCallStatus? value)
+        partial void OnToolCallStatusChanged(SalmonEgg.Acp.Tool.ToolCallStatus? value)
         {
             if (_applyingSnapshot)
             {
@@ -728,9 +728,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _content = string.Empty;
 
         [ObservableProperty]
-        private Domain.Models.Plan.PlanEntryStatus _status;
+        private SalmonEgg.Acp.Plan.PlanEntryStatus _status;
 
         [ObservableProperty]
-        private Domain.Models.Plan.PlanEntryPriority _priority;
+        private SalmonEgg.Acp.Plan.PlanEntryPriority _priority;
     }
 }

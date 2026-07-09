@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Plan;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Infrastructure.Storage;
 

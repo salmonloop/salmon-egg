@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 
 namespace SalmonEgg.Domain.Tests.Models.Content
 {

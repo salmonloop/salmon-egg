@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.Tool;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Tool;
+using SalmonEgg.Acp.Plan;
 
 namespace SalmonEgg.Domain.Models.Session
 {

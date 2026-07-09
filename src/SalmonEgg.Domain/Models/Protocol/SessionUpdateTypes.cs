@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Domain.Models.Protocol
 {

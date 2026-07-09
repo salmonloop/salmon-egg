@@ -279,8 +279,8 @@ public sealed class SessionUpdatePolymorphismTests
         var update = (ToolCallStatusUpdate)parsed.Update!;
         Assert.That(update.ToolCallId, Is.EqualTo("call-1"));
         Assert.That(update.Title, Is.EqualTo("Switch mode"));
-        Assert.That(update.Kind, Is.EqualTo(Domain.Models.Tool.ToolCallKind.SwitchMode));
-        Assert.That(update.Status, Is.EqualTo(Domain.Models.Tool.ToolCallStatus.Completed));
+        Assert.That(update.Kind, Is.EqualTo(SalmonEgg.Acp.Tool.ToolCallKind.SwitchMode));
+        Assert.That(update.Status, Is.EqualTo(SalmonEgg.Acp.Tool.ToolCallStatus.Completed));
         Assert.That(update.RawInput.HasValue, Is.True);
         Assert.That(update.RawOutput.HasValue, Is.True);
         var rawInput = update.RawInput.GetValueOrDefault();

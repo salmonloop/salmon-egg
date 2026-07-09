@@ -24,7 +24,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
@@ -132,10 +132,10 @@ public partial class ChatViewModel
             {
                 var phase = toolCallStatusUpdate.Status switch
                 {
-                    Domain.Models.Tool.ToolCallStatus.InProgress => ChatTurnPhase.ToolRunning,
-                    Domain.Models.Tool.ToolCallStatus.Completed => ChatTurnPhase.WaitingForAgent,
-                    Domain.Models.Tool.ToolCallStatus.Failed => ChatTurnPhase.WaitingForAgent,
-                    Domain.Models.Tool.ToolCallStatus.Cancelled => ChatTurnPhase.WaitingForAgent,
+                    SalmonEgg.Acp.Tool.ToolCallStatus.InProgress => ChatTurnPhase.ToolRunning,
+                    SalmonEgg.Acp.Tool.ToolCallStatus.Completed => ChatTurnPhase.WaitingForAgent,
+                    SalmonEgg.Acp.Tool.ToolCallStatus.Failed => ChatTurnPhase.WaitingForAgent,
+                    SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled => ChatTurnPhase.WaitingForAgent,
                     _ => ChatTurnPhase.ToolPending
                 };
                 await AdvanceActiveTurnPhaseAsync(activeTurn, phase, toolCallStatusUpdate.ToolCallId).ConfigureAwait(true);
@@ -2055,23 +2055,23 @@ public partial class ChatViewModel
     private static string? TryGetRawJson(System.Text.Json.JsonElement? element)
         => element?.GetRawText();
 
-    private static List<Domain.Models.Tool.ToolCallContent>? CloneToolCallContentList(
-        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? content)
+    private static List<SalmonEgg.Acp.Tool.ToolCallContent>? CloneToolCallContentList(
+        IReadOnlyList<SalmonEgg.Acp.Tool.ToolCallContent>? content)
         => ToolCallContentSnapshots.CloneList(content);
 
-    private static List<Domain.Models.Tool.ToolCallLocation>? CloneToolCallLocationList(
-        IReadOnlyList<Domain.Models.Tool.ToolCallLocation>? locations)
+    private static List<SalmonEgg.Acp.Tool.ToolCallLocation>? CloneToolCallLocationList(
+        IReadOnlyList<SalmonEgg.Acp.Tool.ToolCallLocation>? locations)
         => ToolCallContentSnapshots.CloneLocations(locations);
 
     private static string? ResolveToolCallPayload(
         System.Text.Json.JsonElement? rawPayload,
-        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? content)
+        IReadOnlyList<SalmonEgg.Acp.Tool.ToolCallContent>? content)
         => TryGetRawJson(rawPayload)
             ?? ToolCallContentSnapshots.SerializePayload(content);
 
     private static string ResolveToolCallOutput(
         System.Text.Json.JsonElement? rawOutput,
-        IReadOnlyList<Domain.Models.Tool.ToolCallContent>? content,
+        IReadOnlyList<SalmonEgg.Acp.Tool.ToolCallContent>? content,
         string? fallback)
     {
         var serializedOutput = TryGetRawJson(rawOutput);
@@ -2089,7 +2089,7 @@ public partial class ChatViewModel
         return fallback ?? string.Empty;
     }
 
-    private static string FlattenToolCallContent(IReadOnlyList<Domain.Models.Tool.ToolCallContent>? content)
+    private static string FlattenToolCallContent(IReadOnlyList<SalmonEgg.Acp.Tool.ToolCallContent>? content)
     {
         if (content == null || content.Count == 0)
         {
@@ -2101,16 +2101,16 @@ public partial class ChatViewModel
         {
             switch (item)
             {
-                case Domain.Models.Tool.ContentToolCallContent { Content: TextContentBlock textBlock } when !string.IsNullOrWhiteSpace(textBlock.Text):
+                case SalmonEgg.Acp.Tool.ContentToolCallContent { Content: TextContentBlock textBlock } when !string.IsNullOrWhiteSpace(textBlock.Text):
                     parts.Add(textBlock.Text);
                     break;
-                case Domain.Models.Tool.DiffToolCallContent diff when !string.IsNullOrWhiteSpace(diff.NewText):
+                case SalmonEgg.Acp.Tool.DiffToolCallContent diff when !string.IsNullOrWhiteSpace(diff.NewText):
                     parts.Add(diff.NewText);
                     break;
-                case Domain.Models.Tool.DiffToolCallContent diff when !string.IsNullOrWhiteSpace(diff.Path):
+                case SalmonEgg.Acp.Tool.DiffToolCallContent diff when !string.IsNullOrWhiteSpace(diff.Path):
                     parts.Add(diff.Path);
                     break;
-                case Domain.Models.Tool.TerminalToolCallContent terminal when !string.IsNullOrWhiteSpace(terminal.TerminalId):
+                case SalmonEgg.Acp.Tool.TerminalToolCallContent terminal when !string.IsNullOrWhiteSpace(terminal.TerminalId):
                     parts.Add(terminal.TerminalId);
                     break;
             }
@@ -2175,8 +2175,8 @@ public partial class ChatViewModel
                 && !string.IsNullOrWhiteSpace(message.ToolCallId)
                 && message.Timestamp >= cutoff
                 && message.ToolCallStatus is null
-                    or Domain.Models.Tool.ToolCallStatus.Pending
-                    or Domain.Models.Tool.ToolCallStatus.InProgress)
+                    or SalmonEgg.Acp.Tool.ToolCallStatus.Pending
+                    or SalmonEgg.Acp.Tool.ToolCallStatus.InProgress)
             .ToArray();
 
         foreach (var existing in pendingToolCalls)
@@ -2196,7 +2196,7 @@ public partial class ChatViewModel
                 ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
                 ToolCallKind = existing.ToolCallKind,
-                ToolCallStatus = Domain.Models.Tool.ToolCallStatus.Cancelled,
+                ToolCallStatus = SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled,
                 ToolCallJson = existing.ToolCallJson,
                 ToolCallRawInputJson = existing.ToolCallRawInputJson,
                 ToolCallRawOutputJson = existing.ToolCallRawOutputJson,

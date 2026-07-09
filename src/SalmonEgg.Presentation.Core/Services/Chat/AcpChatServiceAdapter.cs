@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;

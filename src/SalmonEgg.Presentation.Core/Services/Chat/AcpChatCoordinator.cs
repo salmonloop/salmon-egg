@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;

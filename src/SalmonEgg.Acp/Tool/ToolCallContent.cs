@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 
-namespace SalmonEgg.Domain.Models.Tool
+namespace SalmonEgg.Acp.Tool
 {
     /// <summary>
     /// Tool call content types.

@@ -1,6 +1,6 @@
 using System;
 using Microsoft.UI.Xaml.Data;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 
 namespace SalmonEgg.Presentation.Converters;
 

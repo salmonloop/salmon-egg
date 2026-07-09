@@ -1,5 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 

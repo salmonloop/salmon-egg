@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Content
+namespace SalmonEgg.Acp.Content
 {
     /// <summary>
     /// 资源链接内容块。

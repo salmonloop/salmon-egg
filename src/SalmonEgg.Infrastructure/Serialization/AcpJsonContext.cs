@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Content;
+using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Mcp;
-using SalmonEgg.Domain.Models.Plan;
+using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Domain.Models.Tool;
+using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Infrastructure.Serialization;
 
