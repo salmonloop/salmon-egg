@@ -34,10 +34,17 @@ public sealed class AcpSdkBoundaryTests
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Content")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Plan")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Tool")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Interfaces\IMessageParser.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Interfaces\IMessageValidator.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\MessageParser.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\MessageValidator.cs")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\AcpJsonContext.cs")), Is.False);
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerConfig.cs")), Is.False);
         Assert.That(LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"), Does.Not.Contain("public bool Enabled"));
         Assert.That(LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"), Does.Not.Contain("enum StopReason"));
         Assert.That(LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"), Does.Contain("enum StopReason"));
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Acp\JsonRpc\MessageParser.cs")), Is.True);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Serialization\AcpJsonContext.cs")), Is.True);
         Assert.That(domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")),
             Has.Some.EqualTo(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj"));
     }

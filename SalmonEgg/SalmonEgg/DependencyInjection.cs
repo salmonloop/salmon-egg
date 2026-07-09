@@ -6,6 +6,7 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Application.Services;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Application.UseCases;

@@ -7,17 +7,16 @@ using System.Threading.Tasks;
 using Moq;
 using Serilog;
 using SalmonEgg.Application.Services.Chat;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
-using SalmonEgg.Infrastructure.Serialization;
 using SalmonEgg.Infrastructure.Services;
 
 namespace SalmonEgg.Application.Tests.Services.Chat;

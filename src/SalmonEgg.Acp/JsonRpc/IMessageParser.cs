@@ -1,7 +1,7 @@
 using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
 
-namespace SalmonEgg.Domain.Interfaces
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 消息解析器接口。

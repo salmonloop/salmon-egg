@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using SalmonEgg.Acp.JsonRpc;
 
-namespace SalmonEgg.Domain.Interfaces
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 消息验证器接口。

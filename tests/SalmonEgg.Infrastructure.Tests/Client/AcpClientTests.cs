@@ -2,14 +2,13 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text.Json;
-using SalmonEgg.Infrastructure.Serialization;
+using SalmonEgg.Acp.JsonRpc;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Moq;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Mcp;
@@ -17,7 +16,6 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Services;
 using Xunit;
-using SalmonEgg.Domain.Interfaces;
 
 namespace SalmonEgg.Infrastructure.Tests.Client
 {

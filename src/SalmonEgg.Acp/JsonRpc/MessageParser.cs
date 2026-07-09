@@ -2,10 +2,9 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
-using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Acp.Serialization;
 
-namespace SalmonEgg.Infrastructure.Serialization
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 消息解析器实现。

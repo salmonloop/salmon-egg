@@ -1,9 +1,4 @@
-using System;
-using System.Text.Json;
-using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Acp.JsonRpc;
-
-namespace SalmonEgg.Infrastructure.Serialization
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 消息验证器实现。

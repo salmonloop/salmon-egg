@@ -25,7 +25,7 @@ namespace SalmonEgg.Infrastructure.Serialization
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 WriteIndented = false,
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-                TypeInfoResolver = AcpJsonContext.Default
+                TypeInfoResolver = AcpInfrastructureJsonContext.Default
             };
         }
 
@@ -43,7 +43,7 @@ namespace SalmonEgg.Infrastructure.Serialization
 
             try
             {
-                var message = JsonSerializer.Deserialize(json, AcpJsonContext.Default.AcpMessage);
+                var message = JsonSerializer.Deserialize(json, AcpInfrastructureJsonContext.Default.AcpMessage);
 
                 if (message == null)
                 {
@@ -84,7 +84,7 @@ namespace SalmonEgg.Infrastructure.Serialization
 
             try
             {
-                return JsonSerializer.Serialize(message, AcpJsonContext.Default.AcpMessage);
+                return JsonSerializer.Serialize(message, AcpInfrastructureJsonContext.Default.AcpMessage);
             }
             catch (JsonException ex)
             {

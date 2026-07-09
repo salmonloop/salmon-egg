@@ -1,5 +1,5 @@
 using Moq;
-using SalmonEgg.Domain.Interfaces;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;

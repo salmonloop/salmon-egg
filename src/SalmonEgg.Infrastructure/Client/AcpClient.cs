@@ -6,16 +6,16 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
-using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
+using SalmonEgg.Domain.Interfaces.Transport;
+using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Serialization;
@@ -744,7 +744,7 @@ namespace SalmonEgg.Infrastructure.Client
 
             var response = new JsonRpcResponse(
                 messageId,
-                ToElement(outcomePayload, AcpJsonContext.Default.PermissionOutcomeResult));
+                ToElement(outcomePayload, AcpInfrastructureJsonContext.Default.PermissionOutcomeResult));
             return await SendResponseAsync(response).ConfigureAwait(false);
         }
 
@@ -770,7 +770,7 @@ namespace SalmonEgg.Infrastructure.Client
             {
                 result = ToElement(
                     new ReadTextFileResult { Content = content ?? string.Empty },
-                    AcpJsonContext.Default.ReadTextFileResult);
+                    AcpInfrastructureJsonContext.Default.ReadTextFileResult);
             }
             else
             {

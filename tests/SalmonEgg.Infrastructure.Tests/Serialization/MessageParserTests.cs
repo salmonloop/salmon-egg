@@ -3,10 +3,10 @@ using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
-using SalmonEgg.Infrastructure.Serialization;
 
 namespace SalmonEgg.Infrastructure.Tests.Serialization;
 

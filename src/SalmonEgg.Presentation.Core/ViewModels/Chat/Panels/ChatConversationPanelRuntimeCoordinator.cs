@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using SalmonEgg.Domain.Interfaces;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;

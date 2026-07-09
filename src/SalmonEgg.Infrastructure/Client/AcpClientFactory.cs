@@ -1,8 +1,7 @@
 using System;
-using SalmonEgg.Domain.Interfaces;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Infrastructure.Serialization;
 
 namespace SalmonEgg.Infrastructure.Client;
 
