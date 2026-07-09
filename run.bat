@@ -54,6 +54,12 @@ popd >nul
 exit /b %EC%
 
 :desktop
+if /I "%OS%"=="Windows_NT" call :require_vcredist_x64
+if errorlevel 1 (
+  set "EC=%errorlevel%"
+  popd >nul
+  exit /b %EC%
+)
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-desktop
 set "EC=%errorlevel%"
 popd >nul
@@ -81,3 +87,18 @@ echo   run.bat wasm      ^(dotnet run net10.0-browserwasm^)
 echo.
 popd >nul
 exit /b 0
+
+:require_vcredist_x64
+if exist "%SystemRoot%\System32\vcruntime140.dll" if exist "%SystemRoot%\System32\vcruntime140_1.dll" if exist "%SystemRoot%\System32\msvcp140.dll" exit /b 0
+set "VCREDIST_INSTALLED="
+for /f "tokens=3" %%I in ('reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed 2^>nul ^| findstr /R /C:"Installed"') do set "VCREDIST_INSTALLED=%%I"
+if /I "%VCREDIST_INSTALLED%"=="0x1" exit /b 0
+
+echo ERROR: Visual C++ x64 runtime is not installed.
+echo The Skia Desktop target can fail with "side-by-side configuration is incorrect" when this runtime is missing.
+echo Install Microsoft Visual C++ Redistributable 2015-2022 x64:
+echo   https://aka.ms/vs/17/release/vc_redist.x64.exe
+echo.
+echo For Windows native development, prefer the MSIX path:
+echo   run.bat
+exit /b 1

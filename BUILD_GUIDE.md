@@ -325,6 +325,23 @@ Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=Sa
 
 若 `CurrentUser\My` 与 `LocalMachine\TrustedPeople` 的 thumbprint 不一致，请先使用最新脚本再次执行一次管理员 `run.bat msix`，让脚本重新同步信任存储。
 
+### 问题 6: `run.bat desktop` 提示 side-by-side 配置不正确
+
+**现象**: Windows 上运行 `run.bat desktop` 时，构建完成后启动 `net10.0-desktop` 可执行文件失败，并提示“应用程序的并行配置不正确”或 `side-by-side configuration is incorrect`。
+
+**原因**: `run.bat desktop` 走 Uno Skia Desktop 的 unpackaged 运行路径，不是 Windows 原生 WinUI 3 / MSIX 路径。该路径依赖本机 Visual C++ x64 运行时；缺失时 Windows 会在进程启动阶段直接报 side-by-side 错误。
+
+**解决方案**:
+1. Windows 原生开发优先运行默认 MSIX 路径：
+   ```bash
+   run.bat
+   ```
+2. 如确实需要 Skia Desktop 路径，先安装 Microsoft Visual C++ Redistributable 2015-2022 x64：
+   ```text
+   https://aka.ms/vs/17/release/vc_redist.x64.exe
+   ```
+3. 最新 `run.bat desktop` 会在 Windows 上提前检查该运行时，缺失时直接给出上述安装提示，避免构建后才出现系统级 side-by-side 崩溃。
+
 ## 构建输出
 
 构建成功后，您会在以下目录找到输出：
