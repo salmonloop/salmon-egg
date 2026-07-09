@@ -668,11 +668,17 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncWebDavFileUrlRequired" xml:space="preserve">
     <value>Enter the WebDAV folder URL.</value>
   </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrlInvalid" xml:space="preserve">
+    <value>Enter a WebDAV folder URL that starts with http:// or https://.</value>
+  </data>
   <data name="DataStorage_CloudSyncWebDavCredentialsRequired" xml:space="preserve">
     <value>Enter the WebDAV password when a username is set, or keep using saved credentials.</value>
   </data>
   <data name="DataStorage_CloudSyncS3EndpointRequired" xml:space="preserve">
     <value>Enter the S3 endpoint.</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3EndpointInvalid" xml:space="preserve">
+    <value>Enter an S3 endpoint that starts with http:// or https://.</value>
   </data>
   <data name="DataStorage_CloudSyncS3BucketRequired" xml:space="preserve">
     <value>Enter the S3 bucket.</value>

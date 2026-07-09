@@ -319,6 +319,59 @@ public sealed class DataStorageSettingsViewModelTests
     }
 
     [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenWebDavFolderUrlInvalid_DoesNotConnect()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "dav.example.test/config-sync/";
+
+        Assert.False(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("请填写以 http:// 或 https:// 开头的 WebDAV 文件夹 URL。", viewModel.WebDavValidationMessage);
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        Assert.Equal("请填写以 http:// 或 https:// 开头的 WebDAV 文件夹 URL。", viewModel.CloudConfigSyncErrorText);
+        cloudSync.Verify(service => service.ConfigureProviderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            default), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenS3EndpointInvalid_DoesNotConnect()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("s3", "S3 compatible", true)
+        });
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "s3";
+        viewModel.S3Endpoint = "s3.example.test";
+        viewModel.S3Bucket = "salmonegg";
+        viewModel.S3AccessKeyId = "access-key";
+        viewModel.S3SecretAccessKey = "secret-key";
+
+        Assert.False(viewModel.IsCloudConfigSyncConfigured);
+        Assert.Equal("请填写以 http:// 或 https:// 开头的 S3 endpoint。", viewModel.S3ValidationMessage);
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        Assert.Equal("请填写以 http:// 或 https:// 开头的 S3 endpoint。", viewModel.CloudConfigSyncErrorText);
+        cloudSync.Verify(service => service.ConfigureProviderAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            default), Times.Never);
+    }
+
+    [Fact]
     public async Task SelectedProviderConfigurationStatus_WhenCredentialsSaved_AllowsBlankSecretFields()
     {
         var cloudSync = new Mock<ICloudConfigSyncService>();

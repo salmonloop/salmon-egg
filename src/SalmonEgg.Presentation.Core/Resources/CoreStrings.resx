@@ -674,11 +674,17 @@
   <data name="DataStorage_CloudSyncWebDavFileUrlRequired" xml:space="preserve">
     <value>请填写 WebDAV 文件夹 URL。</value>
   </data>
+  <data name="DataStorage_CloudSyncWebDavFileUrlInvalid" xml:space="preserve">
+    <value>请填写以 http:// 或 https:// 开头的 WebDAV 文件夹 URL。</value>
+  </data>
   <data name="DataStorage_CloudSyncWebDavCredentialsRequired" xml:space="preserve">
     <value>已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。</value>
   </data>
   <data name="DataStorage_CloudSyncS3EndpointRequired" xml:space="preserve">
     <value>请填写 S3 endpoint。</value>
+  </data>
+  <data name="DataStorage_CloudSyncS3EndpointInvalid" xml:space="preserve">
+    <value>请填写以 http:// 或 https:// 开头的 S3 endpoint。</value>
   </data>
   <data name="DataStorage_CloudSyncS3BucketRequired" xml:space="preserve">
     <value>请填写 S3 bucket。</value>

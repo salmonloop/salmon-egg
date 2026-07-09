@@ -1428,6 +1428,9 @@
   <data name="DataStorage_CloudSyncS3ObjectKey.PlaceholderText" xml:space="preserve">
     <value>config-sync/salmonegg-config.zip</value>
   </data>
+  <data name="DataStorage_CloudSyncS3ObjectKeyDescription.Text" xml:space="preserve">
+    <value>S3 uses an object key, not folders. Keep the default key unless you want a different object name.</value>
+  </data>
   <data name="DataStorage_CloudSyncS3ForcePathStyle.Header" xml:space="preserve">
     <value>Use path-style URL</value>
   </data>

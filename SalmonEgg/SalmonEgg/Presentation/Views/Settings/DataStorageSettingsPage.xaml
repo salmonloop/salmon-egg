@@ -136,6 +136,8 @@
                                             <TextBox x:Uid="DataStorage_CloudSyncS3ObjectKey"
                                                      AutomationProperties.AutomationId="DataStorage.CloudSync.S3ObjectKey"
                                                      Text="{x:Bind ViewModel.S3ObjectKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock x:Uid="DataStorage_CloudSyncS3ObjectKeyDescription"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                             <ToggleSwitch x:Uid="DataStorage_CloudSyncS3ForcePathStyle"
                                                           AutomationProperties.AutomationId="DataStorage.CloudSync.S3ForcePathStyle"
                                                           IsOn="{x:Bind ViewModel.S3ForcePathStyle, Mode=TwoWay}"/>

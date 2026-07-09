@@ -59,8 +59,9 @@ public sealed class CloudSyncProviderContractTests
     [Fact]
     public void DataStoragePage_CloudSyncSmokeExposesProviderSetupControls()
     {
-        var document = XDocument.Parse(TestSourceFiles.ReadAllText(
-            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
+        var xaml = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml");
+        var document = XDocument.Parse(xaml);
 
         AssertElement(document, "DataStorage.CloudSync.ProviderPicker", "ComboBox",
             ("ItemsSource", "{x:Bind ViewModel.CloudConfigProviders, Mode=OneWay}"),
@@ -75,6 +76,9 @@ public sealed class CloudSyncProviderContractTests
             ("Text", "{x:Bind ViewModel.S3Endpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3Bucket", "TextBox",
             ("Text", "{x:Bind ViewModel.S3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+        AssertElement(document, "DataStorage.CloudSync.S3ObjectKey", "TextBox",
+            ("Text", "{x:Bind ViewModel.S3ObjectKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+        Assert.Contains("DataStorage_CloudSyncS3ObjectKeyDescription", xaml, StringComparison.Ordinal);
         AssertElement(document, "DataStorage.CloudSync.S3AccessKeyId", "TextBox",
             ("Text", "{x:Bind ViewModel.S3AccessKeyId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3SecretAccessKey", "PasswordBox",
@@ -121,8 +125,10 @@ public sealed class CloudSyncProviderContractTests
             "DataStorage_CloudSyncCredentialsSaved",
             "DataStorage_CloudSyncCredentialsMissing",
             "DataStorage_CloudSyncWebDavFileUrlRequired",
+            "DataStorage_CloudSyncWebDavFileUrlInvalid",
             "DataStorage_CloudSyncWebDavCredentialsRequired",
             "DataStorage_CloudSyncS3EndpointRequired",
+            "DataStorage_CloudSyncS3EndpointInvalid",
             "DataStorage_CloudSyncS3BucketRequired",
             "DataStorage_CloudSyncS3CredentialsRequired",
             "DataStorage_CloudSyncConnectOneDrive",
@@ -164,6 +170,7 @@ public sealed class CloudSyncProviderContractTests
             "DataStorage_CloudSyncWebDavPassword.Header",
             "DataStorage_CloudSyncS3Endpoint.Header",
             "DataStorage_CloudSyncS3Bucket.Header",
+            "DataStorage_CloudSyncS3ObjectKeyDescription.Text",
             "DataStorage_CloudSyncS3AccessKeyId.Header",
             "DataStorage_CloudSyncS3SecretAccessKey.Header",
             "DataStorage_CloudSyncNow.Content",

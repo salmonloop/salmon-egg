@@ -1428,6 +1428,9 @@
   <data name="DataStorage_CloudSyncS3ObjectKey.PlaceholderText" xml:space="preserve">
     <value>config-sync/salmonegg-config.zip</value>
   </data>
+  <data name="DataStorage_CloudSyncS3ObjectKeyDescription.Text" xml:space="preserve">
+    <value>S3 使用对象 Key，不需要创建文件夹。除非需要改对象名称，否则保留默认值即可。</value>
+  </data>
   <data name="DataStorage_CloudSyncS3ForcePathStyle.Header" xml:space="preserve">
     <value>使用 path-style URL</value>
   </data>

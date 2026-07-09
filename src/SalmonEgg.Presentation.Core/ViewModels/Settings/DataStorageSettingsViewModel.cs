@@ -107,6 +107,8 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     public string WebDavValidationMessage => IsWebDavCloudConfigProviderSelected && string.IsNullOrWhiteSpace(WebDavFileUrl)
         ? _localizer["DataStorage_CloudSyncWebDavFileUrlRequired"]
+        : IsWebDavCloudConfigProviderSelected && !IsAbsoluteHttpUrl(WebDavFileUrl)
+            ? _localizer["DataStorage_CloudSyncWebDavFileUrlInvalid"]
         : IsWebDavCloudConfigProviderSelected &&
           !SelectedProviderHasStoredCredentials &&
           !string.IsNullOrWhiteSpace(WebDavUsername) &&
@@ -126,6 +128,11 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             if (string.IsNullOrWhiteSpace(S3Endpoint))
             {
                 return _localizer["DataStorage_CloudSyncS3EndpointRequired"];
+            }
+
+            if (!IsAbsoluteHttpUrl(S3Endpoint))
+            {
+                return _localizer["DataStorage_CloudSyncS3EndpointInvalid"];
             }
 
             if (string.IsNullOrWhiteSpace(S3Bucket))
@@ -824,6 +831,10 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     private static string GetOptionValue(IReadOnlyDictionary<string, string> options, string key)
         => options.FirstOrDefault(option => string.Equals(option.Key, key, StringComparison.OrdinalIgnoreCase)).Value ?? string.Empty;
+
+    private static bool IsAbsoluteHttpUrl(string value) =>
+        Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private static Dictionary<string, Dictionary<string, string>> CloneProviderOptions(
         IReadOnlyDictionary<string, Dictionary<string, string>>? options)
