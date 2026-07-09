@@ -9,13 +9,61 @@ using System.Threading.Tasks;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
-using SalmonEgg.Presentation.Services.Cloud;
 using Xunit;
 
 namespace SalmonEgg.Application.Tests.Cloud;
 
 public sealed class WebDavCloudConfigStorageProviderTests
 {
+    [Fact]
+    public async Task TryDownloadAsync_WhenDirectoryUrlConfigured_GetsDefaultPackageFileWithBasicAuth()
+    {
+        await using var server = await WebDavSmokeServer.StartAsync(
+            "/dav/config/salmonegg-config.zip",
+            "alice",
+            "app-password");
+        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+
+        await provider.ConfigureAsync(
+            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
+            });
+        var result = await provider.TryDownloadAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal([10, 11, 12], result.Content);
+        var request = Assert.Single(server.Requests);
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("/dav/config/salmonegg-config.zip", request.Path);
+        Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:app-password")), request.Authorization);
+    }
+
+    [Fact]
+    public async Task TryDownloadAsync_WhenCredentialsAreRejected_ThrowsForbiddenAfterUsingResolvedPackagePath()
+    {
+        await using var server = await WebDavSmokeServer.StartAsync(
+            "/dav/config/salmonegg-config.zip",
+            "alice",
+            "app-password");
+        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+
+        await provider.ConfigureAsync(
+            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "wrong-password"
+            });
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryDownloadAsync());
+
+        Assert.Contains("403", exception.Message, StringComparison.Ordinal);
+        var request = Assert.Single(server.Requests);
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("/dav/config/salmonegg-config.zip", request.Path);
+        Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:wrong-password")), request.Authorization);
+    }
+
     [Theory]
     [InlineData("dav/config")]
     [InlineData("dav/config/")]
@@ -107,8 +155,7 @@ public sealed class WebDavCloudConfigStorageProviderTests
 
         return new WebDavCloudConfigStorageProvider(
             new InMemoryAppSettingsService(settings),
-            new InMemorySecureStorage(),
-            new HttpClient());
+            new InMemorySecureStorage());
     }
 
     private static Dictionary<string, string> CreateOptions(string webDavUrl, string username) =>
@@ -250,6 +297,17 @@ public sealed class WebDavCloudConfigStorageProviderTests
             if (!string.Equals(request.Path, _expectedPath, StringComparison.Ordinal))
             {
                 context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+                context.Response.Close();
+                return;
+            }
+
+            if (string.Equals(request.Method, "GET", StringComparison.Ordinal))
+            {
+                var content = new byte[] { 10, 11, 12 };
+                context.Response.StatusCode = (int)HttpStatusCode.OK;
+                context.Response.ContentType = "application/zip";
+                context.Response.ContentLength64 = content.Length;
+                await context.Response.OutputStream.WriteAsync(content).ConfigureAwait(false);
                 context.Response.Close();
                 return;
             }

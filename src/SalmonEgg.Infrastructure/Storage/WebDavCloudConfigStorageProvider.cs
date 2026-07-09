@@ -13,7 +13,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 
-namespace SalmonEgg.Presentation.Services.Cloud;
+namespace SalmonEgg.Infrastructure.Storage;
 
 public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigStorageProvider
 {
@@ -131,9 +131,9 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
                     (int)response.StatusCode));
         }
 
-        await using var content = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var content = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
         using var output = new MemoryStream();
-        await content.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        await content.CopyToAsync(output, 81920, cancellationToken).ConfigureAwait(false);
         return new CloudConfigRemoteFile(
             output.ToArray(),
             response.Headers.ETag?.Tag,
