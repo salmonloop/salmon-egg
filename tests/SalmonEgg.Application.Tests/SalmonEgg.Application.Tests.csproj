@@ -27,4 +27,9 @@
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\SalmonEgg\SalmonEgg\Presentation\Services\Cloud\WebDavCloudConfigStorageProvider.cs"
+             Link="Presentation\Services\Cloud\WebDavCloudConfigStorageProvider.cs" />
+  </ItemGroup>
+
 </Project>

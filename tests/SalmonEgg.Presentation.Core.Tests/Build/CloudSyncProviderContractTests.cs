@@ -158,6 +158,8 @@ public sealed class CloudSyncProviderContractTests
             "DataStorage_CloudSyncProviderSelectionDescription.Text",
             "DataStorage_CloudSyncProviderPicker.Header",
             "DataStorage_CloudSyncWebDavFileUrl.Header",
+            "DataStorage_CloudSyncWebDavFileUrl.PlaceholderText",
+            "DataStorage_CloudSyncWebDavFolderUrlDescription.Text",
             "DataStorage_CloudSyncWebDavUsername.Header",
             "DataStorage_CloudSyncWebDavPassword.Header",
             "DataStorage_CloudSyncS3Endpoint.Header",

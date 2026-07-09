@@ -24,7 +24,7 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
     public const string ProviderId = "onedrive";
 
     private static readonly string[] DefaultScopes = ["Files.ReadWrite.AppFolder", "offline_access"];
-    private const string RemotePath = "config-sync/salmonegg-config.zip";
+    private const string RemotePath = CloudConfigSyncDefaults.RemotePackagePath;
 
     private readonly OneDriveCloudConfigOptions _options;
     private readonly IAppDataService _appData;

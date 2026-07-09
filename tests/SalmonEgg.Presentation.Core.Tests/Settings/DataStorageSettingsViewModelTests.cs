@@ -106,7 +106,7 @@ public sealed class DataStorageSettingsViewModelTests
             .Setup(service => service.ConfigureProviderAsync(
                 "webdav",
                 It.Is<IReadOnlyDictionary<string, string>>(options =>
-                    options["file_url"] == "https://dav.example.test/salmonegg-config.zip" &&
+                    options["file_url"] == "https://dav.example.test/config-sync/" &&
                     options["username"] == "alice"),
                 It.Is<IReadOnlyDictionary<string, string>>(secrets => secrets["password"] == "app-password"),
                 default))
@@ -117,14 +117,14 @@ public sealed class DataStorageSettingsViewModelTests
         var viewModel = CreateViewModel(cloudSync: cloudSync);
 
         viewModel.SelectedCloudConfigProviderId = "webdav";
-        viewModel.WebDavFileUrl = "https://dav.example.test/salmonegg-config.zip";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
         viewModel.WebDavUsername = "alice";
         viewModel.WebDavPassword = "app-password";
         await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.IsCloudConfigSyncEnabled);
         Assert.Equal("webdav", viewModel.Preferences.CloudConfigSync.ProviderId);
-        Assert.Equal("https://dav.example.test/salmonegg-config.zip", viewModel.Preferences.CloudConfigSync.ProviderOptions["webdav"]["file_url"]);
+        Assert.Equal("https://dav.example.test/config-sync/", viewModel.Preferences.CloudConfigSync.ProviderOptions["webdav"]["file_url"]);
         cloudSync.Verify(service => service.AuthorizeAndSyncAsync("onedrive", default), Times.Never);
         cloudSync.VerifyAll();
     }
@@ -242,7 +242,7 @@ public sealed class DataStorageSettingsViewModelTests
         });
 
         viewModel.SelectedCloudConfigProviderId = "webdav";
-        viewModel.WebDavFileUrl = "https://dav.example.test/salmonegg-config.zip";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
         await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
 
         cloudSync.Verify(service => service.ConfigureProviderAsync(
@@ -302,7 +302,7 @@ public sealed class DataStorageSettingsViewModelTests
         var viewModel = CreateViewModel(cloudSync: cloudSync);
 
         viewModel.SelectedCloudConfigProviderId = "webdav";
-        viewModel.WebDavFileUrl = "https://dav.example.test/salmonegg-config.zip";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
         viewModel.WebDavUsername = "alice";
         await Task.Delay(50);
 

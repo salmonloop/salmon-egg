@@ -34,7 +34,7 @@ public sealed class CloudSyncSettingsSmokeTests
         SelectCloudSyncProvider(session, "WebDAV");
         Assert.True(
             session.WaitUntilOnscreen("DataStorage.CloudSync.WebDavFileUrl", TimeSpan.FromSeconds(5)),
-            BuildFailureMessage(session, appData, "WebDAV file URL field did not become visible after selecting the WebDAV provider."));
+            BuildFailureMessage(session, appData, "WebDAV folder URL field did not become visible after selecting the WebDAV provider."));
         Assert.False(
             session.IsOnscreen("DataStorage.CloudSync.S3Endpoint", TimeSpan.FromMilliseconds(500)),
             BuildFailureMessage(session, appData, "S3 fields must not remain visible while the WebDAV provider is selected."));

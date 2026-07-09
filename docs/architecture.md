@@ -100,7 +100,7 @@ GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，Brows
 - **普通配置**：YAML 文件，存储在平台 AppData 目录（Windows: `%LOCALAPPDATA%\SalmonEgg\`，WASM: 浏览器 IDBFS `/local/SalmonEgg`）。
 - **敏感信息**（Token / API Key）：通过 `ISecureStorage` 抽象持久化；有 OS-backed secure store 的平台优先使用系统能力，受限平台或 Linux/macOS 系统安全存储不可用时可降级到应用数据目录下的 plaintext secure storage。
 - **WASM 持久化**：通过 Uno IDBFS 实现，可持久化 ACP profile YAML、普通应用设置和 plaintext secure storage。
-- **配置云同步**：同步核心只依赖 provider-neutral 接口；当前支持 OneDrive（MSAL.NET + Graph）、WebDAV（用户配置远端 ZIP 文件 URL）和 S3-compatible object storage（用户配置 endpoint/bucket/object key），UI 同一时间只能启用一个 provider。同步包包含 `config/` 和已登记的配置相关凭据，`secrets.json` 为明文内容。
+- **配置云同步**：同步核心只依赖 provider-neutral 接口；当前支持 OneDrive（MSAL.NET + Graph）、WebDAV（用户配置远端文件夹 URL，应用使用默认文件名 `salmonegg-config.zip`）和 S3-compatible object storage（用户配置 endpoint/bucket/object key），UI 同一时间只能启用一个 provider。同步包包含 `config/` 和已登记的配置相关凭据，`secrets.json` 为明文内容。
 - **OneDrive 应用注册配置**：`client_id` / tenant / redirect URI / scopes 只允许在 GitHub Actions 构建阶段注入为 MSBuild 属性并写入应用程序集元数据；运行时不读取用户配置或环境变量。Actions 必须同时支持 repository `secrets` 与 `variables`，并优先使用 `secrets`。
 
 ## 传输层

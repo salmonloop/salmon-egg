@@ -30,7 +30,7 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
     private const string SecureStorageAccessKeyIdKey = "salmonegg/cloud-sync/s3/access-key-id";
     private const string SecureStorageSecretAccessKeyKey = "salmonegg/cloud-sync/s3/secret-access-key";
     private const string DefaultRegion = "us-east-1";
-    private const string DefaultObjectKey = "config-sync/salmonegg-config.zip";
+    private const string DefaultObjectKey = CloudConfigSyncDefaults.RemotePackagePath;
     private const string ServiceName = "s3";
     private const string EmptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 

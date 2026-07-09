@@ -115,7 +115,7 @@ authentication:
 - 敏感字段不得写入 `app.yaml` 或 `servers/<id>.yaml`。
 - 敏感字段通过 `ISecureStorage` 保存；平台实现可为 OS-backed secure store，也可为受限平台的 plaintext file fallback。
 - 配置云同步启用且 `IncludeSecrets=true` 时，同步包中的 `secrets.json` 会明文包含已登记的配置相关凭据。
-- `cloud_config_sync.provider_id` 是唯一活动 provider；OneDrive、WebDAV 与 S3-compatible object storage 不能同时启用。WebDAV 的远端文件 URL 和用户名可写入 `cloud_config_sync.provider_options.webdav`，密码只写入 `ISecureStorage`；S3 的 endpoint/bucket/region/object key/path-style 选项可写入 `cloud_config_sync.provider_options.s3`，access key ID 和 secret access key 只写入 `ISecureStorage`。
+- `cloud_config_sync.provider_id` 是唯一活动 provider；OneDrive、WebDAV 与 S3-compatible object storage 不能同时启用。WebDAV 的远端文件夹 URL 和用户名可写入 `cloud_config_sync.provider_options.webdav`，同步包默认文件名为 `salmonegg-config.zip`，密码只写入 `ISecureStorage`；S3 的 endpoint/bucket/region/object key/path-style 选项可写入 `cloud_config_sync.provider_options.s3`，access key ID 和 secret access key 只写入 `ISecureStorage`。
 - OneDrive 应用注册的 `client_id` / tenant / redirect URI / scopes 不是用户配置，必须由 GitHub Actions 在构建阶段从 repository `secrets` 或 `variables` 注入到程序集元数据；客户端运行时不得读取环境变量或把这些值写入 `config/`。
 
 ### 4.2 SecureStorage Key 规则

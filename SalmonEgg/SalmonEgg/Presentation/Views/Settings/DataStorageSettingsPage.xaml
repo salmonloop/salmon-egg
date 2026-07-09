@@ -104,6 +104,8 @@
                                             <TextBox x:Uid="DataStorage_CloudSyncWebDavFileUrl"
                                                      AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavFileUrl"
                                                      Text="{x:Bind ViewModel.WebDavFileUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock x:Uid="DataStorage_CloudSyncWebDavFolderUrlDescription"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                             <TextBlock Text="{x:Bind ViewModel.WebDavValidationMessage, Mode=OneWay}"
                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                        Visibility="{x:Bind ViewModel.WebDavValidationMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"

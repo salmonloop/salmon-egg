@@ -666,7 +666,7 @@ Create the corresponding Markdown file in:
     <value>No credentials are saved for this provider. Fill in credentials before the first connection.</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFileUrlRequired" xml:space="preserve">
-    <value>Enter the WebDAV file URL.</value>
+    <value>Enter the WebDAV folder URL.</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavCredentialsRequired" xml:space="preserve">
     <value>Enter the WebDAV password when a username is set, or keep using saved credentials.</value>

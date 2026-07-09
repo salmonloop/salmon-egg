@@ -33,7 +33,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private const string S3AccessKeyIdSecretKey = "access_key_id";
     private const string S3SecretAccessKeySecretKey = "secret_access_key";
     private const string DefaultS3Region = "us-east-1";
-    private const string DefaultS3ObjectKey = "config-sync/salmonegg-config.zip";
+    private const string DefaultS3ObjectKey = CloudConfigSyncDefaults.RemotePackagePath;
 
     private readonly IAppDataService _paths;
     private readonly IAppMaintenanceService _maintenance;

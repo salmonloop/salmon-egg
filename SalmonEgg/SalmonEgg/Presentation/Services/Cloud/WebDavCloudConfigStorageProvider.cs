@@ -203,7 +203,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
         if (!settings.CloudConfigSync.ProviderOptions.TryGetValue(ProviderId, out var options))
         {
-            return WebDavConfiguration.NotConfigured("WebDAV file URL is required.");
+            return WebDavConfiguration.NotConfigured("WebDAV folder URL is required.");
         }
 
         if (!TryGetNormalizedFileUrl(options, out var fileUrl, out var validationError))
@@ -230,26 +230,41 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         var value = GetValue(options, FileUrlOptionKey).Trim();
         if (string.IsNullOrWhiteSpace(value))
         {
-            errorMessage = "WebDAV file URL is required.";
+            errorMessage = "WebDAV folder URL is required.";
             return false;
         }
 
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
-            errorMessage = "WebDAV file URL must be an absolute HTTP or HTTPS URL.";
+            errorMessage = "WebDAV folder URL must be an absolute HTTP or HTTPS URL.";
             return false;
         }
 
-        if (uri.Segments.Length == 0 || uri.AbsolutePath.EndsWith("/", StringComparison.Ordinal))
-        {
-            errorMessage = "WebDAV file URL must point to a ZIP file path.";
-            return false;
-        }
-
-        fileUrl = uri;
+        fileUrl = ResolvePackageFileUrl(uri);
         errorMessage = string.Empty;
         return true;
+    }
+
+    private static Uri ResolvePackageFileUrl(Uri directoryUrl)
+    {
+        var lastSegment = directoryUrl.Segments.Length == 0
+            ? string.Empty
+            : Uri.UnescapeDataString(directoryUrl.Segments[^1].Trim('/'));
+        if (string.Equals(lastSegment, CloudConfigSyncDefaults.RemotePackageFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return directoryUrl;
+        }
+
+        var builder = new UriBuilder(directoryUrl);
+        var path = string.IsNullOrEmpty(builder.Path) ? "/" : builder.Path;
+        if (!path.EndsWith("/", StringComparison.Ordinal))
+        {
+            path += "/";
+        }
+
+        builder.Path = path + Uri.EscapeDataString(CloudConfigSyncDefaults.RemotePackageFileName);
+        return builder.Uri;
     }
 
     private static string GetValue(IReadOnlyDictionary<string, string> values, string key)

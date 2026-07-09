@@ -191,7 +191,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["DataStorage_CloudSyncLastSyncFormat"] = "上次同步：{0:g}",
         ["DataStorage_CloudSyncCredentialsSaved"] = "已保存该 provider 的凭据。留空密码或密钥字段会继续使用已保存凭据。",
         ["DataStorage_CloudSyncCredentialsMissing"] = "尚未保存该 provider 的凭据。首次连接需要填写凭据。",
-        ["DataStorage_CloudSyncWebDavFileUrlRequired"] = "请填写 WebDAV 文件 URL。",
+        ["DataStorage_CloudSyncWebDavFileUrlRequired"] = "请填写 WebDAV 文件夹 URL。",
         ["DataStorage_CloudSyncWebDavCredentialsRequired"] = "已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。",
         ["DataStorage_CloudSyncS3EndpointRequired"] = "请填写 S3 endpoint。",
         ["DataStorage_CloudSyncS3BucketRequired"] = "请填写 S3 bucket。",

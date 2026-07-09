@@ -1492,10 +1492,13 @@
     <value>Provider</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFileUrl.Header" xml:space="preserve">
-    <value>WebDAV file URL</value>
+    <value>WebDAV folder URL</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFileUrl.PlaceholderText" xml:space="preserve">
-    <value>https://example.com/remote.php/dav/files/me/salmonegg-config.zip</value>
+    <value>https://example.com/remote.php/dav/files/me/config-sync/</value>
+  </data>
+  <data name="DataStorage_CloudSyncWebDavFolderUrlDescription.Text" xml:space="preserve">
+    <value>Enter the WebDAV folder only. SalmonEgg stores the package as salmonegg-config.zip in that folder.</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavUsername.Header" xml:space="preserve">
     <value>WebDAV username</value>
