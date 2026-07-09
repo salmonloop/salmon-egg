@@ -82,7 +82,7 @@ namespace SalmonEgg.Application.UseCases
 
                 // 3. 建立连接 (Requirement 3.1)
                 var connectionResult = await _connectionManager.ConnectAsync(config, CancellationToken.None);
-                
+
                 if (!connectionResult.IsSuccess)
                 {
                     // 连接失败时返回具体的错误原因 (Requirement 3.2)

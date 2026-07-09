@@ -11,35 +11,35 @@ namespace SalmonEgg.Domain.Models.JsonRpc
     public class JsonRpcNotification : JsonRpcMessage
     {
         /// <summary>
-       /// 要调用的方法名。
-       /// </summary>
-       [JsonPropertyName("method")]
-       public string Method { get; set; } = string.Empty;
+        /// 要调用的方法名。
+        /// </summary>
+        [JsonPropertyName("method")]
+        public string Method { get; set; } = string.Empty;
 
         /// <summary>
         /// 方法的参数。
-       /// 可以是对象、数组、原始值或省略。
-       /// </summary>
-       [JsonPropertyName("params")]
-       [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-       public JsonElement? Params { get; set; }
+        /// 可以是对象、数组、原始值或省略。
+        /// </summary>
+        [JsonPropertyName("params")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public JsonElement? Params { get; set; }
 
         /// <summary>
-       /// 创建一个新的 JsonRpcNotification 实例。
-       /// </summary>
-       public JsonRpcNotification()
-       {
-       }
+        /// 创建一个新的 JsonRpcNotification 实例。
+        /// </summary>
+        public JsonRpcNotification()
+        {
+        }
 
-       /// <summary>
-       /// 创建一个新的 JsonRpcNotification 实例。
-       /// </summary>
-       /// <param name="method">方法名</param>
-       /// <param name="params">方法参数</param>
-       public JsonRpcNotification(string method, JsonElement? @params = null)
-       {
-           Method = method;
-           Params = @params;
-       }
+        /// <summary>
+        /// 创建一个新的 JsonRpcNotification 实例。
+        /// </summary>
+        /// <param name="method">方法名</param>
+        /// <param name="params">方法参数</param>
+        public JsonRpcNotification(string method, JsonElement? @params = null)
+        {
+            Method = method;
+            Params = @params;
+        }
     }
 }

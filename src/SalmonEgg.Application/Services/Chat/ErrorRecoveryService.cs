@@ -19,7 +19,7 @@ namespace SalmonEgg.Application.Services.Chat
         private readonly IErrorLogger _errorLogger;
         private readonly ErrorRecoveryConfig _config;
         private int _retryCount;
-        
+
         // CRITICAL: Prevent concurrent recovery attempts which could cause inconsistent state 
         // or flood the server with reconnect requests.
         private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
@@ -62,7 +62,7 @@ namespace SalmonEgg.Application.Services.Chat
                 while (_retryCount < retryCount)
                 {
                     _retryCount++;
-                    
+
                     // RECOVERY STRATEGY: Exponential backoff to avoid hammering the server during transient failures.
                     var delay = (int)Math.Min(initialDelay * Math.Pow(multiplier, _retryCount - 1), maxDelay);
 
@@ -238,7 +238,7 @@ namespace SalmonEgg.Application.Services.Chat
             try
             {
                 var message = $"Protocol version mismatch: Expected {expectedVersion}, actual {actualVersion}";
-                
+
                 if (_config.ShowProtocolVersionWarning)
                 {
                     // USER EXPERIENCE: Version mismatch usually requires external action (updating the app/agent).

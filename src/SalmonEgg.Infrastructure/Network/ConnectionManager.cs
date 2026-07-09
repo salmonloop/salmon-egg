@@ -22,7 +22,7 @@ namespace SalmonEgg.Infrastructure.Network
         private readonly ILogger _logger;
         private readonly Func<TransportType, ITransport> _transportFactory;
         private readonly AsyncRetryPolicy _retryPolicy;
-        
+
         private ITransport? _transport;
         private readonly Subject<AcpMessage> _incomingMessages;
         private readonly BehaviorSubject<ConnectionState> _connectionStateChanges;
@@ -58,14 +58,14 @@ namespace SalmonEgg.Infrastructure.Network
             _protocolService = protocolService ?? throw new ArgumentNullException(nameof(protocolService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
-            
+
             _incomingMessages = new Subject<AcpMessage>();
             _connectionStateChanges = new BehaviorSubject<ConnectionState>(new ConnectionState
             {
                 Status = ConnectionStatus.Disconnected
             });
             _pendingRequests = new Dictionary<string, TaskCompletionSource<AcpMessage>>();
-            
+
             // 配置重试策略：最多重试 3 次，使用指数退避
             _retryPolicy = Policy
                 .Handle<Exception>()
@@ -77,10 +77,10 @@ namespace SalmonEgg.Infrastructure.Network
                         _logger.Warning(
                             "连接尝试 {RetryCount}/3 失败: {Error}. 将在 {Delay} 秒后重试",
                             retryCount, exception.Message, timeSpan.TotalSeconds);
-                        
+
                         // 更新连接状态为重连中
                         UpdateConnectionState(
-                            ConnectionStatus.Reconnecting, 
+                            ConnectionStatus.Reconnecting,
                             _currentConfig?.ServerUrl ?? string.Empty,
                             $"重试 {retryCount}/3",
                             retryCount);
@@ -99,7 +99,7 @@ namespace SalmonEgg.Infrastructure.Network
 
             try
             {
-                _logger.Information("开始连接到服务器: {ServerUrl}, 传输类型: {Transport}", 
+                _logger.Information("开始连接到服务器: {ServerUrl}, 传输类型: {Transport}",
                     config.ServerUrl, config.Transport);
 
                 // 验证配置
@@ -134,7 +134,7 @@ namespace SalmonEgg.Infrastructure.Network
                 UpdateConnectionState(ConnectionStatus.Connected, config.ServerUrl ?? string.Empty);
 
                 _logger.Information("成功连接到服务器: {ServerUrl}", config.ServerUrl);
-                
+
                 // 获取当前连接状态并返回
                 var connectedState = _connectionStateChanges.Value;
                 return ConnectionResult.Success(connectedState);
@@ -167,7 +167,7 @@ namespace SalmonEgg.Infrastructure.Network
             try
             {
                 _logger.Information("Disconnecting from server");
-                
+
                 // 设置手动断开标志，防止自动重连
                 _isManualDisconnect = true;
 
@@ -186,7 +186,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 // 更新状态
                 UpdateConnectionState(ConnectionStatus.Disconnected, _currentConfig?.ServerUrl ?? string.Empty);
-                
+
                 // 清除配置信息
                 _currentConfig = null;
 
@@ -454,7 +454,7 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 _isReconnecting = true;
                 _logger.Information("Reconnecting to server automatically: {ServerUrl}", _currentConfig.ServerUrl);
-                
+
                 // 更新状态为重连中
                 UpdateConnectionState(ConnectionStatus.Reconnecting, _currentConfig.ServerUrl ?? string.Empty, "正在自动重连");
 
@@ -474,7 +474,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 // 创建新的传输层实例
                 _transport = _transportFactory(_currentConfig.Transport);
-                
+
                 // 订阅传输层的消息和状态变化
                 SubscribeToTransport();
 
@@ -496,8 +496,8 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 _logger.Error(ex, "Reconnection failed");
                 UpdateConnectionState(
-                    ConnectionStatus.Error, 
-                    _currentConfig.ServerUrl ?? string.Empty, 
+                    ConnectionStatus.Error,
+                    _currentConfig.ServerUrl ?? string.Empty,
                     "Reconnection failed");
             }
             finally

@@ -403,7 +403,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         var current = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(MessagesList.XamlRoot) as DependencyObject;
         if (DependencyObjectAncestry.FindAncestorOrSelf<ListViewItem>(current) is ListViewItem
             {
-                } itemContainer
+            } itemContainer
             && DependencyObjectAncestry.IsDescendantOf(itemContainer, MessagesList))
         {
             return false;
@@ -608,14 +608,14 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
                 _projectionRestoreController.TryScheduleRetry(DispatcherQueue, TryApplyPendingProjectionRestore);
                 break;
 
-                case TranscriptProjectionRestoreResultKind.Confirmed:
-                    if (result.Token is { } token)
-                    {
-                        ApplyViewportActions(_viewportController.OnRestoreConfirmed(token, result.Generation));
-                    }
-                    break;
+            case TranscriptProjectionRestoreResultKind.Confirmed:
+                if (result.Token is { } token)
+                {
+                    ApplyViewportActions(_viewportController.OnRestoreConfirmed(token, result.Generation));
+                }
+                break;
 
-                case TranscriptProjectionRestoreResultKind.Unavailable:
+            case TranscriptProjectionRestoreResultKind.Unavailable:
                 ApplyViewportActions(_viewportController.OnRestoreUnavailable(
                     result.ConversationId ?? CurrentViewportConversationId,
                     result.Generation,

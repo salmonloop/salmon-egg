@@ -95,7 +95,7 @@ public sealed class MacOSKeychainSecureStorage : ISecureStorage
             }
             finally
             {
-                    _keychain.ReleaseItem(itemRef);
+                _keychain.ReleaseItem(itemRef);
             }
         }
         else

@@ -12,7 +12,7 @@ namespace SalmonEgg.Infrastructure.Serialization
     public class AcpMessageParser : IAcpProtocolService
     {
         private readonly JsonSerializerOptions _options;
-        
+
         /// <summary>
         /// 有效的消息类型
         /// </summary>
@@ -44,7 +44,7 @@ namespace SalmonEgg.Infrastructure.Serialization
             try
             {
                 var message = JsonSerializer.Deserialize(json, AcpJsonContext.Default.AcpMessage);
-                
+
                 if (message == null)
                 {
                     throw new AcpProtocolException(
@@ -54,10 +54,10 @@ namespace SalmonEgg.Infrastructure.Serialization
 
                 // 验证必需字段
                 ValidateRequiredFields(message);
-                
+
                 // 验证消息类型
                 ValidateMessageType(message);
-                
+
                 // 验证消息类型特定的字段
                 ValidateMessageTypeSpecificFields(message);
 

@@ -519,7 +519,7 @@ namespace SalmonEgg.Application.Services.Chat
 
                 var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
                 session.Cwd = @params.Cwd;
-                
+
                 // Clear history before loading to ensure we don't have duplicate entries 
                 // if the server replays the history during the load process.
                 _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());

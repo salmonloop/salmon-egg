@@ -1546,7 +1546,8 @@ public partial class ChatViewModel
             return;
         }
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             ApplySessionSwitchPreview(conversationId);
         });
     }
@@ -1564,7 +1565,8 @@ public partial class ChatViewModel
             return;
         }
 
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             ApplySessionSwitchPreviewClear(conversationId);
         });
     }
@@ -1615,7 +1617,8 @@ public partial class ChatViewModel
 
     private void OnPermissionRequestReceived(object? sender, PermissionRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 PermissionRequestViewModel? permissionRequest = null;
@@ -1731,7 +1734,8 @@ public partial class ChatViewModel
 
     private void OnFileSystemRequestReceived(object? sender, FileSystemRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 PendingFileSystemRequest = _interactionEventBridge.CreateFileSystemRequestViewModel(
@@ -1759,7 +1763,8 @@ public partial class ChatViewModel
 
     private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 Logger.LogInformation("Terminal request received: Method={Method}, TerminalId={TerminalId}", e.Method, e.TerminalId);
@@ -1774,7 +1779,8 @@ public partial class ChatViewModel
 
     private void OnTerminalStateChangedReceived(object? sender, TerminalStateChangedEventArgs e)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             try
             {
                 _ = ProcessTerminalStateChangedAsync(e);
@@ -1841,7 +1847,8 @@ public partial class ChatViewModel
 
     private void OnErrorOccurred(object? sender, string error)
     {
-        _uiDispatcher.Enqueue(() => {
+        _uiDispatcher.Enqueue(() =>
+        {
             SetError(error);
             Logger.LogError(error);
         });

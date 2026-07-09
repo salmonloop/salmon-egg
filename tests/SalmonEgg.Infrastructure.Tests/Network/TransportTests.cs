@@ -1,4 +1,18 @@
-using System;using System.Collections.Generic;using System.Diagnostics;using System.Net;using System.Net.Http;using System.Net.WebSockets;using System.Reactive.Subjects;using System.Threading;using System.Threading.Tasks;using Moq;using Serilog;using SalmonEgg.Domain.Models;using SalmonEgg.Infrastructure.Network;using Websocket.Client;using Xunit;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
+using System.Net.WebSockets;
+using System.Reactive.Subjects;
+using System.Threading;
+using System.Threading.Tasks;
+using Moq;
+using Serilog;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Infrastructure.Network;
+using Websocket.Client;
+using Xunit;
 
 namespace SalmonEgg.Infrastructure.Tests.Network
 {

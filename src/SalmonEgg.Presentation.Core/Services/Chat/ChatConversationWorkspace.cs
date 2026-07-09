@@ -916,89 +916,89 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 }
             }
 
-        foreach (var conversation in document.Conversations)
-        {
-            if (string.IsNullOrWhiteSpace(conversation.ConversationId))
+            foreach (var conversation in document.Conversations)
             {
-                continue;
-            }
-
-            var binding = RegisterConversationCore(
-                conversation.ConversationId,
-                conversation.CreatedAt,
-                conversation.LastUpdatedAt,
-                bumpVersion: false,
-                clearTombstone: true,
-                out _);
-            binding.LastAccessedAt = conversation.LastAccessedAt == default
-                ? binding.LastUpdatedAt
-                : conversation.LastAccessedAt;
-            var shouldRestoreRuntimeContent = RemoteConversationPersistencePolicy.ShouldRestoreRuntimeContent(
-                conversation.RemoteSessionId,
-                conversation.BoundProfileId);
-            binding.Transcript.Clear();
-            if (shouldRestoreRuntimeContent)
-            {
-                binding.Transcript.AddRange(CloneMessages(conversation.Messages));
-            }
-
-            binding.Plan.Clear();
-            if (shouldRestoreRuntimeContent)
-            {
-                binding.Plan.AddRange((conversation.Plan ?? []).Select(ClonePlanEntry));
-            }
-
-            binding.AvailableModes.Clear();
-            if (shouldRestoreRuntimeContent)
-            {
-                binding.AvailableModes.AddRange((conversation.AvailableModes ?? []).Select(CloneModeOption));
-            }
-
-            binding.SelectedModeId = shouldRestoreRuntimeContent ? conversation.SelectedModeId : null;
-            binding.ConfigOptions.Clear();
-            if (shouldRestoreRuntimeContent)
-            {
-                binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
-            }
-
-            binding.ShowConfigOptionsPanel = shouldRestoreRuntimeContent && conversation.ShowConfigOptionsPanel;
-            binding.AvailableCommands.Clear();
-            if (shouldRestoreRuntimeContent)
-            {
-                binding.AvailableCommands.AddRange((conversation.AvailableCommands ?? []).Select(CloneAvailableCommand));
-            }
-
-            var restoredCwd = ResolveConversationRecordCwd(conversation);
-            binding.SessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
-                ConversationSessionInfoSnapshots.Clone(conversation.SessionInfo),
-                restoredCwd);
-            binding.Usage = shouldRestoreRuntimeContent ? CloneUsage(conversation.Usage) : null;
-            binding.ShowPlanPanel = shouldRestoreRuntimeContent && conversation.ShowPlanPanel;
-            binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
-            binding.RemoteSessionId = conversation.RemoteSessionId;
-            binding.BoundProfileId = conversation.BoundProfileId;
-            binding.ProjectAffinityOverride = string.IsNullOrWhiteSpace(conversation.ProjectAffinityOverrideProjectId)
-                ? null
-                : new ProjectAffinityOverride(conversation.ProjectAffinityOverrideProjectId);
-
-            var displayName = ResolveRestoredDisplayName(conversation);
-
-            _sessionManager.UpdateSession(
-                conversation.ConversationId,
-                session =>
+                if (string.IsNullOrWhiteSpace(conversation.ConversationId))
                 {
-                    session.DisplayName = displayName;
-                    session.CreatedAt = binding.CreatedAt;
-                    session.LastActivityAt = binding.LastAccessedAt > binding.LastUpdatedAt
-                        ? binding.LastAccessedAt
-                        : binding.LastUpdatedAt;
-                    if (!string.IsNullOrWhiteSpace(restoredCwd))
+                    continue;
+                }
+
+                var binding = RegisterConversationCore(
+                    conversation.ConversationId,
+                    conversation.CreatedAt,
+                    conversation.LastUpdatedAt,
+                    bumpVersion: false,
+                    clearTombstone: true,
+                    out _);
+                binding.LastAccessedAt = conversation.LastAccessedAt == default
+                    ? binding.LastUpdatedAt
+                    : conversation.LastAccessedAt;
+                var shouldRestoreRuntimeContent = RemoteConversationPersistencePolicy.ShouldRestoreRuntimeContent(
+                    conversation.RemoteSessionId,
+                    conversation.BoundProfileId);
+                binding.Transcript.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.Transcript.AddRange(CloneMessages(conversation.Messages));
+                }
+
+                binding.Plan.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.Plan.AddRange((conversation.Plan ?? []).Select(ClonePlanEntry));
+                }
+
+                binding.AvailableModes.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.AvailableModes.AddRange((conversation.AvailableModes ?? []).Select(CloneModeOption));
+                }
+
+                binding.SelectedModeId = shouldRestoreRuntimeContent ? conversation.SelectedModeId : null;
+                binding.ConfigOptions.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.ConfigOptions.AddRange((conversation.ConfigOptions ?? []).Select(CloneConfigOption));
+                }
+
+                binding.ShowConfigOptionsPanel = shouldRestoreRuntimeContent && conversation.ShowConfigOptionsPanel;
+                binding.AvailableCommands.Clear();
+                if (shouldRestoreRuntimeContent)
+                {
+                    binding.AvailableCommands.AddRange((conversation.AvailableCommands ?? []).Select(CloneAvailableCommand));
+                }
+
+                var restoredCwd = ResolveConversationRecordCwd(conversation);
+                binding.SessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
+                    ConversationSessionInfoSnapshots.Clone(conversation.SessionInfo),
+                    restoredCwd);
+                binding.Usage = shouldRestoreRuntimeContent ? CloneUsage(conversation.Usage) : null;
+                binding.ShowPlanPanel = shouldRestoreRuntimeContent && conversation.ShowPlanPanel;
+                binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
+                binding.RemoteSessionId = conversation.RemoteSessionId;
+                binding.BoundProfileId = conversation.BoundProfileId;
+                binding.ProjectAffinityOverride = string.IsNullOrWhiteSpace(conversation.ProjectAffinityOverrideProjectId)
+                    ? null
+                    : new ProjectAffinityOverride(conversation.ProjectAffinityOverrideProjectId);
+
+                var displayName = ResolveRestoredDisplayName(conversation);
+
+                _sessionManager.UpdateSession(
+                    conversation.ConversationId,
+                    session =>
                     {
-                        session.Cwd = restoredCwd;
-                    }
-                },
-                updateActivity: false);
-        }
+                        session.DisplayName = displayName;
+                        session.CreatedAt = binding.CreatedAt;
+                        session.LastActivityAt = binding.LastAccessedAt > binding.LastUpdatedAt
+                            ? binding.LastAccessedAt
+                            : binding.LastUpdatedAt;
+                        if (!string.IsNullOrWhiteSpace(restoredCwd))
+                        {
+                            session.Cwd = restoredCwd;
+                        }
+                    },
+                    updateActivity: false);
+            }
 
             var lastActiveConversationId = document.LastActiveConversationId;
             if (!string.IsNullOrWhiteSpace(lastActiveConversationId) && _conversationBindings.ContainsKey(lastActiveConversationId))

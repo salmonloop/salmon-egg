@@ -54,20 +54,20 @@ namespace SalmonEgg.Application.Services
         public async Task<Result<AcpMessage>> SendRequestAsync(string? method, JsonElement? parameters)
         {
             _logger.Debug("MessageService: 调用 SendMessageUseCase，方法: {Method}", method);
-            
+
             // 委托给 SendMessageUseCase (Requirement 2.5)
             var result = await _sendMessageUseCase.ExecuteAsync(method, parameters);
-            
+
             if (result.IsSuccess)
             {
                 _logger.Debug("MessageService: 消息发送成功，方法: {Method}", method);
             }
             else
             {
-                _logger.Warning("MessageService: 消息发送失败，方法: {Method}, 错误: {Error}", 
+                _logger.Warning("MessageService: 消息发送失败，方法: {Method}, 错误: {Error}",
                     method, result.Error);
             }
-            
+
             return result;
         }
 

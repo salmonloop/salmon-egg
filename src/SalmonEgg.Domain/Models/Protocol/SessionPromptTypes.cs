@@ -40,7 +40,7 @@ namespace SalmonEgg.Domain.Models.Protocol
         /// <summary>
         /// 创建新的 SessionPromptParams 实例。
         /// </summary>
-        
+
         /// <param name="sessionId">会话 ID</param>
         /// <param name="prompt">提示内容块数组</param>
         public SessionPromptParams(string sessionId, List<ContentBlock> prompt)

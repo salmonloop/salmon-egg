@@ -1,12 +1,11 @@
 using Microsoft.UI.Xaml.Controls;
 
-namespace SalmonEgg.Controls
+namespace SalmonEgg.Controls;
+
+public sealed partial class ChatSkeleton : UserControl
 {
-    public sealed partial class ChatSkeleton : UserControl
+    public ChatSkeleton()
     {
-        public ChatSkeleton()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
     }
 }

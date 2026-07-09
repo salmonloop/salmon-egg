@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Models.Navigation;
 
 namespace SalmonEgg.Controls;
 

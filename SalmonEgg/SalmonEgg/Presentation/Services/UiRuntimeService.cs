@@ -1,5 +1,5 @@
-using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Models;
 #if WINDOWS
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI.ViewManagement;
