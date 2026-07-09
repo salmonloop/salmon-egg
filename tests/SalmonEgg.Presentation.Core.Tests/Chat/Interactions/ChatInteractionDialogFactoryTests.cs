@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 using System.Collections.Immutable;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;

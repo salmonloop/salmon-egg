@@ -1,4 +1,4 @@
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using Xunit;

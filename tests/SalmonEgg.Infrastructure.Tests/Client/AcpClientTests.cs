@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using Moq;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models.Content;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Mcp;

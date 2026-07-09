@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Domain.Interfaces
 {

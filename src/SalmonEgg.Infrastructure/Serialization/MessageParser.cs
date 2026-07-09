@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Infrastructure.Serialization
 {

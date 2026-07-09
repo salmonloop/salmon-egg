@@ -1,6 +1,6 @@
 using System.Text.Json;
 using NUnit.Framework;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Domain.Tests.Models.JsonRpc;
 

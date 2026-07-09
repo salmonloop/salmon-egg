@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 using SalmonEgg.Domain.Interfaces;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Infrastructure.Serialization
 {

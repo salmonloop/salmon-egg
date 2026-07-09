@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using SalmonEgg.Domain.Models.JsonRpc;
 
 namespace SalmonEgg.Domain.Models.Content
 {

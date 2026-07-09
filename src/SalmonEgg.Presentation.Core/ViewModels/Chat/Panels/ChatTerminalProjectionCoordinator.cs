@@ -1,6 +1,6 @@
 using System;
 using System.Text.Json;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Panels;

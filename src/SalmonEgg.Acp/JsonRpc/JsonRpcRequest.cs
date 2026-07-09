@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.JsonRpc
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 请求消息。

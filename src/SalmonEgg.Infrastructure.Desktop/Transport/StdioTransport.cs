@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using SalmonEgg.Domain.Interfaces.Transport;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Utilities;
 
 namespace SalmonEgg.Infrastructure.Transport

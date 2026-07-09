@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 using System.Text.Json;
-using SalmonEgg.Domain.Models.JsonRpc;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using Xunit;

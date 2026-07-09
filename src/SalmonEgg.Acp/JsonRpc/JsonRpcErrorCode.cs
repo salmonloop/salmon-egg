@@ -1,4 +1,4 @@
-namespace SalmonEgg.Domain.Models.JsonRpc
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 标准错误码常量。

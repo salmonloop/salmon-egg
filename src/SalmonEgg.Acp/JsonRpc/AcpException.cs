@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 
-namespace SalmonEgg.Domain.Models.JsonRpc
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// ACP 协议异常类。

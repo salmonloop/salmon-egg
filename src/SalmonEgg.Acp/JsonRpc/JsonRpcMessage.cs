@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.JsonRpc
+namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 2.0 消息的抽象基类。
