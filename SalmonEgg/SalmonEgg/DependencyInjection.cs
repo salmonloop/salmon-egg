@@ -166,7 +166,6 @@ public static class DependencyInjection
         });
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
-        services.AddSingleton<IGamepadNativeInputBridge, WindowsGamepadNativeInputBridge>();
         services.AddSingleton<WindowsGamepadInputService>();
         services.AddSingleton<WindowsGamepadDiagnosticsService>();
         services.AddSingleton<WindowsAudioInputSignalDiagnosticsService>();
@@ -187,17 +186,14 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
         services.AddSingleton<IAudioInputSignalDiagnosticsService, NoOpAudioInputSignalDiagnosticsService>();
-        services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #elif __WASM__
         if (OperatingSystem.IsBrowser())
         {
-            services.AddSingleton<IGamepadNativeInputBridge, WasmGamepadNativeInputBridge>();
             services.AddSingleton<IGamepadInputService, WasmGamepadInputService>();
             services.AddSingleton<IGamepadDiagnosticsService, WasmGamepadDiagnosticsService>();
         }
         else
         {
-            services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
             services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
             services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
         }
@@ -207,7 +203,6 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadInputService, NoOpGamepadInputService>();
         services.AddSingleton<IGamepadDiagnosticsService, NoOpGamepadDiagnosticsService>();
         services.AddSingleton<IAudioInputSignalDiagnosticsService, NoOpAudioInputSignalDiagnosticsService>();
-        services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();
 #endif
 
 #if WINDOWS

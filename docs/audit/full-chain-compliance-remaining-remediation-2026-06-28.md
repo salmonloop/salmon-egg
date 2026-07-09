@@ -184,7 +184,7 @@ git diff --check
 
 ## Task 3: Rework Shell Gamepad / Directional Input to Preserve Native Focus Semantics
 
-**Status:** Not fixed. This item still needs a focused product-code remediation or a fresh gamepad validation pass; do not infer closure from unrelated XAML/localization compliance work.
+**Status:** Fixed as of 2026-07-09. Shell-level polling dispatch, Windows `VirtualKey.Gamepad*` bridging, `SendInput` native fallback, and WASM keyboard-event synthesis were removed from the global navigation path. Gamepad services now remain input fact and diagnostics sources; native controls own DPad, keyboard focus, activation, and value editing.
 
 **Risk If Left Unfixed:** Physical or synthetic gamepad input can enter both native WinUI/Uno focus handling and app-side fallback handling. This can create double dispatch, value-control edits without explicit engagement, and divergence between real hardware and synthetic smoke tests.
 
@@ -213,13 +213,22 @@ git diff --check
 
 **Implementation Checklist:**
 
-- [ ] Before editing, report the exact shell input paths to be removed or retained.
-- [ ] Add a source contract test in `tests/SalmonEgg.Presentation.Core.Tests/Ui/XamlComplianceTests.cs` or a new focused test file that fails if shell-level code reintroduces global `SendInput`, `FocusManager.TryMoveFocus`, AutomationPeer invoke/toggle/expand, or `SelectedItem` mutation for gamepad navigation.
-- [ ] Remove `WindowsGamepadNativeInputBridge` from the default navigation path unless a specific, documented control gap remains.
-- [ ] Keep `WindowsGamepadInputService` only as an input fact source and diagnostics feed. Polling should not dispatch global focus/activation intents into the shell.
-- [ ] Replace shell handoff focus paths with native XAML focus relationships where a real cross-region relation is needed. The implementation must use actual focusable controls, not hidden proxy elements.
-- [ ] Update `MainShellGamepadNavigationDispatcher` so it no longer owns a global focus/activation fallback path. If a page-specific consumer remains, it must be opt-in and not overlap with native control behavior.
-- [ ] Update tests that currently assert synthetic gamepad fallback behavior so they assert native focus reachability or diagnostic fact collection instead.
+- [x] Before editing, report the exact shell input paths to be removed or retained.
+- [x] Add a source contract test in `tests/SalmonEgg.Presentation.Core.Tests/Ui/XamlComplianceTests.cs` or a new focused test file that fails if shell-level code reintroduces global `SendInput`, `FocusManager.TryMoveFocus`, AutomationPeer invoke/toggle/expand, or `SelectedItem` mutation for gamepad navigation.
+- [x] Remove `WindowsGamepadNativeInputBridge` from the default navigation path unless a specific, documented control gap remains.
+- [x] Keep `WindowsGamepadInputService` only as an input fact source and diagnostics feed. Polling should not dispatch global focus/activation intents into the shell.
+- [x] Replace shell handoff focus paths with native XAML focus relationships where a real cross-region relation is needed. The implementation must use actual focusable controls, not hidden proxy elements.
+- [x] Update `MainShellGamepadNavigationDispatcher` so it no longer owns a global focus/activation fallback path. If a page-specific consumer remains, it must be opt-in and not overlap with native control behavior.
+- [x] Update tests that currently assert synthetic gamepad fallback behavior so they assert native focus reachability or diagnostic fact collection instead.
+
+**Verification performed on 2026-07-09:**
+
+- `dotnet test tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~XamlComplianceTests|FullyQualifiedName~GamepadContextIntentDispatcherSourceTests|FullyQualifiedName~WasmStartupAssetsTests"`: 179 passed.
+- `dotnet test tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~XamlComplianceTests|FullyQualifiedName~ChatViewModelTests|FullyQualifiedName~AcpChatCoordinatorTests|FullyQualifiedName~WasmStartupAssetsTests"`: 528 passed.
+- `dotnet build SalmonEgg.sln --configuration Release --no-restore`: 0 warnings, 0 errors.
+- `dotnet format SalmonEgg.sln --verify-no-changes --no-restore`: passed.
+- `git diff --check`: passed.
+- Production source scan for removed bridge/fallback symbols under `SalmonEgg` and `src`: no matches.
 
 **Verification Gates:**
 

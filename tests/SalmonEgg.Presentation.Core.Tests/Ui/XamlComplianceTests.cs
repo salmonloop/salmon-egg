@@ -2102,10 +2102,11 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
 
         Assert.Contains("IShellBackNavigationService", code);
-        Assert.Contains("IGamepadNativeInputBridge", code);
         Assert.Contains("TryConsumeNavigationIntent", code);
         Assert.Contains("GamepadNavigationIntent.Back", code);
-        Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IGamepadNativeInputBridge", code);
+        Assert.DoesNotContain("_nativeInputBridge", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDispatchWithoutNativeFallback", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SendInput", code, StringComparison.Ordinal);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code, StringComparison.Ordinal);
         Assert.DoesNotContain("FindNextElementOptions", code, StringComparison.Ordinal);
@@ -2297,47 +2298,46 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void MainShellGamepadNavigationDispatcher_BridgesPolledDirectionsThroughNativeGamepadKeys()
+    public void MainShellGamepadNavigationDispatcher_DoesNotBridgePolledDirectionsThroughNativeGamepadKeys()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
         var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
 
         Assert.Contains("TryConsumeNavigationIntent", code);
-        Assert.Contains("_nativeInputBridge.TryDispatch(intent)", code, StringComparison.Ordinal);
-        Assert.Contains("ShouldSuppressPolledGamepadIntent(intent)", mainPage, StringComparison.Ordinal);
-        Assert.Contains("_gamepadNavigationDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("_nativeInputBridge", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShouldSuppressPolledGamepadIntent", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("_gamepadNavigationDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
         Assert.DoesNotContain("GetNavigationSearchRoot()", code);
     }
 
     [Fact]
-    public void GamepadNativeInputBridge_IsReplaceableAndPlatformBounded()
+    public void GamepadNativeInputBridge_IsNotRegisteredOrPackaged()
     {
-        var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNativeInputBridge.cs");
-        var noOp = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\NoOpGamepadNativeInputBridge.cs");
-        var windowsBridge = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsGamepadNativeInputBridge.cs");
         var dependencyInjection = LoadText(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
         var projectFile = LoadText(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj");
 
-        Assert.Contains("interface IGamepadNativeInputBridge", contract, StringComparison.Ordinal);
-        Assert.Contains("bool TryDispatch(GamepadNavigationIntent intent)", contract, StringComparison.Ordinal);
-        Assert.Contains("sealed class NoOpGamepadNativeInputBridge : IGamepadNativeInputBridge", noOp, StringComparison.Ordinal);
-        Assert.Contains("return false;", noOp, StringComparison.Ordinal);
-
-        Assert.Contains("sealed class WindowsGamepadNativeInputBridge : IGamepadNativeInputBridge", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_LEFT", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_UP", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_RIGHT", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("VK_DOWN", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("NavigationView", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("FocusManager", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("SelectedItem", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("AutomationPeer", windowsBridge, StringComparison.Ordinal);
-        Assert.DoesNotContain("MainPage", windowsBridge, StringComparison.Ordinal);
-
-        Assert.Contains("services.AddSingleton<IGamepadNativeInputBridge, WindowsGamepadNativeInputBridge>();", dependencyInjection, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<IGamepadNativeInputBridge, NoOpGamepadNativeInputBridge>();", dependencyInjection, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            FindRepoRoot(),
+            NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNativeInputBridge.cs"))));
+        Assert.False(File.Exists(Path.Combine(
+            FindRepoRoot(),
+            NormalizeRelativePath(@"src\SalmonEgg.Presentation.Core\Services\Input\NoOpGamepadNativeInputBridge.cs"))));
+        Assert.False(File.Exists(Path.Combine(
+            FindRepoRoot(),
+            NormalizeRelativePath(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsGamepadNativeInputBridge.cs"))));
+        Assert.False(File.Exists(Path.Combine(
+            FindRepoRoot(),
+            NormalizeRelativePath(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadNativeInputBridge.cs"))));
+        Assert.False(File.Exists(Path.Combine(
+            FindRepoRoot(),
+            NormalizeRelativePath(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-gamepad.js"))));
+        Assert.DoesNotContain("IGamepadNativeInputBridge", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("NoOpGamepadNativeInputBridge", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowsGamepadNativeInputBridge", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("WasmGamepadNativeInputBridge", dependencyInjection, StringComparison.Ordinal);
+        Assert.DoesNotContain("salmon-egg-wasm-gamepad.js", projectFile, StringComparison.Ordinal);
         Assert.Contains(@"<Compile Remove=""Platforms/Windows/**/*.cs"" />", projectFile, StringComparison.Ordinal);
     }
 
@@ -2532,57 +2532,41 @@ public sealed class XamlComplianceTests
         Assert.Contains("_debugKeyboardSource.KeyDown -= OnDebugKeyDown;", windowsPage, StringComparison.Ordinal);
         Assert.Contains("_debugKeyboardSource.KeyDown += OnDebugKeyDown;", windowsPage, StringComparison.Ordinal);
         Assert.Contains("private static void OnDebugKeyDown", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("partial void AttachPlatformGamepadDirectionalBridge()", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("partial void DetachPlatformGamepadDirectionalBridge()", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("OnPlatformGamepadDirectionalBridgeKeyDown", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("Windows.System.VirtualKey.GamepadDPadRight", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("AttachPlatformGamepadDirectionalBridge", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnPlatformGamepadDirectionalBridgeKeyDown", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadRight", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("SystemKeyDown", windowsPage, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MainPage_GamepadDirectionalBridge_RemainsPlatformBounded()
+    public void MainPage_GamepadDirectionalBridge_IsNotAttachedAtShellLevel()
     {
         var sharedPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
 
-        Assert.Contains("partial void AttachPlatformGamepadDirectionalBridge();", sharedPage, StringComparison.Ordinal);
-        Assert.Contains("partial void DetachPlatformGamepadDirectionalBridge();", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("AttachPlatformGamepadDirectionalBridge", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("DetachPlatformGamepadDirectionalBridge", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("InputKeyboardSource", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadRight", sharedPage, StringComparison.Ordinal);
-        Assert.Contains("InputKeyboardSource", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("Windows.System.VirtualKey.GamepadDPadRight", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.GamepadDPadRight", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDispatchWithoutNativeFallback", windowsPage, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MainPage_WindowsPlatformBridge_DelegatesToFocusedConsumerBeforeShellFallbacks()
+    public void MainPage_WindowsPlatformBridge_DoesNotOwnGlobalGamepadNavigationFallbacks()
     {
         var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
         var dispatcher = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\MainShellGamepadNavigationDispatcher.cs");
         var contract = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\IGamepadNavigationDispatcher.cs");
-        var keyDownHandler = ExtractSection(
-            windowsPage,
-            "private void OnPlatformGamepadDirectionalBridgeKeyDown",
-            "private bool ShouldSuppressPolledGamepadIntentForWindows");
 
-        Assert.Contains("bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent);", contract, StringComparison.Ordinal);
-        Assert.Contains("public bool TryDispatchWithoutNativeFallback(GamepadNavigationIntent intent)", dispatcher, StringComparison.Ordinal);
-        Assert.Contains("TryDispatchCore(intent, allowNativeFallback: false)", dispatcher, StringComparison.Ordinal);
-        Assert.Contains("if (args.Handled", keyDownHandler, StringComparison.Ordinal);
-        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadRight:", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("IsFocusWithinMainNavigation() && TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadUp:", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveUp)", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("case Windows.System.VirtualKey.GamepadDPadDown:", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("TryDispatchWithoutNativeFallback(GamepadNavigationIntent.MoveDown)", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("case Windows.System.VirtualKey.GamepadB:", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("_virtualGamepadNavigationDispatcher?.TryDispatchWithoutNativeFallback(GamepadNavigationIntent.Back)", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadDPadLeft:", keyDownHandler, StringComparison.Ordinal);
-        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadA:", keyDownHandler, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDispatchWithoutNativeFallback", contract, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDispatchWithoutNativeFallback", dispatcher, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryDispatchCore(intent, allowNativeFallback", dispatcher, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnPlatformGamepadDirectionalBridgeKeyDown", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.System.VirtualKey.Gamepad", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TryMoveFocusFromMainNavigationIntoCurrentContent()", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", windowsPage, StringComparison.Ordinal);
         Assert.DoesNotContain("AutomationPeer", windowsPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("TryConsumeFocusedNavigationIntent(intent.Value)", windowsPage, StringComparison.Ordinal);
     }
 
     [Fact]

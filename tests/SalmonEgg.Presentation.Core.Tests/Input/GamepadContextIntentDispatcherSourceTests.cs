@@ -32,18 +32,16 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     }
 
     [Fact]
-    public void WindowsMainPage_BridgesNativeTriggerKeysThroughContextDispatcher()
+    public void WindowsMainPage_DoesNotBridgeNativeTriggerKeysThroughShellContextDispatcher()
     {
         var code = TestSourceFiles.ReadAllText(
             @"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
 
-        Assert.Contains("case Windows.System.VirtualKey.GamepadLeftTrigger:", code);
-        Assert.Contains("case Windows.System.VirtualKey.GamepadRightTrigger:", code);
-        Assert.Contains("RecordNativeGamepadContextIntent(GamepadContextIntent.PageUp);", code);
-        Assert.Contains("RecordNativeGamepadContextIntent(GamepadContextIntent.PageDown);", code);
-        Assert.Contains("TryDispatchNativeGamepadContextIntent(GamepadContextIntent.PageUp)", code);
-        Assert.Contains("TryDispatchNativeGamepadContextIntent(GamepadContextIntent.PageDown)", code);
-        Assert.Contains("_virtualGamepadContextIntentDispatcher.TryDispatch(intent);", code);
+        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadLeftTrigger:", code);
+        Assert.DoesNotContain("case Windows.System.VirtualKey.GamepadRightTrigger:", code);
+        Assert.DoesNotContain("RecordNativeGamepadContextIntent", code);
+        Assert.DoesNotContain("TryDispatchNativeGamepadContextIntent", code);
+        Assert.DoesNotContain("_virtualGamepadContextIntentDispatcher", code);
     }
 
     [Fact]

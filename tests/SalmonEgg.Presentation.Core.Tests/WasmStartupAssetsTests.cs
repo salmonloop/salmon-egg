@@ -226,7 +226,8 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IGamepadInputService, WasmGamepadInputService>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IGamepadDiagnosticsService, WasmGamepadDiagnosticsService>();", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<IGamepadNativeInputBridge, WasmGamepadNativeInputBridge>();", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("IGamepadNativeInputBridge", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("WasmGamepadNativeInputBridge", code, StringComparison.Ordinal);
         Assert.Contains("#elif __ANDROID__ || __IOS__", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ITerminalSessionManager, UnsupportedTerminalSessionManager>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();", code, StringComparison.Ordinal);
@@ -261,8 +262,6 @@ public sealed class WasmStartupAssetsTests
         var reader = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadSnapshotReader.cs");
         var inputService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadInputService.cs");
         var diagnosticsService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadDiagnosticsService.cs");
-        var nativeInputBridge = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadNativeInputBridge.cs");
-        var nativeInputBridgeScript = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-gamepad.js");
         var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
 
         Assert.Contains("#if __WASM__", reader, StringComparison.Ordinal);
@@ -277,19 +276,15 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("WasmGamepadSnapshotReader.ReadInputReadings()", inputService, StringComparison.Ordinal);
         Assert.Contains("[SupportedOSPlatform(\"browser\")]", diagnosticsService, StringComparison.Ordinal);
         Assert.Contains("WasmGamepadSnapshotReader.ReadSnapshot()", diagnosticsService, StringComparison.Ordinal);
-        Assert.Contains("[SupportedOSPlatform(\"browser\")]", nativeInputBridge, StringComparison.Ordinal);
-        Assert.Contains("[JSImport(\"dispatchKeyboardNavigation\", \"salmon-egg-wasm-gamepad.js\")]", nativeInputBridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.MoveDown => (\"ArrowDown\", \"ArrowDown\")", nativeInputBridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadNavigationIntent.Activate => (\"Enter\", \"Enter\")", nativeInputBridge, StringComparison.Ordinal);
-        Assert.Contains("new KeyboardEvent(\"keydown\"", nativeInputBridgeScript, StringComparison.Ordinal);
-        Assert.Contains("new KeyboardEvent(\"keyup\"", nativeInputBridgeScript, StringComparison.Ordinal);
-        Assert.Contains(project.Descendants("WasmShellNativeFileReference"), element => string.Equals(
+        Assert.False(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadNativeInputBridge.cs")));
+        Assert.False(File.Exists(RepoPath(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-gamepad.js")));
+        Assert.DoesNotContain(project.Descendants("WasmShellNativeFileReference"), element => string.Equals(
             (string?)element.Attribute("Include"),
             @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-gamepad.js",
             StringComparison.Ordinal));
-        Assert.Contains(project.Descendants("Content"), element =>
+        Assert.DoesNotContain(project.Descendants("Content"), element =>
             string.Equals((string?)element.Attribute("Include"), @"Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-gamepad.js", StringComparison.Ordinal)
-            && string.Equals(element.Element("TargetPath")?.Value, "_framework/salmon-egg-wasm-gamepad.js", StringComparison.Ordinal));
+            || string.Equals(element.Element("TargetPath")?.Value, "_framework/salmon-egg-wasm-gamepad.js", StringComparison.Ordinal));
         Assert.DoesNotContain("Windows.Gaming.Input", reader, StringComparison.Ordinal);
     }
 

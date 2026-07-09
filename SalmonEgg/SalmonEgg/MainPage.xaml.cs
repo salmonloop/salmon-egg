@@ -79,7 +79,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly MainWindowTitleBarAdapter _titleBarAdapter;
     private readonly WindowBackdropService _windowBackdropService;
     private readonly IGamepadInputService _gamepadInputService;
-    private readonly IGamepadNavigationDispatcher _gamepadNavigationDispatcher;
     private readonly IGamepadShortcutDispatcher _gamepadShortcutDispatcher;
     private readonly IGamepadContextIntentDispatcher _gamepadContextIntentDispatcher;
     private readonly IShellStartupNavigationService _startupNavigation;
@@ -105,7 +104,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
         _windowBackdropService = App.ServiceProvider.GetRequiredService<WindowBackdropService>();
         _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
-        _gamepadNavigationDispatcher = App.ServiceProvider.GetRequiredService<IGamepadNavigationDispatcher>();
         _gamepadShortcutDispatcher = App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
         _gamepadContextIntentDispatcher = App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
         _startupNavigation = App.ServiceProvider.GetRequiredService<IShellStartupNavigationService>();
@@ -183,41 +181,19 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 #endif
     }
 
-    partial void AttachPlatformGamepadDirectionalBridge();
-
-    partial void DetachPlatformGamepadDirectionalBridge();
-
-    private bool ShouldSuppressPolledGamepadIntent(GamepadNavigationIntent intent)
-    {
-#if WINDOWS
-        return ShouldSuppressPolledGamepadIntentForWindows(intent);
-#else
-        return false;
-#endif
-    }
-
     private bool ShouldSuppressPolledGamepadShortcut(GamepadShortcutIntent intent)
     {
-#if WINDOWS
-        return ShouldSuppressPolledGamepadShortcutForWindows(intent);
-#else
         return false;
-#endif
     }
 
     private bool ShouldSuppressPolledGamepadContextIntent(GamepadContextIntent intent)
     {
-#if WINDOWS
-        return ShouldSuppressPolledGamepadContextIntentForWindows(intent);
-#else
         return false;
-#endif
     }
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
         DetachGamepadInput();
-        DetachPlatformGamepadDirectionalBridge();
         DetachDebugKeyLogging();
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
@@ -745,7 +721,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private async void OnMainPageLoaded(object sender, RoutedEventArgs e)
     {
         AttachGamepadInput();
-        AttachPlatformGamepadDirectionalBridge();
         AttachDebugKeyLogging();
         _titleBarAdapter.Configure(App.MainWindowInstance);
         _appActivationSignalSource.Attach(App.MainWindowInstance!);
@@ -772,7 +747,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        _gamepadInputService.IntentRaised += OnGamepadIntentRaised;
         _gamepadInputService.ShortcutRaised += OnGamepadShortcutRaised;
         _gamepadInputService.ContextIntentRaised += OnGamepadContextIntentRaised;
         _gamepadInputService.Start();
@@ -787,38 +761,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        _gamepadInputService.IntentRaised -= OnGamepadIntentRaised;
         _gamepadInputService.ShortcutRaised -= OnGamepadShortcutRaised;
         _gamepadInputService.ContextIntentRaised -= OnGamepadContextIntentRaised;
         _gamepadInputService.Stop();
         _logger.LogDebug("Gamepad input service detached from shell handlers.");
         _isGamepadInputAttached = false;
-    }
-
-    private void OnGamepadIntentRaised(object? sender, GamepadNavigationIntent intent)
-    {
-        if (!DispatcherQueue.HasThreadAccess)
-        {
-            _logger.LogDebug(
-                "Gamepad navigation intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
-                intent);
-            _ = DispatcherQueue.TryEnqueue(() => OnGamepadIntentRaised(sender, intent));
-            return;
-        }
-
-        if (ShouldSuppressPolledGamepadIntent(intent))
-        {
-            _logger.LogDebug(
-                "Gamepad navigation intent suppressed due duplicate native keydown. Intent={Intent}.",
-                intent);
-            return;
-        }
-
-        var consumed = _gamepadNavigationDispatcher.TryDispatch(intent);
-        _logger.LogDebug(
-            "Gamepad navigation intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
-            intent,
-            consumed);
     }
 
     private void OnGamepadShortcutRaised(object? sender, GamepadShortcutIntent intent)
