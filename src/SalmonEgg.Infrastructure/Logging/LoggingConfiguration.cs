@@ -12,6 +12,8 @@ namespace SalmonEgg.Infrastructure.Logging;
 /// </summary>
 public static class LoggingConfiguration
 {
+    private const long DefaultFileSizeLimitBytes = 10_485_760;
+
     /// <summary>
     /// 配置 Serilog 日志系统
     /// </summary>
@@ -22,7 +24,23 @@ public static class LoggingConfiguration
         string appDataPath,
         bool enableDebugMode = false,
         LoggingHostCapabilities? hostCapabilities = null)
+        => ConfigureLogging(
+            appDataPath,
+            enableDebugMode,
+            hostCapabilities,
+            DefaultFileSizeLimitBytes);
+
+    internal static ILogger ConfigureLogging(
+        string appDataPath,
+        bool enableDebugMode,
+        LoggingHostCapabilities? hostCapabilities,
+        long fileSizeLimitBytes)
     {
+        if (fileSizeLimitBytes <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileSizeLimitBytes));
+        }
+
         hostCapabilities ??= LoggingHostCapabilities.Desktop;
 
         string? logPath = null;
@@ -70,7 +88,7 @@ public static class LoggingConfiguration
             configuration = configuration.WriteTo.File(
                 path: logPath,
                 rollingInterval: RollingInterval.Day,
-                fileSizeLimitBytes: 10_485_760, // 10MB 限制 (Requirement 6.5)
+                fileSizeLimitBytes: fileSizeLimitBytes, // 默认 10MB 限制 (Requirement 6.5)
                 rollOnFileSizeLimit: true,
                 retainedFileCountLimit: 7,      // 保留 7 天 (Requirement 6.5)
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [Thread:{ThreadId}] {Message:lj}{NewLine}{Exception}");

@@ -26,7 +26,7 @@ public class LoggingConfigurationTests
 
             // Assert
             Assert.NotNull(logger);
-            
+
             // 关闭 logger
             (logger as IDisposable)?.Dispose();
         }
@@ -55,7 +55,7 @@ public class LoggingConfigurationTests
             // Assert
             var logDirectory = Path.Combine(tempPath, "logs");
             Assert.True(Directory.Exists(logDirectory), "日志目录应该被创建");
-            
+
             // 关闭 logger
             (logger as IDisposable)?.Dispose();
         }
@@ -86,7 +86,7 @@ public class LoggingConfigurationTests
             Assert.NotNull(logger);
             // 验证 Debug 级别的日志可以被记录
             logger.Debug("Test debug message");
-            
+
             // 关闭 logger 以释放文件句柄
             (logger as IDisposable)?.Dispose();
         }
@@ -158,7 +158,7 @@ public class LoggingConfigurationTests
             // Act
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             logger.Information("Test log message");
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 
@@ -183,13 +183,22 @@ public class LoggingConfigurationTests
         // Arrange
         var tempPath = Path.Combine(Path.GetTempPath(), "SalmonEggTests", Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempPath);
-        var payload = new string('x', 1_000_000);
+        var payload = new string('x', 1024);
 
         try
         {
             // Act
-            var logger = LoggingConfiguration.ConfigureLogging(tempPath);
-            for (var i = 0; i < 14; i++)
+            var logger = LoggingConfiguration.ConfigureLogging(
+                tempPath,
+                enableDebugMode: false,
+                hostCapabilities: new LoggingHostCapabilities(
+                    SupportsConsoleSink: false,
+                    SupportsFileSink: true,
+                    SupportsThreadEnricher: true,
+                    SupportsMachineNameEnricher: true),
+                fileSizeLimitBytes: 2048);
+
+            for (var i = 0; i < 6; i++)
             {
                 logger.Information("Large diagnostic payload {Index} {Payload}", i, payload);
             }
@@ -225,7 +234,7 @@ public class LoggingConfigurationTests
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             var testMessage = $"Test message {Guid.NewGuid()}";
             logger.Information(testMessage);
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 
@@ -262,7 +271,7 @@ public class LoggingConfigurationTests
             // Act
             var logger = LoggingConfiguration.ConfigureLogging(tempPath);
             logger.Information("Test message with thread ID");
-            
+
             // 关闭 logger 以确保日志被写入
             (logger as IDisposable)?.Dispose();
 
