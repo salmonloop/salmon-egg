@@ -6,8 +6,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    - cron: "30 2 * * *"
+
+concurrency:
+  group: wasm-smoke-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_VERSION: "10.0.x"
@@ -21,6 +23,7 @@ jobs:
   browserwasm-smoke:
     name: Browser WASM Smoke Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v5

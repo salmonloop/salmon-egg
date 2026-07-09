@@ -2,8 +2,10 @@ name: GUI Smoke Gates
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 2 * * *"
+
+concurrency:
+  group: gui-smoke-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   SALMONEGG_GUI: "1"
@@ -16,6 +18,7 @@ jobs:
   deterministic-gui-smokes:
     name: Deterministic GUI Smoke Gates
     runs-on: [self-hosted, windows]
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v5
