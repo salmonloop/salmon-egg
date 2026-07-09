@@ -7,6 +7,7 @@ using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 

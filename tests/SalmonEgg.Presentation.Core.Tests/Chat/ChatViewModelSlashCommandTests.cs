@@ -10,6 +10,7 @@ using SalmonEgg.Presentation.Core.Services.Chat.Slash;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 

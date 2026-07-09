@@ -4,6 +4,7 @@ using Serilog;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Acp.Client;
 namespace SalmonEgg.Application.Services.Chat;
 
 /// <summary>

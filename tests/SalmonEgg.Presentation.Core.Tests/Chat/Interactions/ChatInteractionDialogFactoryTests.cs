@@ -1,10 +1,11 @@
 using System.Threading.Tasks;
 using System.Collections.Immutable;
 using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
-using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat.Interactions;
 

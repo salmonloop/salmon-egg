@@ -20,6 +20,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Serialization;
 using SalmonEgg.Infrastructure.Logging;
+using SalmonEgg.Acp.Client;
 namespace SalmonEgg.Infrastructure.Client
 {
     /// <summary>
@@ -1151,7 +1152,7 @@ namespace SalmonEgg.Infrastructure.Client
                     return;
                 }
 
-                var optionsList = new List<SalmonEgg.Domain.Services.Security.PermissionOption>();
+                var optionsList = new List<PermissionOption>();
                 foreach (var option in optionsProp.EnumerateArray())
                 {
                     if (option.ValueKind != JsonValueKind.Object
@@ -1170,7 +1171,7 @@ namespace SalmonEgg.Infrastructure.Client
                     var description = option.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String
                         ? d.GetString()
                         : null;
-                    optionsList.Add(new SalmonEgg.Domain.Services.Security.PermissionOption(
+                    optionsList.Add(new PermissionOption(
                         id.GetString() ?? string.Empty,
                         n.GetString() ?? string.Empty,
                         k.GetString() ?? string.Empty,

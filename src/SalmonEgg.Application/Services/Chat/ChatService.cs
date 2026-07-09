@@ -12,6 +12,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using DomainSessionMode = SalmonEgg.Domain.Models.Session.SessionMode;
 using ProtocolSessionMode = SalmonEgg.Acp.Protocol.SessionMode;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Application.Services.Chat
 {

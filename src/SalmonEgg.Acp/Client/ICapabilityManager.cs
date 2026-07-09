@@ -1,6 +1,7 @@
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Client;
 
-namespace SalmonEgg.Domain.Services
+namespace SalmonEgg.Acp.Client
 {
     /// <summary>
     /// 能力管理器接口。

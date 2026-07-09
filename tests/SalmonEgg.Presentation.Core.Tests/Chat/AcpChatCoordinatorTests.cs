@@ -24,6 +24,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 

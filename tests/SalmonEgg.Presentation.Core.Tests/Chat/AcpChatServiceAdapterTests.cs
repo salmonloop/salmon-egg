@@ -13,6 +13,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Interactions;
 

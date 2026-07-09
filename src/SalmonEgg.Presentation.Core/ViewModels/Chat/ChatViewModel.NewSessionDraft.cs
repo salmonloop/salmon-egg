@@ -13,6 +13,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 

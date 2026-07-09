@@ -1,4 +1,5 @@
 using SalmonEgg.Domain.Interfaces.Transport;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Domain.Services;
 

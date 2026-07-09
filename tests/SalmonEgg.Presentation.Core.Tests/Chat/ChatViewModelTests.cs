@@ -51,6 +51,7 @@ using SalmonEgg.Presentation.Core.Resources;
 using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -7577,9 +7578,9 @@ public partial class ChatViewModelTests
             ToolCall = toolCall,
             Options =
             [
-                new Domain.Services.Security.PermissionOption("allow-once", "Allow once", "allow_once"),
-                new Domain.Services.Security.PermissionOption("allow-always", "Always allow", "allow_always"),
-                new Domain.Services.Security.PermissionOption("reject-once", "Reject", "reject_once")
+                new PermissionOption("allow-once", "Allow once", "allow_once"),
+                new PermissionOption("allow-always", "Always allow", "allow_always"),
+                new PermissionOption("reject-once", "Reject", "reject_once")
             ]
         });
 

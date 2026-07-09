@@ -1,4 +1,4 @@
-namespace SalmonEgg.Domain.Services.Security;
+namespace SalmonEgg.Acp.Protocol;
 
 /// <summary>
 /// A permission option supplied by the Agent in `session/request_permission`.

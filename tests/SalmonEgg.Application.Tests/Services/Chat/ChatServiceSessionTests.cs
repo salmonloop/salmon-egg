@@ -18,6 +18,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Services;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Application.Tests.Services.Chat;
 

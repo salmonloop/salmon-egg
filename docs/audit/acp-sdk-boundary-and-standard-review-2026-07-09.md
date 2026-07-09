@@ -27,6 +27,8 @@ Moved in this step:
 - `StopReason` moved out of Domain session state and into `SalmonEgg.Acp.Protocol` with the prompt response contract.
 - JSON-RPC parser/validator interfaces and implementations moved into `SalmonEgg.Acp.JsonRpc`.
 - Protocol source-generated serialization moved into `SalmonEgg.Acp.Serialization.AcpJsonContext`; Infrastructure keeps only `AcpInfrastructureJsonContext` for legacy `AcpMessage` and app-local callback payloads.
+- ACP client and capability contracts moved into `SalmonEgg.Acp.Client`; `IAcpClientFactory` stays in Domain because it accepts the app-local transport interface.
+- Permission request option payloads moved into `SalmonEgg.Acp.Protocol`.
 
 Guard coverage:
 
@@ -36,6 +38,7 @@ Guard coverage:
   - fails if Domain reintroduces protocol DTO source files under `Models/Protocol`,
   - fails if Domain reintroduces `Models/JsonRpc`, `Models/Content`, `Models/Plan`, or `Models/Tool`,
   - fails if Domain or Infrastructure reintroduces the JSON-RPC parser/validator or protocol `AcpJsonContext`,
+  - fails if Domain reintroduces ACP client/capability contracts or permission option payloads,
   - fails if Domain reintroduces `Models/Mcp/McpServerConfig.cs`,
   - fails if Domain session state reintroduces `StopReason`,
   - fails if SDK MCP wire payloads contain app-local `Enabled` state,
@@ -76,8 +79,7 @@ No new ACP schema violation was found in this review pass.
 
 Do not mark the SDK extraction complete until these are moved or adapted behind SDK-facing abstractions:
 
-1. Move `IAcpClient` and capability manager contracts into `SalmonEgg.Acp`; keep SalmonEgg chat orchestration in Application/Presentation.
-2. Move transport-independent client logic into `SalmonEgg.Acp`; keep desktop stdio, UI capability probing, storage, and profile configuration outside the SDK.
-3. Add packaging verification with `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
+1. Move transport-independent client logic into `SalmonEgg.Acp`; keep desktop stdio, UI capability probing, storage, and profile configuration outside the SDK.
+2. Add packaging verification with `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
 
 The current commit is intentionally only the first safe boundary cut, not the final SDK extraction.

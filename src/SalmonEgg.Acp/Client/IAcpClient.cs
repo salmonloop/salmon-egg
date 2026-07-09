@@ -1,15 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Threading;
-using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.Plan;
+using System.Threading.Tasks;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Domain.Models.Session;
-using SalmonEgg.Acp.Tool;
-using SalmonEgg.Domain.Services.Security;
+using SalmonEgg.Acp.Client;
 
-namespace SalmonEgg.Domain.Services
+namespace SalmonEgg.Acp.Client
 {
     /// <summary>
     /// ACP 客户端接口。

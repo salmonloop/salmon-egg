@@ -27,6 +27,7 @@ using SalmonEgg.Presentation.ViewModels.Discover;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Tests.Discover;
 

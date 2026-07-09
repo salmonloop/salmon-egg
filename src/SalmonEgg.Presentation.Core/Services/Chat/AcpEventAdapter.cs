@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 

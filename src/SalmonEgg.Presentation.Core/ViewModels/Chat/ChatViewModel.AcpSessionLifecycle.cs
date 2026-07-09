@@ -47,6 +47,7 @@ using SalmonEgg.Presentation.ViewModels.Chat.Panels;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 

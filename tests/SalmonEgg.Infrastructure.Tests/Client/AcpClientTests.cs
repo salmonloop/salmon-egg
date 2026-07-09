@@ -16,6 +16,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Services;
 using Xunit;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Infrastructure.Tests.Client
 {

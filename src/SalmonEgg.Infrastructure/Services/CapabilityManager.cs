@@ -1,6 +1,7 @@
 using System;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Acp.Client;
 
 namespace SalmonEgg.Infrastructure.Services
 {
