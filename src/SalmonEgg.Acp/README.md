@@ -1,0 +1,5 @@
+# SalmonEgg ACP SDK
+
+SalmonEgg.Acp contains Agent Client Protocol contracts and SDK primitives that are independent from the SalmonEgg application, UI, storage, and platform services.
+
+This package is being extracted incrementally. The public surface is not final yet.

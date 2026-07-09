@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\SalmonEgg.Acp\SalmonEgg.Acp.csproj" />
     <ProjectReference Include="..\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
   </ItemGroup>
 

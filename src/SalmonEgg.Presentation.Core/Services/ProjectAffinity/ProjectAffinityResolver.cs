@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.ProjectAffinity;

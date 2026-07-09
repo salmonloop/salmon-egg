@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SalmonEgg.Acp\SalmonEgg.Acp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="System.Reactive" Version="6.1.0" />
   </ItemGroup>
 

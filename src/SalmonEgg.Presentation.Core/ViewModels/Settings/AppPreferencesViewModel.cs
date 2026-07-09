@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
