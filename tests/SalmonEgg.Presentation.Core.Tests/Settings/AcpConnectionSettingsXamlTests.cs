@@ -48,8 +48,10 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Import.Status\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("AutomationProperties.LiveSetting=\"Polite\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.AddServer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"Mcp_RemoveServer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.RemoveServer\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.Name=\"删除\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.Name=\"删除\"", xaml, StringComparison.Ordinal);
+        AssertMcpRemoveServerResourcesExist();
         Assert.Contains("<Button.Flyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("<Flyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Mcp_RemoveServerConfirm\"", xaml, StringComparison.Ordinal);
@@ -65,6 +67,27 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.DoesNotContain("{Binding}", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ContentDialog", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"Mcp.Servers.List\"", xaml, StringComparison.Ordinal);
+    }
+
+    private static void AssertMcpRemoveServerResourcesExist()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadFile(resourceFile));
+            Assert.Contains(resources.Descendants("data"), data =>
+                string.Equals((string?)data.Attribute("name"), "Mcp_RemoveServer.ToolTipService.ToolTip", StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(data.Element("value")?.Value));
+            Assert.Contains(resources.Descendants("data"), data =>
+                string.Equals((string?)data.Attribute("name"), "Mcp_RemoveServer.AutomationProperties.Name", StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(data.Element("value")?.Value));
+        }
     }
 
     [Fact]
