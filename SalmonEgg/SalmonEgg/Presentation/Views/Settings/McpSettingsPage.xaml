@@ -247,9 +247,7 @@
                                                             Command="{x:Bind EditCommand, Mode=OneWay}"
                                                             AutomationProperties.AutomationId="Mcp.EditServer"/>
                                                     <Button x:Uid="Mcp_RemoveServer"
-                                                            AutomationProperties.AutomationId="Mcp.RemoveServer"
-                                                            AutomationProperties.Name="删除"
-                                                            ToolTipService.ToolTip="删除">
+                                                            AutomationProperties.AutomationId="Mcp.RemoveServer">
                                                         <Button.Content>
                                                             <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                                       Glyph="&#xE74D;"/>

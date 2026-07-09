@@ -255,15 +255,15 @@ If GUI smoke is run for this item, it must record:
 
 ## Task 4: Remove XAML User-visible Hardcoded Strings and Enforce `.resw`
 
-**Status:** Not fixed, but the stale broad evidence below must be revalidated before implementation. A 2026-07-01 quick scan narrows the current visible Chinese XAML literals to:
+**Status:** Fixed as of 2026-07-09. The stale broad evidence was revalidated; the remaining user-visible Chinese XAML attribute values were limited to `AcpConnectionSettingsPage.xaml` and `McpSettingsPage.xaml`. Those controls already had `x:Uid` and complete `en`, `en-US`, and `zh-Hans` resources, so the fix removed the local Chinese fallback attributes and added a contract test that scans `Presentation/Views/**/*.xaml` for Chinese text in user-visible attributes.
+
+The 2026-07-09 visible-attribute scan found and removed:
 
 - `SalmonEgg/SalmonEgg/Presentation/Views/Settings/AcpConnectionSettingsPage.xaml`
   - `ToolTipService.ToolTip="更多"`
 - `SalmonEgg/SalmonEgg/Presentation/Views/Settings/McpSettingsPage.xaml`
   - `AutomationProperties.Name="删除"`
   - `ToolTipService.ToolTip="删除"`
-- `SalmonEgg/SalmonEgg/Presentation/Views/Settings/DiagnosticsSettingsPage.xaml`
-  - `Text="Agent："`
 
 Chinese comments remain in some XAML files and are not user-visible localization defects by themselves.
 
@@ -301,8 +301,8 @@ Resource files already exist:
 
 **Implementation Checklist:**
 
-- [ ] Before editing, report the first batch of XAML files to localize. Do not attempt every XAML file in one unreviewed batch if the diff becomes large.
-- [ ] Add a contract test in `tests/SalmonEgg.Presentation.Core.Tests/Ui/XamlComplianceTests.cs` that scans `SalmonEgg/SalmonEgg/Presentation/Views/**/*.xaml` for Chinese characters in these attributes:
+- [x] Before editing, report the first batch of XAML files to localize. Do not attempt every XAML file in one unreviewed batch if the diff becomes large.
+- [x] Add a contract test in `tests/SalmonEgg.Presentation.Core.Tests/Ui/XamlComplianceTests.cs` that scans `SalmonEgg/SalmonEgg/Presentation/Views/**/*.xaml` for Chinese characters in these attributes:
   - `Text`
   - `Content`
   - `Header`
@@ -312,11 +312,11 @@ Resource files already exist:
   - `Message`
   - `ToolTipService.ToolTip`
   - `AutomationProperties.Name`
-- [ ] Maintain a small whitelist only for comments or non-user-visible diagnostic probes. The whitelist entry must include the file path and reason.
-- [ ] For each XAML element with a local Chinese value, either:
+- [x] Maintain a small whitelist only for comments or non-user-visible diagnostic probes. The 2026-07-09 implementation does not need a whitelist because comments are outside the scanned attribute set.
+- [x] For each XAML element with a local Chinese value, either:
   - remove the local text and keep an existing `x:Uid`, or
   - add a new stable `x:Uid` and corresponding `.resw` entries for `en`, `en-US`, and `zh-Hans`.
-- [ ] When adding `.resw` entries, use property names such as:
+- [x] When adding `.resw` entries, use property names such as:
 
 ```text
 General_PageTitle.Text
@@ -324,7 +324,13 @@ General_AutoStartToggle.OnContent
 Mcp_DeleteButton.AutomationProperties.Name
 ```
 
-- [ ] Do not alter layout, visual styling, or binding behavior as part of this localization cleanup.
+- [x] Do not alter layout, visual styling, or binding behavior as part of this localization cleanup.
+
+**Verification performed on 2026-07-09:**
+
+- `rg -n -P '(Text|Header|Content|PlaceholderText|AutomationProperties\.Name|ToolTipService\.ToolTip|Title|Message|OnContent|OffContent)="[^"]*\p{Han}[^"]*"' SalmonEgg/SalmonEgg/Presentation/Views -g '*.xaml' -S`: no user-visible attribute matches.
+- `dotnet test tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~XamlComplianceTests"`: 153 passed.
+- `dotnet build SalmonEgg.sln --configuration Release --no-restore`: 0 warnings, 0 errors.
 
 **Verification Gates:**
 

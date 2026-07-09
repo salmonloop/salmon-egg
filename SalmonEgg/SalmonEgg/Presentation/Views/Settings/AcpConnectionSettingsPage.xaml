@@ -183,8 +183,7 @@
 
                                                 <Button Grid.Column="1"
                                                         VerticalAlignment="Center"
-                                                        x:Uid="Acp_ProfileMore"
-                                                        ToolTipService.ToolTip="更多">
+                                                        x:Uid="Acp_ProfileMore">
                                                     <Button.Content>
                                                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE712;"/>
                                                     </Button.Content>

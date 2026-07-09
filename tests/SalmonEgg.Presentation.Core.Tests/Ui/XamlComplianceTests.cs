@@ -339,6 +339,32 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void Xaml_UserVisibleAttributesDoNotKeepChineseFallbackText()
+    {
+        var root = FindRepoRoot();
+        var viewsRoot = Path.Combine(root, "SalmonEgg", "SalmonEgg", "Presentation", "Views");
+        var xamlFiles = Directory.EnumerateFiles(viewsRoot, "*.xaml", SearchOption.AllDirectories).ToArray();
+        var failures = new List<string>();
+
+        foreach (var xamlFile in xamlFiles)
+        {
+            var document = XDocument.Parse(File.ReadAllText(xamlFile));
+            foreach (var element in document.Descendants())
+            {
+                foreach (var attribute in element.Attributes().Where(IsChineseUserVisibleTextAttribute))
+                {
+                    if (attribute.Value.Any(IsCjkUnifiedIdeograph))
+                    {
+                        failures.Add($"{Path.GetRelativePath(root, xamlFile)} <{element.Name.LocalName}> {attribute.Name.LocalName}=\"{attribute.Value}\"");
+                    }
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
     public void UiCode_DynamicResourceKeysExistInAllCanonicalResources()
     {
         string[] sourceFiles =
@@ -2943,8 +2969,23 @@ public sealed class XamlComplianceTests
             || string.Equals(value, "inactive", StringComparison.Ordinal)
             || string.Equals(fileName, "ChatInputArea.xaml", StringComparison.OrdinalIgnoreCase)
                 && attribute.Name.LocalName == "Content"
-                && value.Length <= 2;
+            && value.Length <= 2;
     }
+
+    private static bool IsChineseUserVisibleTextAttribute(XAttribute attribute)
+        => attribute.Name.LocalName is "Text"
+            or "Content"
+            or "Header"
+            or "OnContent"
+            or "OffContent"
+            or "Title"
+            or "Message"
+            or "ToolTip"
+            or "ToolTipService.ToolTip"
+            or "AutomationProperties.Name";
+
+    private static bool IsCjkUnifiedIdeograph(char value)
+        => value is >= '\u3400' and <= '\u9fff';
 
     private static string GetResourceValue(XDocument resources, string name)
     {
