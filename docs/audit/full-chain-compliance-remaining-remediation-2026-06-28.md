@@ -76,7 +76,7 @@ git diff --check
 
 ## Task 1: Finish Protocol Serialization Test Contract Cleanup
 
-**Status:** Partially done during the P0 cleanup. Wrong `messageId` / `userMessageId` root-field expectations are gone, but many protocol tests still use direct runtime `JsonSerializer` calls or `parser.Options` instead of explicit source-generated `TypeInfo` or a public production parser path.
+**Status:** Fixed as of 2026-07-09. Wrong `messageId` / `userMessageId` root-field expectations are gone, `MessageParserTests` no longer use `parser.Options`, reviewed standard DTO groups have source-generated `AcpJsonContext` coverage, and the `InitializeTypesTests` wire-shape assertions were moved out of Domain runtime serialization tests into Infrastructure source-generation coverage.
 
 **Risk If Left Unfixed:** Tests can pass while AOT / trimming / source-generated serialization contracts are broken. Protocol DTOs can drift from the production serialization path.
 
@@ -104,19 +104,19 @@ git diff --check
 
 **Implementation Checklist:**
 
-- [ ] Before editing, report to the user which protocol test files will be changed.
-- [ ] Run this inventory command and paste the meaningful count into the completion report:
+- [x] Before editing, report to the user which protocol test files will be changed.
+- [x] Run this inventory command and paste the meaningful count into the completion report:
 
 ```powershell
 rg -n "JsonSerializer\.(Serialize|Deserialize|SerializeToElement)" tests\SalmonEgg.Domain.Tests\Protocol tests\SalmonEgg.Infrastructure.Tests\Serialization -S
 ```
 
-- [ ] In `tests/SalmonEgg.Infrastructure.Tests/Serialization/MessageParserTests.cs`, replace remaining protocol DTO round-trip calls that use `parser.Options` with one of:
+- [x] In `tests/SalmonEgg.Infrastructure.Tests/Serialization/MessageParserTests.cs`, replace remaining protocol DTO round-trip calls that use `parser.Options` with one of:
   - `JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams)`
   - `JsonSerializer.Serialize(value, AcpJsonContext.Default.SessionUpdateParams)`
   - a public parser method when testing parser dispatch or JSON-RPC envelope behavior.
-- [ ] For `tests/SalmonEgg.Domain.Tests/Protocol/InitializeTypesTests.cs`, either move wire-shape tests into `tests/SalmonEgg.Infrastructure.Tests/Serialization/` or add a narrowly scoped `InternalsVisibleTo` entry for `SalmonEgg.Domain.Tests`. Prefer moving wire-shape tests, because source-generated serialization is an Infrastructure concern.
-- [ ] Add a source-generation coverage test in `tests/SalmonEgg.Infrastructure.Tests/Serialization/AcpJsonContextTests.cs` that serializes and deserializes the standard protocol DTO groups touched by the review:
+- [x] For `tests/SalmonEgg.Domain.Tests/Protocol/InitializeTypesTests.cs`, either move wire-shape tests into `tests/SalmonEgg.Infrastructure.Tests/Serialization/` or add a narrowly scoped `InternalsVisibleTo` entry for `SalmonEgg.Domain.Tests`. Prefer moving wire-shape tests, because source-generated serialization is an Infrastructure concern.
+- [x] Add a source-generation coverage test in `tests/SalmonEgg.Infrastructure.Tests/Serialization/AcpJsonContextTests.cs` that serializes and deserializes the standard protocol DTO groups touched by the review:
 
 ```csharp
 JsonSerializer.Serialize(new SessionPromptResponse(StopReason.EndTurn), AcpJsonContext.Default.SessionPromptResponse);
@@ -124,13 +124,24 @@ JsonSerializer.Serialize(new SessionSetModeResponse(), AcpJsonContext.Default.Se
 JsonSerializer.Serialize(ClientCapabilityDefaults.Create(), AcpJsonContext.Default.ClientCapabilities);
 ```
 
-- [ ] Add a guard test that serializes `SessionPromptParams`, `SessionPromptResponse`, and `SessionSetModeResponse` through `AcpJsonContext` and asserts the disallowed root fields are absent:
+- [x] Add a guard test that serializes `SessionPromptParams`, `SessionPromptResponse`, and `SessionSetModeResponse` through `AcpJsonContext` and asserts the disallowed root fields are absent:
   - `maxTokens`
   - `stopSequences`
   - `messageId` on `session/prompt` request
   - `userMessageId`
   - response `modeId` on `session/set_mode`
-- [ ] Do not change production DTOs unless a test exposes a real source-generation gap.
+- [x] Do not change production DTOs unless a test exposes a real source-generation gap.
+
+**Verification performed on 2026-07-09:**
+
+- `rg -n "JsonSerializer\.(Serialize|Deserialize|SerializeToElement)" tests/SalmonEgg.Domain.Tests/Protocol tests/SalmonEgg.Infrastructure.Tests/Serialization -S`: 105 remaining inventory entries after cleanup.
+- Remaining inventory classification:
+  - `tests/SalmonEgg.Infrastructure.Tests/Serialization`: 50 entries, retained in tests that explicitly use `AcpJsonContext` type metadata or compare JSON-RPC envelope payloads.
+  - `tests/SalmonEgg.Domain.Tests/Protocol`: 55 entries, retained as runtime DTO/converter behavior tests; production wire-path coverage for the reviewed ACP groups is now in Infrastructure source-generation tests.
+- `rg -n "parser\.Options|\.Options" tests/SalmonEgg.Infrastructure.Tests/Serialization/MessageParserTests.cs tests/SalmonEgg.Domain.Tests/Protocol -S`: no matches.
+- `dotnet test tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Serialization"`: 49 passed.
+- `dotnet test tests/SalmonEgg.Domain.Tests/SalmonEgg.Domain.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Protocol"`: 60 passed.
+- P0 root fields were not reintroduced; `AcpJsonContextTests.ReviewedStandardProtocolDtos_DoNotSerializeNonStandardRootFields` covers `maxTokens`, `stopSequences`, prompt request `messageId`, `userMessageId`, and `session/set_mode` response `modeId`.
 
 **Verification Gates:**
 
