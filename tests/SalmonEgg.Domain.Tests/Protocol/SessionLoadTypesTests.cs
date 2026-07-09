@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
@@ -120,7 +121,7 @@ public sealed class SessionLoadTypesTests
         """;
 
         Assert.That(
-            () => JsonSerializer.Deserialize<SessionLoadResponse>(json),
+            (Action)(() => JsonSerializer.Deserialize<SessionLoadResponse>(json)),
             Throws.TypeOf<JsonException>());
     }
 
@@ -139,7 +140,7 @@ public sealed class SessionLoadTypesTests
         """;
 
         Assert.That(
-            () => JsonSerializer.Deserialize<SessionResumeResponse>(json),
+            (Action)(() => JsonSerializer.Deserialize<SessionResumeResponse>(json)),
             Throws.TypeOf<JsonException>());
     }
 }

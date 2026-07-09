@@ -2789,23 +2789,31 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SelectedAcpProfile_Change_QueuesNextConnectAttemptWithoutConcurrentOverlap()
+    public async Task SelectedAcpProfile_Change_CancelsCurrentConnectAndStartsLatestSelection()
     {
         var syncContext = new ImmediateSynchronizationContext();
         await RunWithSynchronizationContextAsync(syncContext, async () =>
         {
             var firstStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var firstCanceled = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var secondStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var firstGate = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var connectCalls = 0;
             var commands = new Mock<IAcpConnectionCommands>();
-            async Task<AcpTransportApplyResult> ApplyProfileConnectionAsync()
+            async Task<AcpTransportApplyResult> ApplyProfileConnectionAsync(CancellationToken cancellationToken)
             {
                 var callNumber = Interlocked.Increment(ref connectCalls);
                 if (callNumber == 1)
                 {
                     firstStarted.TrySetResult(null);
-                    await firstGate.Task;
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        firstCanceled.TrySetResult(null);
+                        throw;
+                    }
                 }
                 else
                 {
@@ -2822,7 +2830,7 @@ public partial class ChatViewModelTests
                     It.IsAny<IAcpChatCoordinatorSink>(),
                     It.IsAny<CancellationToken>()))
                 .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
-                    (_, _, _, _) => ApplyProfileConnectionAsync());
+                    (_, _, _, cancellationToken) => ApplyProfileConnectionAsync(cancellationToken));
             commands
                 .Setup(x => x.ConnectToProfileAsync(
                     It.IsAny<ServerConfiguration>(),
@@ -2831,7 +2839,7 @@ public partial class ChatViewModelTests
                     It.IsAny<AcpConnectionContext>(),
                     It.IsAny<CancellationToken>()))
                 .Returns<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, AcpConnectionContext, CancellationToken>(
-                    (_, _, _, _, _) => ApplyProfileConnectionAsync());
+                    (_, _, _, _, cancellationToken) => ApplyProfileConnectionAsync(cancellationToken));
 
             await using var fixture = CreateViewModel(syncContext, acpConnectionCommands: commands.Object);
             var profileA = new ServerConfiguration { Id = "profile-a", Name = "Profile A", Transport = TransportType.Stdio };
@@ -2844,10 +2852,9 @@ public partial class ChatViewModelTests
 
             fixture.ViewModel.SelectedAcpProfile = profileB;
 
-            Assert.Equal(1, connectCalls);
-            firstGate.TrySetResult(null);
+            await firstCanceled.Task.WaitAsync(TimeSpan.FromSeconds(2));
             await secondStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            await Assert.ThrowsAsync<OperationCanceledException>(() => firstConnectTask);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstConnectTask);
             Assert.Equal(2, connectCalls);
         });
     }
@@ -7603,9 +7610,9 @@ public partial class ChatViewModelTests
         await fixture.ApplyCurrentStoreProjectionAsync();
 
         var toolMessage = Assert.Single(
-            fixture.ViewModel.MessageHistory.Where(message =>
-                string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
-                && string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)));
+            fixture.ViewModel.MessageHistory,
+            message => string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
+                && string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
         Assert.Same(fixture.ViewModel.PendingPermissionRequest, toolMessage.PendingPermissionRequest);
         Assert.Equal(3, toolMessage.PendingPermissionRequest?.Options.Count);
     }
@@ -8209,8 +8216,9 @@ public partial class ChatViewModelTests
         });
 
         var finalState = await fixture.GetStateAsync();
-        var toolCallMessage = Assert.Single((finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
-            .Where(message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)));
+        var toolCallMessage = Assert.Single(
+            finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+            message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
         Assert.Equal("Switch mode", toolCallMessage.Title);
         Assert.Equal(ToolCallKind.SwitchMode, toolCallMessage.ToolCallKind);
         Assert.Equal(ToolCallStatus.Completed, toolCallMessage.ToolCallStatus);

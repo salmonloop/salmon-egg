@@ -582,7 +582,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var viewModel = await CreateViewModelAsync(preferences);
 
         viewModel.AddRemoteDirectoryCommand.Execute(null);
-        var draftRow = Assert.Single(viewModel.RemoteDirectoryRows.Where(row => row.IsNew));
+        var draftRow = Assert.Single(viewModel.RemoteDirectoryRows, row => row.IsNew);
         draftRow.DisplayNameDraft = "Shared Workspace";
         draftRow.RemotePathDraft = "/remote/shared";
 

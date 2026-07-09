@@ -1542,9 +1542,10 @@ public sealed class XamlComplianceTests
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\ShortcutsSettingsPage.xaml"));
         var restoreAllDescription = FindElementByUid(document, "Shortcuts_RestoreAllDescription");
         var restoreAllButton = FindElementByUid(document, "Shortcuts_RestoreAll");
-        var restoreAllRow = Assert.Single(restoreAllButton.Ancestors()
-            .Where(element => element.Name.LocalName == "Grid"
-                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
+        var restoreAllRow = Assert.Single(
+            restoreAllButton.Ancestors(),
+            element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal));
 
         Assert.Equal("{StaticResource SettingsRowDescriptionTextStyle}", GetAttributeByLocalName(restoreAllDescription, "Style"));
         Assert.Contains(restoreAllDescription, restoreAllRow.Descendants());
@@ -1988,13 +1989,15 @@ public sealed class XamlComplianceTests
         var resetDefaults = FindElementByUid(document, "DataStorage_ResetDefaults");
         var clearAllData = FindElementByUid(document, "DataStorage_ClearAllData");
         var dangerTitle = FindElementByUid(document, "DataStorage_DangerTitle");
-        var dangerExpander = Assert.Single(dangerTitle.Ancestors().Where(element => element.Name.LocalName == "Expander"));
-        var resetDefaultsRow = Assert.Single(resetDefaults.Ancestors()
-            .Where(element => element.Name.LocalName == "Grid"
-                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
-        var clearAllDataRow = Assert.Single(clearAllData.Ancestors()
-            .Where(element => element.Name.LocalName == "Grid"
-                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal)));
+        var dangerExpander = Assert.Single(dangerTitle.Ancestors(), element => element.Name.LocalName == "Expander");
+        var resetDefaultsRow = Assert.Single(
+            resetDefaults.Ancestors(),
+            element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal));
+        var clearAllDataRow = Assert.Single(
+            clearAllData.Ancestors(),
+            element => element.Name.LocalName == "Grid"
+                && string.Equals(GetAttributeByLocalName(element, "Style"), "{StaticResource SettingsRowGridStyle}", StringComparison.Ordinal));
 
         Assert.Contains("x:Uid=\"DataStorage_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"DataStorage_PageSummary\"", xaml, StringComparison.Ordinal);

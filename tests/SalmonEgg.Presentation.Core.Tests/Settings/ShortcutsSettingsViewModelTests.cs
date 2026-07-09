@@ -52,7 +52,7 @@ public sealed class ShortcutsSettingsViewModelTests
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
 
-        var searchShortcut = Assert.Single(viewModel.Shortcuts.Where(shortcut => shortcut.ActionId == "search"));
+        var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Alt+K", searchShortcut.Gesture);
         Assert.DoesNotContain(viewModel.Shortcuts, shortcut => shortcut.ActionId == "toggle_right_pane");
         Assert.Null(preferences.GetKeyBinding("toggle_right_pane"));
@@ -65,7 +65,7 @@ public sealed class ShortcutsSettingsViewModelTests
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
 
-        var searchShortcut = Assert.Single(viewModel.Shortcuts.Where(shortcut => shortcut.ActionId == "search"));
+        var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Shortcuts.Record.search", searchShortcut.RecorderAutomationId);
     }
 
@@ -84,7 +84,7 @@ public sealed class ShortcutsSettingsViewModelTests
 
         viewModel.RestoreDefaultsCommand.Execute(null);
 
-        var searchShortcut = Assert.Single(viewModel.Shortcuts.Where(shortcut => shortcut.ActionId == "search"));
+        var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Ctrl+K", searchShortcut.Gesture);
         Assert.Null(preferences.GetKeyBinding("search"));
         Assert.Empty(preferences.KeyBindings);

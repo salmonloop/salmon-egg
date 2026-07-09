@@ -86,9 +86,9 @@ public sealed class AcpConnectionSettingsXamlTests
         var document = XDocument.Parse(xaml);
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-        var addButton = Assert.Single(document.Descendants().Where(element =>
+        var addButton = Assert.Single(document.Descendants(), element =>
             element.Name.LocalName == "Button"
-            && string.Equals((string?)element.Attribute(x + "Uid"), "Mcp_AddServer", StringComparison.Ordinal)));
+            && string.Equals((string?)element.Attribute(x + "Uid"), "Mcp_AddServer", StringComparison.Ordinal));
         Assert.Equal("{x:Bind ViewModel.AddServerCommand}", (string?)addButton.Attribute("Command"));
         Assert.Null(addButton.Attribute("IsEnabled"));
     }

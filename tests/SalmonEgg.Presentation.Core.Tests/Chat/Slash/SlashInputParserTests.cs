@@ -46,7 +46,7 @@ public sealed class SlashInputParserTests
         Assert.Equal(input, result.RawText);
         Assert.Equal("/pl", result.TrimmedStartText);
         Assert.Equal(2, result.LeadingWhitespaceCount);
-        Assert.Equal(["pl"], result.Tokens);
+        Assert.Equal(new[] { "pl" }, result.Tokens.ToArray());
         Assert.Equal("pl", result.CommandToken);
         Assert.Empty(result.ArgumentTokens);
         Assert.Equal(0, result.CurrentTokenIndex);
@@ -78,7 +78,7 @@ public sealed class SlashInputParserTests
         Assert.Equal(SlashParseKind.EditingArgumentToken, result.Kind);
         Assert.Equal(input, result.RawText);
         Assert.Equal("/plan ", result.TrimmedStartText);
-        Assert.Equal(["plan"], result.Tokens);
+        Assert.Equal(new[] { "plan" }, result.Tokens.ToArray());
         Assert.Equal("plan", result.CommandToken);
         Assert.Empty(result.ArgumentTokens);
         Assert.Equal(1, result.CurrentTokenIndex);
@@ -94,9 +94,9 @@ public sealed class SlashInputParserTests
         var result = SlashInputParser.Parse(input);
 
         Assert.Equal(SlashParseKind.EditingArgumentToken, result.Kind);
-        Assert.Equal(["plan", "goal"], result.Tokens);
+        Assert.Equal(new[] { "plan", "goal" }, result.Tokens.ToArray());
         Assert.Equal("plan", result.CommandToken);
-        Assert.Equal(["goal"], result.ArgumentTokens);
+        Assert.Equal(new[] { "goal" }, result.ArgumentTokens.ToArray());
         Assert.Equal(1, result.CurrentTokenIndex);
         Assert.Equal("goal", result.CurrentTokenText);
         Assert.False(result.HasTrailingSpace);
@@ -110,7 +110,7 @@ public sealed class SlashInputParserTests
         var result = SlashInputParser.Parse(input);
 
         Assert.Equal(SlashParseKind.EditingCommandName, result.Kind);
-        Assert.Equal(["plaaan"], result.Tokens);
+        Assert.Equal(new[] { "plaaan" }, result.Tokens.ToArray());
         Assert.Equal("plaaan", result.CommandToken);
         Assert.Empty(result.ArgumentTokens);
         Assert.Equal(0, result.CurrentTokenIndex);

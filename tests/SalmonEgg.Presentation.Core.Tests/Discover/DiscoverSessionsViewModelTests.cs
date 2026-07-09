@@ -81,14 +81,14 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal(DiscoverSessionsLoadPhase.Loaded, viewModel.LoadPhase);
             Assert.Equal(2, viewModel.AgentSessions.Count);
 
-            var needsMappingRow = Assert.Single(viewModel.AgentSessions.Where(row => row.Id == "remote-needs-mapping"));
+            var needsMappingRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-needs-mapping");
             Assert.Same(viewModel.LoadSessionCommand, needsMappingRow.LoadSessionCommand);
             Assert.Equal(ProjectAffinitySource.NeedsMapping, needsMappingRow.AffinitySource);
             Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
             Assert.True(needsMappingRow.NeedsUserAttention);
             Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
 
-            var unclassifiedRow = Assert.Single(viewModel.AgentSessions.Where(row => row.Id == "remote-unclassified"));
+            var unclassifiedRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-unclassified");
             Assert.Equal(ProjectAffinitySource.Unclassified, unclassifiedRow.AffinitySource);
             Assert.Equal("Unclassified", unclassifiedRow.ProjectAffinityBadgeText);
             Assert.False(unclassifiedRow.NeedsUserAttention);

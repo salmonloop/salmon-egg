@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using NUnit.Framework;
 using SalmonEgg.Domain.Models.Plan;
@@ -113,7 +114,7 @@ public sealed class SessionUpdateTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlanUpdate>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<PlanUpdate>(json)));
     }
 
     [Test]
@@ -126,7 +127,7 @@ public sealed class SessionUpdateTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlanUpdate>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<PlanUpdate>(json)));
     }
 
     [Test]
@@ -139,7 +140,7 @@ public sealed class SessionUpdateTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PlanUpdate>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<PlanUpdate>(json)));
     }
 
     private static string? ReadMetaValue(object? value)

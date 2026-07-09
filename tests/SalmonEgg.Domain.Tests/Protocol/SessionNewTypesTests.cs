@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
@@ -173,7 +174,7 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
     [Test]
@@ -206,7 +207,7 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
     [Test]
@@ -222,7 +223,7 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
     [Test]
@@ -236,7 +237,7 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
     [Test]
@@ -255,7 +256,7 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<McpServer>(json));
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
     [Test]
@@ -342,7 +343,7 @@ public sealed class SessionNewTypesTests
         """;
 
         Assert.That(
-            () => JsonSerializer.Deserialize<SessionNewResponse>(json),
+            (Action)(() => JsonSerializer.Deserialize<SessionNewResponse>(json)),
             Throws.TypeOf<JsonException>());
     }
 }

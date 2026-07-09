@@ -103,8 +103,8 @@ public sealed class CloudSyncProviderContractTests
             @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
         var webDavFileUrl = FindElementByAutomationId(document, "DataStorage.CloudSync.WebDavFileUrl");
         var s3Endpoint = FindElementByAutomationId(document, "DataStorage.CloudSync.S3Endpoint");
-        var webDavPanel = Assert.Single(webDavFileUrl.Ancestors().Where(IsProviderVisibilityPanel));
-        var s3Panel = Assert.Single(s3Endpoint.Ancestors().Where(IsProviderVisibilityPanel));
+        var webDavPanel = Assert.Single(webDavFileUrl.Ancestors(), IsProviderVisibilityPanel);
+        var s3Panel = Assert.Single(s3Endpoint.Ancestors(), IsProviderVisibilityPanel);
 
         Assert.NotSame(webDavPanel, s3Panel);
         Assert.Equal(

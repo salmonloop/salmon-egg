@@ -24,7 +24,7 @@ public sealed class AskUserTypesTests
             }
         });
 
-        var ex = Assert.Throws<InvalidOperationException>(() => AskUserContract.ValidateRequest(request));
+        var ex = Assert.Throws<InvalidOperationException>((Action)(() => AskUserContract.ValidateRequest(request)));
 
         Assert.That(ex, Is.Not.Null);
         Assert.That(ex!.Message, Does.Contain("Duplicate question"));
@@ -39,7 +39,7 @@ public sealed class AskUserTypesTests
             ["Choose a mode"] = "Agent, Plan"
         };
 
-        Assert.DoesNotThrow(() => AskUserContract.ValidateAnswers(request, answers));
+        Assert.DoesNotThrow((Action)(() => AskUserContract.ValidateAnswers(request, answers)));
     }
 
     [Test]
@@ -51,7 +51,7 @@ public sealed class AskUserTypesTests
             ["Choose a mode"] = "YOLO"
         };
 
-        var ex = Assert.Throws<InvalidOperationException>(() => AskUserContract.ValidateAnswers(request, answers));
+        var ex = Assert.Throws<InvalidOperationException>((Action)(() => AskUserContract.ValidateAnswers(request, answers)));
 
         Assert.That(ex, Is.Not.Null);
         Assert.That(ex!.Message, Does.Contain("Invalid answer"));

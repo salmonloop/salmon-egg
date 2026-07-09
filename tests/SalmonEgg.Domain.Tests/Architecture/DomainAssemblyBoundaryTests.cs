@@ -13,7 +13,7 @@ public sealed class DomainAssemblyBoundaryTests
             .Select(type => type.FullName ?? type.Name)
             .ToArray();
 
-        Assert.Multiple(() =>
+        Assert.Multiple((Action)(() =>
         {
             Assert.That(
                 exportedTypeNames,
@@ -23,6 +23,6 @@ public sealed class DomainAssemblyBoundaryTests
                 exportedTypeNames,
                 Has.None.Contains("FileSystemPersistence"),
                 "Platform-backed file-system synchronization is an infrastructure detail and should not be part of the ACP/domain core.");
-        });
+        }));
     }
 }

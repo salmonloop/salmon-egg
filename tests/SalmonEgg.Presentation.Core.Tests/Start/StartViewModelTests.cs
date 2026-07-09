@@ -2167,7 +2167,7 @@ public sealed class StartViewModelTests
             Assert.Equal(SelectorPlaceholderKind.Default, startViewModel.StartAgentSelectorProjection.PlaceholderKind);
             Assert.Equal("未选择 Agent", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
             Assert.False(startViewModel.StartAgentSelectorProjection.IsSubmitBlocked);
-            Assert.Empty(startViewModel.StartAgentSelectorProjection.DisplayItems.Where(item => !item.IsPlaceholder));
+            Assert.DoesNotContain(startViewModel.StartAgentSelectorProjection.DisplayItems, item => !item.IsPlaceholder);
         }
         finally
         {
@@ -3010,8 +3010,8 @@ public sealed class StartViewModelTests
                 item => string.Equals(item.SemanticValue, "remote-directory:dir-a", StringComparison.Ordinal));
 
             var remoteAgentItem = Assert.Single(
-                startViewModel.StartAgentSelectorItems.Where(item =>
-                    string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal)));
+                startViewModel.StartAgentSelectorItems,
+                item => string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal));
 
             startViewModel.SelectStartAgentDisplayCommand.Execute(remoteAgentItem);
 
@@ -3073,8 +3073,8 @@ public sealed class StartViewModelTests
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
             var remoteAgentItem = Assert.Single(
-                startViewModel.StartAgentSelectorItems.Where(item =>
-                    string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal)));
+                startViewModel.StartAgentSelectorItems,
+                item => string.Equals(item.SemanticValue, "profile-remote", StringComparison.Ordinal));
 
             startViewModel.SelectStartAgentDisplayCommand.Execute(remoteAgentItem);
 

@@ -45,7 +45,10 @@ public sealed class ModelSelectorPolicyTests
         Assert.True(projection.SelectorEnabled);
         Assert.Equal("claude-sonnet", projection.SelectedSemanticValue);
         Assert.Equal(ComposerSelectorKind.Model, projection.RealItems[0].Kind);
-        Assert.Equal(["claude-haiku", "claude-sonnet"], projection.RealItems.Select(item => item.SemanticValue).ToArray());
+        Assert.Collection(
+            projection.RealItems,
+            item => Assert.Equal("claude-haiku", item.SemanticValue),
+            item => Assert.Equal("claude-sonnet", item.SemanticValue));
     }
 
     [Fact]
