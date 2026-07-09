@@ -314,7 +314,7 @@ namespace SalmonEgg.Domain.Models.Protocol
     /// </summary>
     public class CurrentModeUpdate : SessionUpdate
     {
-        [JsonPropertyName("modeId")]
+        [JsonPropertyName("currentModeId")]
         public string ModeId { get; set; } = string.Empty;
 
         [JsonPropertyName("title")]

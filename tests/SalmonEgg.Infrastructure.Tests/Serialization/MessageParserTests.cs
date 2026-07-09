@@ -296,7 +296,7 @@ public class MessageParserTests
           "sessionId": "sess_mode",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "modeId": "code"
+            "currentModeId": "code"
           }
         }
         """;

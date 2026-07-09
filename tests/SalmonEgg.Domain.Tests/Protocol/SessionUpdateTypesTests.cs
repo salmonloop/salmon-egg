@@ -43,8 +43,8 @@ public sealed class SessionUpdateTypesTests
         // Then: update should be present in JSON
         Assert.That(parsed.RootElement.TryGetProperty("update", out var update), Is.True);
         Assert.That(update.ValueKind, Is.EqualTo(JsonValueKind.Object));
-        Assert.That(update.GetProperty("modeId").GetString(), Is.EqualTo("test-mode"));
-        Assert.That(update.TryGetProperty("currentModeId", out _), Is.False);
+        Assert.That(update.GetProperty("currentModeId").GetString(), Is.EqualTo("test-mode"));
+        Assert.That(update.TryGetProperty("modeId", out _), Is.False);
     }
 
     [Test]

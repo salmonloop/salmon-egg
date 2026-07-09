@@ -15,7 +15,7 @@ public sealed class SessionUpdatePolymorphismTests
           "sessionId": "s1",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "modeId": "mode_123",
+            "currentModeId": "mode_123",
             "title": "Claude Code"
           }
         }
@@ -226,14 +226,14 @@ public sealed class SessionUpdatePolymorphismTests
     }
 
     [Test]
-    public void Deserialize_CurrentModeUpdate_WithNonStandardCurrentModeId_DoesNotPopulateModeId()
+    public void Deserialize_CurrentModeUpdate_WithNonStandardModeId_DoesNotPopulateModeId()
     {
         var json = """
         {
           "sessionId": "s1",
           "update": {
             "sessionUpdate": "current_mode_update",
-            "currentModeId": "non-standard-mode"
+            "modeId": "non-standard-mode"
           }
         }
         """;
