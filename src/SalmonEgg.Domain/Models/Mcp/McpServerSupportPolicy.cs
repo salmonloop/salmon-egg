@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Domain.Models.Mcp
 {

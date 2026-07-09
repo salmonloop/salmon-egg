@@ -5,13 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using DomainSessionMode = SalmonEgg.Domain.Models.Session.SessionMode;
-using ProtocolSessionMode = SalmonEgg.Domain.Models.Protocol.SessionMode;
+using ProtocolSessionMode = SalmonEgg.Acp.Protocol.SessionMode;
 
 namespace SalmonEgg.Application.Services.Chat
 {
@@ -870,16 +870,16 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
         {
             try
             {
                 if (string.IsNullOrEmpty(_currentSessionId))
                 {
-                    return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(null);
+                    return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(null);
                 }
 
-                return Task.FromResult<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?>(
+                return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(
                     _currentMode is null ? null : ToProtocolModes(_currentMode));
             }
             catch (Exception ex)

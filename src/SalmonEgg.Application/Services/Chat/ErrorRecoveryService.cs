@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Common;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;

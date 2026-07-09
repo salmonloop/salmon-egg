@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;

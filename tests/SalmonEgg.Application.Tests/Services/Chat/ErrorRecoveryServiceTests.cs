@@ -6,7 +6,7 @@ using Moq;
 using Xunit;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 

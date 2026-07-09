@@ -7,7 +7,7 @@ using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 
@@ -48,7 +48,7 @@ namespace SalmonEgg.Infrastructure.Serialization;
 [JsonSerializable(typeof(SessionNewParams))]
 [JsonSerializable(typeof(SessionNewResponse))]
 [JsonSerializable(typeof(SessionModesState))]
-[JsonSerializable(typeof(Domain.Models.Protocol.SessionMode))]
+[JsonSerializable(typeof(SalmonEgg.Acp.Protocol.SessionMode))]
 [JsonSerializable(typeof(SessionPromptParams))]
 [JsonSerializable(typeof(SessionPromptResponse))]
 [JsonSerializable(typeof(SessionLoadParams))]
@@ -141,7 +141,7 @@ namespace SalmonEgg.Infrastructure.Serialization;
 [JsonSerializable(typeof(List<ContentBlock>))]
 [JsonSerializable(typeof(List<ToolCallContent>))]
 [JsonSerializable(typeof(List<ToolCallLocation>))]
-[JsonSerializable(typeof(List<Domain.Models.Protocol.SessionMode>))]
+[JsonSerializable(typeof(List<SalmonEgg.Acp.Protocol.SessionMode>))]
 [JsonSerializable(typeof(List<ConfigOption>))]
 [JsonSerializable(typeof(List<McpServer>))]
 [JsonSerializable(typeof(List<AskUserQuestion>))]

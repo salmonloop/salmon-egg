@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat.Panels;
 

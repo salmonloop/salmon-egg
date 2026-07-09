@@ -2,6 +2,6 @@
 
 SalmonEgg.Acp contains Agent Client Protocol contracts and SDK primitives that are independent from the SalmonEgg application, UI, storage, and platform services.
 
-Current primitives include JSON-RPC message/error types, content blocks, tool call payloads, plan payloads, MCP server payloads, and protocol path rules.
+Current primitives include JSON-RPC message/error types, content blocks, tool call payloads, plan payloads, MCP server payloads, protocol request/response/update DTOs, terminal and ask-user callback payloads, stop reasons, and protocol path rules.
 
 This package is being extracted incrementally. The public surface is not final yet.

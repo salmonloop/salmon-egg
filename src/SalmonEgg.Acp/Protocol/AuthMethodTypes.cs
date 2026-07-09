@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Authentication method advertised by the agent during initialization.

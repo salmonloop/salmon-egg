@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 

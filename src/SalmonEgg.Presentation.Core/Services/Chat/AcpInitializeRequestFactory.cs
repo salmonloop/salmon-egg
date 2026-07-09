@@ -1,4 +1,4 @@
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 

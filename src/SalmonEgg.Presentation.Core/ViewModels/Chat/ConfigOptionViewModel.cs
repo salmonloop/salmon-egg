@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 

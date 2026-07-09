@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 

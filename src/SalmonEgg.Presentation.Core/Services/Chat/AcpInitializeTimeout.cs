@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Authenticate 方法的请求参数。

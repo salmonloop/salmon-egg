@@ -10,7 +10,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
@@ -267,7 +267,7 @@ public sealed class AcpConnectionCoordinatorTests
             new SessionModesState
             {
                 CurrentModeId = "agent",
-                AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
+                AvailableModes = [new SalmonEgg.Acp.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
             });
         var inner = new FakeChatService
         {
@@ -492,7 +492,7 @@ public sealed class AcpConnectionCoordinatorTests
             new SessionModesState
             {
                 CurrentModeId = "agent",
-                AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
+                AvailableModes = [new SalmonEgg.Acp.Protocol.SessionMode { Id = "agent", Name = "Agent" }]
             });
         var chatService = new FakeBufferedChatService
         {
@@ -1039,7 +1039,7 @@ public sealed class AcpConnectionCoordinatorTests
         public Task<bool> DisconnectAsync()
             => throw new NotSupportedException();
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
             => throw new NotSupportedException();
 
         public void ClearHistory()

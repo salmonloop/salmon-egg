@@ -4,10 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Session/Update 通知的参数。

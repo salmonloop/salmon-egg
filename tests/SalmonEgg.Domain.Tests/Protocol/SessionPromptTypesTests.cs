@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NUnit.Framework;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 
 namespace SalmonEgg.Domain.Tests.Protocol;

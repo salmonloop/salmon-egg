@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;

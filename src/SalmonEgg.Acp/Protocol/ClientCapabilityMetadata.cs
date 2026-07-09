@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Metadata helpers for ACP client capability extensions.

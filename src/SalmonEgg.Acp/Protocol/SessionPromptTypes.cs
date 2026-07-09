@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Domain.Models.Session;
 
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Session/Prompt 方法的请求参数。

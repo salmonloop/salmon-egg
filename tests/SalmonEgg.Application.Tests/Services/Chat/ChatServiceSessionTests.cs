@@ -13,7 +13,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
@@ -517,8 +517,8 @@ public sealed class ChatServiceSessionTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                     ]
                 }));
 
@@ -552,13 +552,13 @@ public sealed class ChatServiceSessionTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode
+                        new SalmonEgg.Acp.Protocol.SessionMode
                         {
                             Id = "code",
                             Name = "Code",
                             Description = "Code mode"
                         },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode
+                        new SalmonEgg.Acp.Protocol.SessionMode
                         {
                             Id = "plan",
                             Name = "Plan",
@@ -597,8 +597,8 @@ public sealed class ChatServiceSessionTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                     ]
                 }));
         acpClient
@@ -638,8 +638,8 @@ public sealed class ChatServiceSessionTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                     ]
                 },
                 configOptions: []));

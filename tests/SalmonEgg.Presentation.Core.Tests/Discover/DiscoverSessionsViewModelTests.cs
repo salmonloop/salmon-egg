@@ -11,7 +11,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
@@ -1571,7 +1571,7 @@ public sealed class DiscoverSessionsViewModelTests
         public Task<bool> DisconnectAsync()
             => throw new NotSupportedException();
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
             => throw new NotSupportedException();
 
         public void ClearHistory()

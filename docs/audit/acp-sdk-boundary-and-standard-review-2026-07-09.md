@@ -23,15 +23,18 @@ Moved in this step:
 - ACP tool call payloads moved from `SalmonEgg.Domain.Models.Tool` to `SalmonEgg.Acp.Tool`.
 - ACP plan payloads moved from `SalmonEgg.Domain.Models.Plan` to `SalmonEgg.Acp.Plan`.
 - MCP server wire payloads moved from `SalmonEgg.Domain.Models.Mcp` to `SalmonEgg.Acp.Mcp`; local `Enabled` catalog state now lives in Domain `McpServerCatalogEntry`.
+- ACP protocol request/response/update DTOs moved from `SalmonEgg.Domain.Models.Protocol` to `SalmonEgg.Acp.Protocol`.
+- `StopReason` moved out of Domain session state and into `SalmonEgg.Acp.Protocol` with the prompt response contract.
 
 Guard coverage:
 
 - `tests/SalmonEgg.Domain.Tests/Architecture/AcpSdkBoundaryTests.cs`
   - fails if `SalmonEgg.Acp` gains project references,
   - fails if `SalmonEgg.Acp` source references SalmonEgg business layers,
-  - fails if Domain reintroduces `Models/Protocol/ProtocolPathRules.cs`,
+  - fails if Domain reintroduces protocol DTO source files under `Models/Protocol`,
   - fails if Domain reintroduces `Models/JsonRpc`, `Models/Content`, `Models/Plan`, or `Models/Tool`,
   - fails if Domain reintroduces `Models/Mcp/McpServerConfig.cs`,
+  - fails if Domain session state reintroduces `StopReason`,
   - fails if SDK MCP wire payloads contain app-local `Enabled` state,
   - requires Domain to reference `SalmonEgg.Acp`.
 
@@ -70,11 +73,9 @@ No new ACP schema violation was found in this review pass.
 
 Do not mark the SDK extraction complete until these are moved or adapted behind SDK-facing abstractions:
 
-1. Move protocol DTOs into `SalmonEgg.Acp` with SDK-appropriate namespaces. Keep local support policy and app-specific session state outside the SDK.
-2. Split protocol session DTOs from local session persistence/display models before moving session-related contracts.
-3. Move source-generated serialization context and parser into `SalmonEgg.Acp`, or split app-specific serializers from protocol serializers.
-4. Move `IAcpClient` and capability manager contracts into `SalmonEgg.Acp`; keep SalmonEgg chat orchestration in Application/Presentation.
-5. Move transport-independent client logic into `SalmonEgg.Acp`; keep desktop stdio, UI capability probing, storage, and profile configuration outside the SDK.
-6. Add packaging verification with `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
+1. Move source-generated serialization context and parser into `SalmonEgg.Acp`, or split app-specific serializers from protocol serializers.
+2. Move `IAcpClient` and capability manager contracts into `SalmonEgg.Acp`; keep SalmonEgg chat orchestration in Application/Presentation.
+3. Move transport-independent client logic into `SalmonEgg.Acp`; keep desktop stdio, UI capability probing, storage, and profile configuration outside the SDK.
+4. Add packaging verification with `dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj --configuration Release`.
 
 The current commit is intentionally only the first safe boundary cut, not the final SDK extraction.

@@ -160,7 +160,7 @@ UI 层提供 `FrameNavigationService` 实现：
 - `agent_thought_chunk`（如不展示也必须能解析/跳过而不崩溃）
 
 实现位置：
-- `src/SalmonEgg.Domain/Models/Protocol/SessionUpdateTypes.cs`
+- `src/SalmonEgg.Acp/Protocol/SessionUpdateTypes.cs`
 
 ---
 

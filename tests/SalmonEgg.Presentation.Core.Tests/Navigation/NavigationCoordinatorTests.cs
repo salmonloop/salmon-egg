@@ -16,7 +16,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -2134,7 +2134,7 @@ public sealed class NavigationCoordinatorTests
         public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null) => throw new NotSupportedException();
         public Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers) => throw new NotSupportedException();
         public Task<bool> DisconnectAsync() => throw new NotSupportedException();
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync() => throw new NotSupportedException();
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync() => throw new NotSupportedException();
         public void ClearHistory() { }
     }
 

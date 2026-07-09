@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;

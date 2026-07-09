@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
@@ -180,7 +180,7 @@ namespace SalmonEgg.Application.Services.Chat
         /// <summary>
         /// 获取支持的会话模式列表
         /// </summary>
-        Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync();
+        Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync();
 
         /// <summary>
         /// 清除会话历史

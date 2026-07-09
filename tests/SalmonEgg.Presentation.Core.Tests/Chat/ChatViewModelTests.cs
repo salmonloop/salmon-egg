@@ -25,7 +25,7 @@ using SalmonEgg.Domain.Models.ConversationPreview;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.ProjectAffinity;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
@@ -4598,8 +4598,8 @@ public partial class ChatViewModelTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" },
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" }
                     ]
                 }));
 
@@ -4638,8 +4638,8 @@ public partial class ChatViewModelTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" },
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" },
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" }
                     ]
                 }));
 
@@ -4999,7 +4999,7 @@ public partial class ChatViewModelTests
                     CurrentModeId = "code",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" }
                     ]
                 }));
         commands
@@ -5170,7 +5170,7 @@ public partial class ChatViewModelTests
                 CurrentModeId = "default",
                 AvailableModes =
                 [
-                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }
+                    new SalmonEgg.Acp.Protocol.SessionMode { Id = "default", Name = "Default" }
                 ]
             }));
 
@@ -5234,7 +5234,7 @@ public partial class ChatViewModelTests
                 CurrentModeId = "default",
                 AvailableModes =
                 [
-                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }
+                    new SalmonEgg.Acp.Protocol.SessionMode { Id = "default", Name = "Default" }
                 ]
             }));
 
@@ -5708,7 +5708,7 @@ public partial class ChatViewModelTests
         public Task<bool> DisconnectAsync()
             => throw new NotSupportedException();
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
             => throw new NotSupportedException();
 
         public void ClearHistory()
@@ -5873,7 +5873,7 @@ public partial class ChatViewModelTests
         public Task<bool> DisconnectAsync()
             => Task.FromResult(true);
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
             => throw new NotSupportedException();
 
         public void ClearHistory()
@@ -7098,7 +7098,7 @@ public partial class ChatViewModelTests
                     modes: new SessionModesState
                     {
                         CurrentModeId = "yolo",
-                        AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                        AvailableModes = new List<SalmonEgg.Acp.Protocol.SessionMode>
                         {
                             new() { Id = "interactive", Name = "Interactive" },
                             new() { Id = "yolo", Name = "YOLO" }
@@ -16823,7 +16823,7 @@ public partial class ChatViewModelTests
                     modes: new SessionModesState
                     {
                         CurrentModeId = "agent",
-                        AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                        AvailableModes = new List<SalmonEgg.Acp.Protocol.SessionMode>
                         {
                             new() { Id = "agent", Name = "Agent" },
                             new() { Id = "plan", Name = "Plan" }
@@ -16894,7 +16894,7 @@ public partial class ChatViewModelTests
                     modes: new SessionModesState
                     {
                         CurrentModeId = "agent",
-                        AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                        AvailableModes = new List<SalmonEgg.Acp.Protocol.SessionMode>
                         {
                             new() { Id = "agent", Name = "Agent" },
                             new() { Id = "plan", Name = "Plan" }
@@ -16915,7 +16915,7 @@ public partial class ChatViewModelTests
                     modes: new SessionModesState
                     {
                         CurrentModeId = "agent",
-                        AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                        AvailableModes = new List<SalmonEgg.Acp.Protocol.SessionMode>
                         {
                             new() { Id = "agent", Name = "Agent" },
                             new() { Id = "plan", Name = "Plan" }

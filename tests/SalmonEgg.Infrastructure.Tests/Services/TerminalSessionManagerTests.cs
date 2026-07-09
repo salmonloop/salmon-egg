@@ -1,4 +1,4 @@
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Infrastructure.Services;
 
 namespace SalmonEgg.Infrastructure.Tests.Services;

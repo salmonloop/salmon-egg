@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
@@ -645,7 +645,7 @@ public sealed class AcpChatServiceAdapterTests
         public Task<bool> DisconnectAsync()
             => throw new NotSupportedException();
 
-        public Task<List<SalmonEgg.Domain.Models.Protocol.SessionMode>?> GetAvailableModesAsync()
+        public Task<List<SalmonEgg.Acp.Protocol.SessionMode>?> GetAvailableModesAsync()
             => throw new NotSupportedException();
 
         public void ClearHistory()

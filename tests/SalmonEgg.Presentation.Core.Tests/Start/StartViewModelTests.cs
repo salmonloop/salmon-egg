@@ -14,7 +14,7 @@ using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services;
@@ -840,7 +840,7 @@ public sealed class StartViewModelTests
                         new SessionModesState
                         {
                             CurrentModeId = "code",
-                            AvailableModes = new List<SalmonEgg.Domain.Models.Protocol.SessionMode>
+                            AvailableModes = new List<SalmonEgg.Acp.Protocol.SessionMode>
                             {
                                 new() { Id = "code", Name = "Code" },
                                 new() { Id = "plan", Name = "Plan" }
@@ -948,8 +948,8 @@ public sealed class StartViewModelTests
                         CurrentModeId = "code",
                         AvailableModes =
                         [
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
@@ -1068,7 +1068,7 @@ public sealed class StartViewModelTests
                             CurrentModeId = "default",
                             AvailableModes =
                             [
-                                new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }
+                                new SalmonEgg.Acp.Protocol.SessionMode { Id = "default", Name = "Default" }
                             ]
                         }));
                 });
@@ -1214,8 +1214,8 @@ public sealed class StartViewModelTests
                                 CurrentModeId = "code",
                                 AvailableModes =
                                 [
-                                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                                    new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                                    new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                                    new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                                 ]
                             })),
                         _ => throw new Xunit.Sdk.XunitException("Unexpected extra session/new request.")
@@ -1274,7 +1274,7 @@ public sealed class StartViewModelTests
                     CurrentModeId = "review",
                     AvailableModes =
                     [
-                        new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "review", Name = "Review" }
+                        new SalmonEgg.Acp.Protocol.SessionMode { Id = "review", Name = "Review" }
                     ]
                 }));
 
@@ -1353,8 +1353,8 @@ public sealed class StartViewModelTests
                         CurrentModeId = "code",
                         AvailableModes =
                         [
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
@@ -1445,7 +1445,7 @@ public sealed class StartViewModelTests
                     new SessionModesState
                     {
                         CurrentModeId = "default",
-                        AvailableModes = [new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "default", Name = "Default" }]
+                        AvailableModes = [new SalmonEgg.Acp.Protocol.SessionMode { Id = "default", Name = "Default" }]
                     },
                     [new ConfigOption
                     {
@@ -1601,8 +1601,8 @@ public sealed class StartViewModelTests
                         CurrentModeId = "code",
                         AvailableModes =
                         [
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
@@ -1736,8 +1736,8 @@ public sealed class StartViewModelTests
                         CurrentModeId = "code",
                         AvailableModes =
                         [
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
             await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
@@ -1839,8 +1839,8 @@ public sealed class StartViewModelTests
                         CurrentModeId = "code",
                         AvailableModes =
                         [
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "code", Name = "Code" },
-                            new SalmonEgg.Domain.Models.Protocol.SessionMode { Id = "plan", Name = "Plan" }
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "code", Name = "Code" },
+                            new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
             var authoritativeAdapter = new AcpChatServiceAdapter(

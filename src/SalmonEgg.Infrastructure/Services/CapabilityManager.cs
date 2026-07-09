@@ -1,5 +1,5 @@
 using System;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Infrastructure.Services

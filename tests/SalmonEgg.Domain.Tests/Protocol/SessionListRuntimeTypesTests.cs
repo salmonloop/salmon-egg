@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using System.Text.Json;
 
 namespace SalmonEgg.Domain.Tests.Protocol;

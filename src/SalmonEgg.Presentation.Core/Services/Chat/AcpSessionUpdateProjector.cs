@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;

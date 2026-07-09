@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 

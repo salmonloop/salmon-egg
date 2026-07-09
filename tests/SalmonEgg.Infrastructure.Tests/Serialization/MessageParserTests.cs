@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Domain.Models.Protocol;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;

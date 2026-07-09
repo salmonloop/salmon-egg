@@ -1,4 +1,4 @@
-namespace SalmonEgg.Domain.Models.Protocol
+namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Default ACP client capabilities shared by initialization entry points.

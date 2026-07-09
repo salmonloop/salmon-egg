@@ -28,18 +28,30 @@ public sealed class AcpSdkBoundaryTests
         var domainProject = XDocument.Parse(LoadFile(@"src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"));
 
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Protocol\ProtocolPathRules.cs")), Is.False);
+        Assert.That(EnumerateFilesIfDirectoryExists(@"src\SalmonEgg.Domain\Models\Protocol", "*.cs"),
+            Is.Empty);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\JsonRpc")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Content")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Plan")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Tool")), Is.False);
         Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerConfig.cs")), Is.False);
         Assert.That(LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"), Does.Not.Contain("public bool Enabled"));
+        Assert.That(LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"), Does.Not.Contain("enum StopReason"));
+        Assert.That(LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"), Does.Contain("enum StopReason"));
         Assert.That(domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")),
             Has.Some.EqualTo(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj"));
     }
 
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
+
+    private static string[] EnumerateFilesIfDirectoryExists(string relativePath, string searchPattern)
+    {
+        var path = RepoPath(relativePath);
+        return Directory.Exists(path)
+            ? Directory.EnumerateFiles(path, searchPattern, SearchOption.AllDirectories).ToArray()
+            : [];
+    }
 
     private static string RepoPath(string relativePath)
         => Path.Combine(FindRepoRoot(), relativePath.Replace('\\', Path.DirectorySeparatorChar));
