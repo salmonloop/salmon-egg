@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -22,10 +23,9 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"])
-                    {
-                        Enabled = false
-                    },
+                    new McpServerCatalogEntry(
+                        new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]),
+                        enabled: false),
                     new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")])
                 }
             }
@@ -104,7 +104,7 @@ public sealed class McpSettingsViewModelTests
 
         Assert.NotNull(service.SavedSettings);
         Assert.Equal(2, service.SavedSettings!.Servers.Count);
-        var server = Assert.IsType<StdioMcpServer>(service.SavedSettings.Servers[0]);
+        var server = Assert.IsType<StdioMcpServer>(service.SavedSettings.Servers[0].Server);
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("C:\\mcp\\filesystem.exe", server.Command);
         Assert.Equal(["--root", "C:\\repo path"], server.Args);
@@ -486,8 +486,9 @@ public sealed class McpSettingsViewModelTests
         await row.SaveCommand.ExecuteAsync(null);
 
         Assert.NotNull(service.SavedSettings);
-        var server = Assert.IsType<StdioMcpServer>(Assert.Single(service.SavedSettings!.Servers));
-        Assert.False(server.Enabled);
+        var entry = Assert.Single(service.SavedSettings!.Servers);
+        Assert.False(entry.Enabled);
+        var server = Assert.IsType<StdioMcpServer>(entry.Server);
         Assert.Equal("new-mcp-server", server.Name);
         Assert.Equal(string.Empty, server.Command);
         Assert.Single(viewModel.Servers);
@@ -523,10 +524,9 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
-                    {
-                        Enabled = false
-                    }
+                    new McpServerCatalogEntry(
+                        new HttpMcpServer("search", "https://example.com/mcp"),
+                        enabled: false)
                 }
             }
         };
@@ -549,10 +549,9 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("draft", string.Empty)
-                    {
-                        Enabled = false
-                    }
+                    new McpServerCatalogEntry(
+                        new StdioMcpServer("draft", string.Empty),
+                        enabled: false)
                 }
             }
         };

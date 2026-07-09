@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
@@ -55,26 +56,27 @@ public sealed class McpSettingsServiceTests : IDisposable
         {
             Servers =
             [
-                new StdioMcpServer(
-                    "filesystem",
-                    "/usr/bin/mcp-filesystem",
-                    ["--stdio"],
-                    [
-                        new McpEnvVariable("ROOT", "/repo")
-                        {
-                            Meta = new()
+                new McpServerCatalogEntry(
+                    new StdioMcpServer(
+                        "filesystem",
+                        "/usr/bin/mcp-filesystem",
+                        ["--stdio"],
+                        [
+                            new McpEnvVariable("ROOT", "/repo")
                             {
-                                ["scope"] = "workspace"
+                                Meta = new()
+                                {
+                                    ["scope"] = "workspace"
+                                }
                             }
-                        }
-                    ])
-                {
-                    Enabled = false,
-                    Meta = new()
+                        ])
                     {
-                        ["source"] = "settings"
-                    }
-                },
+                        Meta = new()
+                        {
+                            ["source"] = "settings"
+                        }
+                    },
+                    enabled: false),
                 new HttpMcpServer(
                     "api",
                     "api.example.com/mcp",
@@ -108,8 +110,8 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         Assert.Equal(3, loaded.Servers.Count);
 
-        var stdio = Assert.IsType<StdioMcpServer>(loaded.Servers[0]);
-        Assert.False(stdio.Enabled);
+        Assert.False(loaded.Servers[0].Enabled);
+        var stdio = Assert.IsType<StdioMcpServer>(loaded.Servers[0].Server);
         Assert.Equal("filesystem", stdio.Name);
         Assert.Equal("/usr/bin/mcp-filesystem", stdio.Command);
         Assert.Equal("--stdio", Assert.Single(stdio.Args!));
@@ -119,14 +121,14 @@ public sealed class McpSettingsServiceTests : IDisposable
         Assert.Equal("/repo", env.Value);
         Assert.Equal("workspace", env.Meta!["scope"]);
 
-        var http = Assert.IsType<HttpMcpServer>(loaded.Servers[1]);
+        var http = Assert.IsType<HttpMcpServer>(loaded.Servers[1].Server);
         Assert.Equal("api.example.com/mcp", http.Url);
         var header = Assert.Single(http.Headers!);
         Assert.Equal("Authorization", header.Name);
         Assert.Equal("Bearer token", header.Value);
         Assert.Equal("header-auth", header.Meta!["secret_ref"]);
 
-        var sse = Assert.IsType<SseMcpServer>(loaded.Servers[2]);
+        var sse = Assert.IsType<SseMcpServer>(loaded.Servers[2].Server);
         Assert.Equal("events", sse.Name);
     }
 
@@ -138,10 +140,9 @@ public sealed class McpSettingsServiceTests : IDisposable
         {
             Servers =
             [
-                new StdioMcpServer("filesystem", string.Empty, [], [])
-                {
-                    Enabled = false
-                }
+                new McpServerCatalogEntry(
+                    new StdioMcpServer("filesystem", string.Empty, [], []),
+                    enabled: false)
             ]
         };
 
@@ -149,8 +150,9 @@ public sealed class McpSettingsServiceTests : IDisposable
 
         var loaded = await service.LoadAsync();
 
-        var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers));
-        Assert.False(server.Enabled);
+        var entry = Assert.Single(loaded.Servers);
+        Assert.False(entry.Enabled);
+        var server = Assert.IsType<StdioMcpServer>(entry.Server);
         Assert.Equal(string.Empty, server.Command);
     }
 
@@ -238,7 +240,7 @@ public sealed class McpSettingsServiceTests : IDisposable
         await service.SaveAsync(settings);
 
         var loaded = await service.LoadAsync();
-        var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers));
+        var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers).Server);
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("/usr/bin/mcp-filesystem", server.Command);
     }

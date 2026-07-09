@@ -5,7 +5,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Diagnostics;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.Session;

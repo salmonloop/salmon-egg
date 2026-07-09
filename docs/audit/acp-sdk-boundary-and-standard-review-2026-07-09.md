@@ -22,6 +22,7 @@ Moved in this step:
 - ACP content blocks moved from `SalmonEgg.Domain.Models.Content` to `SalmonEgg.Acp.Content`.
 - ACP tool call payloads moved from `SalmonEgg.Domain.Models.Tool` to `SalmonEgg.Acp.Tool`.
 - ACP plan payloads moved from `SalmonEgg.Domain.Models.Plan` to `SalmonEgg.Acp.Plan`.
+- MCP server wire payloads moved from `SalmonEgg.Domain.Models.Mcp` to `SalmonEgg.Acp.Mcp`; local `Enabled` catalog state now lives in Domain `McpServerCatalogEntry`.
 
 Guard coverage:
 
@@ -30,6 +31,8 @@ Guard coverage:
   - fails if `SalmonEgg.Acp` source references SalmonEgg business layers,
   - fails if Domain reintroduces `Models/Protocol/ProtocolPathRules.cs`,
   - fails if Domain reintroduces `Models/JsonRpc`, `Models/Content`, `Models/Plan`, or `Models/Tool`,
+  - fails if Domain reintroduces `Models/Mcp/McpServerConfig.cs`,
+  - fails if SDK MCP wire payloads contain app-local `Enabled` state,
   - requires Domain to reference `SalmonEgg.Acp`.
 
 ## Latest Standard Review
@@ -67,7 +70,7 @@ No new ACP schema violation was found in this review pass.
 
 Do not mark the SDK extraction complete until these are moved or adapted behind SDK-facing abstractions:
 
-1. Move MCP server and protocol DTOs into `SalmonEgg.Acp` with SDK-appropriate namespaces. Keep local support policy and app-specific session state outside the SDK.
+1. Move protocol DTOs into `SalmonEgg.Acp` with SDK-appropriate namespaces. Keep local support policy and app-specific session state outside the SDK.
 2. Split protocol session DTOs from local session persistence/display models before moving session-related contracts.
 3. Move source-generated serialization context and parser into `SalmonEgg.Acp`, or split app-specific serializers from protocol serializers.
 4. Move `IAcpClient` and capability manager contracts into `SalmonEgg.Acp`; keep SalmonEgg chat orchestration in Application/Presentation.

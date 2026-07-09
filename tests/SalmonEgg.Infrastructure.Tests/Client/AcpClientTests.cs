@@ -12,7 +12,7 @@ using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Models.Protocol;
-using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Client;
 using SalmonEgg.Infrastructure.Services;

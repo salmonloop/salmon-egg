@@ -10,6 +10,6 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// <summary>
         /// MCP server catalog。
         /// </summary>
-        public List<McpServer> Servers { get; set; } = new List<McpServer>();
+        public List<McpServerCatalogEntry> Servers { get; set; } = new List<McpServerCatalogEntry>();
     }
 }

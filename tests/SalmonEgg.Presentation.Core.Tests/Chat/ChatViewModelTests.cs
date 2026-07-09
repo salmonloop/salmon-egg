@@ -23,7 +23,7 @@ using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ConversationPreview;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
 using SalmonEgg.Domain.Models.ProjectAffinity;

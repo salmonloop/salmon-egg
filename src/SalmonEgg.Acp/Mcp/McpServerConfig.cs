@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SalmonEgg.Domain.Models.Mcp
+namespace SalmonEgg.Acp.Mcp
 {
     /// <summary>
     /// MCP 服务器配置类。
@@ -18,13 +18,6 @@ namespace SalmonEgg.Domain.Models.Mcp
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Whether this local catalog entry should be offered to ACP sessions.
-        /// This is local configuration state and is not serialized into ACP protocol payloads.
-        /// </summary>
-        [JsonIgnore]
-        public bool Enabled { get; set; } = true;
 
         /// <summary>
         /// ACP 保留的扩展元数据。
@@ -282,7 +275,6 @@ namespace SalmonEgg.Domain.Models.Mcp
                         stdio.Args == null ? null : new List<string>(stdio.Args),
                         CloneEnv(stdio.Env))
                     {
-                        Enabled = stdio.Enabled,
                         Meta = CloneMeta(stdio.Meta)
                     };
                 case HttpMcpServer http:
@@ -291,7 +283,6 @@ namespace SalmonEgg.Domain.Models.Mcp
                         http.Url,
                         CloneHeaders(http.Headers))
                     {
-                        Enabled = http.Enabled,
                         Meta = CloneMeta(http.Meta)
                     };
                 case SseMcpServer sse:
@@ -300,7 +291,6 @@ namespace SalmonEgg.Domain.Models.Mcp
                         sse.Url,
                         CloneHeaders(sse.Headers))
                     {
-                        Enabled = sse.Enabled,
                         Meta = CloneMeta(sse.Meta)
                     };
                 default:

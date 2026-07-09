@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using NUnit.Framework;
-using SalmonEgg.Domain.Models.Mcp;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;

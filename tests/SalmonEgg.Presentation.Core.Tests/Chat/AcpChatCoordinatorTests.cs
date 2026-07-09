@@ -12,6 +12,7 @@ using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;
@@ -1792,10 +1793,9 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
-                {
-                    Enabled = false
-                }
+                new McpServerCatalogEntry(
+                    new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]),
+                    enabled: false)
             ]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
@@ -1812,10 +1812,9 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"])
-                {
-                    Enabled = false
-                },
+                new McpServerCatalogEntry(
+                    new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"]),
+                    enabled: false),
                 new HttpMcpServer("enabled", "https://enabled.example.com/mcp")
             ]
         };

@@ -32,6 +32,8 @@ public sealed class AcpSdkBoundaryTests
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Content")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Plan")), Is.False);
         Assert.That(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Tool")), Is.False);
+        Assert.That(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerConfig.cs")), Is.False);
+        Assert.That(LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"), Does.Not.Contain("public bool Enabled"));
         Assert.That(domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")),
             Has.Some.EqualTo(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj"));
     }

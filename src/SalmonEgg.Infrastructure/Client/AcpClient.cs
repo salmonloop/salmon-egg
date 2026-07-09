@@ -10,6 +10,7 @@ using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Domain.Models.Protocol;

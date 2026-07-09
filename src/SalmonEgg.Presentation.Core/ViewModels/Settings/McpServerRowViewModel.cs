@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
@@ -92,7 +93,8 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         Func<McpServerRowViewModel, Task>? save = null,
         Action<McpServerRowViewModel>? edit = null,
         Action<McpServerRowViewModel>? edited = null,
-        Func<McpServerRowViewModel, Task>? enabledChanged = null)
+        Func<McpServerRowViewModel, Task>? enabledChanged = null,
+        bool enabled = true)
     {
         ArgumentNullException.ThrowIfNull(server);
 
@@ -101,7 +103,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
             StdioMcpServer stdio => new McpServerRowViewModel(remove ?? NoopRemove, save)
             {
                 Name = stdio.Name,
-                Enabled = stdio.Enabled,
+                Enabled = enabled,
                 Transport = McpServerTransport.Stdio,
                 Command = stdio.Command,
                 ArgumentsText = JoinCommandLine(stdio.Args),
@@ -110,7 +112,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
             HttpMcpServer http => new McpServerRowViewModel(remove ?? NoopRemove, save)
             {
                 Name = http.Name,
-                Enabled = http.Enabled,
+                Enabled = enabled,
                 Transport = McpServerTransport.Http,
                 Url = http.Url,
                 HeadersText = JoinNameValueLines(http.Headers)
@@ -118,7 +120,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
             SseMcpServer sse => new McpServerRowViewModel(remove ?? NoopRemove, save)
             {
                 Name = sse.Name,
-                Enabled = sse.Enabled,
+                Enabled = enabled,
                 Transport = McpServerTransport.Sse,
                 Url = sse.Url,
                 HeadersText = JoinNameValueLines(sse.Headers)
@@ -130,6 +132,18 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         row.SetEditedCallback(edited);
         row.SetEnabledChangedCallback(enabledChanged);
         return row;
+    }
+
+    public static McpServerRowViewModel FromCatalogEntry(
+        McpServerCatalogEntry entry,
+        Action<McpServerRowViewModel>? remove = null,
+        Func<McpServerRowViewModel, Task>? save = null,
+        Action<McpServerRowViewModel>? edit = null,
+        Action<McpServerRowViewModel>? edited = null,
+        Func<McpServerRowViewModel, Task>? enabledChanged = null)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return FromServer(entry.Server, remove, save, edit, edited, enabledChanged, entry.Enabled);
     }
 
     private void Remove()
@@ -276,27 +290,21 @@ public sealed partial class McpServerRowViewModel : ObservableObject
                 name,
                 Command.Trim(),
                 SplitCommandLine(ArgumentsText),
-                ParseNameValueLines(EnvironmentText, (key, value) => new McpEnvVariable(key, value)))
-            {
-                Enabled = Enabled
-            },
+                ParseNameValueLines(EnvironmentText, (key, value) => new McpEnvVariable(key, value))),
             McpServerTransport.Http => new HttpMcpServer(
                 name,
                 Url.Trim(),
-                ParseNameValueLines(HeadersText, (key, value) => new McpHttpHeader(key, value)))
-            {
-                Enabled = Enabled
-            },
+                ParseNameValueLines(HeadersText, (key, value) => new McpHttpHeader(key, value))),
             McpServerTransport.Sse => new SseMcpServer(
                 name,
                 Url.Trim(),
-                ParseNameValueLines(HeadersText, (key, value) => new McpHttpHeader(key, value)))
-            {
-                Enabled = Enabled
-            },
+                ParseNameValueLines(HeadersText, (key, value) => new McpHttpHeader(key, value))),
             _ => throw new NotSupportedException($"Unsupported MCP transport '{Transport}'.")
         };
     }
+
+    public McpServerCatalogEntry ToCatalogEntry()
+        => new(ToServer(), Enabled);
 
     partial void OnTransportChanged(McpServerTransport value)
     {

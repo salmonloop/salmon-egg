@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
@@ -22,7 +23,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<McpSettingsViewModel> _logger;
     private readonly SemaphoreSlim _persistenceLock = new(1, 1);
-    private List<McpServer> _persistedServers = [];
+    private List<McpServerCatalogEntry> _persistedServers = [];
     private bool _isLoadingRows;
 
     [ObservableProperty]
@@ -67,14 +68,14 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         {
             IsLoading = true;
             var settings = await _settingsService.LoadAsync(cancellationToken).ConfigureAwait(true);
-            _persistedServers = McpServerJsonConverter.CloneServers(settings.Servers);
+            _persistedServers = settings.Servers.Select(entry => entry.Clone()).ToList();
             EditingServer = null;
             _isLoadingRows = true;
             Servers.Clear();
-            foreach (var server in settings.Servers)
+            foreach (var entry in settings.Servers)
             {
-                var row = McpServerRowViewModel.FromServer(
-                    server,
+                var row = McpServerRowViewModel.FromCatalogEntry(
+                    entry,
                     RemoveServer,
                     SaveServerAsync,
                     OpenEditor,
@@ -558,8 +559,8 @@ public sealed partial class McpSettingsViewModel : ObservableObject
                 return;
             }
 
-            var savedServer = server.ToServer();
-            var persisted = await PersistServerAsync(server.PersistedName, savedServer, CancellationToken.None).ConfigureAwait(true);
+            var savedEntry = server.ToCatalogEntry();
+            var persisted = await PersistServerAsync(server.PersistedName, savedEntry, CancellationToken.None).ConfigureAwait(true);
             if (!persisted)
             {
                 EditingServer = null;
@@ -568,9 +569,9 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             }
 
             var savedMessage = _localizer["McpSettings_RowSaved"];
-            var savedRow = CreateListRow(savedServer, savedMessage);
+            var savedRow = CreateListRow(savedEntry, savedMessage);
             ReplaceListRow(server.PersistedName, savedRow);
-            server.MarkClean(savedServer.Name, savedMessage);
+            server.MarkClean(savedEntry.Name, savedMessage);
             EditingServer = null;
             StatusMessage = _localizer["McpSettings_Saved"];
         }
@@ -611,10 +612,10 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         await SaveServerAsync(server).ConfigureAwait(true);
     }
 
-    private McpServerRowViewModel CreateListRow(McpServer server, string statusMessage)
+    private McpServerRowViewModel CreateListRow(McpServerCatalogEntry entry, string statusMessage)
     {
-        var row = McpServerRowViewModel.FromServer(
-            server,
+        var row = McpServerRowViewModel.FromCatalogEntry(
+            entry,
             RemoveServer,
             SaveServerAsync,
             OpenEditor,
@@ -654,14 +655,14 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         }
     }
 
-    private async Task<bool> PersistServerAsync(string? persistedName, McpServer server, CancellationToken cancellationToken)
+    private async Task<bool> PersistServerAsync(string? persistedName, McpServerCatalogEntry entry, CancellationToken cancellationToken)
     {
         var skippedStalePersistedRow = false;
         await PersistMutationAsync(
             servers =>
             {
                 var index = persistedName is null
-                    ? servers.FindIndex(candidate => string.Equals(candidate.Name, server.Name, StringComparison.OrdinalIgnoreCase))
+                    ? servers.FindIndex(candidate => string.Equals(candidate.Name, entry.Name, StringComparison.OrdinalIgnoreCase))
                     : servers.FindIndex(candidate => IsPersistedMatch(candidate, persistedName));
 
                 if (persistedName is not null
@@ -674,11 +675,11 @@ public sealed partial class McpSettingsViewModel : ObservableObject
 
                 if (index >= 0)
                 {
-                    servers[index] = server;
+                    servers[index] = entry.Clone();
                 }
                 else
                 {
-                    servers.Add(server);
+                    servers.Add(entry.Clone());
                 }
 
                 return servers;
@@ -697,16 +698,16 @@ public sealed partial class McpSettingsViewModel : ObservableObject
     }
 
     private async Task PersistMutationAsync(
-        Func<List<McpServer>, List<McpServer>> mutate,
+        Func<List<McpServerCatalogEntry>, List<McpServerCatalogEntry>> mutate,
         CancellationToken cancellationToken)
     {
         await _persistenceLock.WaitAsync(cancellationToken).ConfigureAwait(true);
         try
         {
-            var nextServers = mutate(McpServerJsonConverter.CloneServers(_persistedServers));
+            var nextServers = mutate(_persistedServers.Select(entry => entry.Clone()).ToList());
             var settings = new McpSettings { Servers = nextServers };
             await _settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(true);
-            _persistedServers = McpServerJsonConverter.CloneServers(nextServers);
+            _persistedServers = nextServers.Select(entry => entry.Clone()).ToList();
         }
         finally
         {
@@ -714,8 +715,8 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         }
     }
 
-    private static bool IsPersistedMatch(McpServer server, string persistedName)
-        => string.Equals(server.Name, persistedName, StringComparison.OrdinalIgnoreCase);
+    private static bool IsPersistedMatch(McpServerCatalogEntry entry, string persistedName)
+        => string.Equals(entry.Name, persistedName, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRowPersistedMatch(McpServerRowViewModel row, string persistedName)
         => string.Equals(row.PersistedName ?? row.Name, persistedName, StringComparison.OrdinalIgnoreCase);
