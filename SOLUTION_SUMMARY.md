@@ -67,7 +67,7 @@
 
 运行所有测试确保修改没有破坏现有功能：
 ```bash
-dotnet test
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
 ```
 
 当时预期结果：历史记录中的测试全部通过；不要作为当前测试总数。

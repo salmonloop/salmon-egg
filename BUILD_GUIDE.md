@@ -79,8 +79,8 @@ dotnet restore SalmonEgg.sln
 # 构建项目
 dotnet build SalmonEgg.sln --configuration Release
 
-# 运行测试
-dotnet test SalmonEgg.sln
+# 运行测试（global.json 已启用 Microsoft.Testing.Platform）
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
 
 # 发布 Linux desktop 应用
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
@@ -151,6 +151,33 @@ scripts/gates/verify-linux-desktop-runtime.sh publish/linux-desktop
 ```
 
 该 gate 会检查 `publish/linux-desktop/SalmonEgg`、`xvfb-run`、WebKitGTK、JavaScriptCoreGTK，并在 Xvfb 下启动本次 publish 产物。缺少运行库、Skia/freetype native crash、`DllNotFoundException`、`EntryPointNotFoundException` 或未处理异常都会失败。纯 headless X11 缺少 EWMH window manager 时的窗口状态警告不作为应用启动失败处理。
+
+### .NET 测试 runner
+
+仓库通过 `global.json` 启用 Microsoft.Testing.Platform。测试命令必须显式使用 `--solution` 或 `--project`，不要使用旧的 `dotnet test SalmonEgg.sln` 位置参数，也不要使用 VSTest 的 `--filter "FullyQualifiedName~..."`、`--logger trx`、`--collect:XPlat Code Coverage` 或 `--blame-hang`。xUnit v3 / MTP 的常用替代为：
+
+```bash
+# 运行完整 solution
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
+
+# 按类过滤
+dotnet test --project tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj \
+  --filter-class SalmonEgg.Application.Tests.UiConventionsTests \
+  --timeout 3m \
+  --output Normal
+
+# 生成 TRX 与 Cobertura 覆盖率
+dotnet test --solution SalmonEgg.sln \
+  --configuration Release \
+  --results-directory TestResults \
+  --report-xunit-trx \
+  --coverlet \
+  --coverlet-output-format cobertura \
+  --timeout 20m \
+  --output Normal
+```
+
+`tests/SalmonEgg.Presentation.Core.Tests/testconfig.json` 是 Presentation.Core 测试在 MTP 下的并行度事实源；不要再通过 `RunConfiguration.DisableParallelization` 或 VSTest runsettings 参数补偿。
 
 #### Skia Desktop GUI smoke gate
 Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证 XAML 主窗口已经完成 shell 初始内容激活，不把测试探针带入 Release：
@@ -372,7 +399,7 @@ dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
 ### 发布前检查
 ```bash
 # 1. 运行所有测试
-dotnet test
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
 
 # 2. 构建 Core / Skia / Wasm 验证目标
 dotnet build --configuration Release

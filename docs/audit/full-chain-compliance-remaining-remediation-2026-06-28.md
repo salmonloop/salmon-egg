@@ -6,7 +6,7 @@
 
 **Architecture:** Fix one finding at a time, with a report before and after each item. Prefer protocol/native/platform semantics over local compatibility shims. Keep changes scoped to the specific finding and add behavior or contract tests that prevent the same regression.
 
-**Tech Stack:** .NET / C#, Uno / WinUI 3, XAML `.resw` localization, ACP v1 JSON-RPC protocol models, xUnit / NUnit test projects.
+**Tech Stack:** .NET / C#, Uno / WinUI 3, XAML `.resw` localization, ACP v1 JSON-RPC protocol models, xUnit v3 test projects on Microsoft.Testing.Platform.
 
 ## Global Constraints
 
@@ -22,6 +22,8 @@
 ---
 
 ## Current Baseline
+
+Current command note: historical verification snippets below may show the old VSTest filter syntax that was valid at the time. Current test execution uses xUnit v3 on Microsoft.Testing.Platform; use `dotnet test --project ... --filter-class ...` or `--filter-method ...` for new runs.
 
 The original review file `docs/audit/full-chain-compliance-review-2026-06-27.md` was deleted by accident. This document reconstructs the remaining remediation plan from the pasted review content and the current repository state on 2026-06-28.
 

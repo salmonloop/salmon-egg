@@ -36,9 +36,9 @@ GUI 复现显示，同一 `NavigationView` 层级路径中：
 
 已运行：
 
-- `dotnet test tests\SalmonEgg.Presentation.Core.Tests\SalmonEgg.Presentation.Core.Tests.csproj -m:1 -nr:false -v:minimal`
-- `$env:SALMONEGG_GUI='1'; dotnet test tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter "FullyQualifiedName~ShellFocusedActivationSmokeTests" -m:1 -nr:false -v:minimal`
-- `$env:SALMONEGG_GUI='1'; dotnet test tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter "FullyQualifiedName=SalmonEgg.GuiTests.Windows.DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_CanRefreshAndStartFromDiagnosticsSettings" -m:1 -nr:false -v:minimal`
+- `dotnet test --project tests\SalmonEgg.Presentation.Core.Tests\SalmonEgg.Presentation.Core.Tests.csproj --output Normal`
+- `$env:SALMONEGG_GUI='1'; dotnet test --project tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter-class SalmonEgg.GuiTests.Windows.ShellFocusedActivationSmokeTests --output Normal`
+- `$env:SALMONEGG_GUI='1'; dotnet test --project tests\SalmonEgg.GuiTests.Windows\SalmonEgg.GuiTests.Windows.csproj --filter-method SalmonEgg.GuiTests.Windows.DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_CanRefreshAndStartFromDiagnosticsSettings --output Normal`
 - `dotnet build SalmonEgg\SalmonEgg\SalmonEgg.csproj -f net10.0-desktop -p:SalmonEggTargetFrameworks=net10.0-desktop -p:SalmonEggAllTargetFrameworks=net10.0-desktop -m:1 -nr:false -v:minimal`
 - `.tools\run-winui3-msix.ps1 -Configuration Debug`
 

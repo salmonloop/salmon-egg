@@ -65,7 +65,7 @@ dotnet restore SalmonEgg.sln
 dotnet build SalmonEgg.sln --configuration Release
 
 # 运行测试
-dotnet test SalmonEgg.sln
+dotnet test --solution SalmonEgg.sln
 
 # Windows 原生 MSIX 验证
 build.bat msix

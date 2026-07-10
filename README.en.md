@@ -65,7 +65,7 @@ dotnet restore SalmonEgg.sln
 dotnet build SalmonEgg.sln --configuration Release
 
 # Run tests
-dotnet test SalmonEgg.sln
+dotnet test --solution SalmonEgg.sln
 
 # Validate the native Windows MSIX package
 build.bat msix
