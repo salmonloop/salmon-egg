@@ -8,7 +8,9 @@ namespace SalmonEgg;
 public sealed partial class MainPage
 {
     private TrayIconManager? _trayIcon;
+#if DEBUG
     private InputKeyboardSource? _debugKeyboardSource;
+#endif
     private bool _allowClose;
 
     partial void InitializeTray()
