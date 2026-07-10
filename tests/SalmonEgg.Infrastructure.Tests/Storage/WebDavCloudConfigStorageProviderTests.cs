@@ -43,6 +43,7 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
         Assert.Equal("GET", request.Method);
         Assert.Equal("/dav/config/salmonegg-config.zip", request.Path);
         Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:app-password")), request.Authorization);
+        Assert.Equal("SalmonEgg/1.0", request.UserAgent);
     }
 
     [Fact]
@@ -355,6 +356,7 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
                 context.Request.HttpMethod,
                 context.Request.Url?.AbsolutePath ?? string.Empty,
                 context.Request.Headers["Authorization"] ?? string.Empty,
+                context.Request.Headers["User-Agent"] ?? string.Empty,
                 body.ToArray());
             _requests.Enqueue(request);
 
@@ -465,5 +467,5 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
         }
     }
 
-    private sealed record WebDavRequest(string Method, string Path, string Authorization, byte[] Body);
+    private sealed record WebDavRequest(string Method, string Path, string Authorization, string UserAgent, byte[] Body);
 }

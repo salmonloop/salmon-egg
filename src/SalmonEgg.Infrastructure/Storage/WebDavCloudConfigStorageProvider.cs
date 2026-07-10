@@ -23,6 +23,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
 
     private const string SecureStoragePasswordKey = "salmonegg/cloud-sync/webdav/password";
     private static readonly HttpMethod MkColMethod = new("MKCOL");
+    private static readonly ProductInfoHeaderValue UserAgent = new("SalmonEgg", "1.0");
 
     private readonly IAppSettingsService _appSettings;
     private readonly ISecureStorage _secureStorage;
@@ -307,6 +308,7 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
     private HttpRequestMessage CreateRequest(HttpMethod method, Uri requestUri, WebDavConfiguration configuration)
     {
         var request = new HttpRequestMessage(method, requestUri);
+        request.Headers.UserAgent.Add(UserAgent);
         if (!string.IsNullOrWhiteSpace(configuration.Username))
         {
             var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes(configuration.Username + ":" + configuration.Password));
