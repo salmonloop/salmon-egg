@@ -1,6 +1,6 @@
 # SalmonEgg 项目设置指南
 
-> Status: bootstrap reference. This document describes how the project was originally scaffolded and is not the canonical build/run guide for the current repository. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, and `PROJECT_STATUS.md`.
+> Status: bootstrap reference. This document describes how the project was originally scaffolded; package commands and versions below are historical and not the current dependency source of truth. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, `PROJECT_STATUS.md`, and `../SalmonEgg/Directory.Packages.props`.
 
 ## 概述
 

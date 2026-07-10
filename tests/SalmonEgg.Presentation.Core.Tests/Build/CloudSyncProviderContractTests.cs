@@ -118,6 +118,39 @@ public sealed class CloudSyncProviderContractTests
     }
 
     [Fact]
+    public void DataStoragePage_WebDavCopyExplainsFolderUrlAndDefaultPackageName()
+    {
+        foreach (var resourcePath in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        })
+        {
+            var resources = XDocument.Parse(TestSourceFiles.ReadAllText(resourcePath));
+            var header = GetResourceValue(resources, "DataStorage_CloudSyncWebDavFileUrl.Header", resourcePath);
+            var description = GetResourceValue(resources, "DataStorage_CloudSyncWebDavFolderUrlDescription.Text", resourcePath);
+
+            Assert.Contains("WebDAV", header, StringComparison.Ordinal);
+            Assert.True(
+                header.Contains("folder", StringComparison.OrdinalIgnoreCase) ||
+                header.Contains("文件夹", StringComparison.Ordinal),
+                $"WebDAV URL header must use folder semantics in '{resourcePath}'.");
+            Assert.DoesNotContain("file URL", header, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("salmonegg-config.zip", description, StringComparison.Ordinal);
+            Assert.True(
+                description.Contains("folder", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("文件夹", StringComparison.Ordinal),
+                $"WebDAV help text must tell users to enter a folder path in '{resourcePath}'.");
+            Assert.True(
+                description.Contains("only", StringComparison.OrdinalIgnoreCase) ||
+                description.Contains("只填写", StringComparison.Ordinal),
+                $"WebDAV help text must state that only the folder path is needed in '{resourcePath}'.");
+        }
+    }
+
+    [Fact]
     public void DataStoragePage_CloudSyncSmokeHasLocalizedUxCopy()
     {
         var requiredCoreKeys = new[]
@@ -232,11 +265,19 @@ public sealed class CloudSyncProviderContractTests
 
     private static void AssertResourceValue(XDocument document, string key, string resourcePath)
     {
+        var value = GetResourceValue(document, key, resourcePath);
+
+        Assert.False(string.IsNullOrWhiteSpace(value), $"Resource '{key}' must be defined in '{resourcePath}'.");
+    }
+
+    private static string GetResourceValue(XDocument document, string key, string resourcePath)
+    {
         var value = document.Descendants("data")
             .FirstOrDefault(element => string.Equals((string?)element.Attribute("name"), key, StringComparison.Ordinal))
             ?.Element("value")
             ?.Value;
 
         Assert.False(string.IsNullOrWhiteSpace(value), $"Resource '{key}' must be defined in '{resourcePath}'.");
+        return value!;
     }
 }
