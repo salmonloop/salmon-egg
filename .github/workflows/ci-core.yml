@@ -50,15 +50,16 @@ jobs:
         run: |
           $testArgs = @(
             "test",
-            "SalmonEgg.sln",
+            "--solution", "SalmonEgg.sln",
             "--configuration", "${{ env.CONFIGURATION }}",
             "--no-build",
             "--verbosity", "normal",
-            "--collect:XPlat Code Coverage",
-            "--blame-hang",
-            "--blame-hang-timeout", "5m",
-            "--logger", "trx;LogFilePrefix=results",
-            "--results-directory", "${{ env.TEST_RESULTS_DIR }}"
+            "--timeout", "20m",
+            "--long-running", "300",
+            "--results-directory", "${{ env.TEST_RESULTS_DIR }}",
+            "--report-xunit-trx",
+            "--coverlet",
+            "--coverlet-output-format", "cobertura"
           )
 
           Write-Host "Running test pass 1..."

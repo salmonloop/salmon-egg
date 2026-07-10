@@ -15,11 +15,11 @@ desktop_publish_dir() {
 }
 
 run_test_gates() {
-  dotnet test tests/SalmonEgg.Domain.Tests --configuration Release --no-build || return 1
-  dotnet test tests/SalmonEgg.Application.Tests --configuration Release --no-build || return 1
-  dotnet test tests/SalmonEgg.Infrastructure.Tests --configuration Release --no-build || return 1
-  # Presentation tests exercise global UI/testhost state; keep the release gate deterministic.
-  dotnet test tests/SalmonEgg.Presentation.Core.Tests --configuration Release --no-build -- RunConfiguration.DisableParallelization=true || return 1
+  dotnet test --project tests/SalmonEgg.Domain.Tests/SalmonEgg.Domain.Tests.csproj --configuration Release --no-build --timeout 3m || return 1
+  dotnet test --project tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj --configuration Release --no-build --timeout 3m || return 1
+  dotnet test --project tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj --configuration Release --no-build --timeout 5m || return 1
+  # Presentation.Core parallelization is controlled by testconfig.json for MTP.
+  dotnet test --project tests/SalmonEgg.Presentation.Core.Tests/SalmonEgg.Presentation.Core.Tests.csproj --configuration Release --no-build --timeout 5m || return 1
 }
 
 case "$1" in

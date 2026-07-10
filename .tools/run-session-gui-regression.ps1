@@ -21,39 +21,47 @@ if (-not $SkipMsixRefresh)
 
 $env:SALMONEGG_GUI = '1'
 
-$deterministicFilters = @(
-    'FullyQualifiedName~ChatSkeletonSmokeTests.AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.SelectRemoteSessionWithSlowReplay_AutoScrollsToLatestMessageAfterHydration'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.HydratedRemoteSession_NavigateToDiscoverAndBack_ReturnsHotWithoutRemoteReload'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.HydratedRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.BackgroundRemoteSession_LiveAgentUpdate_ShowsUnreadAndClearsWhenActivated'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.SelectSessionWithMarkdownMessages_DoubleClickCodeBlock_DoesNotCrash'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.MarkdownSession_AfterDiscoverRoundTrip_RetainsRenderedCodeAndDoesNotCrash'
-    'FullyQualifiedName~ChatSkeletonSmokeTests.MarkdownSession_AfterAcpSettingsRoundTrip_RetainsRenderedCodeAndDoesNotCrash'
-) -join '|'
+$deterministicMethods = @(
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.SelectRemoteSessionWithSlowReplay_AutoScrollsToLatestMessageAfterHydration'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.HydratedRemoteSession_NavigateToDiscoverAndBack_ReturnsHotWithoutRemoteReload'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.HydratedRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.BackgroundRemoteSession_LiveAgentUpdate_ShowsUnreadAndClearsWhenActivated'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.SelectSessionWithMarkdownMessages_DoubleClickCodeBlock_DoesNotCrash'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.MarkdownSession_AfterDiscoverRoundTrip_RetainsRenderedCodeAndDoesNotCrash'
+    'SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.MarkdownSession_AfterAcpSettingsRoundTrip_RetainsRenderedCodeAndDoesNotCrash'
+)
 
 Write-Host "Running deterministic session GUI regression suite..."
-& dotnet test $project `
-    -c $Configuration `
-    -m:1 `
-    -nr:false `
-    --filter $deterministicFilters `
-    --logger "console;verbosity=minimal" `
-    --logger "trx;LogFileName=gui-session-regression-deterministic.trx"
+& dotnet test `
+    --project $project `
+    --configuration $Configuration `
+    --filter-method $deterministicMethods `
+    --timeout 20m `
+    --output Normal `
+    --report-xunit-trx `
+    --report-xunit-trx-filename gui-session-regression-deterministic.trx
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 if ($IncludeRealUser)
 {
-    $realUserFilters = @(
-        'FullyQualifiedName~RealUserConfigSmokeTests.SelectRemoteBoundSession_AfterDiscoverRoundTrip_ReturnsWithoutStuckReload'
-        'FullyQualifiedName~RealUserConfigSmokeTests.SelectRemoteBoundSession_AfterAcpSettingsRoundTrip_ReturnsWithoutCrash'
-    ) -join '|'
+    $realUserMethods = @(
+        'SalmonEgg.GuiTests.Windows.RealUserConfigSmokeTests.SelectRemoteBoundSession_AfterDiscoverRoundTrip_ReturnsWithoutStuckReload'
+        'SalmonEgg.GuiTests.Windows.RealUserConfigSmokeTests.SelectRemoteBoundSession_AfterAcpSettingsRoundTrip_ReturnsWithoutCrash'
+    )
 
     Write-Host "Running real-user ACP round-trip probes..."
-    & dotnet test $project `
-        -c $Configuration `
-        -m:1 `
-        -nr:false `
-        --filter $realUserFilters `
-        --logger "console;verbosity=minimal" `
-        --logger "trx;LogFileName=gui-session-regression-realuser.trx"
+    & dotnet test `
+        --project $project `
+        --configuration $Configuration `
+        --filter-method $realUserMethods `
+        --timeout 10m `
+        --output Normal `
+        --report-xunit-trx `
+        --report-xunit-trx-filename gui-session-regression-realuser.trx
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 }

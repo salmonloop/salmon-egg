@@ -51,7 +51,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo [3/4] Running tests...
-dotnet test SalmonEgg.sln --configuration Release --no-build
+dotnet test --solution SalmonEgg.sln --configuration Release --no-build --timeout 20m --output Normal
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
