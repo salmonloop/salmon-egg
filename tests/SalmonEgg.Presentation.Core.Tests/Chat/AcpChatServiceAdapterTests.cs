@@ -114,7 +114,7 @@ public sealed class AcpChatServiceAdapterTests
         {
         }
 
-        await adapter.WaitForBufferedUpdatesDrainedAsync(attemptId).WaitAsync(TimeSpan.FromSeconds(1));
+        await adapter.WaitForBufferedUpdatesDrainedAsync(attemptId, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
         Assert.Equal(3, updates.Count);
         Assert.Equal("remote-1", updates[1].SessionId);
         AssertPlanEntryContent(updates[1], "replay");
@@ -483,13 +483,13 @@ public sealed class AcpChatServiceAdapterTests
         }
 
         Assert.True(adapter.TryMarkHydrated(attemptId));
-        var waitTask = adapter.WaitForBufferedUpdatesDrainedAsync(attemptId);
+        var waitTask = adapter.WaitForBufferedUpdatesDrainedAsync(attemptId, TestContext.Current.CancellationToken);
 
         while (dispatcher.RunNext())
         {
         }
 
-        await waitTask.WaitAsync(TimeSpan.FromSeconds(1));
+        await waitTask.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
         Assert.True(waitTask.IsCompletedSuccessfully);
     }
 

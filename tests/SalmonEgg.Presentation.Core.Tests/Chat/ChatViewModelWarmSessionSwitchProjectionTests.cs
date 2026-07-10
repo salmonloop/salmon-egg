@@ -84,7 +84,7 @@ public partial class ChatViewModelTests
         var viewModel = fixture.ViewModel;
 
         fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
-        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.RestoreAsync(TestContext.Current.CancellationToken));
 
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-local",
@@ -102,7 +102,7 @@ public partial class ChatViewModelTests
             LastUpdatedAt: new DateTime(2026, 5, 2, 0, 0, 1, DateTimeKind.Utc),
             AvailableCommands: availableCommands));
 
-        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-local",
@@ -144,7 +144,7 @@ public partial class ChatViewModelTests
         var collectionActions = new List<NotifyCollectionChangedAction>();
         viewModel.AvailableSlashCommands.CollectionChanged += (_, args) => collectionActions.Add(args.Action);
 
-        var switchTask = viewModel.SwitchConversationAsync("conv-remote");
+        var switchTask = viewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
         await AwaitWithSynchronizationContextAsync(syncContext, switchTask);
 
         Assert.True(await switchTask);

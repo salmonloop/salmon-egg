@@ -30,8 +30,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            });
-        var result = await provider.TryDownloadAsync();
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.TryDownloadAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal([10, 11, 12], result.Content);
@@ -55,8 +55,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "wrong-password"
-            });
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryDownloadAsync());
+            }, TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryDownloadAsync(TestContext.Current.CancellationToken));
 
         Assert.Contains("403", exception.Message, StringComparison.Ordinal);
         var request = Assert.Single(server.Requests);
@@ -81,8 +81,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            });
-        var result = await provider.UploadAsync([1, 2, 3], expectedETag: null);
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.UploadAsync([1, 2, 3], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(configuration.Succeeded);
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
@@ -107,8 +107,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            });
-        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null);
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(configuration.Succeeded);
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
@@ -131,8 +131,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            });
-        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null);
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         Assert.Equal(
@@ -155,8 +155,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            });
-        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null);
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         Assert.Equal(
@@ -184,8 +184,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "wrong-password"
-            });
-        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null);
+            }, TestContext.Current.CancellationToken);
+        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(configuration.Succeeded);
         Assert.Equal(CloudConfigUploadStatus.Failed, result.Status);

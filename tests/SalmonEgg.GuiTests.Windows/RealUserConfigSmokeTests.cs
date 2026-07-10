@@ -11,7 +11,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed partial class RealUserConfigSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void AuditVisibleRealSessions_TranscriptAutoBottomAndLastMessages()
     {
         GuiTestGate.RequireEnabled();
@@ -21,7 +21,7 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(candidate => candidate.MarkdownLikeMessageCount)
             .ThenByDescending(candidate => candidate.MessageCount)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No real conversations with local transcript messages were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Length == 0, "No real conversations with local transcript messages were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
         var findings = new List<string>();
@@ -86,13 +86,13 @@ public sealed partial class RealUserConfigSmokeTests
             }
         }
 
-        Skip.If(visibleCount == 0, $"No real transcript candidates were visible in the left navigation. CandidateCount={candidates.Length}.");
+        Assert.SkipWhen(visibleCount == 0, $"No real transcript candidates were visible in the left navigation. CandidateCount={candidates.Length}.");
         Assert.True(
             findings.Count == 0,
             $"Real transcript audit found {findings.Count} problematic session(s) out of {checkedCount} checked visible session(s):{Environment.NewLine}{string.Join(Environment.NewLine, findings)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void VisibleRealSession_ChatComposer_UsesModeSelectorSubsetOnly()
     {
         GuiTestGate.RequireEnabled();
@@ -102,13 +102,13 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(candidate => candidate.MessageCount)
             .ThenByDescending(candidate => candidate.MarkdownLikeMessageCount)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No real conversations with transcript messages were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Length == 0, "No real conversations with transcript messages were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No real transcript candidate is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No real transcript candidate is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
@@ -122,13 +122,13 @@ public sealed partial class RealUserConfigSmokeTests
         AssertChatComposerUsesModeSelectorSubsetOnly(session, $"visible-real-session-{candidate.ConversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSpecificRemoteBoundSession_ByConversationId_CompletesSlowLoadWithoutCrashing()
     {
         GuiTestGate.RequireEnabled();
 
         var conversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
-        Skip.If(string.IsNullOrWhiteSpace(conversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to a real conversation id to validate a specific remote session.");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(conversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to a real conversation id to validate a specific remote session.");
 
         using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -169,16 +169,16 @@ public sealed partial class RealUserConfigSmokeTests
         AssertChatComposerUsesModeSelectorSubsetOnly(session, $"real-config-target-{conversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSpecificRemoteBoundSession_AfterWarmSourceSession_CompletesWithoutCrashing()
     {
         GuiTestGate.RequireEnabled();
 
         var sourceConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SOURCE_CONVERSATION_ID");
         var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
-        Skip.If(string.IsNullOrWhiteSpace(sourceConversationId), "Set SALMONEGG_GUI_SOURCE_CONVERSATION_ID to the warm source conversation id.");
-        Skip.If(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to the target conversation id.");
-        Skip.If(
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(sourceConversationId), "Set SALMONEGG_GUI_SOURCE_CONVERSATION_ID to the warm source conversation id.");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to the target conversation id.");
+        Assert.SkipWhen(
             string.Equals(sourceConversationId, targetConversationId, StringComparison.Ordinal),
             "Source and target conversations must be different.");
 
@@ -209,7 +209,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Target conversation {targetConversationId} stopped rendering stably after source-to-target activation.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ProbeReplayBackedRemoteSession_WithSlowSessionLoad_AutoScrollsToLatestMessageAfterHydration()
     {
         GuiTestGate.RequireEnabled();
@@ -221,7 +221,7 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderBy(item => Math.Abs(item.LocalMessageCount - 40))
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .FirstOrDefault();
-        Skip.If(candidate is null, "No replay-backed remote conversation with enough local transcript history was found to validate bottom auto-scroll.");
+        Assert.SkipWhen(candidate is null, "No replay-backed remote conversation with enough local transcript history was found to validate bottom auto-scroll.");
 
         using var slowLoad = new EnvironmentVariableScope("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", "2000");
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -237,17 +237,17 @@ public sealed partial class RealUserConfigSmokeTests
         Assert.True(sawOverlayStatus, $"Slow remote hydration never exposed ChatView.LoadingOverlayStatus for conversation {candidate.ConversationId}.");
 
         var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
-        Skip.If(
+        Assert.SkipWhen(
             !overlayHidden,
             $"Slow remote hydration overlay did not finish within the budget for conversation {candidate.ConversationId}; skipping real-user auto-scroll assertion in this environment.");
 
         var viewportState = WaitForViewportState(session, "bottom", TimeSpan.FromSeconds(10));
-        Skip.If(
+        Assert.SkipWhen(
             !viewportState,
             $"Hydrated transcript viewport did not settle to bottom within the budget for conversation {candidate.ConversationId}. State='{session.TryGetElementName("ChatView.TranscriptViewportState") ?? "<missing>"}'");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_AfterDiscoverRoundTrip_ReturnsWithoutStuckReload()
     {
         GuiTestGate.RequireEnabled();
@@ -260,7 +260,7 @@ public sealed partial class RealUserConfigSmokeTests
         candidate ??= RealUserConfigProbe.LoadReplayBackedCandidates()
             .OrderByDescending(item => item.LastUpdatedAtUtc)
             .FirstOrDefault();
-        Skip.If(candidate is null, "No replay-backed remote conversation is available for discover round-trip validation.");
+        Assert.SkipWhen(candidate is null, "No replay-backed remote conversation is available for discover round-trip validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -287,7 +287,7 @@ public sealed partial class RealUserConfigSmokeTests
         Assert.True(returnedOverlayHidden, $"Conversation remained stuck behind the loading overlay after discover round-trip for {candidate.ConversationId}.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_AfterAcpSettingsRoundTrip_ReturnsWithoutCrash()
     {
         GuiTestGate.RequireEnabled();
@@ -300,7 +300,7 @@ public sealed partial class RealUserConfigSmokeTests
         candidate ??= RealUserConfigProbe.LoadReplayBackedCandidates()
             .OrderByDescending(item => item.LastUpdatedAtUtc)
             .FirstOrDefault();
-        Skip.If(candidate is null, "No replay-backed remote conversation is available for settings round-trip validation.");
+        Assert.SkipWhen(candidate is null, "No replay-backed remote conversation is available for settings round-trip validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -357,7 +357,7 @@ public sealed partial class RealUserConfigSmokeTests
         Assert.True(returnedOverlayHidden, $"Conversation remained stuck behind the loading overlay after ACP settings round-trip for {candidate.ConversationId}.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromWarmCachedConversationMiniWindow_DoesNotExposeTargetHeaderBeforeOverlay()
     {
         GuiTestGate.RequireEnabled();
@@ -366,7 +366,7 @@ public sealed partial class RealUserConfigSmokeTests
         var explicitRemoteConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID");
         var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates(includeAllProfiles: true);
         var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
-        Skip.If(
+        Assert.SkipWhen(
             remoteCandidates.Count < 2 && localCandidates.Count == 0 && string.IsNullOrWhiteSpace(explicitWarmConversationId) && string.IsNullOrWhiteSpace(explicitRemoteConversationId),
             "Need either one pure local candidate plus one remote candidate, or at least two remote candidates, to validate warm-cache mini-window switching. You can also set SALMONEGG_GUI_MINI_WARM_CONVERSATION_ID and SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID to pin a specific pair.");
 
@@ -384,7 +384,7 @@ public sealed partial class RealUserConfigSmokeTests
             .Where(item => item.LocalMessageCount > 0)
             .Where(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
             .ToArray();
-        Skip.If(
+        Assert.SkipWhen(
             visibleRemoteCandidates.Length == 0 && string.IsNullOrWhiteSpace(explicitRemoteConversationId),
             $"No visible replay-backed remote conversation is available. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
 
@@ -393,7 +393,7 @@ public sealed partial class RealUserConfigSmokeTests
             visibleRemoteCandidates,
             explicitWarmConversationId,
             session);
-        Skip.If(
+        Assert.SkipWhen(
             string.IsNullOrWhiteSpace(warmConversationId),
             "Could not determine a warm-cache source conversation. Set SALMONEGG_GUI_MINI_WARM_CONVERSATION_ID to pin one explicitly.");
 
@@ -403,7 +403,7 @@ public sealed partial class RealUserConfigSmokeTests
             explicitRemoteConversationId,
             warmConversationId,
             session);
-        Skip.If(
+        Assert.SkipWhen(
             remoteCandidate is null,
             $"No visible replay-backed remote conversation distinct from warm source {warmConversationId} is available. Set SALMONEGG_GUI_MINI_REMOTE_CONVERSATION_ID to pin one explicitly.");
 
@@ -419,17 +419,17 @@ public sealed partial class RealUserConfigSmokeTests
         Assert.True(warmHeaderVisible, $"Warm-cache source conversation header did not appear for {warmConversationId}.");
 
         var warmOverlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(60));
-        Skip.If(
+        Assert.SkipWhen(
             !warmOverlayHidden,
             $"Warm-cache source conversation {warmConversationId} did not finish projecting transcript content within the budget.");
 
         var warmMessages = session.TryFindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(5));
-        Skip.If(warmMessages is null, $"Messages list did not become available for warm-cache source conversation {warmConversationId}.");
+        Assert.SkipWhen(warmMessages is null, $"Messages list did not become available for warm-cache source conversation {warmConversationId}.");
 
         var warmVisibleTexts = session.GetVisibleTexts(warmMessages)
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToArray();
-        Skip.If(warmVisibleTexts.Length == 0, $"No visible transcript text was available for warm-cache source conversation {warmConversationId}.");
+        Assert.SkipWhen(warmVisibleTexts.Length == 0, $"No visible transcript text was available for warm-cache source conversation {warmConversationId}.");
         var sampledWarmText = warmVisibleTexts[0];
 
         OpenMiniWindow(session);
@@ -500,7 +500,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Warm-cache transcript text remained visible after mini-window remote hydration. warmSample='{sampledWarmText}' warmConversation={warmConversationId} remoteConversation={remoteCandidate.ConversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectLargestRemoteBoundSession_FirstOpen_ShowsLoadingPillBeforeOverlayClears()
     {
         GuiTestGate.RequireEnabled();
@@ -509,7 +509,7 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for first-open responsiveness validation.");
+        Assert.SkipWhen(candidates.Length == 0, "No replay-backed remote conversation is available for first-open responsiveness validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -519,7 +519,7 @@ public sealed partial class RealUserConfigSmokeTests
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
 
@@ -603,7 +603,7 @@ public sealed partial class RealUserConfigSmokeTests
         AssertChatComposerUsesModeSelectorSubsetOnly(session, $"largest-remote-first-open-{candidate.ConversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectLargestRemoteBoundSession_ImmediateDiscoverSwitch_RemainsResponsive()
     {
         GuiTestGate.RequireEnabled();
@@ -612,13 +612,13 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for responsiveness validation.");
+        Assert.SkipWhen(candidates.Length == 0, "No replay-backed remote conversation is available for responsiveness validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var remoteItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(remoteItem);
@@ -640,7 +640,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Discover page did not become visible quickly after switching away from remote session load. Conversation={candidate.ConversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectLargestRemoteBoundSession_DiscoverRoundTrip_ReturnsWithinResponsivenessBudget()
     {
         GuiTestGate.RequireEnabled();
@@ -649,13 +649,13 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No replay-backed remote conversation is available for discover round-trip responsiveness validation.");
+        Assert.SkipWhen(candidates.Length == 0, "No replay-backed remote conversation is available for discover round-trip responsiveness validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionId = SessionAutomationId(candidate.ConversationId);
         var remoteItem = session.FindByAutomationId(sessionId, TimeSpan.FromSeconds(10));
@@ -681,7 +681,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Round-trip back to remote chat exceeded responsiveness budget. Conversation={candidate.ConversationId} elapsedMs={returnStopwatch.ElapsedMilliseconds}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectVisibleCrossProfileRemoteSessions_AfterHydratingBoth_ReturnsHotWithoutLoadingOverlay()
     {
         GuiTestGate.RequireEnabled();
@@ -699,7 +699,7 @@ public sealed partial class RealUserConfigSmokeTests
             .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
             .OrderByDescending(group => group.Count())
             .ToArray();
-        Skip.If(profileGroups.Length < 2, "Need two visible replay-backed remote conversations bound to different profiles for real-config cross-profile hot-return validation.");
+        Assert.SkipWhen(profileGroups.Length < 2, "Need two visible replay-backed remote conversations bound to different profiles for real-config cross-profile hot-return validation.");
 
         var remoteA = profileGroups[0]
             .OrderByDescending(item => item.LocalMessageCount)
@@ -709,7 +709,7 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .First();
-        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot-return validation requires two distinct remote conversations.");
+        Assert.SkipWhen(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot-return validation requires two distinct remote conversations.");
 
         var startItem = session.FindByAutomationId("MainNav.Start", TimeSpan.FromSeconds(10));
         session.ActivateElement(startItem);
@@ -798,7 +798,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Cross-profile hot-return to remote session A did not restore visible transcript content promptly. Conversation={remoteA.ConversationId}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void RealData_ExpandedToCompactResize_DoesNotLoseNavigationSelectionContext()
     {
         GuiTestGate.RequireEnabled();
@@ -806,13 +806,13 @@ public sealed partial class RealUserConfigSmokeTests
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates()
             .OrderByDescending(item => item.LastUpdatedAtUtc)
             .ToArray();
-        Skip.If(candidates.Length == 0, "No replay-backed conversation is available for real-data resize navigation validation.");
+        Assert.SkipWhen(candidates.Length == 0, "No replay-backed conversation is available for real-data resize navigation validation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, "No replay-backed candidate is currently visible in left navigation.");
+        Assert.SkipWhen(candidate is null, "No replay-backed candidate is currently visible in left navigation.");
 
         ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1200);
@@ -829,7 +829,7 @@ public sealed partial class RealUserConfigSmokeTests
             $"Navigation activation context did not appear after selecting conversation {candidate.ConversationId}. State={DumpAutomationSelectionState(session)}");
 
         var projectId = TryResolveOwningProjectAutomationId(session, sessionId);
-        Skip.If(
+        Assert.SkipWhen(
             string.IsNullOrWhiteSpace(projectId),
             $"Unable to resolve owning project after selecting conversation {candidate.ConversationId}. State={DumpAutomationSelectionState(session)}");
 
@@ -852,7 +852,7 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RealData_ExpandedToCompactResize_WhenSessionCollapses_KeepsNavFocusOnProjectAncestor()
     {
         GuiTestGate.RequireEnabled();
@@ -863,7 +863,7 @@ public sealed partial class RealUserConfigSmokeTests
         var replayCandidates = RealUserConfigProbe.LoadReplayBackedCandidates()
             .OrderByDescending(item => item.LastUpdatedAtUtc)
             .ToArray();
-        Skip.If(
+        Assert.SkipWhen(
             localCandidates.Length == 0 && replayCandidates.Length == 0,
             "No local or replay-backed conversation is available for real-data compact focus continuity validation.");
 
@@ -875,7 +875,7 @@ public sealed partial class RealUserConfigSmokeTests
             ? replayCandidates.FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
             : null;
         var conversationId = localCandidate?.ConversationId ?? replayCandidate?.ConversationId;
-        Skip.If(conversationId is null, "No local/replay candidate is currently visible in left navigation.");
+        Assert.SkipWhen(conversationId is null, "No local/replay candidate is currently visible in left navigation.");
 
         ResizeMainWindow(width: 1400, height: 900);
         Thread.Sleep(1000);
@@ -897,7 +897,7 @@ public sealed partial class RealUserConfigSmokeTests
             () => session.IsFocusWithinAutomationId(sessionId),
             timeout: TimeSpan.FromSeconds(3),
             pollInterval: TimeSpan.FromMilliseconds(120));
-        Skip.If(!focusPrimed, $"Unable to prime keyboard focus to selected session before compact resize. Conversation={conversationId} Focus={session.DescribeFocusedElement()}");
+        Assert.SkipWhen(!focusPrimed, $"Unable to prime keyboard focus to selected session before compact resize. Conversation={conversationId} Focus={session.DescribeFocusedElement()}");
 
         ResizeMainWindow(width: 800, height: 900);
 
@@ -972,13 +972,13 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromStart_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
     {
         GuiTestGate.RequireEnabled();
 
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
-        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
         var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
@@ -992,7 +992,7 @@ public sealed partial class RealUserConfigSmokeTests
                 string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
                 && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null)
             : candidates.FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Target={targetConversationId ?? "<none>"} Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Target={targetConversationId ?? "<none>"} Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
@@ -1034,15 +1034,15 @@ public sealed partial class RealUserConfigSmokeTests
             $"Real-config first-open never surfaced loading overlay for conversation {candidate.ConversationId}.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromStart_HighFrequencyProbe_DoesNotExposeActiveRootBeforeLoadingOverlay()
     {
         GuiTestGate.RequireEnabled();
 
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
-        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
         var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
-        Skip.If(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to run the high-frequency first-frame probe for a specific real conversation.");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to run the high-frequency first-frame probe for a specific real conversation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1053,7 +1053,7 @@ public sealed partial class RealUserConfigSmokeTests
         var candidate = candidates.FirstOrDefault(item =>
             string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
             && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
+        Assert.SkipWhen(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
@@ -1103,15 +1103,15 @@ public sealed partial class RealUserConfigSmokeTests
             $"High-frequency probe did not observe loading overlay within the initial sampling window for conversation {candidate.ConversationId}.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromStart_CapturesFirstFramesForManualAudit()
     {
         GuiTestGate.RequireEnabled();
 
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
-        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
         var targetConversationId = Environment.GetEnvironmentVariable("SALMONEGG_GUI_TARGET_CONVERSATION_ID");
-        Skip.If(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to capture first-frame screenshots for a specific real conversation.");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(targetConversationId), "Set SALMONEGG_GUI_TARGET_CONVERSATION_ID to capture first-frame screenshots for a specific real conversation.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1122,7 +1122,7 @@ public sealed partial class RealUserConfigSmokeTests
         var candidate = candidates.FirstOrDefault(item =>
             string.Equals(item.ConversationId, targetConversationId, StringComparison.Ordinal)
             && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
+        Assert.SkipWhen(candidate is null, $"Target conversation '{targetConversationId}' is not currently visible in the left navigation.");
 
         var captureRoot = Path.Combine(
             Path.GetTempPath(),
@@ -1164,13 +1164,13 @@ public sealed partial class RealUserConfigSmokeTests
         Assert.NotEmpty(capturedFrames);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromStart_DoesNotSnapBackToStartSelection()
     {
         GuiTestGate.RequireEnabled();
 
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
-        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1180,7 +1180,7 @@ public sealed partial class RealUserConfigSmokeTests
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(sessionItem);
@@ -1224,13 +1224,13 @@ public sealed partial class RealUserConfigSmokeTests
             $"After selecting remote-bound conversation {candidate.ConversationId}, left navigation snapped back to Start while activation was still unfolding.{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteBoundSession_FromStart_KeepsLoadingVisible_UntilRemoteReplayProjects()
     {
         GuiTestGate.RequireEnabled();
 
         var candidates = RealUserConfigProbe.LoadReplayBackedCandidates();
-        Skip.If(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(candidates.Count == 0, "No real remote-bound conversations with recent session/load + session/update evidence were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1240,7 +1240,7 @@ public sealed partial class RealUserConfigSmokeTests
 
         var candidate = candidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(candidate is null, $"No replay-backed conversation is currently visible in the left navigation. Candidates: {string.Join(", ", candidates.Select(c => c.ConversationId))}");
 
         var sessionItem = session.FindByAutomationId(SessionAutomationId(candidate.ConversationId), TimeSpan.FromSeconds(10));
 
@@ -1356,15 +1356,15 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectPureLocalSession_WhileRemoteLoading_DoesNotLeakRemoteStatusPill()
     {
         GuiTestGate.RequireEnabled();
 
         var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
         var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
-        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
-        Skip.If(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1374,12 +1374,12 @@ public sealed partial class RealUserConfigSmokeTests
 
         var remoteCandidate = remoteCandidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(remoteCandidate is null, $"No replay-backed remote candidate is currently visible in the left navigation. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(remoteCandidate is null, $"No replay-backed remote candidate is currently visible in the left navigation. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
 
         var localCandidate = localCandidates
             .Where(item => !string.Equals(item.ConversationId, remoteCandidate.ConversationId, StringComparison.Ordinal))
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(localCandidate is null, $"No pure local conversation candidate is currently visible in the left navigation. Candidates: {string.Join(", ", localCandidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(localCandidate is null, $"No pure local conversation candidate is currently visible in the left navigation. Candidates: {string.Join(", ", localCandidates.Select(c => c.ConversationId))}");
 
         var remoteItem = session.FindByAutomationId(SessionAutomationId(remoteCandidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(remoteItem);
@@ -1397,7 +1397,7 @@ public sealed partial class RealUserConfigSmokeTests
             Thread.Sleep(150);
         }
 
-        Skip.IfNot(sawRemoteStatus, $"Remote loading pill did not become visible for conversation {remoteCandidate.ConversationId}; cannot validate cross-session leakage.");
+        Assert.SkipUnless(sawRemoteStatus, $"Remote loading pill did not become visible for conversation {remoteCandidate.ConversationId}; cannot validate cross-session leakage.");
 
         var localItem = session.FindByAutomationId(SessionAutomationId(localCandidate.ConversationId), TimeSpan.FromSeconds(10));
         session.ActivateElement(localItem);
@@ -1453,13 +1453,13 @@ public sealed partial class RealUserConfigSmokeTests
             $"Remote loading status pill leaked after selecting pure local conversation {localCandidate.ConversationId} while remote conversation {remoteCandidate.ConversationId} was still loading.{Environment.NewLine}Capture: {capturePath ?? "<none>"}{Environment.NewLine}{string.Join(Environment.NewLine, timeline)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartComposer_WhenStartupRemoteProfileCannotPrepareDraft_SwitchingToLocalStdioProfileRecoversModeSelector()
     {
         GuiTestGate.RequireEnabled();
 
         var scenario = RealUserConfigProbe.LoadStartComposerProfileSwitchScenario();
-        Skip.If(
+        Assert.SkipWhen(
             scenario is null,
             "Current real config does not expose a startup remote profile plus a different local stdio profile for targeted start-composer recovery validation.");
 
@@ -1495,13 +1495,13 @@ public sealed partial class RealUserConfigSmokeTests
             $"Start composer mode selector did not recover after switching from startup remote profile '{scenario.StartupProfileName}' ({scenario.StartupProfileTransport}) to local stdio profile '{scenario.LocalProfileName}'. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartComposer_WhenSwitchingLocalRemoteLocal_RoundTripsBackToReadyModes()
     {
         GuiTestGate.RequireEnabled();
 
         var scenario = RealUserConfigProbe.LoadStartComposerRoundTripScenario();
-        Skip.If(
+        Assert.SkipWhen(
             scenario is null,
             "Current real config does not expose both a local stdio profile and a different remote profile for targeted start-composer local-remote-local validation.");
 
@@ -1557,14 +1557,14 @@ public sealed partial class RealUserConfigSmokeTests
             $"Start composer mode selector did not recover after round-tripping from local stdio profile '{scenario.LocalProfileName}' to remote profile '{scenario.RemoteProfileName}' ({scenario.RemoteProfileTransport}) and back. AgentSelector='{session.TryGetElementName("StartView.AgentSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}' ModeSelector='{session.TryGetElementName("StartView.ModeSelector", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartComposer_WhenSelectingRealRemoteProfileAndRemoteDirectory_LoadsReadyModes()
     {
         GuiTestGate.RequireEnabled();
 
         var scenario = RealUserConfigProbe.LoadStartComposerRemoteDirectoryScenario(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI_REAL_REMOTE_PROFILE_NAME") ?? "cc-ws1");
-        Skip.If(
+        Assert.SkipWhen(
             scenario is null,
             "Current real config does not expose the requested remote profile plus a configured remote project for targeted start-composer validation.");
 
@@ -1633,15 +1633,15 @@ public sealed partial class RealUserConfigSmokeTests
             $"Real remote start-composer run did not log a fresh session/new response for profile '{scenario.RemoteProfileName}' and cwd '{scenario.RemoteDirectoryPath}'. Recent log tail:{Environment.NewLine}{recentLogTail}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void RandomSwitchBetweenLocalRemote_WithOneSecondCadence_RemainsInteractive()
     {
         GuiTestGate.RequireEnabled();
 
         var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
         var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
-        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
-        Skip.If(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1650,8 +1650,8 @@ public sealed partial class RealUserConfigSmokeTests
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
         var localCandidate = localCandidates
             .FirstOrDefault(item => session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(remoteCandidate is null, $"No replay-backed remote candidate is currently visible in the left navigation. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
-        Skip.If(localCandidate is null, $"No pure local candidate is currently visible in the left navigation. Candidates: {string.Join(", ", localCandidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(remoteCandidate is null, $"No replay-backed remote candidate is currently visible in the left navigation. Candidates: {string.Join(", ", remoteCandidates.Select(c => c.ConversationId))}");
+        Assert.SkipWhen(localCandidate is null, $"No pure local candidate is currently visible in the left navigation. Candidates: {string.Join(", ", localCandidates.Select(c => c.ConversationId))}");
 
         var remoteId = SessionAutomationId(remoteCandidate.ConversationId);
         var localId = SessionAutomationId(localCandidate.ConversationId);
@@ -1717,15 +1717,15 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RandomSwitchAcrossProfilesAndLocal_ForExtendedDuration_RemainsInteractive()
     {
         GuiTestGate.RequireEnabled();
 
         var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates();
         var localCandidates = RealUserConfigProbe.LoadPureLocalCandidates();
-        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
-        Skip.If(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(localCandidates.Count == 0, "No pure local conversation candidates were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1738,7 +1738,7 @@ public sealed partial class RealUserConfigSmokeTests
             .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
             .OrderByDescending(group => group.Count())
             .ToArray();
-        Skip.If(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile soak switching.");
+        Assert.SkipWhen(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile soak switching.");
 
         var remoteA = profileGroups[0]
             .OrderByDescending(item => item.LocalMessageCount)
@@ -1748,14 +1748,14 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .First();
-        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile soak requires two distinct remote conversations.");
+        Assert.SkipWhen(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile soak requires two distinct remote conversations.");
 
         var localCandidate = localCandidates
             .FirstOrDefault(item =>
                 !string.Equals(item.ConversationId, remoteA.ConversationId, StringComparison.Ordinal)
                 && !string.Equals(item.ConversationId, remoteB.ConversationId, StringComparison.Ordinal)
                 && session.TryFindByAutomationId(SessionAutomationId(item.ConversationId), TimeSpan.FromSeconds(1)) is not null);
-        Skip.If(localCandidate is null, "No visible pure local conversation candidate is available for cross-profile soak switching.");
+        Assert.SkipWhen(localCandidate is null, "No visible pure local conversation candidate is available for cross-profile soak switching.");
 
         var remoteAId = SessionAutomationId(remoteA.ConversationId);
         var remoteBId = SessionAutomationId(remoteB.ConversationId);
@@ -1826,13 +1826,13 @@ public sealed partial class RealUserConfigSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectReplayBackedRemoteSessions_AcrossProfiles_HotReturn_RecoversWithoutReloadUi()
     {
         GuiTestGate.RequireEnabled();
 
         var remoteCandidates = RealUserConfigProbe.LoadReplayBackedCandidates(includeAllProfiles: true);
-        Skip.If(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
+        Assert.SkipWhen(remoteCandidates.Count == 0, "No replay-backed remote conversation candidates were found in the current SalmonEgg app data.");
 
         using var session = WindowsGuiAppSession.LaunchFresh();
 
@@ -1848,7 +1848,7 @@ public sealed partial class RealUserConfigSmokeTests
             .GroupBy(item => item.BoundProfileId!, StringComparer.Ordinal)
             .OrderByDescending(group => group.Count())
             .ToArray();
-        Skip.If(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile hot return validation.");
+        Assert.SkipWhen(profileGroups.Length < 2, "Need at least two visible replay-backed remote conversations bound to different profiles for cross-profile hot return validation.");
 
         var remoteA = profileGroups[0]
             .OrderByDescending(item => item.LocalMessageCount)
@@ -1858,7 +1858,7 @@ public sealed partial class RealUserConfigSmokeTests
             .OrderByDescending(item => item.LocalMessageCount)
             .ThenByDescending(item => item.LastUpdatedAtUtc)
             .First();
-        Skip.If(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot return requires two distinct remote conversations.");
+        Assert.SkipWhen(string.Equals(remoteA.ConversationId, remoteB.ConversationId, StringComparison.Ordinal), "Cross-profile hot return requires two distinct remote conversations.");
 
         var remoteAId = SessionAutomationId(remoteA.ConversationId);
         var remoteBId = SessionAutomationId(remoteB.ConversationId);

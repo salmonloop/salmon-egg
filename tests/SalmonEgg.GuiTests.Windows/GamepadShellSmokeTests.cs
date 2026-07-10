@@ -8,7 +8,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class ShellFocusedActivationSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void DiscoverSessions_CanBeReached_AndActivated_ThroughFocusedNativeActivationPath()
     {
         GuiTestGate.RequireEnabled();
@@ -26,7 +26,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"Discover sessions page did not become visible through focused native activation.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiscoverSessions_CanBeActivated_ThroughVirtualGamepadA()
     {
         GuiTestGate.RequireEnabled();
@@ -44,7 +44,7 @@ public sealed class ShellFocusedActivationSmokeTests
             $"Discover sessions page did not become visible through Virtual Gamepad A activation.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void TitleBarCommand_VirtualGamepadDPadDown_CanReachMainNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -67,7 +67,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationStartItem_VirtualGamepadDPadDown_CanReachAnotherNavigationItem()
     {
         GuiTestGate.RequireEnabled();
@@ -91,7 +91,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationProjectItem_VirtualGamepadDPadDown_CanReachSessionChild()
     {
         GuiTestGate.RequireEnabled();
@@ -120,7 +120,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationSessionItem_VirtualGamepadDPadUp_CanReachParentProject()
     {
         GuiTestGate.RequireEnabled();
@@ -148,7 +148,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationLastSession_VirtualGamepadDPadDown_CanReachNextProject()
     {
         GuiTestGate.RequireEnabled();
@@ -182,7 +182,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void RightTitleBarCommand_VirtualGamepadDPadDown_CanReachApplicationBody()
     {
         GuiTestGate.RequireEnabled();
@@ -215,7 +215,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationTopItem_VirtualGamepadDPadUp_CanReachTitleBar()
     {
         GuiTestGate.RequireEnabled();
@@ -241,7 +241,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MainNavigationSessionItem_VirtualGamepadDPadRight_CanReachChatInputBox()
     {
         GuiTestGate.RequireEnabled();
@@ -275,7 +275,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartPromptBox_KeyboardUp_CanReturnToFirstHeroSuggestion()
     {
         GuiTestGate.RequireEnabled();
@@ -298,7 +298,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartPromptBox_KeyboardDown_CanReachFirstSelector()
     {
         GuiTestGate.RequireEnabled();
@@ -323,7 +323,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_VirtualGamepadDPadDown_CanReachInputBox()
     {
         GuiTestGate.RequireEnabled();
@@ -372,7 +372,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_ModeSelector_VirtualGamepadDPadUp_CanReturnToInputBox()
     {
         GuiTestGate.RequireEnabled();
@@ -407,7 +407,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_InputBox_KeyboardUp_CanReachTranscriptViewport()
     {
         GuiTestGate.RequireEnabled();
@@ -439,7 +439,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptSurface_KeyboardUpThenVirtualGamepadVerticalNavigation_DoesNotEscapeToMainNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -489,7 +489,7 @@ public sealed class ShellFocusedActivationSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_ComposerHorizontalTraversal_CanReachActionButtonAndReturnToTrailingVisibleSelector()
     {
         GuiTestGate.RequireEnabled();
@@ -554,7 +554,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_ComposerHorizontalTraversal_KeyboardCanReturnToTrailingVisibleSelector()
     {
         GuiTestGate.RequireEnabled();
@@ -619,7 +619,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_InputBox_VirtualGamepadY_KeepsFocusDuringVoiceToggle()
     {
         GuiTestGate.RequireEnabled();
@@ -652,7 +652,7 @@ public sealed class ShellFocusedActivationSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputArea_InputBox_VirtualGamepadY_KeepsFocusAfterVoiceButtonWasPreviouslyFocused()
     {
         GuiTestGate.RequireEnabled();
@@ -663,7 +663,7 @@ public sealed class ShellFocusedActivationSmokeTests
         using var gamepad = session.CreateConfiguredGamepadInput();
 
         var inputBox = OpenChatSessionAndFocusInputBox(session, appData);
-        Skip.IfNot(
+        Assert.SkipUnless(
             session.WaitUntilOnscreen("VoiceInputStartButton", TimeSpan.FromSeconds(3)),
             "Voice input start button is not available in this environment.");
 
@@ -685,7 +685,7 @@ public sealed class ShellFocusedActivationSmokeTests
         Assert.Equal(promptText, session.TryGetValue(inputBox));
     }
 
-    [SkippableFact]
+    [Fact]
     public void MiniChatInputBox_VirtualGamepadY_KeepsFocusDuringVoiceToggle()
     {
         GuiTestGate.RequireEnabled();
@@ -724,7 +724,7 @@ public sealed class ShellFocusedActivationSmokeTests
     }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptViewport_VirtualGamepadLeftTrigger_CanPageUpTranscript()
     {
         GuiTestGate.RequireEnabled();
@@ -774,7 +774,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatInputBox_AfterTranscriptTrigger_VirtualGamepadLeftTrigger_DoesNotStealFocusOrScrollTranscript()
     {
         GuiTestGate.RequireEnabled();
@@ -841,7 +841,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDataStorageContent_VirtualGamepadRightTrigger_CanPageDownSettingsContent()
     {
         GuiTestGate.RequireEnabled();
@@ -882,7 +882,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptViewport_KeyboardUpThenVirtualGamepadActivation_CanEnterFirstMessageListItem()
     {
         GuiTestGate.RequireEnabled();
@@ -931,7 +931,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadDPadUp_DoesNotEscapeMessageLayerAtTopBoundary()
     {
         GuiTestGate.RequireEnabled();
@@ -991,7 +991,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadBack_ReturnsToTranscriptViewport()
     {
         GuiTestGate.RequireEnabled();
@@ -1047,7 +1047,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadDPadDown_CanReachNextMessage()
     {
         GuiTestGate.RequireEnabled();
@@ -1111,7 +1111,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptMessageLayer_KeyboardUpThenVirtualGamepadRight_CanReachToolCallPill()
     {
         GuiTestGate.RequireEnabled();
@@ -1163,7 +1163,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ChatTranscriptChildControl_KeyboardUpThenVirtualGamepadLeft_ReturnsToMessageLayer()
     {
         GuiTestGate.RequireEnabled();
@@ -1225,7 +1225,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsCenter_VirtualGamepadDPadRight_CanReachSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1250,7 +1250,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsContent_VirtualGamepadDPadUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1295,7 +1295,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsAboutContent_VirtualGamepadDPadUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1335,7 +1335,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsMcpTopRowAction_VirtualGamepadDPadUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1367,7 +1367,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsShortcutsContent_VirtualGamepadDPadUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1411,7 +1411,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsShortcutsRestoreAll_VirtualGamepadDPadUp_CanReturnToTrailingShortcutAction()
     {
         GuiTestGate.RequireEnabled();
@@ -1443,7 +1443,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsShortcutsRestoreAll_KeyboardUp_CanReturnToTrailingShortcutAction()
     {
         GuiTestGate.RequireEnabled();
@@ -1474,7 +1474,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDiagnosticsContent_VirtualGamepadDPadUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1514,7 +1514,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDiagnosticsContent_KeyboardUp_CanReturnToSectionNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1544,7 +1544,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiscoverSessions_VirtualGamepadDPadRight_CanReachProfilesList()
     {
         GuiTestGate.RequireEnabled();
@@ -1568,7 +1568,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiscoverProfilesSelection_VirtualGamepadDPadRight_CanReachImportAction()
     {
         GuiTestGate.RequireEnabled();
@@ -1617,7 +1617,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void GamepadB_FromDiscoverDetails_ReturnsToProfilesPane()
     {
         GuiTestGate.RequireEnabled();
@@ -1667,7 +1667,7 @@ public sealed class ShellFocusedActivationSmokeTests
         AssertMainNavSemanticSelection(session, "DiscoverSessions");
     }
 
-    [SkippableFact]
+    [Fact]
     public void GamepadB_FromDiscoverProfiles_ReturnsFocusToMainNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1708,7 +1708,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void GamepadB_FromSettingsSectionNavigation_ReturnsFocusToMainNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1729,7 +1729,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void GamepadB_FromChatBody_ReturnsFocusToMainNavigation()
     {
         GuiTestGate.RequireEnabled();
@@ -1770,7 +1770,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsContent_VirtualGamepadDPadDown_CanReachSubsequentDiagnosticsActions()
     {
         GuiTestGate.RequireEnabled();
@@ -1812,7 +1812,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiagnosticsGamepadActions_VirtualGamepadDPadDown_CanAdvanceWhenStopIsDisabled()
     {
         GuiTestGate.RequireEnabled();
@@ -1849,7 +1849,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiagnosticsGamepadActions_VirtualGamepadDPadDown_SkipsDisabledStopButton()
     {
         GuiTestGate.RequireEnabled();
@@ -1886,7 +1886,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsGeneralContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -1921,7 +1921,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsAppearanceContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -1957,7 +1957,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsAcpContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -1986,7 +1986,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsMcpContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -2015,7 +2015,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsMcpReload_VirtualGamepadDPadDown_ReachesFirstServerToggleWithoutHiddenStops()
     {
         GuiTestGate.RequireEnabled();
@@ -2067,7 +2067,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsMcpReload_KeyboardDown_ReachesFirstServerToggleWithoutHiddenStops()
     {
         GuiTestGate.RequireEnabled();
@@ -2119,7 +2119,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsShortcutsContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -2155,7 +2155,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsAboutContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -2189,7 +2189,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsAppearanceSection_VirtualGamepadDPadDown_CanReachFirstControl()
     {
         GuiTestGate.RequireEnabled();
@@ -2218,7 +2218,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsSectionNavigation_VirtualGamepadActivationThenDPadDown_EntersFocusedSectionContent()
     {
         GuiTestGate.RequireEnabled();
@@ -2257,7 +2257,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDataStorageContent_VirtualGamepadDPadDown_CanReachSubsequentControls()
     {
         GuiTestGate.RequireEnabled();
@@ -2290,7 +2290,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDataStorageNumberBox_VirtualGamepadDPadDown_MovesFocusWithoutChangingValue()
     {
         GuiTestGate.RequireEnabled();
@@ -2351,7 +2351,7 @@ public sealed class ShellFocusedActivationSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SettingsDataStorageFirstToggle_VirtualGamepadDPadDown_ReachesNumberBoxInSingleStep()
     {
         GuiTestGate.RequireEnabled();

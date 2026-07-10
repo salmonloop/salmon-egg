@@ -7,7 +7,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class ViewportDetachedWarmReturnSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void RemoteSession_DetachedViewport_SwitchAwayAndBack_DoesNotReclaimBottom()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

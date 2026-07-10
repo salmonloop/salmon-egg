@@ -14,12 +14,12 @@ internal static class GuiTestGate
     public static void RequireEnabled()
     {
         var enabled = Environment.GetEnvironmentVariable(EnableEnvVar);
-        Skip.IfNot(
+        Assert.SkipUnless(
             string.Equals(enabled, "1", StringComparison.Ordinal),
             $"Windows GUI smoke tests are opt-in. Set {EnableEnvVar}=1 after installing/running the MSIX build.");
 
         var install = GetRequiredCurrentInstall();
-        Skip.IfNot(
+        Assert.SkipUnless(
             install.IsCurrentInstall,
             install.FailureMessage
             ?? $"Windows GUI smoke tests require the current repo MSIX install marker. Run .tools/run-winui3-msix.ps1 -Configuration Debug first, then set {EnableEnvVar}=1.");

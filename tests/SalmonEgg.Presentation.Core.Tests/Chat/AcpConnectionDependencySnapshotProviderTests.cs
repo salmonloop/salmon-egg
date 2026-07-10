@@ -26,7 +26,7 @@ public sealed class AcpConnectionDependencySnapshotProviderTests
             new ChatStore(chatState),
             new ChatConnectionStore(connectionState));
 
-        var snapshot = await provider.GetSnapshotAsync();
+        var snapshot = await provider.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("profile-b", snapshot.SelectedProfileId);
         Assert.Contains("profile-a", snapshot.ProfilesRequiredByRemoteBindings);
@@ -47,7 +47,7 @@ public sealed class AcpConnectionDependencySnapshotProviderTests
             new ChatStore(chatState),
             new ChatConnectionStore(connectionState));
 
-        var snapshot = await provider.GetSnapshotAsync();
+        var snapshot = await provider.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(snapshot.SelectedProfileId);
         Assert.Empty(snapshot.ProfilesRequiredByRemoteBindings);

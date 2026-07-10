@@ -47,7 +47,7 @@ public sealed class ThreadingComplianceTests
         invokeStopwatch.Stop();
 
         Assert.True(invokeStopwatch.ElapsedMilliseconds < 1000, $"Invoke path was unexpectedly slow. elapsedMs={invokeStopwatch.ElapsedMilliseconds}");
-        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.False(activationTask.IsCompleted, "Activation should still be pending while switcher is blocked.");
 
         allowSwitchCompletion.TrySetResult(null);

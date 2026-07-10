@@ -1,15 +1,14 @@
 using System;
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionUpdateTypesTests
 {
-    [Test]
+    [Fact]
     public void SessionUpdateParams_Update_RoundTripsAsSessionUpdatePayload()
     {
         var sessionParams = new SessionUpdateParams
@@ -21,12 +20,12 @@ public sealed class SessionUpdateTypesTests
         var json = JsonSerializer.Serialize(sessionParams);
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json);
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.SessionId, Is.EqualTo("test-session"));
-        Assert.That(parsed.Update, Is.TypeOf<CurrentModeUpdate>());
+        Assert.NotNull(parsed);
+        Assert.Equal("test-session", parsed!.SessionId);
+        Assert.IsType<CurrentModeUpdate>(parsed.Update);
     }
 
-    [Test]
+    [Fact]
     public void SessionUpdateParams_Should_Serialize_With_Update()
     {
         // Given: A SessionUpdateParams with an update
@@ -41,13 +40,13 @@ public sealed class SessionUpdateTypesTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: update should be present in JSON
-        Assert.That(parsed.RootElement.TryGetProperty("update", out var update), Is.True);
-        Assert.That(update.ValueKind, Is.EqualTo(JsonValueKind.Object));
-        Assert.That(update.GetProperty("currentModeId").GetString(), Is.EqualTo("test-mode"));
-        Assert.That(update.TryGetProperty("modeId", out _), Is.False);
+        Assert.True(parsed.RootElement.TryGetProperty("update", out var update));
+        Assert.Equal(JsonValueKind.Object, update.ValueKind);
+        Assert.Equal("test-mode", update.GetProperty("currentModeId").GetString());
+        Assert.False(update.TryGetProperty("modeId", out _));
     }
 
-    [Test]
+    [Fact]
     public void ConfigOptionUpdate_ConfigOptions_RoundTrips()
     {
         var update = new ConfigOptionUpdate
@@ -58,13 +57,13 @@ public sealed class SessionUpdateTypesTests
         var json = JsonSerializer.Serialize(update);
         var parsed = JsonSerializer.Deserialize<ConfigOptionUpdate>(json);
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.ConfigOptions, Is.Not.Null);
-        Assert.That(parsed.ConfigOptions!.Count, Is.EqualTo(1));
-        Assert.That(parsed.ConfigOptions[0].Id, Is.EqualTo("mode"));
+        Assert.NotNull(parsed);
+        Assert.NotNull(parsed!.ConfigOptions);
+        var option = Assert.Single(parsed.ConfigOptions!);
+        Assert.Equal("mode", option.Id);
     }
 
-    [Test]
+    [Fact]
     public void PlanUpdate_Deserialization_PreservesStandardMetaFields()
     {
         var json = """
@@ -88,17 +87,16 @@ public sealed class SessionUpdateTypesTests
 
         var parsed = JsonSerializer.Deserialize<PlanUpdate>(json);
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Meta, Is.Not.Null);
-        Assert.That(ReadMetaValue(parsed.Meta!["agent"]), Is.EqualTo("unit-test"));
+        Assert.NotNull(parsed);
+        Assert.NotNull(parsed!.Meta);
+        Assert.Equal("unit-test", ReadMetaValue(parsed.Meta!["agent"]));
 
-        Assert.That(parsed.Entries, Has.Count.EqualTo(1));
-        var entry = parsed.Entries[0];
-        Assert.That(entry.Meta, Is.Not.Null);
-        Assert.That(ReadMetaValue(entry.Meta!["id"]), Is.EqualTo("step-1"));
+        var entry = Assert.Single(parsed.Entries);
+        Assert.NotNull(entry.Meta);
+        Assert.Equal("step-1", ReadMetaValue(entry.Meta!["id"]));
     }
 
-    [Test]
+    [Fact]
     public void PlanUpdate_Deserialization_RejectsNullEntryContent()
     {
         var json = """
@@ -117,7 +115,7 @@ public sealed class SessionUpdateTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<PlanUpdate>(json)));
     }
 
-    [Test]
+    [Fact]
     public void PlanUpdate_Deserialization_RejectsNullEntries()
     {
         var json = """
@@ -130,7 +128,7 @@ public sealed class SessionUpdateTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<PlanUpdate>(json)));
     }
 
-    [Test]
+    [Fact]
     public void PlanUpdate_Deserialization_RejectsNullEntryItem()
     {
         var json = """

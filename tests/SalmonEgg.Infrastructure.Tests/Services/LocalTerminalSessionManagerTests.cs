@@ -22,8 +22,8 @@ public sealed class LocalTerminalSessionManagerTests
         });
 
         // Act
-        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
-        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two");
+        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
+        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Assert
         var created = Assert.Single(createdSessions);
@@ -46,8 +46,8 @@ public sealed class LocalTerminalSessionManagerTests
         });
 
         // Act
-        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
-        var second = await manager.GetOrCreateAsync("conversation-2", "/workspace/two");
+        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
+        var second = await manager.GetOrCreateAsync("conversation-2", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, createdSessions.Count);
@@ -70,11 +70,11 @@ public sealed class LocalTerminalSessionManagerTests
             return new ValueTask<ILocalTerminalSession>(session);
         });
 
-        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
+        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
 
         // Act
-        await manager.DisposeConversationAsync("conversation-1");
-        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two");
+        await manager.DisposeConversationAsync("conversation-1", TestContext.Current.CancellationToken);
+        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, createdSessions.Count);
@@ -97,11 +97,11 @@ public sealed class LocalTerminalSessionManagerTests
             return new ValueTask<ILocalTerminalSession>(session);
         });
 
-        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
+        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
         await first.DisposeAsync();
 
         // Act
-        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two");
+        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, createdSessions.Count);
@@ -125,12 +125,12 @@ public sealed class LocalTerminalSessionManagerTests
             return new ValueTask<ILocalTerminalSession>(session);
         });
 
-        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
+        var first = await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
         var firstFake = Assert.IsType<FakeLocalTerminalSession>(first);
         firstFake.SetCanAcceptInput(false);
 
         // Act
-        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two");
+        var second = await manager.GetOrCreateAsync("conversation-1", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, createdSessions.Count);
@@ -152,8 +152,8 @@ public sealed class LocalTerminalSessionManagerTests
             return new ValueTask<ILocalTerminalSession>(session);
         });
 
-        await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
-        await manager.GetOrCreateAsync("conversation-2", "/workspace/two");
+        await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
+        await manager.GetOrCreateAsync("conversation-2", "/workspace/two", TestContext.Current.CancellationToken);
 
         // Act
         await manager.DisposeAsync();
@@ -173,7 +173,7 @@ public sealed class LocalTerminalSessionManagerTests
             return new ValueTask<ILocalTerminalSession>(session);
         });
 
-        await manager.GetOrCreateAsync("conversation-1", "/workspace/one");
+        await manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken);
         await manager.DisposeAsync();
 
         // Act
@@ -191,7 +191,7 @@ public sealed class LocalTerminalSessionManagerTests
         // Arrange
         var output = new ConcurrentQueue<string>();
         await using var manager = new LocalTerminalSessionManager();
-        var session = await manager.GetOrCreateAsync("conversation-process", Environment.CurrentDirectory);
+        var session = await manager.GetOrCreateAsync("conversation-process", Environment.CurrentDirectory, TestContext.Current.CancellationToken);
         Assert.Equal(LocalTerminalTransportMode.PseudoConsole, session.TransportMode);
         session.OutputReceived += (_, text) => output.Enqueue(text);
         var token = "salmon-local-terminal-smoke";
@@ -200,7 +200,7 @@ public sealed class LocalTerminalSessionManagerTests
             : $"echo {token}\n";
 
         // Act
-        await session.WriteInputAsync(command);
+        await session.WriteInputAsync(command, TestContext.Current.CancellationToken);
         var sawOutput = await WaitForAsync(() => string.Concat(output).Contains(token, StringComparison.Ordinal));
 
         // Assert
@@ -213,12 +213,12 @@ public sealed class LocalTerminalSessionManagerTests
         // Arrange
         var output = new ConcurrentQueue<string>();
         await using var manager = new LocalTerminalSessionManager();
-        var session = await manager.GetOrCreateAsync("conversation-process-enter", Environment.CurrentDirectory);
+        var session = await manager.GetOrCreateAsync("conversation-process-enter", Environment.CurrentDirectory, TestContext.Current.CancellationToken);
         session.OutputReceived += (_, text) => output.Enqueue(text);
         var token = "salmon-local-terminal-enter";
 
         // Act
-        await session.WriteInputAsync($"echo {token}\r");
+        await session.WriteInputAsync($"echo {token}\r", TestContext.Current.CancellationToken);
         var sawOutput = await WaitForAsync(() => string.Concat(output).Contains(token, StringComparison.Ordinal));
 
         // Assert
@@ -240,7 +240,7 @@ public sealed class LocalTerminalSessionManagerTests
             return createdSession;
         });
 
-        var getOrCreateTask = manager.GetOrCreateAsync("conversation-1", "/workspace/one").AsTask();
+        var getOrCreateTask = manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken).AsTask();
         await factoryEntered.Task;
 
         // Act
@@ -254,7 +254,7 @@ public sealed class LocalTerminalSessionManagerTests
         Assert.Same(createdSession, returnedSession);
         Assert.Equal(1, createdSession!.DisposeCount);
         await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => manager.GetOrCreateAsync("conversation-1", "/workspace/one").AsTask());
+            () => manager.GetOrCreateAsync("conversation-1", "/workspace/one", TestContext.Current.CancellationToken).AsTask());
     }
 
     [Theory]

@@ -32,7 +32,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             FirstNonSilentSampleObservedAt: DateTimeOffset.Now.AddMilliseconds(-200),
             LastNonSilentSampleObservedAt: DateTimeOffset.Now.AddMilliseconds(-20),
             FailureMessage: null));
-        await Task.Delay(150);
+        await Task.Delay(150, TestContext.Current.CancellationToken);
         service.RaisePartial("测试");
         service.RaiseFinal("测试语音");
         service.RaiseSessionEnded();
@@ -104,7 +104,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
         };
 
         await viewModel.StartProbeCommand.ExecuteAsync(null);
-        await Task.Run(() => viewModel.StopProbeCommand.ExecuteAsync(null));
+        await Task.Run(() => viewModel.StopProbeCommand.ExecuteAsync(null), TestContext.Current.CancellationToken);
 
         Assert.True(stoppingStatusRaisedOnUi);
     }
@@ -126,7 +126,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
             FirstNonSilentSampleObservedAt: null,
             LastNonSilentSampleObservedAt: null,
             FailureMessage: null));
-        await Task.Delay(150);
+        await Task.Delay(150, TestContext.Current.CancellationToken);
         await viewModel.StopProbeCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.IsRunning);
@@ -329,7 +329,7 @@ public sealed class VoiceInputDiagnosticsProbeViewModelTests
 
         service.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, service.StartCount);
         Assert.False(viewModel.IsRunning);

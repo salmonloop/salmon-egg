@@ -53,10 +53,10 @@ public sealed class StdioTransportConnectionTests
             }
         };
 
-        var connected = await transport.ConnectAsync();
+        var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
 
         Assert.False(connected);
-        await stderrObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await stderrObserved.Task.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
         Assert.Contains(
             errors,
             message => message.Contains("ssh config permissions are invalid", StringComparison.Ordinal));

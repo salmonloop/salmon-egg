@@ -7,7 +7,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class ViewportProjectionOwnedRestoreSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void RemoteSession_WheelOnVisibleMessageContent_DetachesViewportFromBottom()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -62,7 +62,7 @@ public sealed class ViewportProjectionOwnedRestoreSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RemoteSession_DetachedWarmReturn_RestoresFirstVisibleReplayAnchorWithoutBottomReclaim()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

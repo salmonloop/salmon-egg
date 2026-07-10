@@ -43,7 +43,7 @@ public sealed class McpSettingsServiceTests : IDisposable
     {
         var service = CreateService();
 
-        var settings = await service.LoadAsync();
+        var settings = await service.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(settings.Servers);
     }
@@ -93,9 +93,9 @@ public sealed class McpSettingsServiceTests : IDisposable
             ]
         };
 
-        await service.SaveAsync(settings);
+        await service.SaveAsync(settings, TestContext.Current.CancellationToken);
 
-        var yaml = await File.ReadAllTextAsync(GetMcpYamlPath());
+        var yaml = await File.ReadAllTextAsync(GetMcpYamlPath(), TestContext.Current.CancellationToken);
         Assert.DoesNotContain("is_enabled:", yaml, StringComparison.Ordinal);
         Assert.Contains("enabled: false", yaml, StringComparison.Ordinal);
         Assert.Contains("servers:", yaml, StringComparison.Ordinal);
@@ -106,7 +106,7 @@ public sealed class McpSettingsServiceTests : IDisposable
         Assert.Contains("scope: workspace", yaml, StringComparison.Ordinal);
         Assert.Contains("secret_ref: header-auth", yaml, StringComparison.Ordinal);
 
-        var loaded = await service.LoadAsync();
+        var loaded = await service.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(3, loaded.Servers.Count);
 
@@ -146,9 +146,9 @@ public sealed class McpSettingsServiceTests : IDisposable
             ]
         };
 
-        await service.SaveAsync(settings);
+        await service.SaveAsync(settings, TestContext.Current.CancellationToken);
 
-        var loaded = await service.LoadAsync();
+        var loaded = await service.LoadAsync(TestContext.Current.CancellationToken);
 
         var entry = Assert.Single(loaded.Servers);
         Assert.False(entry.Enabled);
@@ -168,7 +168,7 @@ public sealed class McpSettingsServiceTests : IDisposable
             ]
         };
 
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(settings));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SaveAsync(settings, TestContext.Current.CancellationToken));
         Assert.Contains("MCP server configuration is invalid", error.Message, StringComparison.Ordinal);
     }
 
@@ -184,10 +184,10 @@ public sealed class McpSettingsServiceTests : IDisposable
             - transport: stdio
               name: filesystem
               command: ''
-            """);
+            """, TestContext.Current.CancellationToken);
         var service = CreateService();
 
-        var loaded = await service.LoadAsync();
+        var loaded = await service.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(loaded.Servers);
     }
@@ -206,10 +206,10 @@ public sealed class McpSettingsServiceTests : IDisposable
             - transport: '{{transport}}'
               name: filesystem
               command: /usr/bin/mcp-filesystem
-            """);
+            """, TestContext.Current.CancellationToken);
         var service = CreateService();
 
-        var loaded = await service.LoadAsync();
+        var loaded = await service.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(loaded.Servers);
     }
@@ -226,7 +226,7 @@ public sealed class McpSettingsServiceTests : IDisposable
     public async Task SaveAsync_WhenExistingFileIsCorruptedYaml_OverwritesAndLoadsBack()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(GetMcpYamlPath())!);
-        await File.WriteAllTextAsync(GetMcpYamlPath(), ":\n  - definitely not yaml");
+        await File.WriteAllTextAsync(GetMcpYamlPath(), ":\n  - definitely not yaml", TestContext.Current.CancellationToken);
 
         var service = CreateService();
         var settings = new McpSettings
@@ -237,9 +237,9 @@ public sealed class McpSettingsServiceTests : IDisposable
             ]
         };
 
-        await service.SaveAsync(settings);
+        await service.SaveAsync(settings, TestContext.Current.CancellationToken);
 
-        var loaded = await service.LoadAsync();
+        var loaded = await service.LoadAsync(TestContext.Current.CancellationToken);
         var server = Assert.IsType<StdioMcpServer>(Assert.Single(loaded.Servers).Server);
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("/usr/bin/mcp-filesystem", server.Command);

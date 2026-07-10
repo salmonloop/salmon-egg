@@ -89,7 +89,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         });
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
-        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
         var loaded = await service.LoadAsync();
 
         Assert.Contains("schema_version: 2", yaml, StringComparison.Ordinal);
@@ -130,7 +130,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         });
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
-        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("profile_id", yaml, StringComparison.Ordinal);
 
@@ -167,7 +167,7 @@ public sealed class AppSettingsServiceTests : IDisposable
                 directory_id: dir-a
                 display_name: Alpha
                 remote_path: /remote/alpha
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var service = CreateService();
 
@@ -208,7 +208,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal(1, loaded.AcpMaxPinnedProfiles);
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
-        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
         Assert.Contains("acp_enabled: false", yaml, StringComparison.Ordinal);
     }
 
@@ -244,7 +244,7 @@ public sealed class AppSettingsServiceTests : IDisposable
             $"""
             schema_version: 1
             language: {persistedTag}
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var service = CreateService();
 
@@ -261,7 +261,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         await service.SaveAsync(new AppSettings { Language = "zh-CN" });
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
-        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
 
         Assert.Contains("language: zh-Hans", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("zh-CN", yaml, StringComparison.Ordinal);
@@ -280,7 +280,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         await service.SaveAsync(settings);
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
-        var yaml = await File.ReadAllTextAsync(appYamlPath);
+        var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("HistoryRetentionDays", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RememberRecentProjectPaths", yaml, StringComparison.Ordinal);
@@ -303,7 +303,7 @@ public sealed class AppSettingsServiceTests : IDisposable
             history_retention_days: 45
             remember_recent_project_paths: false
             last_selected_project_id: project-123
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var service = CreateService();
 
@@ -341,7 +341,7 @@ public sealed class AppSettingsServiceTests : IDisposable
     {
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
         Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
-        await File.WriteAllTextAsync(appYamlPath, ":\n  - definitely not yaml");
+        await File.WriteAllTextAsync(appYamlPath, ":\n  - definitely not yaml", TestContext.Current.CancellationToken);
 
         var service = CreateService();
         await service.SaveAsync(new AppSettings { Theme = "Dark", Language = "zh-Hans" });

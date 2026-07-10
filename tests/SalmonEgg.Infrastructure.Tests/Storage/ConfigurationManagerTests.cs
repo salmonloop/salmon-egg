@@ -52,7 +52,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         Assert.True(File.Exists(GetServerYamlPath(config.Id)));
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.Contains("schema_version:", yaml);
         Assert.Contains("id:", yaml);
         Assert.DoesNotContain("{", yaml);
@@ -72,7 +72,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         await _configManager.SaveConfigurationAsync(config);
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.DoesNotContain("secret-token-123", yaml, StringComparison.Ordinal);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
@@ -90,7 +90,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         await _configManager.SaveConfigurationAsync(config);
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.DoesNotContain("secret-api-key-456", yaml, StringComparison.Ordinal);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
@@ -115,7 +115,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         await _configManager.SaveConfigurationAsync(config);
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.Contains("transport: stdio", yaml, StringComparison.Ordinal);
         Assert.Contains("stdio_command: ssh", yaml, StringComparison.Ordinal);
         Assert.Contains("stdio_arguments:", yaml, StringComparison.Ordinal);
@@ -143,7 +143,7 @@ public sealed class ConfigurationManagerTests : IDisposable
               mode: none
             proxy:
               mode: system
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(configId);
 
@@ -177,7 +177,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         await _configManager.SaveConfigurationAsync(config);
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.DoesNotContain("mcp_servers:", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("transport: stdio", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("transport: http", yaml, StringComparison.Ordinal);
@@ -194,7 +194,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         await _configManager.SaveConfigurationAsync(config);
 
-        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id));
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
         Assert.DoesNotContain("mcp_servers:", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("meta:", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("source: profile", yaml, StringComparison.Ordinal);
@@ -231,7 +231,7 @@ public sealed class ConfigurationManagerTests : IDisposable
               mode: none
             proxy:
               mode: system
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(configId);
 
@@ -285,7 +285,7 @@ public sealed class ConfigurationManagerTests : IDisposable
               mode: none
             proxy:
               mode: system
-            """);
+            """, TestContext.Current.CancellationToken);
 
         var configs = (await _configManager.ListConfigurationsAsync()).ToList();
 
@@ -310,9 +310,9 @@ public sealed class ConfigurationManagerTests : IDisposable
         await _configManager.SaveConfigurationAsync(config);
 
         var path = GetServerYamlPath(config.Id);
-        var yaml = await File.ReadAllTextAsync(path);
+        var yaml = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
         yaml += $"{Environment.NewLine}totally_unknown_field: 123{Environment.NewLine}";
-        await File.WriteAllTextAsync(path, yaml);
+        await File.WriteAllTextAsync(path, yaml, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
         Assert.NotNull(loaded);
@@ -326,9 +326,9 @@ public sealed class ConfigurationManagerTests : IDisposable
         await _configManager.SaveConfigurationAsync(config);
 
         var path = GetServerYamlPath(config.Id);
-        var yaml = await File.ReadAllTextAsync(path);
+        var yaml = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
         yaml = yaml.Replace("transport: websocket", "transport: totally_unknown_transport", StringComparison.OrdinalIgnoreCase);
-        await File.WriteAllTextAsync(path, yaml);
+        await File.WriteAllTextAsync(path, yaml, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
         Assert.NotNull(loaded);
@@ -342,9 +342,9 @@ public sealed class ConfigurationManagerTests : IDisposable
         await _configManager.SaveConfigurationAsync(config);
 
         var path = GetServerYamlPath(config.Id);
-        var yaml = await File.ReadAllTextAsync(path);
+        var yaml = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
         yaml = yaml.Replace($"connection_timeout_seconds: {config.ConnectionTimeout}{Environment.NewLine}", string.Empty, StringComparison.Ordinal);
-        await File.WriteAllTextAsync(path, yaml);
+        await File.WriteAllTextAsync(path, yaml, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
 
@@ -359,7 +359,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         await _configManager.SaveConfigurationAsync(config);
 
         var path = GetServerYamlPath(config.Id);
-        var yaml = await File.ReadAllTextAsync(path);
+        var yaml = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
         var proxyMode = ProxyConfig.DefaultMode switch
         {
             ProxyMode.System => "system",
@@ -368,7 +368,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         };
         var proxyBlock = $"proxy:{Environment.NewLine}  mode: {proxyMode}{Environment.NewLine}  enabled: false{Environment.NewLine}  proxy_url: ''{Environment.NewLine}";
         yaml = yaml.Replace(proxyBlock, string.Empty, StringComparison.Ordinal);
-        await File.WriteAllTextAsync(path, yaml);
+        await File.WriteAllTextAsync(path, yaml, TestContext.Current.CancellationToken);
 
         var loaded = await _configManager.LoadConfigurationAsync(config.Id);
 
@@ -383,7 +383,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         var configId = "corrupted-then-save-001";
         var path = GetServerYamlPath(configId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, ":\n  - definitely not yaml");
+        await File.WriteAllTextAsync(path, ":\n  - definitely not yaml", TestContext.Current.CancellationToken);
 
         var config = CreateTestConfiguration(configId);
         await _configManager.SaveConfigurationAsync(config);

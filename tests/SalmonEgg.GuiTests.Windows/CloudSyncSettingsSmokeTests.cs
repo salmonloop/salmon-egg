@@ -7,7 +7,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class CloudSyncSettingsSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void DataStorageCloudSyncProviderPicker_SwitchesVisibleProviderSetupPane()
     {
         GuiTestGate.RequireEnabled();

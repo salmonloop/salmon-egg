@@ -33,7 +33,7 @@ public sealed class LiveLogStreamServiceTests
         try
         {
             var logFile = Path.Combine(tempRoot, "app.log");
-            await File.WriteAllTextAsync(logFile, "line-1\n");
+            await File.WriteAllTextAsync(logFile, "line-1\n", TestContext.Current.CancellationToken);
 
             var updates = new ConcurrentQueue<LiveLogStreamUpdate>();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
@@ -48,7 +48,7 @@ public sealed class LiveLogStreamServiceTests
             await WaitForConditionAsync(
                 () => updates.Any(u => u.AppendedText.Contains("line-1", StringComparison.Ordinal)),
                 cts.Token);
-            await File.AppendAllTextAsync(logFile, "line-2\n");
+            await File.AppendAllTextAsync(logFile, "line-2\n", TestContext.Current.CancellationToken);
             await WaitForConditionAsync(
                 () => updates.Any(u => u.AppendedText.Contains("line-2", StringComparison.Ordinal)),
                 cts.Token);
@@ -74,7 +74,7 @@ public sealed class LiveLogStreamServiceTests
         try
         {
             var logFile = Path.Combine(tempRoot, "app.log");
-            await File.WriteAllTextAsync(logFile, "line-1\nline-2\nline-3\n");
+            await File.WriteAllTextAsync(logFile, "line-1\nline-2\nline-3\n", TestContext.Current.CancellationToken);
 
             var updates = new ConcurrentQueue<LiveLogStreamUpdate>();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
@@ -110,7 +110,7 @@ public sealed class LiveLogStreamServiceTests
         {
             var fileA = Path.Combine(tempRoot, "a.log");
             var fileB = Path.Combine(tempRoot, "b.log");
-            await File.WriteAllTextAsync(fileA, "initial-a\n");
+            await File.WriteAllTextAsync(fileA, "initial-a\n", TestContext.Current.CancellationToken);
             File.SetLastWriteTimeUtc(fileA, DateTime.UtcNow.AddSeconds(-2));
 
             var updates = new ConcurrentQueue<LiveLogStreamUpdate>();
@@ -123,13 +123,13 @@ public sealed class LiveLogStreamServiceTests
                 return Task.CompletedTask;
             }, cts.Token);
 
-            await File.AppendAllTextAsync(fileA, "after-start\n");
+            await File.AppendAllTextAsync(fileA, "after-start\n", TestContext.Current.CancellationToken);
             await WaitForConditionAsync(() => updates.Any(u => u.AppendedText.Contains("after-start")), cts.Token);
 
-            await File.WriteAllTextAsync(fileB, "initial-b\n");
+            await File.WriteAllTextAsync(fileB, "initial-b\n", TestContext.Current.CancellationToken);
             File.SetLastWriteTimeUtc(fileB, DateTime.UtcNow.AddSeconds(2));
-            await Task.Delay(TimeSpan.FromMilliseconds(150));
-            await File.AppendAllTextAsync(fileB, "second-file-late\n");
+            await Task.Delay(TimeSpan.FromMilliseconds(150), TestContext.Current.CancellationToken);
+            await File.AppendAllTextAsync(fileB, "second-file-late\n", TestContext.Current.CancellationToken);
 
             await WaitForConditionAsync(
                 () => updates.Any(
@@ -183,10 +183,10 @@ public sealed class LiveLogStreamServiceTests
                 cts.Token);
             Directory.CreateDirectory(tempRoot);
             var logFile = Path.Combine(tempRoot, "fresh.log");
-            await File.WriteAllTextAsync(logFile, string.Empty);
+            await File.WriteAllTextAsync(logFile, string.Empty, TestContext.Current.CancellationToken);
 
             await WaitForConditionAsync(() => updates.Any(u => u.HasFileSwitched), cts.Token);
-            await File.AppendAllTextAsync(logFile, "hello\n");
+            await File.AppendAllTextAsync(logFile, "hello\n", TestContext.Current.CancellationToken);
 
             await WaitForConditionAsync(() => updates.Any(u => u.AppendedText.Contains("hello")), cts.Token);
 

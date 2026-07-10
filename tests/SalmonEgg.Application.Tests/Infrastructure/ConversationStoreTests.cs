@@ -72,9 +72,9 @@ public sealed class ConversationStoreTests
             }
         };
 
-        await store.SaveAsync(doc);
+        await store.SaveAsync(doc, TestContext.Current.CancellationToken);
 
-        var loaded = await store.LoadAsync();
+        var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
         Assert.Equal("c1", loaded.LastActiveConversationId);
         Assert.Single(loaded.Conversations);
         Assert.Equal("My Session", loaded.Conversations[0].DisplayName);

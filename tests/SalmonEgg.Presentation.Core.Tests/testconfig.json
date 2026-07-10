@@ -1,0 +1,7 @@
+{
+  "xUnit": {
+    "parallelizeTestCollections": false,
+    "maxParallelThreads": 1,
+    "parallelAlgorithm": "conservative"
+  }
+}

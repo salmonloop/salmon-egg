@@ -22,7 +22,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
             """;
         var sut = CreateService(logText, VoiceInputPermissionResult.Granted());
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.True(snapshot.IsSupported);
         Assert.NotNull(snapshot.LatestSession);
@@ -47,7 +47,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
         using var culture = new CurrentUiCultureScope("zh-CN");
         var sut = CreateService(string.Empty, VoiceInputPermissionResult.Granted());
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("zh-CN", snapshot.CurrentLanguageTag);
     }
@@ -61,7 +61,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
             RequiresAuthorization: true);
         var sut = CreateService(string.Empty, permission);
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(permission, snapshot.Permission);
     }
@@ -78,7 +78,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
             new FakeAppDataService("C:/app/logs"),
             new FakeLogFileCatalog(string.Empty));
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(permission, snapshot.Permission);
         Assert.Equal(0, voiceInputService.EnsurePermissionCallCount);
@@ -99,7 +99,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
             """;
         var sut = CreateService(logText, VoiceInputPermissionResult.Granted());
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(snapshot.LatestSession);
         Assert.Equal("latest", snapshot.LatestSession!.RequestId);
@@ -142,7 +142,7 @@ public sealed class VoiceInputDiagnosticsServiceTests
                 CompletionStatus: "StoppedByApp"));
         var sut = CreateService(logText, VoiceInputPermissionResult.Granted(), runtimeDiagnostics);
 
-        var snapshot = await sut.GetSnapshotAsync();
+        var snapshot = await sut.GetSnapshotAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("USB Microphone", snapshot.DefaultInputDeviceName);
         Assert.Equal("device-1", snapshot.DefaultInputDeviceId);

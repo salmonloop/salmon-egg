@@ -268,7 +268,7 @@ public sealed class GlobalSearchViewModelTests
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
 
         viewModel.Query = "alpha";
-        await Task.Delay(40);
+        await Task.Delay(40, TestContext.Current.CancellationToken);
         viewModel.Query = "beta";
         await WaitForConditionAsync(() => viewModel.ViewState == GlobalSearchViewState.Results);
 

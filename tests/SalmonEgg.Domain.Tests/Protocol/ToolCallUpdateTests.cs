@@ -1,11 +1,10 @@
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class ToolCallUpdateTests
 {
     private readonly JsonSerializerOptions _jsonOptions;
@@ -21,7 +20,7 @@ public sealed class ToolCallUpdateTests
         };
     }
 
-    [Test]
+    [Fact]
     public void ToolCallUpdate_DeserializesKnownFields_AndIgnoresUnknownLegacyField()
     {
         var json = """
@@ -36,14 +35,14 @@ public sealed class ToolCallUpdateTests
 
         var update = JsonSerializer.Deserialize<ToolCallUpdate>(json, _jsonOptions);
 
-        Assert.That(update, Is.Not.Null);
-        Assert.That(update!.ToolCallId, Is.EqualTo("call-1"));
-        Assert.That(update.Title, Is.EqualTo("Switch mode"));
-        Assert.That(update.Kind, Is.EqualTo(ToolCallKind.SwitchMode));
-        Assert.That(update.Status, Is.EqualTo(ToolCallStatus.Completed));
+        Assert.NotNull(update);
+        Assert.Equal("call-1", update!.ToolCallId);
+        Assert.Equal("Switch mode", update.Title);
+        Assert.Equal(ToolCallKind.SwitchMode, update.Kind);
+        Assert.Equal(ToolCallStatus.Completed, update.Status);
     }
 
-    [Test]
+    [Fact]
     public void ToolCallUpdate_Should_Serialize_Correctly()
     {
         // Given: A ToolCallUpdate with required fields
@@ -60,17 +59,17 @@ public sealed class ToolCallUpdateTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: Required fields should be present
-        Assert.That(parsed.RootElement.TryGetProperty("toolCallId", out var toolCallId), Is.True);
-        Assert.That(toolCallId.GetString(), Is.EqualTo("test-call-123"));
-        Assert.That(parsed.RootElement.TryGetProperty("title", out var title), Is.True);
-        Assert.That(title.GetString(), Is.EqualTo("Test Tool Call"));
-        Assert.That(parsed.RootElement.TryGetProperty("kind", out var kind), Is.True);
-        Assert.That(kind.GetString(), Is.EqualTo("execute"));
-        Assert.That(parsed.RootElement.TryGetProperty("status", out var status), Is.True);
-        Assert.That(status.GetString(), Is.EqualTo("pending"));
+        Assert.True(parsed.RootElement.TryGetProperty("toolCallId", out var toolCallId));
+        Assert.Equal("test-call-123", toolCallId.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("title", out var title));
+        Assert.Equal("Test Tool Call", title.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("kind", out var kind));
+        Assert.Equal("execute", kind.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("status", out var status));
+        Assert.Equal("pending", status.GetString());
     }
 
-    [Test]
+    [Fact]
     public void ToolCallUpdate_SwitchModeKind_Should_Serialize_ToSchemaValue()
     {
         var update = new ToolCallUpdate
@@ -83,6 +82,6 @@ public sealed class ToolCallUpdateTests
         var json = JsonSerializer.Serialize(update, _jsonOptions);
         var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.GetProperty("kind").GetString(), Is.EqualTo("switch_mode"));
+        Assert.Equal("switch_mode", parsed.RootElement.GetProperty("kind").GetString());
     }
 }

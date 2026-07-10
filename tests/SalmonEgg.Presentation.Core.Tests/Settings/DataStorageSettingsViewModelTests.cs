@@ -272,7 +272,7 @@ public sealed class DataStorageSettingsViewModelTests
         viewModel.SelectedCloudConfigProviderId = "s3";
         viewModel.S3Endpoint = "https://s3.example.test";
         viewModel.S3Bucket = "salmonegg";
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.False(viewModel.IsCloudConfigSyncConfigured);
         Assert.Equal("请填写 S3 access key ID 和 secret access key。", viewModel.S3ValidationMessage);
@@ -304,7 +304,7 @@ public sealed class DataStorageSettingsViewModelTests
         viewModel.SelectedCloudConfigProviderId = "webdav";
         viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
         viewModel.WebDavUsername = "alice";
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.False(viewModel.IsCloudConfigSyncConfigured);
         Assert.Equal("已填写 WebDAV 用户名时，请填写密码或先保存该 provider 的凭据。", viewModel.WebDavValidationMessage);
@@ -390,7 +390,7 @@ public sealed class DataStorageSettingsViewModelTests
         viewModel.SelectedCloudConfigProviderId = "s3";
         viewModel.S3Endpoint = "https://s3.example.test";
         viewModel.S3Bucket = "salmonegg";
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.True(viewModel.SelectedCloudConfigProviderHasStoredCredentials);
         Assert.True(viewModel.IsCloudConfigSyncConfigured);
@@ -416,7 +416,7 @@ public sealed class DataStorageSettingsViewModelTests
         viewModel.SelectedCloudConfigProviderId = "s3";
         viewModel.S3Endpoint = "https://s3.example.test";
         viewModel.S3Bucket = "salmonegg";
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         Assert.False(viewModel.SelectedCloudConfigProviderHasStoredCredentials);
         Assert.False(viewModel.IsCloudConfigSyncConfigured);

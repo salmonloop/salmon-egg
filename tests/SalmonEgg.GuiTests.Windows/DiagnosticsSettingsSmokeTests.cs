@@ -10,7 +10,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class DiagnosticsSettingsSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void GamepadDiagnosticsMonitor_CanRefreshAndStartFromDiagnosticsSettings()
     {
         GuiTestGate.RequireEnabled();
@@ -42,11 +42,11 @@ public sealed class DiagnosticsSettingsSmokeTests
         Assert.True(stopButton.IsEnabled, "Gamepad diagnostics stop button should become enabled after starting the monitor.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void GamepadDiagnosticsMonitor_NativeDeviceBackend_ReflectsVirtualControllerInput()
     {
         GuiTestGate.RequireEnabled();
-        Skip.IfNot(
+        Assert.SkipUnless(
             NativeDeviceGamepadTestInput.IsBridgeConfigured(out var failureReason),
             failureReason);
 

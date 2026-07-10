@@ -369,8 +369,10 @@ public class UiConventionsTests
 
     [Theory]
     [InlineData("src", "SalmonEgg.Domain", "SalmonEgg.Domain.csproj")]
+    [InlineData("src", "SalmonEgg.Application", "SalmonEgg.Application.csproj")]
     [InlineData("src", "SalmonEgg.Infrastructure", "SalmonEgg.Infrastructure.csproj")]
-    public void MultiTargetLibraries_ShouldScopeSystemTextJsonPackageToNetstandard(
+    [InlineData("src", "SalmonEgg.Infrastructure.Desktop", "SalmonEgg.Infrastructure.Desktop.csproj")]
+    public void InternalLibraries_ShouldTargetNet10Only(
         string projectRoot,
         string projectDirectory,
         string projectFileName)
@@ -381,10 +383,33 @@ public class UiConventionsTests
         var root = xml.Root;
         Assert.NotNull(root);
 
+        var targetFramework = root!
+            .Descendants("TargetFramework")
+            .Select(node => node.Value.Trim())
+            .SingleOrDefault();
+
+        Assert.Equal("net10.0", targetFramework);
+        Assert.Empty(root.Descendants("TargetFrameworks"));
+        Assert.DoesNotContain(root.Descendants("ItemGroup"), group =>
+            string.Equals(
+                group.Attribute("Condition")?.Value?.Trim(),
+                "'$(TargetFramework)' == 'netstandard2.1'",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AcpSdk_ShouldScopeSystemTextJsonPackageToNetstandard()
+    {
+        var repoRoot = FindRepoRoot();
+        var projectFile = Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "SalmonEgg.Acp.csproj");
+        var xml = XDocument.Load(projectFile);
+        var root = xml.Root;
+        Assert.NotNull(root);
+
         var targetFrameworks = root!
             .Descendants("TargetFrameworks")
             .Select(node => node.Value.Trim())
-            .FirstOrDefault();
+            .SingleOrDefault();
         Assert.Equal("netstandard2.1;net10.0", targetFrameworks);
 
         var itemGroups = root

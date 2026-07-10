@@ -1,19 +1,19 @@
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Domain.Tests.Models;
 
 public sealed class StdioCommandLineTests
 {
-    [Test]
+    [Fact]
     public void ParseArgumentsText_WithQuotedPath_ReturnsStructuredArguments()
     {
         var result = StdioCommandLine.ParseArgumentsText("-NoLogo -File \"/tmp/agent script.ps1\" --mode plan");
 
-        Assert.That(result, Is.EqualTo(new[] { "-NoLogo", "-File", "/tmp/agent script.ps1", "--mode", "plan" }));
+        Assert.Equal(new[] { "-NoLogo", "-File", "/tmp/agent script.ps1", "--mode", "plan" }, result);
     }
 
-    [Test]
+    [Fact]
     public void FormatArgumentsText_WithWhitespaceAndQuotes_RoundTrips()
     {
         string[] arguments = ["-File", "/tmp/agent script.ps1", "--name", "a\"b"];
@@ -21,10 +21,10 @@ public sealed class StdioCommandLineTests
         var formatted = StdioCommandLine.FormatArgumentsText(arguments);
         var reparsed = StdioCommandLine.ParseArgumentsText(formatted);
 
-        Assert.That(reparsed, Is.EqualTo(arguments));
+        Assert.Equal(arguments, reparsed);
     }
 
-    [Test]
+    [Fact]
     public void CanonicalizeArguments_WithDelimiterCharacters_IsUnambiguous()
     {
         string[] first = ["a|b", "c"];
@@ -33,6 +33,6 @@ public sealed class StdioCommandLineTests
         var firstCanonical = StdioCommandLine.CanonicalizeArguments(first);
         var secondCanonical = StdioCommandLine.CanonicalizeArguments(second);
 
-        Assert.That(firstCanonical, Is.Not.EqualTo(secondCanonical));
+        Assert.NotEqual(secondCanonical, firstCanonical);
     }
 }

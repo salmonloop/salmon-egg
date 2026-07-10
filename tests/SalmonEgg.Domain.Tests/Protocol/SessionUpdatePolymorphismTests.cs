@@ -1,13 +1,12 @@
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionUpdatePolymorphismTests
 {
-    [Test]
+    [Fact]
     public void Deserialize_CurrentModeUpdate_Works()
     {
         var json = """
@@ -23,16 +22,16 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.SessionId, Is.EqualTo("s1"));
-        Assert.That(parsed.Update, Is.TypeOf<CurrentModeUpdate>());
+        Assert.NotNull(parsed);
+        Assert.Equal("s1", parsed!.SessionId);
+        Assert.IsType<CurrentModeUpdate>(parsed.Update);
 
         var update = (CurrentModeUpdate)parsed.Update!;
-        Assert.That(update.ModeId, Is.EqualTo("mode_123"));
-        Assert.That(update.Title, Is.EqualTo("Claude Code"));
+        Assert.Equal("mode_123", update.ModeId);
+        Assert.Equal("Claude Code", update.Title);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_ConfigOptionsUpdate_Works()
     {
         var json = """
@@ -47,11 +46,11 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<ConfigUpdateUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<ConfigUpdateUpdate>(parsed!.Update);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_ConfigOptionUpdate_Works()
     {
         var json = """
@@ -77,16 +76,17 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<ConfigOptionUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<ConfigOptionUpdate>(parsed!.Update);
 
         var update = (ConfigOptionUpdate)parsed.Update!;
-        Assert.That(update.ConfigOptions, Is.Not.Null.And.Not.Empty);
-        Assert.That(update.ConfigOptions![0].Id, Is.EqualTo("mode"));
-        Assert.That(update.ConfigOptions[0].CurrentValue, Is.EqualTo("agent"));
+        Assert.NotNull(update.ConfigOptions);
+        Assert.NotEmpty(update.ConfigOptions!);
+        Assert.Equal("mode", update.ConfigOptions![0].Id);
+        Assert.Equal("agent", update.ConfigOptions[0].CurrentValue);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_SessionInfoUpdate_WithOfficialFields_Works()
     {
         var json = """
@@ -107,24 +107,24 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<SessionInfoUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<SessionInfoUpdate>(parsed!.Update);
 
         var update = (SessionInfoUpdate)parsed.Update!;
-        Assert.That(update.Title, Is.EqualTo("New Title"));
-        Assert.That(update.HasTitle, Is.True);
-        Assert.That(update.UpdatedAt, Is.EqualTo("2026-03-22T19:00:00Z"));
-        Assert.That(update.HasUpdatedAt, Is.True);
+        Assert.Equal("New Title", update.Title);
+        Assert.True(update.HasTitle);
+        Assert.Equal("2026-03-22T19:00:00Z", update.UpdatedAt);
+        Assert.True(update.HasUpdatedAt);
 
         var meta = update.Meta;
-        Assert.That(meta, Is.Not.Null);
-        Assert.That(meta!.ContainsKey("source"), Is.True);
-        Assert.That(ReadMetaValue(meta["source"]), Is.EqualTo("unit-test"));
-        Assert.That(ReadMetaValue(meta["pinned"]), Is.EqualTo("true"));
-        Assert.That(ReadMetaValue(meta["rank"]), Is.EqualTo("3"));
+        Assert.NotNull(meta);
+        Assert.True(meta!.ContainsKey("source"));
+        Assert.Equal("unit-test", ReadMetaValue(meta["source"]));
+        Assert.Equal("true", ReadMetaValue(meta["pinned"]));
+        Assert.Equal("3", ReadMetaValue(meta["rank"]));
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_SessionInfoUpdate_IgnoresUnsupportedCwdField()
     {
         var json = """
@@ -141,13 +141,13 @@ public sealed class SessionUpdatePolymorphismTests
         var serializerOptions = CreateJsonOptions();
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, serializerOptions);
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<SessionInfoUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<SessionInfoUpdate>(parsed!.Update);
 
-        Assert.That(typeof(SessionInfoUpdate).GetProperty("Cwd"), Is.Null);
+        Assert.Null(typeof(SessionInfoUpdate).GetProperty("Cwd"));
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_SessionInfoUpdate_AllowsPartialPayloads()
     {
         var json = """
@@ -164,22 +164,22 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<SessionInfoUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<SessionInfoUpdate>(parsed!.Update);
 
         var update = (SessionInfoUpdate)parsed.Update!;
-        Assert.That(update.Title, Is.Null);
-        Assert.That(update.HasTitle, Is.False);
-        Assert.That(update.UpdatedAt, Is.Null);
-        Assert.That(update.HasUpdatedAt, Is.False);
+        Assert.Null(update.Title);
+        Assert.False(update.HasTitle);
+        Assert.Null(update.UpdatedAt);
+        Assert.False(update.HasUpdatedAt);
 
         var meta = update.Meta;
-        Assert.That(meta, Is.Not.Null);
-        Assert.That(meta!.ContainsKey("source"), Is.True);
-        Assert.That(ReadMetaValue(meta["source"]), Is.EqualTo("unit-test"));
+        Assert.NotNull(meta);
+        Assert.True(meta!.ContainsKey("source"));
+        Assert.Equal("unit-test", ReadMetaValue(meta["source"]));
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_SessionInfoUpdate_WithNullTitle_MarksTitleAsPresent()
     {
         var json = """
@@ -194,15 +194,15 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<SessionInfoUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<SessionInfoUpdate>(parsed!.Update);
 
         var update = (SessionInfoUpdate)parsed.Update!;
-        Assert.That(update.Title, Is.Null);
-        Assert.That(update.HasTitle, Is.True);
+        Assert.Null(update.Title);
+        Assert.True(update.HasTitle);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_SessionInfoUpdate_WithNullUpdatedAt_MarksUpdatedAtAsPresent()
     {
         var json = """
@@ -217,15 +217,15 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<SessionInfoUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<SessionInfoUpdate>(parsed!.Update);
 
         var update = (SessionInfoUpdate)parsed.Update!;
-        Assert.That(update.UpdatedAt, Is.Null);
-        Assert.That(update.HasUpdatedAt, Is.True);
+        Assert.Null(update.UpdatedAt);
+        Assert.True(update.HasUpdatedAt);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_CurrentModeUpdate_WithNonStandardModeId_DoesNotPopulateModeId()
     {
         var json = """
@@ -243,14 +243,14 @@ public sealed class SessionUpdatePolymorphismTests
             PropertyNameCaseInsensitive = true
         });
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<CurrentModeUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<CurrentModeUpdate>(parsed!.Update);
 
         var update = (CurrentModeUpdate)parsed.Update!;
-        Assert.That(update.ModeId, Is.Empty);
+        Assert.Empty(update.ModeId);
     }
 
-    [Test]
+    [Fact]
     public void Deserialize_ToolCallStatusUpdate_WithExtendedSchemaFields_Works()
     {
         var json = """
@@ -273,20 +273,20 @@ public sealed class SessionUpdatePolymorphismTests
             PropertyNameCaseInsensitive = true
         });
 
-        Assert.That(parsed, Is.Not.Null);
-        Assert.That(parsed!.Update, Is.TypeOf<ToolCallStatusUpdate>());
+        Assert.NotNull(parsed);
+        Assert.IsType<ToolCallStatusUpdate>(parsed!.Update);
 
         var update = (ToolCallStatusUpdate)parsed.Update!;
-        Assert.That(update.ToolCallId, Is.EqualTo("call-1"));
-        Assert.That(update.Title, Is.EqualTo("Switch mode"));
-        Assert.That(update.Kind, Is.EqualTo(SalmonEgg.Acp.Tool.ToolCallKind.SwitchMode));
-        Assert.That(update.Status, Is.EqualTo(SalmonEgg.Acp.Tool.ToolCallStatus.Completed));
-        Assert.That(update.RawInput.HasValue, Is.True);
-        Assert.That(update.RawOutput.HasValue, Is.True);
+        Assert.Equal("call-1", update.ToolCallId);
+        Assert.Equal("Switch mode", update.Title);
+        Assert.Equal(SalmonEgg.Acp.Tool.ToolCallKind.SwitchMode, update.Kind);
+        Assert.Equal(SalmonEgg.Acp.Tool.ToolCallStatus.Completed, update.Status);
+        Assert.True(update.RawInput.HasValue);
+        Assert.True(update.RawOutput.HasValue);
         var rawInput = update.RawInput.GetValueOrDefault();
         var rawOutput = update.RawOutput.GetValueOrDefault();
-        Assert.That(rawInput.GetProperty("targetMode").GetString(), Is.EqualTo("plan"));
-        Assert.That(rawOutput.GetProperty("applied").GetBoolean(), Is.True);
+        Assert.Equal("plan", rawInput.GetProperty("targetMode").GetString());
+        Assert.True(rawOutput.GetProperty("applied").GetBoolean());
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

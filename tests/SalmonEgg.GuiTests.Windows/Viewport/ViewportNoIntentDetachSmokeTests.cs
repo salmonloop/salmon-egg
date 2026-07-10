@@ -6,7 +6,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class ViewportNoIntentDetachSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void RemoteSlowReplay_ViewportJitterWithoutUserIntent_DoesNotDetachFromBottom()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

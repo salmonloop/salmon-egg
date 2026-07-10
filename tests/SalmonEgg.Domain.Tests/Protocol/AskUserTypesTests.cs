@@ -1,14 +1,13 @@
 using System;
 using System.Collections.Generic;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class AskUserTypesTests
 {
-    [Test]
+    [Fact]
     public void ValidateRequest_DuplicateQuestions_ThrowsInvalidOperationException()
     {
         var request = CreateRequest();
@@ -26,11 +25,11 @@ public sealed class AskUserTypesTests
 
         var ex = Assert.Throws<InvalidOperationException>((Action)(() => AskUserContract.ValidateRequest(request)));
 
-        Assert.That(ex, Is.Not.Null);
-        Assert.That(ex!.Message, Does.Contain("Duplicate question"));
+        Assert.NotNull(ex);
+        Assert.Contains("Duplicate question", ex!.Message);
     }
 
-    [Test]
+    [Fact]
     public void ValidateAnswers_MultiSelectAnswer_IsAccepted()
     {
         var request = CreateRequest(multiSelect: true);
@@ -39,10 +38,10 @@ public sealed class AskUserTypesTests
             ["Choose a mode"] = "Agent, Plan"
         };
 
-        Assert.DoesNotThrow((Action)(() => AskUserContract.ValidateAnswers(request, answers)));
+        AskUserContract.ValidateAnswers(request, answers);
     }
 
-    [Test]
+    [Fact]
     public void ValidateAnswers_UnknownAnswer_ThrowsInvalidOperationException()
     {
         var request = CreateRequest();
@@ -53,8 +52,8 @@ public sealed class AskUserTypesTests
 
         var ex = Assert.Throws<InvalidOperationException>((Action)(() => AskUserContract.ValidateAnswers(request, answers)));
 
-        Assert.That(ex, Is.Not.Null);
-        Assert.That(ex!.Message, Does.Contain("Invalid answer"));
+        Assert.NotNull(ex);
+        Assert.Contains("Invalid answer", ex!.Message);
     }
 
     private static AskUserRequest CreateRequest(bool multiSelect = false)

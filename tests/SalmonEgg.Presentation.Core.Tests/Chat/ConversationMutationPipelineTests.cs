@@ -34,9 +34,9 @@ public sealed class ConversationMutationPipelineTests
                 {
                     order.Add(2);
                 }
-            });
+            }, TestContext.Current.CancellationToken);
 
-        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         var secondCompleted = false;
         var second = pipeline.RunAsync(
@@ -51,7 +51,7 @@ public sealed class ConversationMutationPipelineTests
                 secondCompleted = true;
                 secondEntered.TrySetResult();
                 return Task.CompletedTask;
-            });
+            }, TestContext.Current.CancellationToken);
 
         Assert.False(secondEntered.Task.IsCompleted);
         Assert.False(secondCompleted);

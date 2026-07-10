@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionNewTypesTests
 {
-    [Test]
+    [Fact]
     public void SessionNewParams_StdioMcpServers_Should_Serialize_StableProtocolShape()
     {
         var sessionParams = new SessionNewParams
@@ -29,17 +28,17 @@ public sealed class SessionNewTypesTests
         var json = JsonSerializer.Serialize(sessionParams);
         var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
-        Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
-        Assert.That(mcpServers[0].TryGetProperty("type", out _), Is.False);
-        Assert.That(mcpServers[0].GetProperty("name").GetString(), Is.EqualTo("test-server"));
-        Assert.That(mcpServers[0].GetProperty("command").GetString(), Is.EqualTo("/usr/local/bin/node"));
-        Assert.That(mcpServers[0].GetProperty("args")[0].GetString(), Is.EqualTo("server.js"));
-        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("name").GetString(), Is.EqualTo("API_KEY"));
-        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("value").GetString(), Is.EqualTo("secret"));
+        Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
+        Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
+        Assert.False(mcpServers[0].TryGetProperty("type", out _));
+        Assert.Equal("test-server", mcpServers[0].GetProperty("name").GetString());
+        Assert.Equal("/usr/local/bin/node", mcpServers[0].GetProperty("command").GetString());
+        Assert.Equal("server.js", mcpServers[0].GetProperty("args")[0].GetString());
+        Assert.Equal("API_KEY", mcpServers[0].GetProperty("env")[0].GetProperty("name").GetString());
+        Assert.Equal("secret", mcpServers[0].GetProperty("env")[0].GetProperty("value").GetString());
     }
 
-    [Test]
+    [Fact]
     public void SessionNewParams_HttpAndSseMcpServers_Should_Serialize_With_TransportType()
     {
         var sessionParams = new SessionNewParams
@@ -56,12 +55,12 @@ public sealed class SessionNewTypesTests
         var parsed = JsonDocument.Parse(json);
         var mcpServers = parsed.RootElement.GetProperty("mcpServers");
 
-        Assert.That(mcpServers[0].GetProperty("type").GetString(), Is.EqualTo("http"));
-        Assert.That(mcpServers[0].GetProperty("headers")[0].GetProperty("name").GetString(), Is.EqualTo("Authorization"));
-        Assert.That(mcpServers[1].GetProperty("type").GetString(), Is.EqualTo("sse"));
+        Assert.Equal("http", mcpServers[0].GetProperty("type").GetString());
+        Assert.Equal("Authorization", mcpServers[0].GetProperty("headers")[0].GetProperty("name").GetString());
+        Assert.Equal("sse", mcpServers[1].GetProperty("type").GetString());
     }
 
-    [Test]
+    [Fact]
     public void SessionNewParams_McpServers_Should_Serialize_Meta_With_UnderscoreMeta()
     {
         var sessionParams = new SessionNewParams
@@ -114,14 +113,14 @@ public sealed class SessionNewTypesTests
         var parsed = JsonDocument.Parse(json);
         var mcpServers = parsed.RootElement.GetProperty("mcpServers");
 
-        Assert.That(mcpServers[0].GetProperty("_meta").GetProperty("source").GetString(), Is.EqualTo("profile"));
-        Assert.That(mcpServers[0].GetProperty("_meta").GetProperty("enabled").ValueKind, Is.EqualTo(JsonValueKind.True));
-        Assert.That(mcpServers[0].GetProperty("env")[0].GetProperty("_meta").GetProperty("scope").GetString(), Is.EqualTo("workspace"));
-        Assert.That(mcpServers[1].GetProperty("_meta").GetProperty("transport").GetString(), Is.EqualTo("remote"));
-        Assert.That(mcpServers[1].GetProperty("headers")[0].GetProperty("_meta").GetProperty("secretRef").GetString(), Is.EqualTo("header-auth"));
+        Assert.Equal("profile", mcpServers[0].GetProperty("_meta").GetProperty("source").GetString());
+        Assert.Equal(JsonValueKind.True, mcpServers[0].GetProperty("_meta").GetProperty("enabled").ValueKind);
+        Assert.Equal("workspace", mcpServers[0].GetProperty("env")[0].GetProperty("_meta").GetProperty("scope").GetString());
+        Assert.Equal("remote", mcpServers[1].GetProperty("_meta").GetProperty("transport").GetString());
+        Assert.Equal("header-auth", mcpServers[1].GetProperty("headers")[0].GetProperty("_meta").GetProperty("secretRef").GetString());
     }
 
-    [Test]
+    [Fact]
     public void McpServer_Meta_Should_Deserialize_And_Clone_As_ProtocolObjects()
     {
         var json = """
@@ -145,23 +144,23 @@ public sealed class SessionNewTypesTests
 
         var server = JsonSerializer.Deserialize<McpServer>(json);
 
-        Assert.That(server, Is.TypeOf<StdioMcpServer>());
+        Assert.IsType<StdioMcpServer>(server);
         var stdio = (StdioMcpServer)server!;
-        Assert.That(stdio.Meta, Is.Not.Null);
-        Assert.That(((JsonElement)stdio.Meta!["source"]!).GetString(), Is.EqualTo("profile"));
-        Assert.That(((JsonElement)stdio.Meta["nested"]!).GetProperty("value").GetInt32(), Is.EqualTo(1));
-        Assert.That(stdio.Env, Has.Count.EqualTo(1));
-        Assert.That(((JsonElement)stdio.Env![0].Meta!["scope"]!).GetString(), Is.EqualTo("workspace"));
+        Assert.NotNull(stdio.Meta);
+        Assert.Equal("profile", ((JsonElement)stdio.Meta!["source"]!).GetString());
+        Assert.Equal(1, ((JsonElement)stdio.Meta["nested"]!).GetProperty("value").GetInt32());
+        var env = Assert.Single(stdio.Env!);
+        Assert.Equal("workspace", ((JsonElement)env.Meta!["scope"]!).GetString());
 
         var clonedServer = McpServerJsonConverter.CloneServer(stdio);
-        Assert.That(clonedServer, Is.TypeOf<StdioMcpServer>());
+        Assert.IsType<StdioMcpServer>(clonedServer);
         var clone = (StdioMcpServer)clonedServer;
-        Assert.That(((JsonElement)clone.Meta!["source"]!).GetString(), Is.EqualTo("profile"));
-        Assert.That(clone.Env, Has.Count.EqualTo(1));
-        Assert.That(((JsonElement)clone.Env![0].Meta!["scope"]!).GetString(), Is.EqualTo("workspace"));
+        Assert.Equal("profile", ((JsonElement)clone.Meta!["source"]!).GetString());
+        var clonedEnv = Assert.Single(clone.Env!);
+        Assert.Equal("workspace", ((JsonElement)clonedEnv.Meta!["scope"]!).GetString());
     }
 
-    [Test]
+    [Fact]
     public void McpServer_WhenMetaIsNotObjectOrNull_Should_NotDeserialize()
     {
         var json = """
@@ -177,7 +176,7 @@ public sealed class SessionNewTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
-    [Test]
+    [Fact]
     public void McpServer_StdioWithoutEnv_Should_Deserialize_WithEmptyEnvironment()
     {
         var json = """
@@ -190,12 +189,13 @@ public sealed class SessionNewTypesTests
 
         var server = JsonSerializer.Deserialize<McpServer>(json);
 
-        Assert.That(server, Is.TypeOf<StdioMcpServer>());
+        Assert.IsType<StdioMcpServer>(server);
         var stdio = (StdioMcpServer)server!;
-        Assert.That(stdio.Env, Is.Empty);
+        Assert.NotNull(stdio.Env);
+        Assert.Empty(stdio.Env);
     }
 
-    [Test]
+    [Fact]
     public void McpServer_StdioWithNullEnv_Should_NotDeserialize()
     {
         var json = """
@@ -210,7 +210,7 @@ public sealed class SessionNewTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
-    [Test]
+    [Fact]
     public void McpServer_WithStdioTypeDiscriminator_Should_NotDeserialize()
     {
         var json = """
@@ -226,7 +226,7 @@ public sealed class SessionNewTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
-    [Test]
+    [Fact]
     public void McpServer_WhenRequiredArrayIsMissing_Should_NotDeserialize()
     {
         var json = """
@@ -240,7 +240,7 @@ public sealed class SessionNewTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
-    [Test]
+    [Fact]
     public void McpServer_WhenHeaderEntryValueIsMissing_Should_NotDeserialize()
     {
         var json = """
@@ -259,7 +259,7 @@ public sealed class SessionNewTypesTests
         Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
     }
 
-    [Test]
+    [Fact]
     public void SessionNewParams_McpServers_Should_Serialize_As_Array()
     {
         // Given: A SessionNewParams with MCP servers
@@ -277,11 +277,11 @@ public sealed class SessionNewTypesTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: mcpServers should be an array in JSON
-        Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
-        Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
+        Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
+        Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
     }
 
-    [Test]
+    [Fact]
     public void SessionNewParams_McpServers_Should_NotBe_Object()
     {
         // Given: A SessionNewParams with MCP servers
@@ -295,11 +295,11 @@ public sealed class SessionNewTypesTests
         var json = JsonSerializer.Serialize(sessionParams);
 
         // Then: JSON should not contain "object" representation
-        Assert.That(json, Does.Not.Contain("\"mcpServers\":{}"));
-        Assert.That(json, Does.Contain("\"mcpServers\":[]"));
+        Assert.DoesNotContain("\"mcpServers\":{}", json);
+        Assert.Contains("\"mcpServers\":[]", json);
     }
 
-    [Test]
+    [Fact]
     public void SessionNewResponse_Modes_Should_Deserialize_Standard_State_Object()
     {
         var json = """
@@ -320,14 +320,14 @@ public sealed class SessionNewTypesTests
 
         var response = JsonSerializer.Deserialize<SessionNewResponse>(json);
 
-        Assert.That(response, Is.Not.Null);
-        Assert.That(response!.Modes, Is.Not.Null);
-        Assert.That(response.Modes!.CurrentModeId, Is.EqualTo("default"));
-        Assert.That(response.Modes.AvailableModes, Has.Count.EqualTo(1));
-        Assert.That(response.Modes.AvailableModes[0].Id, Is.EqualTo("default"));
+        Assert.NotNull(response);
+        Assert.NotNull(response!.Modes);
+        Assert.Equal("default", response.Modes!.CurrentModeId);
+        var mode = Assert.Single(response.Modes.AvailableModes);
+        Assert.Equal("default", mode.Id);
     }
 
-    [Test]
+    [Fact]
     public void SessionNewResponse_Modes_Should_Reject_Legacy_Array()
     {
         var json = """
@@ -342,8 +342,6 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.That(
-            (Action)(() => JsonSerializer.Deserialize<SessionNewResponse>(json)),
-            Throws.TypeOf<JsonException>());
+        Assert.Throws<JsonException>((() => JsonSerializer.Deserialize<SessionNewResponse>(json)));
     }
 }

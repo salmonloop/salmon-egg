@@ -77,7 +77,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
@@ -114,12 +114,12 @@ public sealed class ChatServiceSessionTests
         acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
         acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "s1" });
 
         // Loading a different session fails.
         acpClient
-            .Setup(c => c.LoadSessionAsync(It.IsAny<SessionLoadParams>(), default))
+            .Setup(c => c.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
@@ -139,7 +139,7 @@ public sealed class ChatServiceSessionTests
         var before = sessionManager.GetSession("s2")!.History.Count;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.LoadSessionAsync(new SessionLoadParams("s2", Environment.CurrentDirectory)));
+            sut.LoadSessionAsync(new SessionLoadParams("s2", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("s1", sut.CurrentSessionId);
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
@@ -155,10 +155,10 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
         acpClient
-            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-failed"), default))
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-failed"), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 acpClient.Raise(
@@ -174,7 +174,7 @@ public sealed class ChatServiceSessionTests
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.LoadSessionAsync(new SessionLoadParams("remote-failed", Environment.CurrentDirectory)));
+            sut.LoadSessionAsync(new SessionLoadParams("remote-failed", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("current", sut.CurrentSessionId);
         Assert.Null(sessionManager.GetSession("remote-failed"));
@@ -189,10 +189,10 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
         acpClient
-            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-1"), default))
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "remote-1"), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 acpClient.Raise(
@@ -220,7 +220,7 @@ public sealed class ChatServiceSessionTests
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory)));
+            sut.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
         acpClient.Raise(
             c => c.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
@@ -246,7 +246,7 @@ public sealed class ChatServiceSessionTests
         acpClient
             .Setup(c => c.LoadSessionAsync(
                 It.Is<SessionLoadParams>(p => p.SessionId == "remote-1"),
-                default))
+                It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 var tracked = sessionManager.GetSession("remote-1");
@@ -257,7 +257,7 @@ public sealed class ChatServiceSessionTests
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
-        await sut.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory));
+        await sut.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
@@ -281,7 +281,7 @@ public sealed class ChatServiceSessionTests
         acpClient
             .Setup(c => c.ResumeSessionAsync(
                 It.Is<SessionResumeParams>(p => p.SessionId == "remote-1"),
-                default))
+                It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 var tracked = sessionManager.GetSession("remote-1");
@@ -292,7 +292,7 @@ public sealed class ChatServiceSessionTests
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
-        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
@@ -320,12 +320,12 @@ public sealed class ChatServiceSessionTests
         acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
         acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
         acpClient
-            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionResumeResponse());
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
-        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
@@ -342,10 +342,10 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
         acpClient
-            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("resume failed"));
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
@@ -358,7 +358,7 @@ public sealed class ChatServiceSessionTests
                 new PlanUpdate([new PlanEntry("current plan")])));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.ResumeSessionAsync(new SessionResumeParams("remote-2", Environment.CurrentDirectory)));
+            sut.ResumeSessionAsync(new SessionResumeParams("remote-2", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("current", sut.CurrentSessionId);
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
@@ -373,10 +373,10 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "current" });
         acpClient
-            .Setup(c => c.ResumeSessionAsync(It.Is<SessionResumeParams>(p => p.SessionId == "remote-resume"), default))
+            .Setup(c => c.ResumeSessionAsync(It.Is<SessionResumeParams>(p => p.SessionId == "remote-resume"), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 acpClient.Raise(
@@ -392,7 +392,7 @@ public sealed class ChatServiceSessionTests
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.ResumeSessionAsync(new SessionResumeParams("remote-resume", Environment.CurrentDirectory)));
+            sut.ResumeSessionAsync(new SessionResumeParams("remote-resume", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("current", sut.CurrentSessionId);
         Assert.Null(sessionManager.GetSession("remote-resume"));
@@ -412,21 +412,21 @@ public sealed class ChatServiceSessionTests
         acpClient.SetupGet(c => c.AgentInfo).Returns((AgentInfo?)null);
         acpClient.SetupGet(c => c.AgentCapabilities).Returns((AgentCapabilities?)null);
         acpClient
-            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), default))
+            .Setup(c => c.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionResumeResponse());
         acpClient
             .Setup(c => c.CloseSessionAsync(
                 It.Is<SessionCloseParams>(p => p.SessionId == "remote-1"),
-                default))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(SessionCloseResponse.Completed);
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
-        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
         Assert.Equal("remote-1", sut.CurrentSessionId);
         Assert.NotNull(sessionManager.GetSession("remote-1"));
 
-        await sut.CloseSessionAsync(new SessionCloseParams("remote-1"));
+        await sut.CloseSessionAsync(new SessionCloseParams("remote-1"), TestContext.Current.CancellationToken);
 
         Assert.Null(sut.CurrentSessionId);
         Assert.Null(sessionManager.GetSession("remote-1"));
@@ -448,23 +448,23 @@ public sealed class ChatServiceSessionTests
         acpClient
             .Setup(c => c.ResumeSessionAsync(
                 It.Is<SessionResumeParams>(p => p.SessionId == "remote-1"),
-                default))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionResumeResponse());
         acpClient
             .Setup(c => c.CloseSessionAsync(
                 It.Is<SessionCloseParams>(p => p.SessionId == "remote-2"),
-                default))
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(SessionCloseResponse.Completed);
 
         await sessionManager.CreateSessionAsync("remote-2", cwd: Environment.CurrentDirectory);
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
-        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory));
+        await sut.ResumeSessionAsync(new SessionResumeParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
         Assert.Equal("remote-1", sut.CurrentSessionId);
         Assert.NotNull(sessionManager.GetSession("remote-2"));
 
-        await sut.CloseSessionAsync(new SessionCloseParams("remote-2"));
+        await sut.CloseSessionAsync(new SessionCloseParams("remote-2"), TestContext.Current.CancellationToken);
 
         Assert.Equal("remote-1", sut.CurrentSessionId);
         Assert.NotNull(sessionManager.GetSession("remote-1"));
@@ -480,7 +480,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse { SessionId = "s1" });
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
@@ -509,7 +509,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse(
                 "current",
                 modes: new SessionModesState
@@ -544,7 +544,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse(
                 "s1",
                 modes: new SessionModesState
@@ -589,7 +589,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse(
                 "s1",
                 modes: new SessionModesState
@@ -630,7 +630,7 @@ public sealed class ChatServiceSessionTests
         var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
         var sessionManager = new SessionManager();
         acpClient
-            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), default))
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SessionNewResponse(
                 "s1",
                 modes: new SessionModesState
@@ -683,9 +683,9 @@ public sealed class ChatServiceSessionTests
         var chatService = sut.CreateChatService(TransportType.Stdio, "agent");
 
         await chatService.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1.0.0"), new ClientCapabilities()));
-        await chatService.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory));
+        await chatService.LoadSessionAsync(new SessionLoadParams("remote-1", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
         var promptResponse = await chatService.SendPromptAsync(
-            new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hello") }));
+            new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hello") }), TestContext.Current.CancellationToken);
 
         Assert.Equal(StopReason.EndTurn, promptResponse.StopReason);
         Assert.NotNull(sessionManager.GetSession("remote-1"));

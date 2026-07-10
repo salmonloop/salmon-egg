@@ -54,7 +54,7 @@ public sealed class WorkspaceWriterTests
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -90,7 +90,7 @@ public sealed class WorkspaceWriterTests
                     null,
                     null)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);
@@ -121,7 +121,7 @@ public sealed class WorkspaceWriterTests
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);
@@ -143,7 +143,7 @@ public sealed class WorkspaceWriterTests
             HydratedConversationId: "conv-a",
             Transcript: ImmutableList.Create(CreateTextMessage("agent-001", "first")),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var restored = workspace.GetConversationSnapshot("conv-a");
 
@@ -178,7 +178,7 @@ public sealed class WorkspaceWriterTests
                 }),
             ShowConfigOptionsPanel: true,
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -263,7 +263,7 @@ public sealed class WorkspaceWriterTests
                     Reason: "SessionLoadStarted",
                     UpdatedAtUtc: DateTime.UtcNow)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -319,7 +319,7 @@ public sealed class WorkspaceWriterTests
                     Reason: "SessionLoadStarted",
                     UpdatedAtUtc: DateTime.UtcNow)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -389,7 +389,7 @@ public sealed class WorkspaceWriterTests
                     Reason: "SessionLoadStarted",
                     UpdatedAtUtc: DateTime.UtcNow)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -451,7 +451,7 @@ public sealed class WorkspaceWriterTests
                     Reason: "SessionLoadStarted",
                     UpdatedAtUtc: DateTime.UtcNow)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -514,7 +514,7 @@ public sealed class WorkspaceWriterTests
                         256,
                         new ConversationUsageCostSnapshot(2.5m, "USD")))),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);
@@ -567,7 +567,7 @@ public sealed class WorkspaceWriterTests
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -620,7 +620,7 @@ public sealed class WorkspaceWriterTests
                 128,
                 new ConversationUsageCostSnapshot(0.9m, "USD")),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -654,7 +654,7 @@ public sealed class WorkspaceWriterTests
             HydratedConversationId: "session-1",
             ShowPlanPanel: true,
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -706,7 +706,7 @@ public sealed class WorkspaceWriterTests
                     null,
                     null)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -764,7 +764,7 @@ public sealed class WorkspaceWriterTests
                     null,
                     null)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);
@@ -834,7 +834,7 @@ public sealed class WorkspaceWriterTests
                         256,
                         new ConversationUsageCostSnapshot(2.5m, "USD")))),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);
@@ -919,7 +919,7 @@ public sealed class WorkspaceWriterTests
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
             Generation: 1), scheduleSave: false);
-        await writer.FlushAsync();
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-bg");
         Assert.NotNull(snapshot);

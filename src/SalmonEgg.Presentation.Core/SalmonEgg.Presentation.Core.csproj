@@ -17,11 +17,7 @@
     <ProjectReference Include="..\SalmonEgg.Acp\SalmonEgg.Acp.csproj"
                       SetTargetFramework="TargetFramework=net10.0"
                       SkipGetTargetFrameworkProperties="true" />
-    <ProjectReference Include="..\SalmonEgg.Domain\SalmonEgg.Domain.csproj"
-                      SetTargetFramework="TargetFramework=net10.0"
-                      SkipGetTargetFrameworkProperties="true" />
-    <ProjectReference Include="..\SalmonEgg.Application\SalmonEgg.Application.csproj"
-                      SetTargetFramework="TargetFramework=net10.0"
-                      SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\SalmonEgg.Application\SalmonEgg.Application.csproj" />
   </ItemGroup>
 </Project>

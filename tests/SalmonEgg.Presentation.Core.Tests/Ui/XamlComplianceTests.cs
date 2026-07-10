@@ -53,7 +53,11 @@ public sealed class XamlComplianceTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("-SkipInstall", script, StringComparison.Ordinal);
         Assert.Contains(
-            "FullyQualifiedName~ChatSkeletonSmokeTests.AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface",
+            "--filter-method",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface",
             script,
             StringComparison.Ordinal);
     }

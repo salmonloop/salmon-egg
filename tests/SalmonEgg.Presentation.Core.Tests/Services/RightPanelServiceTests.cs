@@ -20,10 +20,10 @@ public class RightPanelServiceTests
         service.ModeChanged += (_, _) => signal.Set();
 
         await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
-        Assert.True(signal.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(signal.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
-        var disposeTask = Task.Run(service.Dispose);
-        var completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        var disposeTask = Task.Run(service.Dispose, TestContext.Current.CancellationToken);
+        var completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
 
         Assert.Same(disposeTask, completedTask);
         await disposeTask;
@@ -40,7 +40,7 @@ public class RightPanelServiceTests
         service.ModeChanged += (_, _) => signal.Set();
 
         await store.Dispatch(new RightPanelModeChanged(RightPanelMode.TaskOverview));
-        Assert.True(signal.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(signal.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
         Assert.Equal(RightPanelMode.TaskOverview, service.CurrentMode);
         Assert.Equal(1, modeChangedCalled);

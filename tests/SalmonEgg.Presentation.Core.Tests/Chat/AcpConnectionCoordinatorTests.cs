@@ -44,7 +44,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.SetConnectingAsync("profile-remote");
+        await coordinator.SetConnectingAsync("profile-remote", TestContext.Current.CancellationToken);
 
         Assert.Collection(
             store.Snapshots,
@@ -107,7 +107,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.False(publishedBeforeReset);
         Assert.Equal(1, sink.ResetHydratedConversationForResyncCalls);
@@ -144,7 +144,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.NotNull(inner.LastLoadParams);
         Assert.Equal("remote-1", inner.LastLoadParams!.SessionId);
@@ -178,7 +178,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         var http = Assert.IsType<HttpMcpServer>(Assert.Single(inner.LastLoadParams!.McpServers));
         Assert.Equal("api", http.Name);
@@ -210,7 +210,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.Empty(inner.LastLoadParams!.McpServers);
         Assert.Empty(sink.CurrentMcpServers);
@@ -249,7 +249,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
         current.Url = "mutated.example.com/mcp";
         current.Meta["source"] = "mutated";
         current.Headers![0].Value = "mutated";
@@ -292,7 +292,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
         Assert.Null(inner.LastLoadParams);
@@ -334,7 +334,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         var sse = Assert.IsType<SseMcpServer>(Assert.Single(inner.LastResumeParams!.McpServers));
         Assert.Equal("events", sse.Name);
@@ -369,7 +369,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.Empty(inner.LastResumeParams!.McpServers);
         Assert.Empty(sink.CurrentMcpServers);
@@ -401,7 +401,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.NotNull(inner.LastResumeParams);
         Assert.Null(inner.LastLoadParams);
@@ -452,7 +452,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.False(publishedBeforeReset);
     }
@@ -479,7 +479,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.False(sink.IsHydrating);
         Assert.Equal(0, sink.MarkConversationRemoteHydratedCalls);
@@ -514,7 +514,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.Same(expectedResponse, sink.AppliedLoadResponse);
     }
@@ -574,7 +574,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver(sink.CurrentMcpServers));
 
-        await coordinator.ResyncAsync(sink);
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
         Assert.False(sink.IsHydrating);
         Assert.Contains(chatService.MarkHydratedCalls, call => call.LowTrust && call.Reason == "LoadSessionFailed");
@@ -599,7 +599,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.SetConnectionInstanceIdAsync("conn-new");
+        await coordinator.SetConnectionInstanceIdAsync("conn-new", TestContext.Current.CancellationToken);
 
         var updated = await store.GetCurrentStateAsync();
         Assert.Equal(ConnectionPhase.Connected, updated.Phase);
@@ -627,7 +627,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.SetDisconnectedAsync("network down");
+        await coordinator.SetDisconnectedAsync("network down", TestContext.Current.CancellationToken);
 
         var updated = await store.GetCurrentStateAsync();
         Assert.Equal(ConnectionPhase.Disconnected, updated.Phase);
@@ -655,7 +655,7 @@ public sealed class AcpConnectionCoordinatorTests
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
             new StaticMcpResolver([]));
 
-        await coordinator.ResetAsync();
+        await coordinator.ResetAsync(TestContext.Current.CancellationToken);
 
         var updated = await store.GetCurrentStateAsync();
         Assert.Equal(ConnectionPhase.Disconnected, updated.Phase);

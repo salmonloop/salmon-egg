@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionLoadTypesTests
 {
-    [Test]
+    [Fact]
     public void SessionLoadParams_StdioMcpServers_Should_Serialize_StableProtocolShape()
     {
         var sessionParams = new SessionLoadParams
@@ -26,13 +25,13 @@ public sealed class SessionLoadTypesTests
         var json = JsonSerializer.Serialize(sessionParams);
         var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
-        Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
-        Assert.That(mcpServers[0].TryGetProperty("type", out _), Is.False);
-        Assert.That(mcpServers[0].GetProperty("command").GetString(), Is.EqualTo("/usr/local/bin/node"));
+        Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
+        Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
+        Assert.False(mcpServers[0].TryGetProperty("type", out _));
+        Assert.Equal("/usr/local/bin/node", mcpServers[0].GetProperty("command").GetString());
     }
 
-    [Test]
+    [Fact]
     public void SessionLoadParams_McpServers_Should_Serialize_As_Array()
     {
         // Given: A SessionLoadParams with MCP servers
@@ -51,37 +50,37 @@ public sealed class SessionLoadTypesTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: mcpServers should be an array in JSON
-        Assert.That(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers), Is.True);
-        Assert.That(mcpServers.ValueKind, Is.EqualTo(JsonValueKind.Array));
+        Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
+        Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
     }
 
-    [Test]
+    [Fact]
     public void SessionLoadParams_Constructor_Should_Default_McpServers_To_Empty_Array()
     {
         // Given/When: Constructing params without explicitly supplying MCP servers
         var sessionParams = new SessionLoadParams("test-session", "/home/user/project");
 
         // Then: protocol-required mcpServers should still be emitted as an empty array
-        Assert.That(sessionParams.McpServers, Is.Not.Null);
-        Assert.That(sessionParams.McpServers, Is.Empty);
+        Assert.NotNull(sessionParams.McpServers);
+        Assert.Empty(sessionParams.McpServers);
 
         var json = JsonSerializer.Serialize(sessionParams);
-        Assert.That(json, Does.Contain("\"mcpServers\":[]"));
+        Assert.Contains("\"mcpServers\":[]", json);
     }
 
-    [Test]
+    [Fact]
     public void SessionResumeParams_Constructor_Should_Default_McpServers_To_Empty_Array()
     {
         var sessionParams = new SessionResumeParams("test-session", "/home/user/project");
 
-        Assert.That(sessionParams.McpServers, Is.Not.Null);
-        Assert.That(sessionParams.McpServers, Is.Empty);
+        Assert.NotNull(sessionParams.McpServers);
+        Assert.Empty(sessionParams.McpServers);
 
         var json = JsonSerializer.Serialize(sessionParams);
-        Assert.That(json, Does.Contain("\"mcpServers\":[]"));
+        Assert.Contains("\"mcpServers\":[]", json);
     }
 
-    [Test]
+    [Fact]
     public void SessionLoadResponse_Modes_Should_Deserialize_Standard_State_Object()
     {
         var json = """
@@ -100,13 +99,13 @@ public sealed class SessionLoadTypesTests
 
         var response = JsonSerializer.Deserialize<SessionLoadResponse>(json);
 
-        Assert.That(response, Is.Not.Null);
-        Assert.That(response!.Modes, Is.Not.Null);
-        Assert.That(response.Modes!.CurrentModeId, Is.EqualTo("review"));
-        Assert.That(response.Modes.AvailableModes, Has.Count.EqualTo(1));
+        Assert.NotNull(response);
+        Assert.NotNull(response!.Modes);
+        Assert.Equal("review", response.Modes!.CurrentModeId);
+        Assert.Single(response.Modes.AvailableModes);
     }
 
-    [Test]
+    [Fact]
     public void SessionLoadResponse_Modes_Should_Reject_Legacy_Array()
     {
         var json = """
@@ -120,12 +119,10 @@ public sealed class SessionLoadTypesTests
         }
         """;
 
-        Assert.That(
-            (Action)(() => JsonSerializer.Deserialize<SessionLoadResponse>(json)),
-            Throws.TypeOf<JsonException>());
+        Assert.Throws<JsonException>((() => JsonSerializer.Deserialize<SessionLoadResponse>(json)));
     }
 
-    [Test]
+    [Fact]
     public void SessionResumeResponse_Modes_Should_Reject_Legacy_Array()
     {
         var json = """
@@ -139,8 +136,6 @@ public sealed class SessionLoadTypesTests
         }
         """;
 
-        Assert.That(
-            (Action)(() => JsonSerializer.Deserialize<SessionResumeResponse>(json)),
-            Throws.TypeOf<JsonException>());
+        Assert.Throws<JsonException>((() => JsonSerializer.Deserialize<SessionResumeResponse>(json)));
     }
 }

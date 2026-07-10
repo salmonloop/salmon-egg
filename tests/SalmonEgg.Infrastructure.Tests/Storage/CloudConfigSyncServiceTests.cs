@@ -54,7 +54,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         var provider = new FakeProvider { Remote = null };
         var service = CreateService(provider);
 
-        var result = await service.SyncNowAsync();
+        var result = await service.SyncNowAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(CloudConfigSyncStatus.Uploaded, result.Status);
         Assert.NotNull(provider.UploadedContent);
@@ -66,7 +66,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
     public async Task SyncNowAsync_WhenRemoteExistsWithoutState_RestoresRemoteAndBacksUpLocalConfig()
     {
         await SaveEnabledSettingsAsync();
-        await File.WriteAllTextAsync(Path.Combine(_appData.ConfigRootPath, "local-only.yaml"), "value: local");
+        await File.WriteAllTextAsync(Path.Combine(_appData.ConfigRootPath, "local-only.yaml"), "value: local", TestContext.Current.CancellationToken);
         var remotePackage = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
@@ -74,7 +74,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         };
         var service = CreateService(provider);
 
-        var result = await service.SyncNowAsync();
+        var result = await service.SyncNowAsync(TestContext.Current.CancellationToken);
         var restored = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.Restored, result.Status);
@@ -91,7 +91,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         {
             ProviderId = "onedrive",
             RemoteETag = "old-etag"
-        });
+        }, TestContext.Current.CancellationToken);
         var remotePackage = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
@@ -100,7 +100,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         };
         var service = CreateService(provider);
 
-        var result = await service.SyncNowAsync();
+        var result = await service.SyncNowAsync(TestContext.Current.CancellationToken);
         var restored = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.ConflictRemoteApplied, result.Status);
@@ -117,7 +117,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             archive.CreateEntry("files/config/../escape.yaml");
         }
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => _packageService.RestorePackageAsync(stream.ToArray()));
+        await Assert.ThrowsAsync<InvalidDataException>(() => _packageService.RestorePackageAsync(stream.ToArray(), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             _configChangeSignal,
             persistence);
 
-        await packageService.RestorePackageAsync(CreateRemotePackage("theme: Dark"));
+        await packageService.RestorePackageAsync(CreateRemotePackage("theme: Dark"), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, persistence.LoadCount);
         Assert.Equal(1, persistence.FlushCount);
@@ -152,7 +152,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             new Dictionary<string, string>
             {
                 ["password"] = "app-password"
-            });
+            }, TestContext.Current.CancellationToken);
         var settings = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
@@ -183,7 +183,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
             {
                 ["access_key_id"] = "access-key",
                 ["secret_access_key"] = "secret-key"
-            });
+            }, TestContext.Current.CancellationToken);
         var settings = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
@@ -202,7 +202,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         var provider = new ConfigurableFakeProvider("s3", "S3 compatible");
         var service = CreateService(provider);
 
-        var result = await service.ConfigureProviderAsync("s3", null!, null!);
+        var result = await service.ConfigureProviderAsync("s3", null!, null!, TestContext.Current.CancellationToken);
         var settings = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.Disabled, result.Status);
@@ -218,7 +218,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         var nextProvider = new ConfigurableFakeProvider("s3", "S3 compatible");
         var service = CreateService(previousProvider, nextProvider);
 
-        var result = await service.AuthorizeAndSyncAsync("s3");
+        var result = await service.AuthorizeAndSyncAsync("s3", TestContext.Current.CancellationToken);
         var settings = await _appSettings.LoadAsync();
 
         Assert.Equal(CloudConfigSyncStatus.Uploaded, result.Status);
@@ -234,7 +234,7 @@ public sealed class CloudConfigSyncServiceTests : IDisposable
         var provider = new ConfigurableFakeProvider("onedrive", "OneDrive");
         var service = CreateService(provider);
 
-        await service.AuthorizeAndSyncAsync("onedrive");
+        await service.AuthorizeAndSyncAsync("onedrive", TestContext.Current.CancellationToken);
 
         Assert.Equal(0, provider.SignOutCount);
     }

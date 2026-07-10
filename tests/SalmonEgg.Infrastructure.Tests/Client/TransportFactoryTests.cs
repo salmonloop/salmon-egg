@@ -199,7 +199,7 @@ public sealed class TransportFactoryTests
         var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
         Directory.CreateDirectory(tempDir);
         var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
-        await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2");
+        await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2", TestContext.Current.CancellationToken);
 
         try
         {
@@ -208,7 +208,7 @@ public sealed class TransportFactoryTests
                 command: "powershell.exe",
                 arguments: ["-NoLogo", "-NoProfile", "-File", scriptPath]);
 
-            var connected = await transport.ConnectAsync();
+            var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
             Assert.True(
                 connected,
                 "Stdio transport should connect when script path contains spaces and is quoted.");

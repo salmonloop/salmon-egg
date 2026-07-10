@@ -1,18 +1,18 @@
 using System.Reflection;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Domain.Tests.Models;
 
 public sealed class ServerConfigurationMcpContractTests
 {
-    [Test]
+    [Fact]
     public void ServerConfiguration_ProfileModel_Should_NotOwnMcpServers()
     {
         var mcpServersProperty = typeof(ServerConfiguration).GetProperty(
             "McpServers",
             BindingFlags.Public | BindingFlags.Instance);
 
-        Assert.That(mcpServersProperty, Is.Null);
+        Assert.Null(mcpServersProperty);
     }
 }

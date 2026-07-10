@@ -51,12 +51,12 @@ public sealed class SessionExportServiceTests : IDisposable
                 new("message-1", DateTimeOffset.UnixEpoch, true, "text", null, "hello")
             });
 
-        var result = await sut.ExportAsync(request);
+        var result = await sut.ExportAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(SessionExportStatus.Success, result.Status);
         var path = Assert.IsType<string>(result.Path);
         Assert.True(File.Exists(path));
-        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
         Assert.Equal("session-1", json.RootElement.GetProperty("SessionId").GetString());
         Assert.Single(json.RootElement.GetProperty("Messages").EnumerateArray());
     }
@@ -75,7 +75,7 @@ public sealed class SessionExportServiceTests : IDisposable
             "1.0",
             []);
 
-        var result = await sut.ExportAsync(request);
+        var result = await sut.ExportAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(SessionExportStatus.Unsupported, result.Status);
         Assert.Null(result.Path);

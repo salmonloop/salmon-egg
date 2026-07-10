@@ -90,7 +90,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 ElementFromJson("{}"),
                 parser);
 
-            var result = await client.AuthenticateAsync(new AuthenticateParams("agent-login"));
+            var result = await client.AuthenticateAsync(new AuthenticateParams("agent-login"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
         }
@@ -100,7 +100,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         {
             var client = await CreateInitializedClientAsync();
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LogoutAsync(new LogoutParams()));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LogoutAsync(new LogoutParams(), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
             _transportMock.Verify(
@@ -125,7 +125,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            var result = await client.LogoutAsync(new LogoutParams());
+            var result = await client.LogoutAsync(new LogoutParams(), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.True(sentMessages.TryDequeue(out var requestJson));
@@ -147,7 +147,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 responseDelay: TimeSpan.FromMilliseconds(200));
 
-            var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
             Assert.Equal("session-123", result.SessionId);
         }
 
@@ -164,7 +164,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
                 parser);
 
-            var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.Equal("session-123", result.SessionId);
             Assert.NotNull(sessionManager.GetSession("session-123"));
@@ -176,7 +176,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync();
 
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
-                client.CreateSessionAsync(new SessionNewParams("relative-path", null)));
+                client.CreateSessionAsync(new SessionNewParams("relative-path", null), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             _transportMock.Verify(
@@ -193,7 +193,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
                 client.CreateSessionAsync(new SessionNewParams(
                     AbsoluteCwd,
-                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") })));
+                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpCapabilities.http", ex.Message);
@@ -211,7 +211,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 McpServers = null!
             };
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.CreateSessionAsync(@params));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.CreateSessionAsync(@params, TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpServers", ex.Message);
@@ -235,7 +235,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             await client.CreateSessionAsync(new SessionNewParams(
                 AbsoluteCwd,
-                new List<McpServer> { new HttpMcpServer("api", "api.example.com/mcp") }));
+                new List<McpServer> { new HttpMcpServer("api", "api.example.com/mcp") }), TestContext.Current.CancellationToken);
 
             _transportMock.Verify(
                 t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()),
@@ -255,7 +255,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd));
+            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd), TestContext.Current.CancellationToken);
 
             Assert.True(sentMessages.TryDequeue(out var requestJson));
             using var document = JsonDocument.Parse(requestJson);
@@ -272,7 +272,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
                 client.CreateSessionAsync(new SessionNewParams(
                     AbsoluteCwd,
-                    additionalDirectories: [Path.Combine(AbsoluteCwd, "extra")])));
+                    additionalDirectories: [Path.Combine(AbsoluteCwd, "extra")]), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.MethodNotAllowed, ex.ErrorCode);
             Assert.Contains("additionalDirectories", ex.Message);
@@ -301,7 +301,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             await client.CreateSessionAsync(new SessionNewParams(
                 AbsoluteCwd,
-                additionalDirectories: [additionalDirectory]));
+                additionalDirectories: [additionalDirectory]), TestContext.Current.CancellationToken);
 
             Assert.True(sentMessages.TryDequeue(out var requestJson));
             using var document = JsonDocument.Parse(requestJson);
@@ -320,7 +320,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
                 client.CreateSessionAsync(new SessionNewParams(
                     AbsoluteCwd,
-                    new List<McpServer> { new StdioMcpServer("filesystem", string.Empty) })));
+                    new List<McpServer> { new StdioMcpServer("filesystem", string.Empty) }), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("requires a command", ex.Message);
@@ -337,7 +337,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
                 client.CreateSessionAsync(new SessionNewParams(
                     AbsoluteCwd,
-                    new List<McpServer> { new StdioMcpServer("filesystem", "mcp-server") })));
+                    new List<McpServer> { new StdioMcpServer("filesystem", "mcp-server") }), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("absolute command path", ex.Message);
@@ -362,7 +362,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             var result = await client.CreateSessionAsync(new SessionNewParams(
                 AbsoluteCwd,
-                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }));
+                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }), TestContext.Current.CancellationToken);
 
             Assert.Equal("session-123", result.SessionId);
             Assert.True(sentMessages.TryDequeue(out var requestJson));
@@ -392,7 +392,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             await client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create()));
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
 
             Assert.NotNull(sentInitialize);
 
@@ -427,7 +427,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             var ex = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create())));
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
             Assert.False(client.IsInitialized);
@@ -457,19 +457,19 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             try
             {
-                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
                 await client.DisconnectAsync();
 
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
             }
             finally
             {
                 cts.Cancel();
                 try
                 {
-                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 }
                 catch
                 {
@@ -493,7 +493,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
                     new ClientInfo("Test", "1.0.0"),
-                    ClientCapabilityDefaults.Create())));
+                    ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Contains("无法启动进程：stdio command not found", ex.Message, StringComparison.Ordinal);
         }
@@ -517,7 +517,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
                     new ClientInfo("Test", "1.0.0"),
-                    ClientCapabilityDefaults.Create())));
+                    ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Contains("Failed to connect transport", ex.Message, StringComparison.Ordinal);
             Assert.Contains("insecure WebSocket connection", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -547,14 +547,14 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             try
             {
-                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                await initializeSent.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 isConnected = false;
                 _transportMock.Raise(
                     t => t.ErrorOccurred += null,
                     new TransportErrorEventArgs("Agent 进程已退出"));
 
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                    async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
                 Assert.Contains("Agent 进程已退出", ex.Message, StringComparison.Ordinal);
             }
             finally
@@ -562,7 +562,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 cts.Cancel();
                 try
                 {
-                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 }
                 catch
                 {
@@ -593,9 +593,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             try
             {
-                await sessionNewSent.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                await sessionNewSent.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                    async () => await createTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                    async () => await createTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
                 Assert.Contains("发送消息失败：broken pipe", ex.Message, StringComparison.Ordinal);
             }
             finally
@@ -603,7 +603,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 cts.Cancel();
                 try
                 {
-                    await createTask.WaitAsync(TimeSpan.FromSeconds(2));
+                    await createTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 }
                 catch
                 {
@@ -637,7 +637,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             var ex = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create())));
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
         }
@@ -697,7 +697,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 responseDelay: TimeSpan.FromMilliseconds(200));
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
         }
@@ -733,7 +733,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     return Task.FromResult(true);
                 });
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
         }
@@ -751,7 +751,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 new SessionLoadParams("session-123", AbsoluteCwd, null),
                 cts.Token);
 
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
             cts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => loadTask);
@@ -764,7 +764,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 capabilities: new AgentCapabilities(loadSession: true));
 
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
-                client.LoadSessionAsync(new SessionLoadParams("session-123", "relative-path", null)));
+                client.LoadSessionAsync(new SessionLoadParams("session-123", "relative-path", null), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             _transportMock.Verify(
@@ -782,7 +782,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 client.LoadSessionAsync(new SessionLoadParams(
                     "session-123",
                     AbsoluteCwd,
-                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") })));
+                    new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpCapabilities.http", ex.Message);
@@ -801,7 +801,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 McpServers = null!
             };
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LoadSessionAsync(@params));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.LoadSessionAsync(@params, TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpServers", ex.Message);
@@ -817,7 +817,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities(loadSession: false));
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionLoadResponse.Completed, result);
             _transportMock.Verify(
@@ -834,7 +834,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var result = await client.LoadSessionAsync(new SessionLoadParams(
                 "session-123",
                 AbsoluteCwd,
-                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }));
+                new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") }), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionLoadResponse.Completed, result);
             _transportMock.Verify(
@@ -848,7 +848,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities());
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionLoadResponse.Completed, result);
             _transportMock.Verify(
@@ -867,7 +867,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement<object?>(null, parser.Options),
                 parser);
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionLoadResponse.Completed, result);
         }
@@ -885,7 +885,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd));
+            await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd), TestContext.Current.CancellationToken);
 
             Assert.True(sentMessages.TryDequeue(out var requestJson));
             using var document = JsonDocument.Parse(requestJson);
@@ -917,7 +917,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             await client.LoadSessionAsync(new SessionLoadParams(
                 "session-123",
                 AbsoluteCwd,
-                additionalDirectories: [additionalDirectory]));
+                additionalDirectories: [additionalDirectory]), TestContext.Current.CancellationToken);
 
             Assert.True(sentMessages.TryDequeue(out var requestJson));
             using var document = JsonDocument.Parse(requestJson);
@@ -968,7 +968,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     """),
                 parser);
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result.Modes);
             Assert.Equal("plan", result.Modes!.CurrentModeId);
@@ -989,7 +989,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             SetupJsonRpcResponse("session/load", ElementFromJson("{}"), parser);
 
-            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null));
+            var result = await client.LoadSessionAsync(new SessionLoadParams("session-123", AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.Null(result.Modes);
@@ -1006,7 +1006,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             SetupJsonRpcResponse("session/set_mode", ElementFromJson("{}"), parser);
 
-            var result = await client.SetSessionModeAsync(new SessionSetModeParams("session-123", "plan"));
+            var result = await client.SetSessionModeAsync(new SessionSetModeParams("session-123", "plan"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.Equal("plan", sessionManager.GetSession("session-123")!.Mode.CurrentModeId);
@@ -1018,7 +1018,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities(loadSession: true));
 
-            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd));
+            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionResumeResponse.Completed, result);
             _transportMock.Verify(
@@ -1035,7 +1035,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var result = await client.ResumeSessionAsync(new SessionResumeParams(
                 "session-123",
                 AbsoluteCwd,
-                new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") }));
+                new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") }), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionResumeResponse.Completed, result);
             _transportMock.Verify(
@@ -1053,7 +1053,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 }));
 
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
-                client.ResumeSessionAsync(new SessionResumeParams("session-123", "relative-path")));
+                client.ResumeSessionAsync(new SessionResumeParams("session-123", "relative-path"), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             _transportMock.Verify(
@@ -1074,7 +1074,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 client.ResumeSessionAsync(new SessionResumeParams(
                     "session-123",
                     AbsoluteCwd,
-                    new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") })));
+                    new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") }), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpCapabilities.sse", ex.Message);
@@ -1096,7 +1096,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 McpServers = null!
             };
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ResumeSessionAsync(@params));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ResumeSessionAsync(@params, TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("mcpServers", ex.Message);
@@ -1136,7 +1136,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd));
+            var result = await client.ResumeSessionAsync(new SessionResumeParams("session-123", AbsoluteCwd), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result.Modes);
             Assert.Equal("plan", result.Modes!.CurrentModeId);
@@ -1164,7 +1164,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 client.ResumeSessionAsync(new SessionResumeParams(
                     "session-123",
                     AbsoluteCwd,
-                    additionalDirectories: ["relative-extra"])));
+                    additionalDirectories: ["relative-extra"]), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             Assert.Contains("additionalDirectories[0]", ex.Message);
@@ -1179,7 +1179,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities(loadSession: true));
 
-            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionCloseResponse.Completed, result);
             _transportMock.Verify(
@@ -1204,7 +1204,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+            var result = await client.CloseSessionAsync(new SessionCloseParams("session-123"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.True(sentMessages.TryDequeue(out var requestJson));
@@ -1236,20 +1236,20 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser);
             await client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                new ClientCapabilities()));
+                new ClientCapabilities()), TestContext.Current.CancellationToken);
 
             SetupJsonRpcResponse(
                 "session/new",
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
                 parser);
-            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
             Assert.NotNull(sessionManager.GetSession("session-123"));
 
             SetupJsonRpcResponse(
                 "session/close",
                 ElementFromJson("{}"),
                 parser);
-            await client.CloseSessionAsync(new SessionCloseParams("session-123"));
+            await client.CloseSessionAsync(new SessionCloseParams("session-123"), TestContext.Current.CancellationToken);
 
             Assert.Null(sessionManager.GetSession("session-123"));
         }
@@ -1259,7 +1259,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         {
             var client = await CreateInitializedClientAsync();
 
-            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"));
+            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"), TestContext.Current.CancellationToken);
 
             Assert.Same(SessionDeleteResponse.Completed, result);
             _transportMock.Verify(
@@ -1284,7 +1284,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser,
                 onSend: message => sentMessages.Enqueue(message));
 
-            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"));
+            var result = await client.DeleteSessionAsync(new SessionDeleteParams("session-123"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
             Assert.True(sentMessages.TryDequeue(out var requestJson));
@@ -1309,14 +1309,14 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
                 parser);
 
-            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             SetupJsonRpcResponse(
                 "session/prompt",
                 JsonSerializer.SerializeToElement(new SessionPromptResponse(expected), parser.Options),
                 parser);
 
-            var promptResult = await client.SendPromptAsync(new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
+            var promptResult = await client.SendPromptAsync(new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }), TestContext.Current.CancellationToken);
 
             Assert.Equal(expected, promptResult.StopReason);
         }
@@ -1383,10 +1383,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     return Task.FromResult(true);
                 });
 
-            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null));
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             var result = await client.SendPromptAsync(
-                new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }));
+                new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { new TextContentBlock("hi") }), TestContext.Current.CancellationToken);
 
             Assert.Equal(StopReason.EndTurn, result.StopReason);
         }
@@ -1431,9 +1431,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     return Task.FromResult(true);
                 });
 
-            await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1.0.0"), new ClientCapabilities()));
+            await client.InitializeAsync(new InitializeParams(new ClientInfo("Test", "1.0.0"), new ClientCapabilities()), TestContext.Current.CancellationToken);
 
-            var result = await client.SendPromptAsync(new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hi") }));
+            var result = await client.SendPromptAsync(new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hi") }), TestContext.Current.CancellationToken);
 
             Assert.Equal(StopReason.EndTurn, result.StopReason);
         }
@@ -1482,7 +1482,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 t => t.MessageReceived += null,
                 new MessageReceivedEventArgs(parser.SerializeMessage(request)));
 
-            await client.CancelSessionAsync(new SessionCancelParams("session-1", "User cancelled"));
+            await client.CancelSessionAsync(new SessionCancelParams("session-1", "User cancelled"), TestContext.Current.CancellationToken);
 
             var permissionResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 301);
             Assert.False(permissionResponse.IsError);
@@ -1507,7 +1507,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .Callback<string, CancellationToken>((message, _) => sentPayload = message)
                 .ReturnsAsync(true);
 
-            await client.CancelSessionAsync(new SessionCancelParams("session-42", "User cancelled"));
+            await client.CancelSessionAsync(new SessionCancelParams("session-42", "User cancelled"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(sentPayload);
             var parsed = parser.ParseMessage(sentPayload!);
@@ -2268,7 +2268,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement(new SessionListResponse(), parser.Options),
                 parser);
 
-            var result = await client.ListSessionsAsync(new SessionListParams());
+            var result = await client.ListSessionsAsync(new SessionListParams(), TestContext.Current.CancellationToken);
 
             Assert.Empty(result.Sessions);
             _transportMock.Verify(
@@ -2286,7 +2286,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 }));
 
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
-                client.ListSessionsAsync(new SessionListParams { Cwd = "relative-path" }));
+                client.ListSessionsAsync(new SessionListParams { Cwd = "relative-path" }, TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
             _transportMock.Verify(
@@ -2321,7 +2321,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     """),
                 parser);
 
-            var result = await client.ListSessionsAsync(new SessionListParams());
+            var result = await client.ListSessionsAsync(new SessionListParams(), TestContext.Current.CancellationToken);
 
             Assert.Equal("cursor-2", result.NextCursor);
         }
@@ -2351,7 +2351,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     """),
                 parser);
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ListSessionsAsync(new SessionListParams()));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ListSessionsAsync(new SessionListParams(), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ParseError, ex.ErrorCode);
         }
@@ -2382,7 +2382,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     """),
                 parser);
 
-            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ListSessionsAsync(new SessionListParams()));
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.ListSessionsAsync(new SessionListParams(), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ParseError, ex.ErrorCode);
         }

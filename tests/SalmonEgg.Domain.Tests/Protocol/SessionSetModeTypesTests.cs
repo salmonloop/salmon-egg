@@ -1,13 +1,12 @@
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionSetModeTypesTests
 {
-    [Test]
+    [Fact]
     public void SessionSetModeParams_Should_Serialize_OfficialRequestFields()
     {
         var parameters = new SessionSetModeParams("session-1", "code");
@@ -15,11 +14,11 @@ public sealed class SessionSetModeTypesTests
         var json = JsonSerializer.Serialize(parameters);
         using var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.GetProperty("sessionId").GetString(), Is.EqualTo("session-1"));
-        Assert.That(parsed.RootElement.GetProperty("modeId").GetString(), Is.EqualTo("code"));
+        Assert.Equal("session-1", parsed.RootElement.GetProperty("sessionId").GetString());
+        Assert.Equal("code", parsed.RootElement.GetProperty("modeId").GetString());
     }
 
-    [Test]
+    [Fact]
     public void SessionSetModeResponse_Should_Serialize_WithoutNonStandardModeId()
     {
         var response = new SessionSetModeResponse();
@@ -27,6 +26,6 @@ public sealed class SessionSetModeTypesTests
         var json = JsonSerializer.Serialize(response);
         using var parsed = JsonDocument.Parse(json);
 
-        Assert.That(parsed.RootElement.TryGetProperty("modeId", out _), Is.False);
+        Assert.False(parsed.RootElement.TryGetProperty("modeId", out _));
     }
 }

@@ -34,7 +34,7 @@ public sealed class LogFileCatalogTests : IDisposable
     {
         var sut = new LogFileCatalog();
 
-        var latest = await sut.GetLatestAsync(Path.Combine(_root, "logs"));
+        var latest = await sut.GetLatestAsync(Path.Combine(_root, "logs"), TestContext.Current.CancellationToken);
 
         Assert.Null(latest);
     }
@@ -44,10 +44,10 @@ public sealed class LogFileCatalogTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, "app.log");
-        await File.WriteAllTextAsync(path, "0123456789");
+        await File.WriteAllTextAsync(path, "0123456789", TestContext.Current.CancellationToken);
         var sut = new LogFileCatalog();
 
-        var tail = await sut.ReadTailAsync(path, 4);
+        var tail = await sut.ReadTailAsync(path, 4, TestContext.Current.CancellationToken);
 
         Assert.Equal("6789", tail);
     }
@@ -57,14 +57,14 @@ public sealed class LogFileCatalogTests : IDisposable
     {
         Directory.CreateDirectory(_root);
         var path = Path.Combine(_root, "app.log");
-        await File.WriteAllTextAsync(path, "0123456789");
+        await File.WriteAllTextAsync(path, "0123456789", TestContext.Current.CancellationToken);
         await using var writer = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
         writer.Seek(0, SeekOrigin.End);
-        await writer.WriteAsync("ABC"u8.ToArray());
-        await writer.FlushAsync();
+        await writer.WriteAsync("ABC"u8.ToArray(), TestContext.Current.CancellationToken);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
         var sut = new LogFileCatalog();
 
-        var tail = await sut.ReadTailAsync(path, 4);
+        var tail = await sut.ReadTailAsync(path, 4, TestContext.Current.CancellationToken);
 
         Assert.Equal("9ABC", tail);
     }

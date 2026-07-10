@@ -5,7 +5,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class ChatInputSelectorSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void ChatComposer_ForRemoteAcpSessionWithModelConfig_ShowsModelSelector_AndSelectingModelUsesSetConfigOptionOnly()
     {
         GuiTestGate.RequireEnabled();

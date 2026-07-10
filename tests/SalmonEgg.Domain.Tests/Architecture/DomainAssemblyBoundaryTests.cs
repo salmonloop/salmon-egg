@@ -1,11 +1,11 @@
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Domain.Tests.Architecture;
 
 public sealed class DomainAssemblyBoundaryTests
 {
-    [Test]
+    [Fact]
     public void DomainAssembly_DoesNotExposeHostEndpointOrFileSystemPersistencePolicyTypes()
     {
         var exportedTypeNames = typeof(TransportType).Assembly
@@ -13,16 +13,7 @@ public sealed class DomainAssemblyBoundaryTests
             .Select(type => type.FullName ?? type.Name)
             .ToArray();
 
-        Assert.Multiple((Action)(() =>
-        {
-            Assert.That(
-                exportedTypeNames,
-                Has.None.Contains("TransportEndpointAccess"),
-                "Endpoint reachability depends on the current host runtime and belongs outside the ACP/domain core.");
-            Assert.That(
-                exportedTypeNames,
-                Has.None.Contains("FileSystemPersistence"),
-                "Platform-backed file-system synchronization is an infrastructure detail and should not be part of the ACP/domain core.");
-        }));
+        Assert.DoesNotContain(exportedTypeNames, item => item?.Contains("TransportEndpointAccess", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(exportedTypeNames, item => item?.Contains("FileSystemPersistence", StringComparison.Ordinal) == true);
     }
 }

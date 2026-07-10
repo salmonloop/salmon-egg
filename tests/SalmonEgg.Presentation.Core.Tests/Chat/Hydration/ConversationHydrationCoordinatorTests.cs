@@ -49,9 +49,9 @@ public sealed class ConversationHydrationCoordinatorTests
             hydrationAttemptId: 11,
             CancellationToken.None);
 
-        await Task.Delay(30);
+        await Task.Delay(30, TestContext.Current.CancellationToken);
         replayCount = 1;
-        await Task.Delay(30);
+        await Task.Delay(30, TestContext.Current.CancellationToken);
         projectionCount = 1;
 
         await task;

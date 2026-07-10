@@ -73,7 +73,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.False(workspace.IsConversationListLoading);
         Assert.Equal(1, workspace.ConversationListVersion);
@@ -134,7 +134,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("session-existing");
         Assert.NotNull(session);
@@ -174,7 +174,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("session-existing-info");
         Assert.NotNull(session);
@@ -207,7 +207,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var session = sessionManager.GetSession("session-1");
         Assert.NotNull(session);
@@ -242,8 +242,8 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
-        await workspace.SaveAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-null");
         Assert.NotNull(snapshot);
@@ -302,7 +302,7 @@ public sealed class ChatConversationWorkspaceTests
             ],
             ShowConfigOptionsPanel: true));
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
@@ -339,7 +339,7 @@ public sealed class ChatConversationWorkspaceTests
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
-            await workspace.SaveAsync();
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
@@ -349,7 +349,7 @@ public sealed class ChatConversationWorkspaceTests
 
         store.LoadResult = saved;
         using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
-        await restoredWorkspace.RestoreAsync();
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var restored = restoredWorkspace.GetConversationSnapshot("session-1");
         Assert.NotNull(restored);
@@ -395,7 +395,7 @@ public sealed class ChatConversationWorkspaceTests
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
         Assert.Equal("https://example.com/doc", resourceLink.Uri);
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
@@ -446,7 +446,7 @@ public sealed class ChatConversationWorkspaceTests
                 failure = ex;
                 cts.Cancel();
             }
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         var transcriptMutator = Task.Run(() =>
         {
@@ -474,7 +474,7 @@ public sealed class ChatConversationWorkspaceTests
                 failure = ex;
                 cts.Cancel();
             }
-        });
+        }, cancellationToken: TestContext.Current.CancellationToken);
 
         started.Set();
         await Task.Delay(200, CancellationToken.None);
@@ -550,7 +550,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -593,8 +593,8 @@ public sealed class ChatConversationWorkspaceTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
-        var switched = await workspace.TryPrepareConversationActivationAsync("session-1");
-        var committed = await workspace.CommitActivatedConversationAsync("session-1");
+        var switched = await workspace.TryPrepareConversationActivationAsync("session-1", TestContext.Current.CancellationToken);
+        var committed = await workspace.CommitActivatedConversationAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(switched);
         Assert.True(committed);
@@ -633,13 +633,13 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
         var before = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
             .Conversations
             .Single(c => c.ConversationId == "session-1");
 
-        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
-        await workspace.SaveAsync();
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1", TestContext.Current.CancellationToken));
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(workspace.LastActiveConversationId);
         var after = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
@@ -679,15 +679,15 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc)));
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
         var beforeAccessedAt = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
             .Conversations
             .Single(c => c.ConversationId == "session-old")
             .LastAccessedAt;
 
-        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-old"));
-        Assert.True(await workspace.CommitActivatedConversationAsync("session-old"));
-        await workspace.SaveAsync();
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-old", TestContext.Current.CancellationToken));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-old", TestContext.Current.CancellationToken));
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "session-new", "session-old" }, workspace.GetKnownConversationIds());
         var updatedRecord = Assert.IsType<ConversationDocument>(store.LastSavedDocument)
@@ -733,9 +733,9 @@ public sealed class ChatConversationWorkspaceTests
         workspace.UpdateRemoteBinding("session-1", "remote-older", "profile-older");
         workspace.UpdateRemoteBinding("session-2", "remote-newer", "profile-newer");
 
-        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-2"));
-        Assert.True(await workspace.CommitActivatedConversationAsync("session-2"));
-        await workspace.SaveAsync();
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-2", TestContext.Current.CancellationToken));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-2", TestContext.Current.CancellationToken));
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         Assert.Null(saved.LastActiveConversationId);
@@ -818,7 +818,7 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationUsageCostSnapshot(1.25m, "USD"))));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
@@ -902,7 +902,7 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationUsageCostSnapshot(1.25m, "USD"))));
         workspace.UpdateRemoteBinding("session-1", remoteSessionId: null, boundProfileId: "profile-1");
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
@@ -993,7 +993,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1027,10 +1027,10 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RegisterConversationAsync("session-1");
+        await workspace.RegisterConversationAsync("session-1", cancellationToken: TestContext.Current.CancellationToken);
         workspace.UpdateProjectAffinityOverride("session-1", "project-override");
 
-        await workspace.SaveAsync();
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var record = Assert.Single(saved.Conversations);
@@ -1043,7 +1043,7 @@ public sealed class ChatConversationWorkspaceTests
         var restoreSessionManager = new FakeSessionManager();
         var restorePreferences = CreatePreferences(syncContext);
         using var restoredWorkspace = CreateWorkspace(restoreStore, restoreSessionManager, restorePreferences, syncContext);
-        await restoredWorkspace.RestoreAsync();
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var overrideValue = restoredWorkspace.GetProjectAffinityOverride("session-1");
         Assert.NotNull(overrideValue);
@@ -1061,7 +1061,7 @@ public sealed class ChatConversationWorkspaceTests
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
-        await workspace.RegisterConversationAsync("session-1");
+        await workspace.RegisterConversationAsync("session-1", cancellationToken: TestContext.Current.CancellationToken);
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
 
         var beforeVersion = workspace.ConversationListVersion;
@@ -1089,7 +1089,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RegisterConversationAsync("session-1");
+        await workspace.RegisterConversationAsync("session-1", cancellationToken: TestContext.Current.CancellationToken);
 
         workspace.UpdateProjectAffinityOverride("session-1", NavigationProjectIds.Unclassified);
 
@@ -1148,9 +1148,9 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
 
-        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
-        Assert.True(await workspace.CommitActivatedConversationAsync("session-1"));
-        await workspace.SaveAsync();
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1", TestContext.Current.CancellationToken));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-1", TestContext.Current.CancellationToken));
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
@@ -1179,9 +1179,9 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1"));
-        Assert.True(await workspace.CommitActivatedConversationAsync("session-1"));
-        await workspace.SaveAsync();
+        Assert.True(await workspace.TryPrepareConversationActivationAsync("session-1", TestContext.Current.CancellationToken));
+        Assert.True(await workspace.CommitActivatedConversationAsync("session-1", TestContext.Current.CancellationToken));
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
 
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         Assert.Null(saved.LastActiveConversationId);
@@ -1221,7 +1221,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
-        await workspace.RestoreAsync();
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("session-accessed", workspace.LastActiveConversationId);
         Assert.Equal(new[] { "session-updated", "session-accessed" }, workspace.GetKnownConversationIds());
@@ -1258,7 +1258,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Renamed Session",
                 HasTitle = true,
                 UpdatedAtUtc = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(beforeVersion + 1, workspace.ConversationListVersion);
         var catalog = Assert.Single(workspace.GetCatalog());
@@ -1387,7 +1387,7 @@ public sealed class ChatConversationWorkspaceTests
         await workspace.ApplySessionInfoUpdateAsync(
             "session-1",
             title: "zombie",
-            updatedAtUtc: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc));
+            updatedAtUtc: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
         Assert.Null(workspace.GetConversationSnapshot("session-1"));
@@ -1421,7 +1421,7 @@ public sealed class ChatConversationWorkspaceTests
             "session-1",
             title: "zombie",
             updatedAtUtc: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
-            allowRegisterWhenMissing: true);
+            allowRegisterWhenMissing: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
         Assert.Null(workspace.GetConversationSnapshot("session-1"));
@@ -1469,7 +1469,7 @@ public sealed class ChatConversationWorkspaceTests
                     ["shared"] = "after",
                     ["added"] = 2
                 }
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1515,7 +1515,7 @@ public sealed class ChatConversationWorkspaceTests
                 Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1560,7 +1560,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = null,
                 HasTitle = true,
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1604,7 +1604,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "/systematic-debugging",
                 HasTitle = true,
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1655,7 +1655,7 @@ public sealed class ChatConversationWorkspaceTests
                     ["shared"] = "after",
                     ["added"] = 2
                 }
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1701,7 +1701,7 @@ public sealed class ChatConversationWorkspaceTests
                 Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
         Assert.NotNull(sessionInfo);
@@ -1742,7 +1742,7 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Older event title",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1781,7 +1781,7 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = "Metadata-only title"
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
         Assert.NotNull(sessionInfo);
@@ -1818,7 +1818,7 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Cleared timestamp title",
                 UpdatedAtUtc = null
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
         Assert.NotNull(sessionInfo);
@@ -1857,7 +1857,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Refreshed title",
                 Cwd = @"C:\Users\shang\AppData\Local\SalmonEgg",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -1898,7 +1898,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Refreshed title",
                 Cwd = @"C:\Users\shang\AppData\Local\SalmonEgg",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -2060,7 +2060,7 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Refreshed title",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
@@ -2130,7 +2130,7 @@ public sealed class ChatConversationWorkspaceTests
                     99,
                     new ConversationUsageCostSnapshot(1.25m, "USD"))));
 
-            await workspace.SaveAsync();
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
 
         var saved = store.LastSavedDocument;
@@ -2149,7 +2149,7 @@ public sealed class ChatConversationWorkspaceTests
 
         store.LoadResult = saved;
         using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
-        await restoredWorkspace.RestoreAsync();
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         var restored = restoredWorkspace.GetConversationSnapshot("session-1");
         Assert.NotNull(restored);
@@ -2480,19 +2480,19 @@ public sealed class ChatConversationWorkspaceTests
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
             workspace.DeleteConversation("session-1");
-            await workspace.SaveAsync();
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
 
         Assert.NotNull(store.LastSavedDocument);
         store.LoadResult = store.LastSavedDocument!;
 
         using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
-        await restoredWorkspace.RestoreAsync();
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
         await restoredWorkspace.ApplySessionInfoUpdateAsync(
             "session-1",
             title: "zombie",
             updatedAtUtc: DateTime.UtcNow,
-            allowRegisterWhenMissing: true);
+            allowRegisterWhenMissing: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain("session-1", restoredWorkspace.GetKnownConversationIds());
         Assert.Null(restoredWorkspace.GetConversationSnapshot("session-1"));
@@ -2558,8 +2558,8 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationCatalogPresenter(),
             NullLogger<ConversationCatalogFacade>.Instance);
 
-        var deleteTask = facade.DeleteConversationAsync("session-1");
-        var completed = await Task.WhenAny(deleteTask, Task.Delay(100));
+        var deleteTask = facade.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
+        var completed = await Task.WhenAny(deleteTask, Task.Delay(100, TestContext.Current.CancellationToken));
         Assert.True(completed != deleteTask, "DeleteConversationAsync must remain pending until backend mutation completes.");
 
         tcs.SetResult(new ConversationMutationResult(true, false, null));
@@ -2602,9 +2602,9 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationCatalogPresenter(),
             NullLogger<ConversationCatalogFacade>.Instance);
 
-        var mutationTask = facade.ArchiveConversationAsync("session-1");
+        var mutationTask = facade.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
 
-        await mutationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await mutationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         await mutationTask;
 
         navigation.Verify(n => n.ActivateStartAsync(), Times.Once);
@@ -2736,7 +2736,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Remote older",
                 HasTitle = true,
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 10, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
         await workspace.ApplySessionInfoSnapshotAsync(
             "session-2",
             new ConversationSessionInfoSnapshot
@@ -2744,7 +2744,7 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Remote newer",
                 HasTitle = true,
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 20, 0, DateTimeKind.Utc)
-            });
+            }, cancellationToken: TestContext.Current.CancellationToken);
 
         sessionManager.UpdateSession(
             "session-1",

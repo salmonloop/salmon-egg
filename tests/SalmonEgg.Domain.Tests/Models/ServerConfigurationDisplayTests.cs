@@ -1,12 +1,11 @@
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Domain.Tests.Models;
 
-[TestFixture]
 public sealed class ServerConfigurationDisplayTests
 {
-    [Test]
+    [Fact]
     public void TransportDisplayName_ForStdio_Should_DescribeSubprocessTransport()
     {
         var configuration = new ServerConfiguration
@@ -14,6 +13,6 @@ public sealed class ServerConfigurationDisplayTests
             Transport = TransportType.Stdio
         };
 
-        Assert.That(configuration.TransportDisplayName, Is.EqualTo("Stdio（子进程）"));
+        Assert.Equal("Stdio（子进程）", configuration.TransportDisplayName);
     }
 }

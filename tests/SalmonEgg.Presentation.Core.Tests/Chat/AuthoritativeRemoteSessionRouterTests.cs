@@ -23,7 +23,7 @@ public sealed class AuthoritativeRemoteSessionRouterTests
         chatStore.Setup(store => store.GetCurrentStateAsync()).ReturnsAsync(state);
         var router = new AuthoritativeRemoteSessionRouter(chatStore.Object);
 
-        var conversationId = await router.ResolveConversationIdAsync("remote-store");
+        var conversationId = await router.ResolveConversationIdAsync("remote-store", TestContext.Current.CancellationToken);
 
         Assert.Equal("conv-store", conversationId);
         chatStore.Verify(store => store.GetCurrentStateAsync(), Times.Once);

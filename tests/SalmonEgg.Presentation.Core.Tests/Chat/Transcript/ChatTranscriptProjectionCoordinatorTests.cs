@@ -27,7 +27,7 @@ public partial class ChatViewModelTests
     public async Task ApplyProjection_WhenSessionChanges_ReplacesMessageHistory()
     {
         await using var fixture = CreateViewModel();
-        await fixture.ViewModel.RestoreAsync();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -81,7 +81,7 @@ public partial class ChatViewModelTests
     public async Task ApplyProjection_WhenSessionStaysSame_DiffsMessageHistory()
     {
         await using var fixture = CreateViewModel();
-        await fixture.ViewModel.RestoreAsync();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
 
         await fixture.UpdateStateAsync(state => state with
         {
@@ -144,7 +144,7 @@ public partial class ChatViewModelTests
     public async Task ExportCurrentSessionJson_UsesFullRenderedTranscriptFromAuthoritativeProjection()
     {
         await using var fixture = CreateViewModel();
-        await fixture.ViewModel.RestoreAsync();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
         var transcript = ImmutableList.CreateRange(
             Enumerable.Range(0, 160)
                 .Select(index => new ConversationMessageSnapshot
@@ -216,7 +216,7 @@ public partial class ChatViewModelTests
             await settings.ExportCurrentSessionJsonCommand.ExecuteAsync(null);
 
             var exportFile = Assert.Single(System.IO.Directory.GetFiles(exportDirectory, "*.json"));
-            using var json = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(exportFile));
+            using var json = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(exportFile, TestContext.Current.CancellationToken));
             Assert.Equal(transcript.Count, json.RootElement.GetProperty("Messages").GetArrayLength());
         }
         finally

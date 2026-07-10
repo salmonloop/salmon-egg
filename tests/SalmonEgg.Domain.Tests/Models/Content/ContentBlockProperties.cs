@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Content;
 
 namespace SalmonEgg.Domain.Tests.Models.Content
@@ -10,7 +10,6 @@ namespace SalmonEgg.Domain.Tests.Models.Content
     /// 内容块属性测试。
     /// 使用 FsCheck 验证内容块的往返一致性和多态性。
     /// </summary>
-    [TestFixture]
     public class ContentBlockProperties
     {
         private readonly JsonSerializerOptions _jsonOptions;
@@ -29,8 +28,13 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             _jsonOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void TextContentBlock_PropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void TextContentBlock_PropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(TextContentBlock_PropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void TextContentBlock_PropertyRoundTrip_PreservesFidelityProperty(
             string text,
             string audience1,
             string audience2,
@@ -44,13 +48,18 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as TextContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Text, Is.EqualTo(block.Text));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Text, roundTripped!.Text);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void ImageContentBlock_PropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void ImageContentBlock_PropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(ImageContentBlock_PropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void ImageContentBlock_PropertyRoundTrip_PreservesFidelityProperty(
             string data,
             string mimeType,
             string uri,
@@ -67,15 +76,20 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as ImageContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Data, Is.EqualTo(block.Data));
-            Assert.That(roundTripped.MimeType, Is.EqualTo(block.MimeType));
-            Assert.That(roundTripped.Uri, Is.EqualTo(block.Uri));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Data, roundTripped!.Data);
+            Assert.Equal(block.MimeType, roundTripped.MimeType);
+            Assert.Equal(block.Uri, roundTripped.Uri);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void AudioContentBlock_PropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void AudioContentBlock_PropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(AudioContentBlock_PropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void AudioContentBlock_PropertyRoundTrip_PreservesFidelityProperty(
             string data,
             string mimeType,
             string audience1,
@@ -90,14 +104,19 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as AudioContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Data, Is.EqualTo(block.Data));
-            Assert.That(roundTripped.MimeType, Is.EqualTo(block.MimeType));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Data, roundTripped!.Data);
+            Assert.Equal(block.MimeType, roundTripped.MimeType);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void ResourceContentBlock_TextPropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void ResourceContentBlock_TextPropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(ResourceContentBlock_TextPropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void ResourceContentBlock_TextPropertyRoundTrip_PreservesFidelityProperty(
             string uri,
             string text,
             string mimeType,
@@ -111,16 +130,21 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as ResourceContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Resource.Uri, Is.EqualTo(block.Resource.Uri));
-            Assert.That(roundTripped.Resource.MimeType, Is.EqualTo(block.Resource.MimeType));
-            Assert.That(roundTripped.Resource.Text, Is.EqualTo(block.Resource.Text));
-            Assert.That(roundTripped.Resource.Blob, Is.EqualTo(block.Resource.Blob));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Resource.Uri, roundTripped!.Resource.Uri);
+            Assert.Equal(block.Resource.MimeType, roundTripped.Resource.MimeType);
+            Assert.Equal(block.Resource.Text, roundTripped.Resource.Text);
+            Assert.Equal(block.Resource.Blob, roundTripped.Resource.Blob);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void ResourceContentBlock_BlobPropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void ResourceContentBlock_BlobPropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(ResourceContentBlock_BlobPropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void ResourceContentBlock_BlobPropertyRoundTrip_PreservesFidelityProperty(
             string uri,
             string blob,
             string mimeType,
@@ -134,16 +158,21 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as ResourceContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Resource.Uri, Is.EqualTo(block.Resource.Uri));
-            Assert.That(roundTripped.Resource.MimeType, Is.EqualTo(block.Resource.MimeType));
-            Assert.That(roundTripped.Resource.Text, Is.EqualTo(block.Resource.Text));
-            Assert.That(roundTripped.Resource.Blob, Is.EqualTo(block.Resource.Blob));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Resource.Uri, roundTripped!.Resource.Uri);
+            Assert.Equal(block.Resource.MimeType, roundTripped.Resource.MimeType);
+            Assert.Equal(block.Resource.Text, roundTripped.Resource.Text);
+            Assert.Equal(block.Resource.Blob, roundTripped.Resource.Blob);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void ResourceLinkContentBlock_PropertyRoundTrip_PreservesFidelity(
+        [Fact]
+        public void ResourceLinkContentBlock_PropertyRoundTrip_PreservesFidelity()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(ResourceLinkContentBlock_PropertyRoundTrip_PreservesFidelityProperty));
+        }
+
+        private void ResourceLinkContentBlock_PropertyRoundTrip_PreservesFidelityProperty(
             string uri,
             string name,
             string mimeType,
@@ -162,20 +191,20 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
             var roundTripped = RoundTrip(block) as ResourceLinkContentBlock;
 
-            Assert.That(roundTripped, Is.Not.Null);
-            Assert.That(roundTripped!.Uri, Is.EqualTo(block.Uri));
-            Assert.That(roundTripped.Name, Is.EqualTo(block.Name));
-            Assert.That(roundTripped.MimeType, Is.EqualTo(block.MimeType));
-            Assert.That(roundTripped.Title, Is.EqualTo(block.Title));
-            Assert.That(roundTripped.Description, Is.EqualTo(block.Description));
-            Assert.That(roundTripped.Size, Is.EqualTo(block.Size));
+            Assert.NotNull(roundTripped);
+            Assert.Equal(block.Uri, roundTripped!.Uri);
+            Assert.Equal(block.Name, roundTripped.Name);
+            Assert.Equal(block.MimeType, roundTripped.MimeType);
+            Assert.Equal(block.Title, roundTripped.Title);
+            Assert.Equal(block.Description, roundTripped.Description);
+            Assert.Equal(block.Size, roundTripped.Size);
             AssertAnnotations(roundTripped.Annotations, block.Annotations);
         }
 
         /// <summary>
         /// 属性 6：文本内容块往返一致性
         /// </summary>
-        [Test]
+        [Fact]
         public void TextContentBlock_RoundTrip_PreservesEquivalence()
         {
             // Arrange
@@ -198,19 +227,19 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var doc = JsonDocument.Parse(roundTripped);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Type, Is.EqualTo("text"));
-            Assert.That(deserialized.Text, Is.EqualTo(text));
-            Assert.That(doc.RootElement.TryGetProperty("annotations", out var annotations), Is.True);
-            Assert.That(annotations.GetProperty("audience")[0].GetString(), Is.EqualTo("user"));
-            Assert.That(annotations.GetProperty("priority").GetDecimal(), Is.EqualTo(0.8m));
-            Assert.That(annotations.GetProperty("lastModified").GetString(), Is.EqualTo("2026-04-20T00:00:00Z"));
+            Assert.NotNull(deserialized);
+            Assert.Equal("text", deserialized!.Type);
+            Assert.Equal(text, deserialized.Text);
+            Assert.True(doc.RootElement.TryGetProperty("annotations", out var annotations));
+            Assert.Equal("user", annotations.GetProperty("audience")[0].GetString());
+            Assert.Equal(0.8m, annotations.GetProperty("priority").GetDecimal());
+            Assert.Equal("2026-04-20T00:00:00Z", annotations.GetProperty("lastModified").GetString());
         }
 
         /// <summary>
         /// 属性 6：图片内容块往返一致性
         /// </summary>
-        [Test]
+        [Fact]
         public void ImageContentBlock_RoundTrip_PreservesOptionalUriAndAnnotations()
         {
             // Arrange
@@ -237,20 +266,20 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var doc = JsonDocument.Parse(roundTripped);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Type, Is.EqualTo("image"));
-            Assert.That(deserialized.Data, Is.EqualTo(data));
-            Assert.That(deserialized.MimeType, Is.EqualTo(mimeType));
-            Assert.That(doc.RootElement.GetProperty("uri").GetString(), Is.EqualTo(uri));
-            Assert.That(doc.RootElement.TryGetProperty("annotations", out var annotations), Is.True);
-            Assert.That(annotations.GetProperty("audience")[0].GetString(), Is.EqualTo("assistant"));
-            Assert.That(annotations.GetProperty("priority").GetDecimal(), Is.EqualTo(0.4m));
+            Assert.NotNull(deserialized);
+            Assert.Equal("image", deserialized!.Type);
+            Assert.Equal(data, deserialized.Data);
+            Assert.Equal(mimeType, deserialized.MimeType);
+            Assert.Equal(uri, doc.RootElement.GetProperty("uri").GetString());
+            Assert.True(doc.RootElement.TryGetProperty("annotations", out var annotations));
+            Assert.Equal("assistant", annotations.GetProperty("audience")[0].GetString());
+            Assert.Equal(0.4m, annotations.GetProperty("priority").GetDecimal());
         }
 
         /// <summary>
         /// 属性 6：音频内容块往返一致性
         /// </summary>
-        [Test]
+        [Fact]
         public void AudioContentBlock_RoundTrip_PreservesEquivalence()
         {
             // Arrange
@@ -275,18 +304,18 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var doc = JsonDocument.Parse(roundTripped);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Type, Is.EqualTo("audio"));
-            Assert.That(deserialized.Data, Is.EqualTo(data));
-            Assert.That(deserialized.MimeType, Is.EqualTo(mimeType));
-            Assert.That(doc.RootElement.TryGetProperty("annotations", out var annotations), Is.True);
-            Assert.That(annotations.GetProperty("audience").GetArrayLength(), Is.EqualTo(2));
+            Assert.NotNull(deserialized);
+            Assert.Equal("audio", deserialized!.Type);
+            Assert.Equal(data, deserialized.Data);
+            Assert.Equal(mimeType, deserialized.MimeType);
+            Assert.True(doc.RootElement.TryGetProperty("annotations", out var annotations));
+            Assert.Equal(2, annotations.GetProperty("audience").GetArrayLength());
         }
 
         /// <summary>
         /// 属性 6：资源内容块往返一致性
         /// </summary>
-        [Test]
+        [Fact]
         public void ResourceContentBlock_RoundTrip_PreservesTextAndBlobForms()
         {
             // Arrange
@@ -334,25 +363,25 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var blobDoc = JsonDocument.Parse(blobRoundTripped);
 
             // Assert
-            Assert.That(textBlock, Is.Not.Null);
-            Assert.That(textBlock!.Type, Is.EqualTo("resource"));
-            Assert.That(textBlock.Resource.Uri, Is.EqualTo(uri));
-            Assert.That(textBlock.Resource.Text, Is.EqualTo(text));
-            Assert.That(textBlock.Resource.Blob, Is.Null);
-            Assert.That(textDoc.RootElement.GetProperty("annotations").GetProperty("priority").GetDecimal(), Is.EqualTo(0.5m));
+            Assert.NotNull(textBlock);
+            Assert.Equal("resource", textBlock!.Type);
+            Assert.Equal(uri, textBlock.Resource.Uri);
+            Assert.Equal(text, textBlock.Resource.Text);
+            Assert.Null(textBlock.Resource.Blob);
+            Assert.Equal(0.5m, textDoc.RootElement.GetProperty("annotations").GetProperty("priority").GetDecimal());
 
-            Assert.That(blobBlock, Is.Not.Null);
-            Assert.That(blobBlock!.Type, Is.EqualTo("resource"));
-            Assert.That(blobBlock.Resource.Uri, Is.EqualTo(uri));
-            Assert.That(blobBlock.Resource.Blob, Is.EqualTo(blob));
-            Assert.That(blobBlock.Resource.Text, Is.Null);
-            Assert.That(blobDoc.RootElement.GetProperty("annotations").GetProperty("priority").GetDecimal(), Is.EqualTo(0.9m));
+            Assert.NotNull(blobBlock);
+            Assert.Equal("resource", blobBlock!.Type);
+            Assert.Equal(uri, blobBlock.Resource.Uri);
+            Assert.Equal(blob, blobBlock.Resource.Blob);
+            Assert.Null(blobBlock.Resource.Text);
+            Assert.Equal(0.9m, blobDoc.RootElement.GetProperty("annotations").GetProperty("priority").GetDecimal());
         }
 
         /// <summary>
         /// 属性 6：资源内容块二进制工厂必须写入 blob 字段。
         /// </summary>
-        [Test]
+        [Fact]
         public void ResourceContentBlock_CreateBinary_UsesBlobField()
         {
             // Arrange
@@ -367,16 +396,16 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             var resource = doc.RootElement.GetProperty("resource");
 
             // Assert
-            Assert.That(resource.TryGetProperty("blob", out var blob), Is.True);
-            Assert.That(blob.GetString(), Is.EqualTo("AAECAwQ="));
-            Assert.That(resource.TryGetProperty("text", out var text), Is.True);
-            Assert.That(text.ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.True(resource.TryGetProperty("blob", out var blob));
+            Assert.Equal("AAECAwQ=", blob.GetString());
+            Assert.True(resource.TryGetProperty("text", out var text));
+            Assert.Equal(JsonValueKind.Null, text.ValueKind);
         }
 
         /// <summary>
         /// 属性 6：资源链接内容块往返一致性。
         /// </summary>
-        [Test]
+        [Fact]
         public void ResourceLinkContentBlock_RoundTrip_PreservesAnnotations()
         {
             // Arrange
@@ -403,17 +432,17 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var doc = JsonDocument.Parse(roundTripped);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Uri, Is.EqualTo("file:///home/user/document.pdf"));
-            Assert.That(deserialized.Name, Is.EqualTo("document.pdf"));
-            Assert.That(doc.RootElement.TryGetProperty("annotations", out var annotations), Is.True);
-            Assert.That(annotations.GetProperty("priority").GetDecimal(), Is.EqualTo(0.2m));
+            Assert.NotNull(deserialized);
+            Assert.Equal("file:///home/user/document.pdf", deserialized!.Uri);
+            Assert.Equal("document.pdf", deserialized.Name);
+            Assert.True(doc.RootElement.TryGetProperty("annotations", out var annotations));
+            Assert.Equal(0.2m, annotations.GetProperty("priority").GetDecimal());
         }
 
         /// <summary>
         /// 属性 8：未知内容类型应在启用回退时保留负载。
         /// </summary>
-        [Test]
+        [Fact]
         public void ContentBlock_UnknownType_RoundTrip_PreservesExtensionPayload()
         {
             // Arrange
@@ -433,17 +462,17 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             using var doc = JsonDocument.Parse(roundTripped);
 
             // Assert
-            Assert.That(block, Is.Not.Null);
-            Assert.That(block, Is.InstanceOf<ContentBlock>());
-            Assert.That(doc.RootElement.GetProperty("type").GetString(), Is.EqualTo("experimental_content"));
-            Assert.That(doc.RootElement.GetProperty("payload").GetProperty("kind").GetString(), Is.EqualTo("custom"));
-            Assert.That(doc.RootElement.GetProperty("payload").GetProperty("value").GetInt32(), Is.EqualTo(42));
+            Assert.NotNull(block);
+            Assert.IsAssignableFrom<ContentBlock>(block);
+            Assert.Equal("experimental_content", doc.RootElement.GetProperty("type").GetString());
+            Assert.Equal("custom", doc.RootElement.GetProperty("payload").GetProperty("kind").GetString());
+            Assert.Equal(42, doc.RootElement.GetProperty("payload").GetProperty("value").GetInt32());
         }
 
         /// <summary>
         /// 属性 7：内容块多态序列化和反序列化
         /// </summary>
-        [Test]
+        [Fact]
         public void ContentBlock_Array_Polymorphic_Serialization()
         {
             // Arrange
@@ -459,17 +488,17 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             var deserialized = JsonSerializer.Deserialize<ContentBlock[]>(json, _jsonOptions);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Length, Is.EqualTo(blocks.Count));
-            Assert.That(deserialized[0], Is.InstanceOf<TextContentBlock>());
-            Assert.That(deserialized[1], Is.InstanceOf<ImageContentBlock>());
-            Assert.That(deserialized[2], Is.InstanceOf<AudioContentBlock>());
+            Assert.NotNull(deserialized);
+            Assert.Equal(blocks.Count, deserialized!.Length);
+            Assert.IsAssignableFrom<TextContentBlock>(deserialized[0]);
+            Assert.IsAssignableFrom<ImageContentBlock>(deserialized[1]);
+            Assert.IsAssignableFrom<AudioContentBlock>(deserialized[2]);
         }
 
         /// <summary>
         /// 属性 7：ContentBlock 数组序列化时 type 字段存在
         /// </summary>
-        [Test]
+        [Fact]
         public void ContentBlock_Array_TypeDiscriminator_Present()
         {
             // Arrange
@@ -484,11 +513,11 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             var doc = JsonDocument.Parse(json);
 
             // Assert
-            Assert.That(doc.RootElement.GetArrayLength(), Is.GreaterThan(0));
+            Assert.True(doc.RootElement.GetArrayLength() > 0);
 
             foreach (var element in doc.RootElement.EnumerateArray())
             {
-                Assert.That(element.TryGetProperty("type", out _), Is.True, "每个 ContentBlock 必须包含 type 字段");
+                Assert.True(element.TryGetProperty("type", out _), "每个 ContentBlock 必须包含 type 字段");
             }
         }
 
@@ -514,11 +543,11 @@ namespace SalmonEgg.Domain.Tests.Models.Content
 
         private static void AssertAnnotations(Annotations? actual, Annotations? expected)
         {
-            Assert.That(actual, Is.Not.Null);
-            Assert.That(expected, Is.Not.Null);
-            Assert.That(actual!.Audience, Is.EqualTo(expected!.Audience));
-            Assert.That(actual.Priority, Is.EqualTo(expected.Priority));
-            Assert.That(actual.LastModified, Is.EqualTo(expected.LastModified));
+            Assert.NotNull(actual);
+            Assert.NotNull(expected);
+            Assert.Equal(expected!.Audience, actual!.Audience);
+            Assert.Equal(expected.Priority, actual.Priority);
+            Assert.Equal(expected.LastModified, actual.LastModified);
         }
     }
 }

@@ -1,7 +1,6 @@
 using System;
 using System.Text.Json;
-using FsCheck.NUnit;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Domain.Tests.Models.JsonRpc
@@ -10,7 +9,6 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
     /// JSON-RPC 消息属性测试。
     /// 使用 FsCheck 进行基于属性的测试，验证消息的往返一致性和字段约束。
     /// </summary>
-    [TestFixture]
     public class JsonRpcMessageProperties
     {
         /// <summary>
@@ -68,8 +66,13 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 1：JSON-RPC 2.0 请求消息往返一致性
         /// 验证序列化后反序列化产生等效对象，所有必需字段保持不变。
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcRequest_RoundTrip_PreservesEquivalence(string id, string method, byte[]? paramsData)
+        [Fact]
+        public void JsonRpcRequest_RoundTrip_PreservesEquivalence()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcRequest_RoundTrip_PreservesEquivalenceProperty));
+        }
+
+        private void JsonRpcRequest_RoundTrip_PreservesEquivalenceProperty(string id, string method, byte[]? paramsData)
         {
             // Arrange
             var paramsElement = paramsData != null
@@ -88,31 +91,36 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var deserialized = JsonSerializer.Deserialize<JsonRpcRequest>(json);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.JsonRpc, Is.EqualTo("2.0"));
-            Assert.That(AreIdsEqual(deserialized.Id, request.Id), Is.True);
-            Assert.That(deserialized.Method, Is.EqualTo(request.Method));
+            Assert.NotNull(deserialized);
+            Assert.Equal("2.0", deserialized!.JsonRpc);
+            Assert.True(AreIdsEqual(deserialized.Id, request.Id));
+            Assert.Equal(request.Method, deserialized.Method);
 
             if (request.Params is JsonElement requestParams)
             {
-                Assert.That(deserialized!.Params.HasValue, Is.True);
+                Assert.True(deserialized!.Params.HasValue);
                 var deserializedParams = deserialized!.Params!.Value;
                 // 比较 JSON 值的原始文本，而不是创建时的原始文本
                 var deserializedParamsJson = deserializedParams.GetRawText();
                 var expectedParamsJson = JsonSerializer.Serialize(requestParams, new JsonSerializerOptions { WriteIndented = false });
-                Assert.That(deserializedParamsJson, Is.EqualTo(expectedParamsJson), $"Params JSON mismatch. Expected: {expectedParamsJson}, Actual: {deserializedParamsJson}");
+                Assert.Equal(expectedParamsJson, deserializedParamsJson);
             }
             else
             {
-                Assert.That(deserialized!.Params.HasValue, Is.False);
+                Assert.False(deserialized!.Params.HasValue);
             }
         }
 
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 响应消息往返一致性（成功情况）
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcResponse_Success_RoundTrip_PreservesEquivalence(string id, byte[] resultData)
+        [Fact]
+        public void JsonRpcResponse_Success_RoundTrip_PreservesEquivalence()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcResponse_Success_RoundTrip_PreservesEquivalenceProperty));
+        }
+
+        private void JsonRpcResponse_Success_RoundTrip_PreservesEquivalenceProperty(string id, byte[] resultData)
         {
             // Arrange
             var result = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(resultData));
@@ -123,25 +131,30 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var deserialized = JsonSerializer.Deserialize<JsonRpcResponse>(json);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.JsonRpc, Is.EqualTo("2.0"));
-            Assert.That(AreIdsEqual(deserialized.Id, response.Id), Is.True);
-            Assert.That(deserialized.Result.HasValue, Is.True);
-            Assert.That(deserialized.Error, Is.Null);
+            Assert.NotNull(deserialized);
+            Assert.Equal("2.0", deserialized!.JsonRpc);
+            Assert.True(AreIdsEqual(deserialized.Id, response.Id));
+            Assert.True(deserialized.Result.HasValue);
+            Assert.Null(deserialized.Error);
             // 比较 JSON 值的原始文本
-            Assert.That(response.Result.HasValue, Is.True);
+            Assert.True(response.Result.HasValue);
             var deserializedResult = deserialized.Result!.Value;
             var expectedResult = response.Result!.Value;
             var deserializedResultJson = deserializedResult.GetRawText();
             var expectedResultJson = JsonSerializer.Serialize(expectedResult, new JsonSerializerOptions { WriteIndented = false });
-            Assert.That(deserializedResultJson, Is.EqualTo(expectedResultJson), $"Result JSON mismatch. Expected: {expectedResultJson}, Actual: {deserializedResultJson}");
+            Assert.Equal(expectedResultJson, deserializedResultJson);
         }
 
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 响应消息往返一致性（错误情况）
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcResponse_Error_RoundTrip_PreservesEquivalence(string id, int code, string message)
+        [Fact]
+        public void JsonRpcResponse_Error_RoundTrip_PreservesEquivalence()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcResponse_Error_RoundTrip_PreservesEquivalenceProperty));
+        }
+
+        private void JsonRpcResponse_Error_RoundTrip_PreservesEquivalenceProperty(string id, int code, string message)
         {
             // Arrange
             var limitedCode = Math.Max(-32768, Math.Min(-32000, code));
@@ -153,21 +166,26 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var deserialized = JsonSerializer.Deserialize<JsonRpcResponse>(json);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.JsonRpc, Is.EqualTo("2.0"));
-            Assert.That(AreIdsEqual(deserialized.Id, response.Id), Is.True);
-            Assert.That(deserialized.Result.HasValue, Is.False);
-            Assert.That(deserialized.Error, Is.Not.Null);
-            Assert.That(response.Error, Is.Not.Null);
-            Assert.That(deserialized.Error!.Code, Is.EqualTo(response.Error!.Code));
-            Assert.That(deserialized.Error.Message, Is.EqualTo(response.Error.Message));
+            Assert.NotNull(deserialized);
+            Assert.Equal("2.0", deserialized!.JsonRpc);
+            Assert.True(AreIdsEqual(deserialized.Id, response.Id));
+            Assert.False(deserialized.Result.HasValue);
+            Assert.NotNull(deserialized.Error);
+            Assert.NotNull(response.Error);
+            Assert.Equal(response.Error!.Code, deserialized.Error!.Code);
+            Assert.Equal(response.Error.Message, deserialized.Error.Message);
         }
 
         /// <summary>
         /// 属性 1：JSON-RPC 2.0 通知消息往返一致性
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcNotification_RoundTrip_PreservesEquivalence(string method, byte[]? paramsData)
+        [Fact]
+        public void JsonRpcNotification_RoundTrip_PreservesEquivalence()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcNotification_RoundTrip_PreservesEquivalenceProperty));
+        }
+
+        private void JsonRpcNotification_RoundTrip_PreservesEquivalenceProperty(string method, byte[]? paramsData)
         {
             // Arrange
             var paramsElement = paramsData != null
@@ -181,22 +199,22 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var deserialized = JsonSerializer.Deserialize<JsonRpcNotification>(json);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.JsonRpc, Is.EqualTo("2.0"));
-            Assert.That(deserialized.Method, Is.EqualTo(notification.Method));
+            Assert.NotNull(deserialized);
+            Assert.Equal("2.0", deserialized!.JsonRpc);
+            Assert.Equal(notification.Method, deserialized.Method);
 
             if (notification.Params is JsonElement notificationParams)
             {
-                Assert.That(deserialized!.Params.HasValue, Is.True);
+                Assert.True(deserialized!.Params.HasValue);
                 var deserializedParams = deserialized!.Params!.Value;
                 // 比较 JSON 值的原始文本
                 var deserializedParamsJson = deserializedParams.GetRawText();
                 var expectedParamsJson = JsonSerializer.Serialize(notificationParams, new JsonSerializerOptions { WriteIndented = false });
-                Assert.That(deserializedParamsJson, Is.EqualTo(expectedParamsJson), $"Params JSON mismatch. Expected: {expectedParamsJson}, Actual: {deserializedParamsJson}");
+                Assert.Equal(expectedParamsJson, deserializedParamsJson);
             }
             else
             {
-                Assert.That(deserialized!.Params.HasValue, Is.False);
+                Assert.False(deserialized!.Params.HasValue);
             }
         }
 
@@ -204,8 +222,13 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
         /// 属性 2：请求消息必需字段完整性
         /// 验证序列化后的 JSON 包含 jsonrpc, method, id 字段。
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcRequest_RequiredFields_Present(string id, string method)
+        [Fact]
+        public void JsonRpcRequest_RequiredFields_Present()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcRequest_RequiredFields_PresentProperty));
+        }
+
+        private void JsonRpcRequest_RequiredFields_PresentProperty(string id, string method)
         {
             // Arrange
             var request = new JsonRpcRequest(id, method);
@@ -215,21 +238,26 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var doc = JsonDocument.Parse(json);
 
             // Assert
-            Assert.That(doc.RootElement.TryGetProperty("jsonrpc", out _), Is.True);
-            Assert.That(doc.RootElement.TryGetProperty("method", out _), Is.True);
-            Assert.That(doc.RootElement.TryGetProperty("id", out _), Is.True);
+            Assert.True(doc.RootElement.TryGetProperty("jsonrpc", out _));
+            Assert.True(doc.RootElement.TryGetProperty("method", out _));
+            Assert.True(doc.RootElement.TryGetProperty("id", out _));
 
             // 验证 jsonrpc 值
             var jsonRpcValue = doc.RootElement.GetProperty("jsonrpc").GetString();
-            Assert.That(jsonRpcValue, Is.EqualTo("2.0"));
+            Assert.Equal("2.0", jsonRpcValue);
         }
 
         /// <summary>
         /// 属性 3：通知消息字段约束
         /// 验证通知消息不包含 id 字段。
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcNotification_NoIdField(string method)
+        [Fact]
+        public void JsonRpcNotification_NoIdField()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcNotification_NoIdFieldProperty));
+        }
+
+        private void JsonRpcNotification_NoIdFieldProperty(string method)
         {
             // Arrange
             var notification = new JsonRpcNotification(method);
@@ -239,15 +267,15 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var doc = JsonDocument.Parse(json);
 
             // Assert
-            Assert.That(doc.RootElement.TryGetProperty("jsonrpc", out _), Is.True);
-            Assert.That(doc.RootElement.TryGetProperty("method", out _), Is.True);
-            Assert.That(doc.RootElement.TryGetProperty("id", out _), Is.False, "Notification should NOT contain 'id' field");
+            Assert.True(doc.RootElement.TryGetProperty("jsonrpc", out _));
+            Assert.True(doc.RootElement.TryGetProperty("method", out _));
+            Assert.False(doc.RootElement.TryGetProperty("id", out _), "Notification should NOT contain 'id' field");
         }
 
         /// <summary>
         /// 属性 4：响应消息互斥字段验证（成功情况）
         /// </summary>
-        [Test]
+        [Fact]
         public void JsonRpcResponse_ExactlyOneOfResultOrError_Success()
         {
             // Arrange
@@ -265,14 +293,14 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             // Check if error property exists AND is not null
             var errorIsNull = hasError && errorProp.ValueKind == System.Text.Json.JsonValueKind.Null;
 
-            Assert.That(hasResult, Is.True, "Response should have 'result' property");
-            Assert.That(errorIsNull, Is.True, "Response should have 'error' property set to null");
+            Assert.True(hasResult, "Response should have 'result' property");
+            Assert.True(errorIsNull, "Response should have 'error' property set to null");
         }
 
         /// <summary>
         /// 属性 4：响应消息互斥字段验证（错误情况）
         /// </summary>
-        [Test]
+        [Fact]
         public void JsonRpcResponse_ExactlyOneOfResultOrError_Error()
         {
             // Arrange
@@ -291,16 +319,21 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var resultIsNull = hasResult && resultProp.ValueKind == System.Text.Json.JsonValueKind.Null;
             var errorIsNotNull = hasError && errorProp.ValueKind != System.Text.Json.JsonValueKind.Null;
 
-            Assert.That(resultIsNull, Is.True, "Response should have 'result' property set to null");
-            Assert.That(errorIsNotNull, Is.True, "Response should have a non-null 'error' property");
+            Assert.True(resultIsNull, "Response should have 'result' property set to null");
+            Assert.True(errorIsNotNull, "Response should have a non-null 'error' property");
         }
 
         /// <summary>
         /// 属性 5：错误码标准化
         /// 验证所有错误响应包含标准错误码在有效范围内。
         /// </summary>
-        [FsCheck.NUnit.Property(QuietOnSuccess = true)]
-        public void JsonRpcError_StandardErrorCodeRange(int code, string message)
+        [Fact]
+        public void JsonRpcError_StandardErrorCodeRange()
+        {
+            FsCheckPropertyRunner.Run(this, nameof(JsonRpcError_StandardErrorCodeRangeProperty));
+        }
+
+        private void JsonRpcError_StandardErrorCodeRangeProperty(int code, string message)
         {
             // Arrange
             var limitedCode = Math.Max(-32768, Math.Min(-32000, code));
@@ -311,13 +344,13 @@ namespace SalmonEgg.Domain.Tests.Models.JsonRpc
             var deserialized = JsonSerializer.Deserialize<JsonRpcError>(json);
 
             // Assert
-            Assert.That(deserialized, Is.Not.Null);
-            Assert.That(deserialized!.Code, Is.EqualTo(error.Code));
-            Assert.That(deserialized.Message, Is.EqualTo(error.Message));
+            Assert.NotNull(deserialized);
+            Assert.Equal(error.Code, deserialized!.Code);
+            Assert.Equal(error.Message, deserialized.Message);
 
             // 验证错误码在有效范围内
-            Assert.That(deserialized.Code, Is.GreaterThanOrEqualTo(-32768));
-            Assert.That(deserialized.Code, Is.LessThanOrEqualTo(-32000));
+            Assert.True(deserialized.Code >= -32768);
+            Assert.True(deserialized.Code <= -32000);
         }
     }
 }

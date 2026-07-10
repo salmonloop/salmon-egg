@@ -27,7 +27,7 @@ public sealed class UiDispatcherProjectionBarrierTests
 
         dispatcher.RunNext();
 
-        await barrierTask.WaitAsync(TimeSpan.FromSeconds(1));
+        await barrierTask.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
     }
 
     private sealed class QueueingUiDispatcherWithInlineUiAsync : IUiDispatcher

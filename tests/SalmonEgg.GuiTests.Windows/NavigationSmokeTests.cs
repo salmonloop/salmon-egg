@@ -10,7 +10,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class NavigationSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void Launch_WithSeededData_ShowsMainNav_AndStartIsSelected()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -38,7 +38,7 @@ public sealed class NavigationSmokeTests
             $"Launch state mismatch. {launchSnapshot}{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void StartComposer_ShowsAgentModeAndProjectSelectorsByDefault()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -66,7 +66,7 @@ public sealed class NavigationSmokeTests
             $"Expected selector order agent -> mode -> project. agent={agentSelector.BoundingRectangle}; mode={modeSelector.BoundingRectangle}; project={projectSelector.BoundingRectangle}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ProjectInvoke_DoesNotChangeSelectionOrContent()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -82,7 +82,7 @@ public sealed class NavigationSmokeTests
         Assert.True(selectionItem.IsSelected.Value);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSeededSession_UpdatesNavAndChatHeader()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(withContent: true);
@@ -100,7 +100,7 @@ public sealed class NavigationSmokeTests
         Assert.True(selectionItem.IsSelected.Value);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RemoteSessionContextMenu_CopyAcpSessionId_WritesRemoteSessionIdToClipboard()
     {
         using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
@@ -124,7 +124,7 @@ public sealed class NavigationSmokeTests
             $"Expected clipboard to contain remote ACP session id after context menu copy. Actual='{await ReadClipboardTextAsync().ConfigureAwait(true) ?? "<null>"}'.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void CtrlKShortcut_FocusesTopSearchBox()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -140,7 +140,7 @@ public sealed class NavigationSmokeTests
             $"Expected Ctrl+K to move focus into TopSearchBox.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SearchOverflowSession_MaterializesNativeNavSelection_AndSubsequentNavigationWorks()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(sessionCount: 25, withContent: true);
@@ -191,7 +191,7 @@ public sealed class NavigationSmokeTests
         Assert.Equal(startId, selectedAfterStart);
     }
 
-    [SkippableFact]
+    [Fact]
     public void ShortcutRecorder_UpdatesSearchBindingImmediately_AndDropsPreviousBinding()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -228,7 +228,7 @@ public sealed class NavigationSmokeTests
             $"Expected recorded Ctrl+L binding to focus TopSearchBox immediately.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ShortcutToggle_DisablesShortcutDispatch_WithoutClearingSavedOverride()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -245,7 +245,7 @@ public sealed class NavigationSmokeTests
             Thread.Sleep(250);
 
             var toggle = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
-            Skip.IfNot(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
+            Assert.SkipUnless(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
             Assert.Equal(ToggleState.On, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
 
             session.ClickElement(toggle);
@@ -271,7 +271,7 @@ public sealed class NavigationSmokeTests
             NavigateToShortcutsSettings(session);
 
             var toggle = session.FindByAutomationId("Shortcuts.Enabled", TimeSpan.FromSeconds(10));
-            Skip.IfNot(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
+            Assert.SkipUnless(toggle.Patterns.Toggle.IsSupported, "Shortcuts.Enabled does not expose TogglePattern in current UIA backend.");
             Assert.Equal(ToggleState.Off, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
 
             session.FocusElement(toggle);
@@ -302,7 +302,7 @@ public sealed class NavigationSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RestoreAllShortcuts_ClearsRecordedOverride_AndRestoresDefaultBinding()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -349,7 +349,7 @@ public sealed class NavigationSmokeTests
             $"Expected restore-all to restore the default Ctrl+K search binding.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void TitleBarPanelButtons_Toggle_ChangesBottomPanelState()
     {
         using var _ = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -360,7 +360,7 @@ public sealed class NavigationSmokeTests
         session.FindByAutomationId("ChatView.CurrentSessionTitle", TimeSpan.FromSeconds(10));
 
         var bottomPanelButton = session.FindByAutomationId("TitleBar.BottomPanel");
-        Skip.IfNot(bottomPanelButton.Patterns.Toggle.IsSupported, "TitleBar.BottomPanel does not expose TogglePattern in current UIA backend.");
+        Assert.SkipUnless(bottomPanelButton.Patterns.Toggle.IsSupported, "TitleBar.BottomPanel does not expose TogglePattern in current UIA backend.");
 
         var before = bottomPanelButton.Patterns.Toggle.Pattern.ToggleState.Value;
         bottomPanelButton.Patterns.Toggle.Pattern.Toggle();
@@ -370,7 +370,7 @@ public sealed class NavigationSmokeTests
         Assert.NotEqual(before, after);
     }
 
-    [SkippableFact]
+    [Fact]
     public void MoreSessionsDialog_SelectsOverflowSession_AndUpdatesChatHeader()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(sessionCount: 21);
@@ -392,7 +392,7 @@ public sealed class NavigationSmokeTests
         Assert.False(string.IsNullOrWhiteSpace(chatHeader.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public void CompactMode_AddProject_HidesExpandedLabel_AndStaysBetweenStartAndProjects()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -437,7 +437,7 @@ public sealed class NavigationSmokeTests
         Assert.DoesNotContain(affordanceElements, item => item.Contains("ControlType.Button", StringComparison.Ordinal));
     }
 
-    [SkippableFact]
+    [Fact]
     public void MinimalMode_Resize_CollapsesLeftPane()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -467,7 +467,7 @@ public sealed class NavigationSmokeTests
             $"Expected navigation affordance to become onscreen after minimal toggle open.{Environment.NewLine}{DumpCompactNavigationAffordance(session)}{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void CollapsedPane_AddProject_DoesNotLeakExpandedLabel()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -488,7 +488,7 @@ public sealed class NavigationSmokeTests
         Assert.DoesNotContain(affordanceElements, item => item.Contains("ControlType.Button", StringComparison.Ordinal));
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_CollapsedPane_AddProject_DoesNotLeakExpandedLabel()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -517,7 +517,7 @@ public sealed class NavigationSmokeTests
         Assert.DoesNotContain(affordanceElements, item => item.Contains("ControlType.Button", StringComparison.Ordinal));
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_SelectionRemainsVisible_AcrossExpandedCollapse_AndMinimalToCompact()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -584,7 +584,7 @@ public sealed class NavigationSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_ResizeBackToExpanded_RestoresVisibleSessionSelection()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -612,7 +612,7 @@ public sealed class NavigationSmokeTests
         Assert.Equal(sessionId, winner);
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_ExpandedToCompact_WithExplicitOpenIntent_PreservesSelectionContext()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -655,7 +655,7 @@ public sealed class NavigationSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_ExpandedToCompact_WithoutManualToggle_KeepsSemanticSelection()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();

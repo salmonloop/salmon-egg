@@ -71,7 +71,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
         uiRuntime.Invocations.Clear();
 
         vm.IsAnimationEnabled = false;
@@ -118,7 +118,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.False(vm.IsAnimationEnabled);
         uiRuntime.Verify(u => u.SetAnimationsEnabled(false), Times.AtLeastOnce);
@@ -148,7 +148,7 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
@@ -175,13 +175,13 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
         languageService.Invocations.Clear();
         uiRuntime.Invocations.Clear();
 
         vm.Language = "zh-CN";
 
-        await Task.Delay(1200);
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
@@ -203,7 +203,7 @@ public class AppPreferencesViewModelTests
         });
         var vm = CreateViewModel(settingsService);
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         var directory = Assert.Single(vm.AgentRemoteDirectories);
         Assert.Equal("dir-a", directory.DirectoryId);
@@ -216,7 +216,7 @@ public class AppPreferencesViewModelTests
     {
         var settingsService = new FakeAppSettingsService(new AppSettings());
         var vm = CreateViewModel(settingsService);
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.AgentRemoteDirectories.Add(new AgentRemoteDirectory
         {
@@ -245,7 +245,7 @@ public class AppPreferencesViewModelTests
             }
         });
         var vm = CreateViewModel(settingsService);
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.Collection(
             vm.AgentRemoteDirectories,
@@ -282,11 +282,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.AcpEnabled = false;
 
-        await Task.Delay(1200);
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
 
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.AcpEnabled == false)),
@@ -395,7 +395,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.ResetToDefaults();
 
@@ -436,7 +436,7 @@ public class AppPreferencesViewModelTests
             logger.Object,
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         var raisedCount = 0;
         vm.ShortcutConfigurationChanged += (_, _) => raisedCount++;
@@ -465,7 +465,7 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.False(vm.KeyboardShortcutsEnabled);
     }
@@ -489,11 +489,11 @@ public class AppPreferencesViewModelTests
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
-        await vm.InitializeAsync();
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.KeyboardShortcutsEnabled = false;
 
-        await Task.Delay(1200);
+        await Task.Delay(1200, TestContext.Current.CancellationToken);
 
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.KeyboardShortcutsEnabled == false)),

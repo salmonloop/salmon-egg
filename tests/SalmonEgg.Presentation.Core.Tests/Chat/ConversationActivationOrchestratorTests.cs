@@ -22,7 +22,7 @@ public sealed class ConversationActivationOrchestratorTests
         };
         var request = new ConversationActivationOrchestratorRequest("conv-1", true);
 
-        var result = await orchestrator.ActivateAsync(request, sink);
+        var result = await orchestrator.ActivateAsync(request, sink, TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.True(result.UsedWarmReuse);
@@ -44,7 +44,7 @@ public sealed class ConversationActivationOrchestratorTests
         };
         var request = new ConversationActivationOrchestratorRequest("conv-1", true);
 
-        var result = await orchestrator.ActivateAsync(request, sink);
+        var result = await orchestrator.ActivateAsync(request, sink, TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.False(result.UsedWarmReuse);
@@ -64,13 +64,13 @@ public sealed class ConversationActivationOrchestratorTests
 
         var firstTask = orchestrator.ActivateAsync(
             new ConversationActivationOrchestratorRequest("conv-1", true),
-            sink);
+            sink, TestContext.Current.CancellationToken);
 
         await sink.WaitForExecuteStartedAsync();
 
         var secondTask = orchestrator.ActivateAsync(
             new ConversationActivationOrchestratorRequest("conv-2", true),
-            sink);
+            sink, TestContext.Current.CancellationToken);
         var secondResult = await secondTask;
         var firstResult = await firstTask;
 

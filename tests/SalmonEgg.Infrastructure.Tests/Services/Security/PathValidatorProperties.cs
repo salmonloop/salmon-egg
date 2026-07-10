@@ -1,48 +1,11 @@
 using System;
 using FsCheck;
-using FsCheck.Xunit;
 using Xunit;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Services.Security;
 
 namespace SalmonEgg.Infrastructure.Tests.Services.Security
 {
-    /// <summary>
-    /// 路径遍历测试数据
-    /// </summary>
-    public class PathTraversalData
-    {
-        public string Path { get; set; } = string.Empty;
-        public override string ToString() => $"PathTraversalData(Path={Path})";
-    }
-
-    /// <summary>
-    /// 安全路径测试数据
-    /// </summary>
-    public class SafePathData
-    {
-        public string Path { get; set; } = string.Empty;
-        public override string ToString() => $"SafePathData(Path={Path})";
-    }
-
-    /// <summary>
-    /// 空字节路径测试数据
-    /// </summary>
-    public class NulBytePathData
-    {
-        public string Path { get; set; } = string.Empty;
-        public override string ToString() => $"NulBytePathData(Path={Path})";
-    }
-
-    /// <summary>
-    /// 可规范化路径测试数据
-    /// </summary>
-    public class NormalizablePathData
-    {
-        public string Path { get; set; } = string.Empty;
-        public override string ToString() => $"NormalizablePathData(Path={Path})";
-    }
-
     /// <summary>
     /// 路径验证器属性测试。
     /// 使用 FsCheck 验证路径验证器的安全性，特别是防止路径遍历攻击。
@@ -54,8 +17,31 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         /// <summary>
         /// 属性：路径遍历攻击防护
         /// </summary>
-        [Property]
-        public bool PathTraversal_Patterns_Rejected(string pathSegment)
+        [Fact]
+        public void PathTraversal_Patterns_Rejected()
+        {
+            CheckPathProperty(PathTraversalPatternsRejected);
+        }
+
+        [Fact]
+        public void SafePaths_Accepted()
+        {
+            CheckPathProperty(SafePathsAccepted);
+        }
+
+        [Fact]
+        public void NullByte_Injection_Rejected()
+        {
+            CheckPathProperty(NullByteInjectionRejected);
+        }
+
+        [Fact]
+        public void PathNormalization_PreservesSemantics()
+        {
+            CheckPathProperty(PathNormalizationPreservesSemantics);
+        }
+
+        private bool PathTraversalPatternsRejected(string pathSegment)
         {
             // 生成包含遍历模式的路径
             var unsafePaths = new[]
@@ -82,8 +68,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         /// <summary>
         /// 属性：合法路径被接受
         /// </summary>
-        [Property]
-        public bool SafePaths_Accepted(string pathSegment)
+        private bool SafePathsAccepted(string pathSegment)
         {
             // 生成安全路径（过滤掉危险字符）
             var safeSegment = pathSegment
@@ -104,8 +89,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         /// <summary>
         /// 属性：空字节注入防护
         /// </summary>
-        [Property]
-        public bool NullByte_Injection_Rejected(string pathSegment)
+        private bool NullByteInjectionRejected(string pathSegment)
         {
             var maliciousPath = $"{pathSegment}\0.txt";
 
@@ -118,8 +102,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
         /// <summary>
         /// 属性：路径规范化保持语义
         /// </summary>
-        [Property]
-        public bool PathNormalization_PreservesSemantics(string pathSegment)
+        private bool PathNormalizationPreservesSemantics(string pathSegment)
         {
             // 过滤掉无效字符和空字节
             if (string.IsNullOrEmpty(pathSegment) || pathSegment.Contains('\0'))
@@ -166,6 +149,13 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
             {
                 return true; // 路径无效时抛出异常是预期的
             }
+        }
+
+        private static void CheckPathProperty(Func<string, bool> property)
+        {
+            Check.One(
+                Config.QuickThrowOnFailure.WithQuietOnSuccess(true),
+                FsCheck.Fluent.Prop.ForAll(property));
         }
     }
 }

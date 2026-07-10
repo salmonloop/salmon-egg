@@ -24,7 +24,7 @@ public class NavigationStateServiceTests
         var initialIsPaneOpen = service.IsPaneOpen;
 
         await store.Dispatch(new NavToggleRequested("test"));
-        Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
+        Assert.True(signal.Wait(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
 
         Assert.Equal(!initialIsPaneOpen, service.IsPaneOpen);
         Assert.Equal(1, changedCount);
@@ -39,7 +39,7 @@ public class NavigationStateServiceTests
         service.PaneStateChanged += (_, _) => signal.Set();
 
         await store.Dispatch(new NavToggleRequested("test"));
-        Assert.True(signal.Wait(TimeSpan.FromSeconds(1)));
+        Assert.True(signal.Wait(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken));
         var stabilizedIsPaneOpen = service.IsPaneOpen;
 
         var changedCount = 0;
@@ -81,7 +81,7 @@ public class NavigationStateServiceTests
         service.Dispose();
 
         var disposeTask = store.DisposeAsync().AsTask();
-        var completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        var completedTask = await Task.WhenAny(disposeTask, Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
 
         Assert.Same(disposeTask, completedTask);
         await disposeTask;

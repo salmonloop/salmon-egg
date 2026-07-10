@@ -1,46 +1,41 @@
 using SalmonEgg.Domain.Models;
-using NUnit.Framework;
+using Xunit;
 
 namespace SalmonEgg.Domain.Tests.Models;
 
 public sealed class AppLanguageCatalogTests
 {
-    [TestCase(null, AppLanguageCatalog.SystemTag)]
-    [TestCase("", AppLanguageCatalog.SystemTag)]
-    [TestCase("System", AppLanguageCatalog.SystemTag)]
-    [TestCase("en", AppLanguageCatalog.EnglishUnitedStatesTag)]
-    [TestCase("en-US", AppLanguageCatalog.EnglishUnitedStatesTag)]
-    [TestCase("zh", AppLanguageCatalog.SimplifiedChineseTag)]
-    [TestCase("zh-CN", AppLanguageCatalog.SimplifiedChineseTag)]
-    [TestCase("zh-Hans", AppLanguageCatalog.SimplifiedChineseTag)]
-    [TestCase("fr-FR", AppLanguageCatalog.SystemTag)]
+    [Theory]
+    [InlineData(null, AppLanguageCatalog.SystemTag)]
+    [InlineData("", AppLanguageCatalog.SystemTag)]
+    [InlineData("System", AppLanguageCatalog.SystemTag)]
+    [InlineData("en", AppLanguageCatalog.EnglishUnitedStatesTag)]
+    [InlineData("en-US", AppLanguageCatalog.EnglishUnitedStatesTag)]
+    [InlineData("zh", AppLanguageCatalog.SimplifiedChineseTag)]
+    [InlineData("zh-CN", AppLanguageCatalog.SimplifiedChineseTag)]
+    [InlineData("zh-Hans", AppLanguageCatalog.SimplifiedChineseTag)]
+    [InlineData("fr-FR", AppLanguageCatalog.SystemTag)]
     public void NormalizeTag_ReturnsCanonicalSupportedTags(string? input, string expected)
     {
-        Assert.That(AppLanguageCatalog.NormalizeTag(input), Is.EqualTo(expected));
+        Assert.Equal(expected, AppLanguageCatalog.NormalizeTag(input));
     }
 
-    [TestCase("System", "")]
-    [TestCase("zh-CN", AppLanguageCatalog.SimplifiedChineseTag)]
-    [TestCase("en", AppLanguageCatalog.EnglishUnitedStatesTag)]
+    [Theory]
+    [InlineData("System", "")]
+    [InlineData("zh-CN", AppLanguageCatalog.SimplifiedChineseTag)]
+    [InlineData("en", AppLanguageCatalog.EnglishUnitedStatesTag)]
     public void ToPlatformOverrideTag_UsesCanonicalTags(string input, string expected)
     {
-        Assert.That(AppLanguageCatalog.ToPlatformOverrideTag(input), Is.EqualTo(expected));
+        Assert.Equal(expected, AppLanguageCatalog.ToPlatformOverrideTag(input));
     }
 
-    [Test]
+    [Fact]
     public void SupportedResourceLanguageTags_DeclaresShippedCanonicalResourceCultures()
     {
-        Assert.That(
-            AppLanguageCatalog.SupportedResourceLanguageTags,
-            Is.EqualTo(new[]
-            {
-                AppLanguageCatalog.EnglishNeutralTag,
-                AppLanguageCatalog.EnglishUnitedStatesTag,
-                AppLanguageCatalog.SimplifiedChineseTag
-            }));
+        Assert.Equal(new[] { AppLanguageCatalog.EnglishNeutralTag, AppLanguageCatalog.EnglishUnitedStatesTag, AppLanguageCatalog.SimplifiedChineseTag }, AppLanguageCatalog.SupportedResourceLanguageTags);
     }
 
-    [Test]
+    [Fact]
     public void SupportedResourceLanguageTags_AreDerivedFromOptions()
     {
         var expected = AppLanguageCatalog.SupportedOptions
@@ -48,10 +43,10 @@ public sealed class AppLanguageCatalogTests
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.That(AppLanguageCatalog.SupportedResourceLanguageTags, Is.EqualTo(expected));
+        Assert.Equal(expected, AppLanguageCatalog.SupportedResourceLanguageTags);
     }
 
-    [Test]
+    [Fact]
     public void LegacyAliasTags_AreDerivedFromOptions()
     {
         var expected = AppLanguageCatalog.SupportedOptions
@@ -60,6 +55,6 @@ public sealed class AppLanguageCatalogTests
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.That(AppLanguageCatalog.LegacyAliasTags, Is.EqualTo(expected));
+        Assert.Equal(expected, AppLanguageCatalog.LegacyAliasTags);
     }
 }

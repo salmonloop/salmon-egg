@@ -1,13 +1,12 @@
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.JsonRpc;
 
 namespace SalmonEgg.Domain.Tests.Models.JsonRpc;
 
-[TestFixture]
 public sealed class AcpExceptionTests
 {
-    [Test]
+    [Fact]
     public void Message_WhenJsonRpcErrorDataContainsDetails_IncludesRemoteDetails()
     {
         using var document = JsonDocument.Parse("""{"details":"Already initialized"}""");
@@ -17,10 +16,10 @@ public sealed class AcpExceptionTests
             "Internal error",
             document.RootElement.Clone());
 
-        Assert.That(exception.Message, Is.EqualTo("Internal error: Already initialized"));
+        Assert.Equal("Internal error: Already initialized", exception.Message);
     }
 
-    [Test]
+    [Fact]
     public void Message_WhenJsonRpcErrorDataHasNoKnownDetailField_IncludesRawRemoteData()
     {
         using var document = JsonDocument.Parse("""{"reason":"Bridge lifecycle mismatch"}""");
@@ -30,6 +29,6 @@ public sealed class AcpExceptionTests
             "Internal error",
             document.RootElement.Clone());
 
-        Assert.That(exception.Message, Is.EqualTo("""Internal error: {"reason":"Bridge lifecycle mismatch"}"""));
+        Assert.Equal("""Internal error: {"reason":"Bridge lifecycle mismatch"}""", exception.Message);
     }
 }

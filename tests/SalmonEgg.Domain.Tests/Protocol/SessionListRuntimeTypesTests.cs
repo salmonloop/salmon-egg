@@ -1,13 +1,12 @@
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 using System.Text.Json;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionListRuntimeTypesTests
 {
-    [Test]
+    [Fact]
     public void SessionListParams_SerializesCursorField()
     {
         var payload = new SessionListParams
@@ -18,10 +17,10 @@ public sealed class SessionListRuntimeTypesTests
 
         var json = JsonSerializer.Serialize(payload);
 
-        Assert.That(json, Does.Contain("\"cursor\":\"cursor-1\""));
+        Assert.Contains("\"cursor\":\"cursor-1\"", json);
     }
 
-    [Test]
+    [Fact]
     public void SessionListResponse_DeserializesNextCursorField()
     {
         var json = """
@@ -33,7 +32,7 @@ public sealed class SessionListRuntimeTypesTests
 
         var response = JsonSerializer.Deserialize<SessionListResponse>(json);
 
-        Assert.That(response, Is.Not.Null);
-        Assert.That(response!.NextCursor, Is.EqualTo("cursor-2"));
+        Assert.NotNull(response);
+        Assert.Equal("cursor-2", response!.NextCursor);
     }
 }

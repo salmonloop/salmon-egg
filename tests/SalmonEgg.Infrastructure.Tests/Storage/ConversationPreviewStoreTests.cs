@@ -54,16 +54,16 @@ public sealed class ConversationPreviewStoreTests : IDisposable
                 new PreviewEntry("assistant", "world", new DateTimeOffset(2026, 4, 18, 1, 0, 2, TimeSpan.Zero))
             ]);
 
-        await sut.SaveAsync(original);
+        await sut.SaveAsync(original, TestContext.Current.CancellationToken);
         var previewPath = GetStoredPreviewPath();
-        var firstJson = await File.ReadAllTextAsync(previewPath);
+        var firstJson = await File.ReadAllTextAsync(previewPath, TestContext.Current.CancellationToken);
 
-        await sut.SaveAsync(duplicateWithNewTimestamp);
-        var secondJson = await File.ReadAllTextAsync(previewPath);
+        await sut.SaveAsync(duplicateWithNewTimestamp, TestContext.Current.CancellationToken);
+        var secondJson = await File.ReadAllTextAsync(previewPath, TestContext.Current.CancellationToken);
 
         Assert.Equal(firstJson, secondJson);
 
-        var loaded = await sut.LoadAsync("conversation-1");
+        var loaded = await sut.LoadAsync("conversation-1", TestContext.Current.CancellationToken);
         Assert.NotNull(loaded);
         Assert.Equal(original.GeneratedAt, loaded.GeneratedAt);
         Assert.Equal(original.Entries, loaded.Entries);
@@ -90,10 +90,10 @@ public sealed class ConversationPreviewStoreTests : IDisposable
             ]);
 
         await Task.WhenAll(
-            sut.SaveAsync(first),
-            sut.SaveAsync(second));
+            sut.SaveAsync(first, TestContext.Current.CancellationToken),
+            sut.SaveAsync(second, TestContext.Current.CancellationToken));
 
-        var loaded = await sut.LoadAsync("conversation-1");
+        var loaded = await sut.LoadAsync("conversation-1", TestContext.Current.CancellationToken);
         Assert.NotNull(loaded);
         Assert.Equal(second.GeneratedAt, loaded.GeneratedAt);
         Assert.Equal(second.Entries, loaded.Entries);

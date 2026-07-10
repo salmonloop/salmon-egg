@@ -13,7 +13,7 @@ public sealed class ResponsiveNavigationAncestorTests
     private const string ProjectAutomationId = "MainNav.Project.project-1";
     private const string StartAutomationId = "MainNav.Start";
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_ExpandedToCompact_WithoutManualToggle_SettlesToAncestorContext()
     {
         GuiTestGate.RequireEnabled();
@@ -46,7 +46,7 @@ public sealed class ResponsiveNavigationAncestorTests
             $"Screenshot={screenshotPath}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_ExpandedToCompactThenExpanded_RestoresLeafSelectionAfterAncestorContext()
     {
         GuiTestGate.RequireEnabled();
@@ -97,7 +97,7 @@ public sealed class ResponsiveNavigationAncestorTests
             $"Expanded restore did not bring the leaf session selection back onscreen. {DumpSelectionSnapshot(session, SessionAutomationId, ProjectAutomationId, StartAutomationId)}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_SlowResizeToCompact_KeepsAncestorContextStable()
     {
         GuiTestGate.RequireEnabled();
@@ -156,7 +156,7 @@ public sealed class ResponsiveNavigationAncestorTests
             $"Capture1={firstStableCapture} Capture2={secondStableCapture}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void ActiveSession_BoundaryJitterBeforeCompact_KeepsAncestorContextStable()
     {
         GuiTestGate.RequireEnabled();

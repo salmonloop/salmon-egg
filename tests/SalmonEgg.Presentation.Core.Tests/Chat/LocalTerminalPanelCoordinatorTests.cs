@@ -28,7 +28,7 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-local",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(@"C:\repo\project", manager.LastRequestedCwd);
@@ -54,7 +54,7 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-remote",
             isLocalSession: false,
-            sessionInfoCwd: @"Z:\remote");
+            sessionInfoCwd: @"Z:\remote", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(@"C:\Users\shang", manager.LastRequestedCwd);
@@ -78,11 +78,11 @@ public class LocalTerminalPanelCoordinatorTests
         var first = await coordinator.ActivateAsync(
             "conversation-1",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
         var second = await coordinator.ActivateAsync(
             "conversation-1",
             isLocalSession: false,
-            sessionInfoCwd: @"C:\ignored");
+            sessionInfoCwd: @"C:\ignored", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(first, second);
@@ -105,15 +105,15 @@ public class LocalTerminalPanelCoordinatorTests
         var first = await coordinator.ActivateAsync(
             "conversation-1",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
-        await coordinator.RemoveConversationAsync("conversation-1");
+        await coordinator.RemoveConversationAsync("conversation-1", TestContext.Current.CancellationToken);
         var activeSessionAfterRemove = coordinator.ActiveSession;
         var second = await coordinator.ActivateAsync(
             "conversation-1",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(activeSessionAfterRemove);
@@ -136,9 +136,9 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-output",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
 
-        await sessionViewModel.Session.WriteInputAsync("hello");
+        await sessionViewModel.Session.WriteInputAsync("hello", TestContext.Current.CancellationToken);
 
         Assert.Equal("hello", sessionViewModel.OutputText);
     }
@@ -155,11 +155,11 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-state",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
         var fakeSession = Assert.IsType<FakeLocalTerminalSession>(sessionViewModel.Session);
 
         fakeSession.UpdateState(@"C:\repo\changed", canAcceptInput: false);
-        await fakeSession.ResizeAsync(120, 40);
+        await fakeSession.ResizeAsync(120, 40, TestContext.Current.CancellationToken);
 
         Assert.Equal(@"C:\repo\changed", sessionViewModel.CurrentWorkingDirectory);
         Assert.Equal("changed", sessionViewModel.DisplayTitle);
@@ -178,13 +178,13 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-detach",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
         var fakeSession = Assert.IsType<FakeLocalTerminalSession>(sessionViewModel.Session);
 
-        await coordinator.RemoveConversationAsync("conversation-detach");
+        await coordinator.RemoveConversationAsync("conversation-detach", TestContext.Current.CancellationToken);
         fakeSession.RaiseOutput("after-remove");
         fakeSession.UpdateState(@"C:\repo\after", canAcceptInput: false);
-        await fakeSession.ResizeAsync(120, 40);
+        await fakeSession.ResizeAsync(120, 40, TestContext.Current.CancellationToken);
 
         Assert.Equal(string.Empty, sessionViewModel.OutputText);
         Assert.Equal(@"C:\repo\project", sessionViewModel.CurrentWorkingDirectory);
@@ -204,13 +204,13 @@ public class LocalTerminalPanelCoordinatorTests
         var sessionViewModel = await coordinator.ActivateAsync(
             "conversation-dispose",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
         var fakeSession = Assert.IsType<FakeLocalTerminalSession>(sessionViewModel.Session);
 
         await coordinator.DisposeAsync();
         fakeSession.RaiseOutput("after-dispose");
         fakeSession.UpdateState(@"C:\repo\after-dispose", canAcceptInput: false);
-        await fakeSession.ResizeAsync(120, 40);
+        await fakeSession.ResizeAsync(120, 40, TestContext.Current.CancellationToken);
 
         Assert.Null(coordinator.ActiveSession);
         Assert.Equal(1, manager.DisposeManagerCallCount);
@@ -233,7 +233,7 @@ public class LocalTerminalPanelCoordinatorTests
         var activation = coordinator.ActivateAsync(
             "conversation-queued",
             isLocalSession: true,
-            sessionInfoCwd: @"C:\repo\project");
+            sessionInfoCwd: @"C:\repo\project", cancellationToken: TestContext.Current.CancellationToken);
         dispatcher.RunAll();
         var sessionViewModel = await activation;
         var fakeSession = Assert.IsType<FakeLocalTerminalSession>(sessionViewModel.Session);
@@ -241,7 +241,7 @@ public class LocalTerminalPanelCoordinatorTests
         fakeSession.RaiseOutput("queued");
         Assert.Equal(1, dispatcher.PendingCount);
 
-        var remove = coordinator.RemoveConversationAsync("conversation-queued");
+        var remove = coordinator.RemoveConversationAsync("conversation-queued", TestContext.Current.CancellationToken);
         dispatcher.RunAll();
         await remove;
         dispatcher.RunAll();

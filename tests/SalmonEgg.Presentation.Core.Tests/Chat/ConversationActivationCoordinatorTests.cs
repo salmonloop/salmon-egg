@@ -56,7 +56,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -96,7 +96,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -140,7 +140,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -189,7 +189,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -261,7 +261,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -325,7 +325,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -389,7 +389,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -469,7 +469,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = Assert.IsType<ChatState>(await state);
@@ -529,7 +529,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         var result = await coordinator.ActivateSessionAsync(
             "session-1",
-            ConversationActivationHydrationMode.SelectionOnly);
+            ConversationActivationHydrationMode.SelectionOnly, TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = await WaitForStateAsync(
@@ -615,7 +615,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         var result = await coordinator.ActivateSessionAsync(
             "session-1",
-            ConversationActivationHydrationMode.MetadataOnly);
+            ConversationActivationHydrationMode.MetadataOnly, TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = await WaitForStateAsync(
@@ -760,7 +760,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-1");
+        var result = await coordinator.ActivateSessionAsync("session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.Equal("session-1", result.ConversationId);
@@ -827,7 +827,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ActivateSessionAsync("session-old");
+        var result = await coordinator.ActivateSessionAsync("session-old", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.Equal(new[] { "session-new", "session-old" }, workspace.GetKnownConversationIds());
@@ -852,7 +852,7 @@ public sealed class ConversationActivationCoordinatorTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
         var state = State.Value(new object(), () => ChatState.Empty);
-        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
+        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), TestContext.Current.CancellationToken);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore);
@@ -863,7 +863,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ArchiveConversationAsync("session-1", "session-1");
+        var result = await coordinator.ArchiveConversationAsync("session-1", "session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
@@ -890,7 +890,7 @@ public sealed class ConversationActivationCoordinatorTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
         var state = State.Value(new object(), () => ChatState.Empty);
-        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
+        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), TestContext.Current.CancellationToken);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore);
@@ -903,7 +903,7 @@ public sealed class ConversationActivationCoordinatorTests
 
         workspace.Dispose();
 
-        var result = await coordinator.ArchiveConversationAsync("session-1", "session-1");
+        var result = await coordinator.ArchiveConversationAsync("session-1", "session-1", TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.False(result.ClearedActiveConversation);
@@ -929,7 +929,7 @@ public sealed class ConversationActivationCoordinatorTests
             LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
         var state = State.Value(new object(), () => ChatState.Empty);
-        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), default);
+        await state.Update(_ => ChatReducer.Reduce(ChatState.Empty, new SelectConversationAction("session-1")), TestContext.Current.CancellationToken);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore);
@@ -940,7 +940,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.DeleteConversationAsync("session-1", "session-1");
+        var result = await coordinator.DeleteConversationAsync("session-1", "session-1", TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         Assert.True(result.ClearedActiveConversation);
@@ -971,7 +971,7 @@ public sealed class ConversationActivationCoordinatorTests
             current => ChatReducer.Reduce(
                 current,
                 new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1"))),
-            default);
+            TestContext.Current.CancellationToken);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore);
@@ -982,7 +982,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null);
+        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = await chatStore.GetCurrentStateAsync();
@@ -1011,7 +1011,7 @@ public sealed class ConversationActivationCoordinatorTests
             current => ChatReducer.Reduce(
                 current,
                 new SetBindingSliceAction(new ConversationBindingSlice("session-1", "remote-1", "profile-1"))),
-            default);
+            TestContext.Current.CancellationToken);
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
         var bindingCommands = new BindingCoordinator(workspace, chatStore);
@@ -1022,7 +1022,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.DeleteConversationAsync("session-1", activeConversationId: null);
+        var result = await coordinator.DeleteConversationAsync("session-1", activeConversationId: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded);
         var currentState = await chatStore.GetCurrentStateAsync();
@@ -1055,7 +1055,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null);
+        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal("forced-binding-clear-failure", result.FailureReason);
@@ -1086,7 +1086,7 @@ public sealed class ConversationActivationCoordinatorTests
             connectionStore,
             Mock.Of<ILogger<ConversationActivationCoordinator>>());
 
-        var result = await coordinator.DeleteConversationAsync("session-1", "session-1");
+        var result = await coordinator.DeleteConversationAsync("session-1", "session-1", TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.True(bindings.ClearedCalled);

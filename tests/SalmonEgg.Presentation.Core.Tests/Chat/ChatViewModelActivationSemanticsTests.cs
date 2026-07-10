@@ -94,7 +94,7 @@ public partial class ChatViewModelTests
             conversationActivationCoordinator: activationCoordinator.Object);
         await using (fixture)
         {
-            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
 
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "conv-local",
@@ -133,7 +133,7 @@ public partial class ChatViewModelTests
                 ConnectionInstanceId: "conn-1"),
                 ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
-            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
             await fixture.UpdateStateAsync(state => state with
             {
                 HydratedConversationId = "conv-local",
@@ -167,7 +167,7 @@ public partial class ChatViewModelTests
             await fixture.ApplyCurrentStoreProjectionAsync();
             Assert.Equal("conn-1", fixture.ViewModel.ConnectionInstanceId);
 
-            var switchedRemote = await fixture.ViewModel.SwitchConversationAsync("conv-remote");
+            var switchedRemote = await fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
 
             Assert.True(switchedRemote);
             Assert.Equal("conv-remote", fixture.ViewModel.CurrentSessionId);
@@ -278,7 +278,7 @@ public partial class ChatViewModelTests
             conversationActivationCoordinator: activationCoordinator.Object);
         await using (fixture)
         {
-            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
 
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "conv-local",
@@ -317,7 +317,7 @@ public partial class ChatViewModelTests
                 ConnectionInstanceId: "conn-1"),
                 ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
-            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+            await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
             await fixture.UpdateStateAsync(state => state with
             {
                 HydratedConversationId = "conv-local",
@@ -354,7 +354,7 @@ public partial class ChatViewModelTests
             await fixture.ApplyCurrentStoreProjectionAsync();
             Assert.Equal("conn-1", fixture.ViewModel.ConnectionInstanceId);
 
-            var switchedRemote = await fixture.ViewModel.SwitchConversationAsync("conv-remote");
+            var switchedRemote = await fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
 
             Assert.True(switchedRemote);
             Assert.Equal("conv-remote", fixture.ViewModel.CurrentSessionId);
@@ -468,7 +468,7 @@ public partial class ChatViewModelTests
             syncContext,
             sessionManager: sessionManager,
             conversationActivationCoordinator: activationCoordinator.Object);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
 
         var appliedWarmAfterSelected = false;
         fixture.ChatStore.AfterDispatch = async action =>
@@ -522,7 +522,7 @@ public partial class ChatViewModelTests
             ConnectionInstanceId: "conn-1"),
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-competing",
@@ -564,7 +564,7 @@ public partial class ChatViewModelTests
         var connectionState = await fixture.GetConnectionStateAsync();
         Assert.Equal("conn-1", connectionState.ConnectionInstanceId);
 
-        var switched = await fixture.ViewModel.SwitchConversationAsync("conv-target");
+        var switched = await fixture.ViewModel.SwitchConversationAsync("conv-target", TestContext.Current.CancellationToken);
 
         Assert.True(switched);
         Assert.True(
@@ -628,8 +628,8 @@ public partial class ChatViewModelTests
             });
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-local",
             Transcript: [],
@@ -655,13 +655,13 @@ public partial class ChatViewModelTests
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
 
-        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
-        await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
+        await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
+        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
         Assert.True(localSwitch);
 
-        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>
         {
             return Task.FromResult(
@@ -758,7 +758,7 @@ public partial class ChatViewModelTests
         await using (fixture)
         {
             fixture.Profiles.Profiles.Add(profile);
-            await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+            await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
 
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "conv-remote",
@@ -778,7 +778,7 @@ public partial class ChatViewModelTests
             SetCurrentSessionId(fixture.ViewModel, "conv-remote");
 
             var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
-            var switchTask = switcher.SwitchConversationAsync("conv-remote");
+            var switchTask = switcher.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
 
             await WaitForConditionAsync(() =>
             {
@@ -865,7 +865,7 @@ public partial class ChatViewModelTests
             CreatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)));
         fixture.Workspace.UpdateRemoteBinding("conv-remote", "remote-ws-1", "profile-ws");
-        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync());
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-local",
@@ -873,7 +873,7 @@ public partial class ChatViewModelTests
                 .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-ws-1", "profile-ws"))
         });
 
-        var switched = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        var switched = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
 
         await WaitForConditionAsync(() =>
         {
@@ -953,8 +953,8 @@ public partial class ChatViewModelTests
             });
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-a",
             Transcript: [],
@@ -983,13 +983,13 @@ public partial class ChatViewModelTests
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
 
-        var firstASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a");
-        await aStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var firstASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a", TestContext.Current.CancellationToken);
+        await aStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        var bSwitch = fixture.ViewModel.SwitchConversationAsync("conv-b");
-        await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var bSwitch = fixture.ViewModel.SwitchConversationAsync("conv-b", TestContext.Current.CancellationToken);
+        await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        var secondASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a");
+        var secondASwitch = fixture.ViewModel.SwitchConversationAsync("conv-a", TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>
         {
             return Task.FromResult(
@@ -1079,8 +1079,8 @@ public partial class ChatViewModelTests
             });
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-local",
             Transcript: [],
@@ -1106,16 +1106,16 @@ public partial class ChatViewModelTests
         await DispatchConnectedAsync(fixture, "profile-1");
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-old"));
 
-        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
         await WaitForConditionAsync(
             () => Task.FromResult(oldLoadStarted.Task.IsCompleted),
             timeoutMilliseconds: 5000);
 
-        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
+        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
         Assert.True(localSwitch);
         await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-new"));
 
-        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
+        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
         await WaitForConditionAsync(
             () => Task.FromResult(newLoadStarted.Task.IsCompleted),
             timeoutMilliseconds: 5000);
@@ -1204,8 +1204,8 @@ public partial class ChatViewModelTests
             });
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync());
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(oldService.Object, TestContext.Current.CancellationToken));
         fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "conv-local",
             Transcript: [],
@@ -1229,18 +1229,18 @@ public partial class ChatViewModelTests
         });
         await DispatchConnectedAsync(fixture, "profile-1");
 
-        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
-        await oldLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var firstRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
+        await oldLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
-        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local");
+        var localSwitch = await fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
         Assert.True(localSwitch);
 
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(replacementService.Object, TestContext.Current.CancellationToken));
         await WaitForConditionAsync(() => Task.FromResult(oldLoadCanceled.Task.IsCompleted), timeoutMilliseconds: 2000);
         Assert.False(await firstRemoteSwitch);
 
-        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote");
-        await newLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondRemoteSwitch = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
+        await newLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, Volatile.Read(ref newLoadCount));
         Assert.True(await secondRemoteSwitch);

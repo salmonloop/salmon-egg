@@ -375,7 +375,7 @@ public sealed class DiscoverSessionsViewModelTests
                 navigationCoordinator);
 
             var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
-            await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             viewModel.SelectedProfile = profile2;
             allowImportCompletion.TrySetResult(null);
@@ -550,7 +550,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
-            await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             Assert.True(viewModel.IsLoading);
             Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
 
@@ -616,7 +616,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             var loadTask = viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
-            await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await activationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             Assert.True(viewModel.IsLoading);
             Assert.True(viewModel.IsImportInProgress);
             Assert.True(viewModel.ShowBusyStatus);

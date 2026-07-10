@@ -7,7 +7,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class AcpSettingsSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void GlobalAcpEnabledToggle_PersistsAcrossRestart()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();

@@ -420,7 +420,7 @@ public sealed class NavigationCoordinatorTests
             discoverConnectionFacade: discoverFacade.Object);
 
         var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         var result = await coordinator.ActivateDiscoveredRemoteSessionAsync(
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
@@ -590,7 +590,7 @@ public sealed class NavigationCoordinatorTests
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
 
             var firstActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             var secondActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
 
             Assert.True(secondActivation.IsCompletedSuccessfully);
@@ -628,7 +628,7 @@ public sealed class NavigationCoordinatorTests
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation);
 
             var firstActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await shellNavigation.FirstChatNavigationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await shellNavigation.FirstChatNavigationStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             var secondActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
             Assert.True(secondActivation.IsCompletedSuccessfully);
@@ -639,7 +639,7 @@ public sealed class NavigationCoordinatorTests
             Assert.True(await firstActivation);
             Assert.Equal(new[] { "session-1" }, activationCoordinator.ActivatedSessionIds);
             Assert.Equal(1, shellNavigation.ChatNavigationCount);
-            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         }
         finally
         {
@@ -828,7 +828,7 @@ public sealed class NavigationCoordinatorTests
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
 
             var activationTask = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             shellNavigation.As<IActivationTokenShellNavigationService>()
                 .Verify(s => s.NavigateToChat(It.IsAny<long>()), Times.Once);
@@ -870,7 +870,7 @@ public sealed class NavigationCoordinatorTests
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
 
             var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             await coordinator.ActivateStartAsync();
             allowSwitchCompletion.TrySetResult(null);
@@ -931,7 +931,7 @@ public sealed class NavigationCoordinatorTests
             navVm.RebuildTree();
 
             var sessionActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await switchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.True(runtimeState.IsSessionActivationInProgress);
@@ -969,7 +969,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1116,7 +1116,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1155,7 +1155,7 @@ public sealed class NavigationCoordinatorTests
                 runtimeState: runtimeState);
 
             navVm.RebuildTree();
-            var initialActivated = await chat.ViewModel.SwitchConversationAsync("session-1");
+            var initialActivated = await chat.ViewModel.SwitchConversationAsync("session-1", TestContext.Current.CancellationToken);
             Assert.True(initialActivated);
             var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
 
@@ -1190,7 +1190,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await SetConnectedProfileAsync(chat, "profile-1", "conn-1");
 
@@ -1231,7 +1231,7 @@ public sealed class NavigationCoordinatorTests
 
             navVm.RebuildTree();
             Assert.True(await coordinator.ActivateSessionAsync("session-2", "project-1"));
-            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             await coordinator.ActivateStartAsync();
 
@@ -1266,7 +1266,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1344,7 +1344,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 "session-2",
                 [],
@@ -1405,7 +1405,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
             await chat.ChatStore.Dispatch(new SetBindingSliceAction(
@@ -1513,14 +1513,14 @@ public sealed class NavigationCoordinatorTests
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object, runtimeState);
 
             var firstActivation = coordinator.ActivateSessionAsync("session-1", "project-1");
-            await firstSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await firstSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             var secondActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
-            var completedBeforeFirstLoadFinished = await Task.WhenAny(secondActivation, Task.Delay(250)) == secondActivation;
+            var completedBeforeFirstLoadFinished = await Task.WhenAny(secondActivation, Task.Delay(250, TestContext.Current.CancellationToken)) == secondActivation;
 
             Assert.True(completedBeforeFirstLoadFinished);
             Assert.True(await secondActivation);
-            await secondSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await secondSwitchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             var selection = Assert.IsType<NavigationSelectionState.Session>(selectionStore.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
@@ -1555,7 +1555,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1600,14 +1600,14 @@ public sealed class NavigationCoordinatorTests
 
             var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
             Assert.True(await activationTask);
-            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             Assert.True(await coordinator.ActivateStartAsync());
             var selection = Assert.IsType<NavigationSelectionState.Start>(navVm.CurrentSelection);
             Assert.Equal(NavigationSelectionState.StartSelection, selection);
 
             allowLoadCompletion.TrySetResult(null);
-            await loadCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await loadCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             await WaitForConditionAsync(() =>
                 runtimeState.CurrentShellContent == ShellNavigationContent.Start
                 && string.IsNullOrWhiteSpace(chat.ViewModel.ErrorMessage)
@@ -1648,7 +1648,7 @@ public sealed class NavigationCoordinatorTests
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
             using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
-            await chat.ViewModel.RestoreAsync();
+            await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1693,16 +1693,16 @@ public sealed class NavigationCoordinatorTests
 
             var activationTask = coordinator.ActivateSessionAsync("session-2", "project-1");
             Assert.True(await activationTask);
-            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await loadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             var startTask = coordinator.ActivateStartAsync();
-            await startNavigationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await startNavigationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
             Assert.Equal(ShellNavigationContent.Start, runtimeState.PendingShellContent);
             Assert.Equal(ShellNavigationContent.Chat, runtimeState.CurrentShellContent);
 
             allowLoadCompletion.TrySetResult(null);
-            await loadCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(100);
+            await loadCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
             await WaitForConditionAsync(
                 () => string.IsNullOrWhiteSpace(chat.ViewModel.ErrorMessage),
                 maxAttempts: 20,

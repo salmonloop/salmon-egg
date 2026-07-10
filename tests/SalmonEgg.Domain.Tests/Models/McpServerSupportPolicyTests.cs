@@ -1,57 +1,56 @@
 using System.Collections.Generic;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Models;
 
-[TestFixture]
 public sealed class McpServerSupportPolicyTests
 {
-    [Test]
+    [Fact]
     public void Validate_StdioServer_Should_BeSupportedWithoutAgentMcpCapabilities()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]) },
             new AgentCapabilities());
 
-        Assert.That(result.IsSupported, Is.True);
+        Assert.True(result.IsSupported);
     }
 
-    [Test]
+    [Fact]
     public void Validate_StdioServer_WhenCommandIsMissing_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new StdioMcpServer("filesystem", string.Empty) },
             new AgentCapabilities());
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("requires a command"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("requires a command", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_StdioServer_WhenCommandIsRelative_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new StdioMcpServer("filesystem", "mcp-server") },
             new AgentCapabilities());
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("absolute command path"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("absolute command path", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_WhenServerEntryIsNull_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new McpServer?[] { null },
             McpServerSupportPolicy.SupportAllTransports);
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("cannot be null"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("cannot be null", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_StdioServer_WhenEnvNameIsNull_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
@@ -65,53 +64,53 @@ public sealed class McpServerSupportPolicyTests
             },
             new AgentCapabilities());
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("without a name"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("without a name", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_HttpServer_WhenAgentDoesNotAdvertiseHttp_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") },
             new AgentCapabilities());
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("mcpCapabilities.http"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("mcpCapabilities.http", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_HttpServer_WhenAgentAdvertisesHttp_Should_BeSupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new HttpMcpServer("api", "https://api.example.com/mcp") },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-        Assert.That(result.IsSupported, Is.True);
+        Assert.True(result.IsSupported);
     }
 
-    [Test]
+    [Fact]
     public void Validate_HttpServer_WhenNameIsMissing_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new HttpMcpServer(string.Empty, "https://api.example.com/mcp") },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("requires a name"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("requires a name", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_HttpServer_WhenUrlIsPresent_Should_BeSupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new HttpMcpServer("api", "api.example.com/mcp") },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-        Assert.That(result.IsSupported, Is.True);
+        Assert.True(result.IsSupported);
     }
 
-    [Test]
+    [Fact]
     public void Validate_HttpServer_WhenHeaderValueMissing_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
@@ -124,18 +123,18 @@ public sealed class McpServerSupportPolicyTests
             },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("without a value"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("without a value", result.ErrorMessage);
     }
 
-    [Test]
+    [Fact]
     public void Validate_SseServer_WhenAgentDoesNotAdvertiseSse_Should_BeUnsupported()
     {
         var result = McpServerSupportPolicy.Validate(
             new List<McpServer> { new SseMcpServer("events", "https://events.example.com/mcp") },
             new AgentCapabilities(mcpCapabilities: new McpCapabilities(http: true)));
 
-        Assert.That(result.IsSupported, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("mcpCapabilities.sse"));
+        Assert.False(result.IsSupported);
+        Assert.Contains("mcpCapabilities.sse", result.ErrorMessage);
     }
 }

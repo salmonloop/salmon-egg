@@ -1,13 +1,12 @@
 using System.Text.Json;
-using NUnit.Framework;
+using Xunit;
 using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Tests.Protocol;
 
-[TestFixture]
 public sealed class SessionListTypesTests
 {
-    [Test]
+    [Fact]
     public void ListSessionsResponse_Should_Serialize_Correctly()
     {
         var response = new SessionListResponse
@@ -28,11 +27,11 @@ public sealed class SessionListTypesTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: sessions should be an array in JSON
-        Assert.That(parsed.RootElement.TryGetProperty("sessions", out var sessions), Is.True);
-        Assert.That(sessions.ValueKind, Is.EqualTo(JsonValueKind.Array));
+        Assert.True(parsed.RootElement.TryGetProperty("sessions", out var sessions));
+        Assert.Equal(JsonValueKind.Array, sessions.ValueKind);
     }
 
-    [Test]
+    [Fact]
     public void SessionInfo_Should_Serialize_Correctly()
     {
         var sessionInfo = new AgentSessionInfo
@@ -48,13 +47,13 @@ public sealed class SessionListTypesTests
         var parsed = JsonDocument.Parse(json);
 
         // Then: All properties should be present
-        Assert.That(parsed.RootElement.TryGetProperty("sessionId", out var sessionId), Is.True);
-        Assert.That(sessionId.GetString(), Is.EqualTo("test-session"));
-        Assert.That(parsed.RootElement.TryGetProperty("cwd", out var cwd), Is.True);
-        Assert.That(cwd.GetString(), Is.EqualTo("/home/user/project"));
-        Assert.That(parsed.RootElement.TryGetProperty("title", out var title), Is.True);
-        Assert.That(title.GetString(), Is.EqualTo("Test Session"));
-        Assert.That(parsed.RootElement.TryGetProperty("updatedAt", out var updatedAt), Is.True);
-        Assert.That(updatedAt.GetString(), Is.EqualTo("2024-01-01T00:00:00Z"));
+        Assert.True(parsed.RootElement.TryGetProperty("sessionId", out var sessionId));
+        Assert.Equal("test-session", sessionId.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("cwd", out var cwd));
+        Assert.Equal("/home/user/project", cwd.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("title", out var title));
+        Assert.Equal("Test Session", title.GetString());
+        Assert.True(parsed.RootElement.TryGetProperty("updatedAt", out var updatedAt));
+        Assert.Equal("2024-01-01T00:00:00Z", updatedAt.GetString());
     }
 }

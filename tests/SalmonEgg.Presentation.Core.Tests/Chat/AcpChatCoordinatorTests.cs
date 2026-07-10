@@ -107,7 +107,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        var result = await sut.ConnectToProfileAsync(profile, transport, sink);
+        var result = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Equal(TransportType.Stdio, transport.SelectedTransportType);
         Assert.Equal("agent.exe", transport.StdioCommand);
@@ -177,7 +177,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Null(sink.SelectedProfileId);
         Assert.True(registry.TryGetByProfile("profile-1", out var cachedSession));
@@ -219,7 +219,7 @@ public sealed class AcpChatCoordinatorTests
         };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.ConnectToProfileAsync(profile, transport, sink));
+            sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken));
 
         Assert.Contains("ACP is disabled", ex.Message, StringComparison.Ordinal);
         factory.VerifyNoOtherCalls();
@@ -261,7 +261,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Equal(expectedSnapshot, poolManager.LastCleanupSnapshot);
         snapshotProvider.Verify(x => x.GetSnapshotAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -305,9 +305,9 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var first = await sut.ConnectToProfileAsync(profile1, transport, sink);
-        var second = await sut.ConnectToProfileAsync(profile2, transport, sink);
-        var third = await sut.ConnectToProfileAsync(profile1, transport, sink);
+        var first = await sut.ConnectToProfileAsync(profile1, transport, sink, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectToProfileAsync(profile2, transport, sink, TestContext.Current.CancellationToken);
+        var third = await sut.ConnectToProfileAsync(profile1, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.IsType<AcpChatServiceAdapter>(first.ChatService);
         Assert.IsType<AcpChatServiceAdapter>(second.ChatService);
@@ -349,7 +349,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: false);
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: false, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Claude Agent", sink.AgentName);
         Assert.Equal("0.20.2", sink.AgentVersion);
@@ -404,8 +404,8 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        var first = await sut.ConnectToProfileAsync(profile, transport, sink);
-        var second = await sut.ConnectToProfileAsync(profile, transport, sink);
+        var first = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Same(first.ChatService, second.ChatService);
         profileService.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
@@ -450,12 +450,12 @@ public sealed class AcpChatCoordinatorTests
 
         using var cts = new CancellationTokenSource();
         var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cts.Token);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2)));
+            async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
         service.Verify(x => x.DisconnectAsync(), Times.Once);
         Assert.Null(sink.CurrentChatService);
     }
@@ -506,9 +506,9 @@ public sealed class AcpChatCoordinatorTests
 
         try
         {
-            await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             var ex = await Assert.ThrowsAsync<TimeoutException>(
-                async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2)));
+                async () => await connectTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
 
             Assert.Contains("initialize", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("profile-remote", ex.Message, StringComparison.Ordinal);
@@ -521,11 +521,11 @@ public sealed class AcpChatCoordinatorTests
         }
         finally
         {
-            initializeBlocker.TrySetCanceled();
+            initializeBlocker.TrySetCanceled(TestContext.Current.CancellationToken);
             cts.Cancel();
             try
             {
-                await connectTask.WaitAsync(TimeSpan.FromSeconds(2));
+                await connectTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             }
             catch
             {
@@ -558,7 +558,7 @@ public sealed class AcpChatCoordinatorTests
             profile,
             transport,
             sink,
-            new AcpConnectionContext("conv-1", PreserveConversation: true, ActivationVersion: 1));
+            new AcpConnectionContext("conv-1", PreserveConversation: true, ActivationVersion: 1), TestContext.Current.CancellationToken);
 
         Assert.Contains(ServiceReplaceIntent.PoolOnly, sink.ReplaceChatServiceIntents);
         Assert.DoesNotContain(ServiceReplaceIntent.ForegroundOwner, sink.ReplaceChatServiceIntents);
@@ -597,8 +597,8 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var first = await sut.ConnectToProfileAsync(profileWithSpacing, transport, sink);
-        var second = await sut.ConnectToProfileAsync(normalizedProfile, transport, sink);
+        var first = await sut.ConnectToProfileAsync(profileWithSpacing, transport, sink, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectToProfileAsync(normalizedProfile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Same(first.ChatService, second.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
@@ -669,8 +669,8 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        var first = await sut.ConnectToProfileAsync(oldProfile, transport, sink);
-        var second = await sut.ConnectToProfileAsync(newProfile, transport, sink);
+        var first = await sut.ConnectToProfileAsync(oldProfile, transport, sink, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectToProfileAsync(newProfile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.NotSame(first.ChatService, second.ChatService);
         Assert.Equal("agent-new", sink.AgentName);
@@ -718,11 +718,11 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var first = await sut.ConnectToProfileAsync(profile, transport, sink);
+        var first = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
         staleConnected = false;
 
-        var second = await sut.ConnectToProfileAsync(profile, transport, sink);
-        var third = await sut.ConnectToProfileAsync(profile, transport, sink);
+        var second = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
+        var third = await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.NotSame(first.ChatService, second.ChatService);
         Assert.Same(second.ChatService, third.ChatService);
@@ -764,14 +764,14 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
         Assert.True(registry.TryGetByProfile("profile-1", out var cached));
 
         var oldTimestamp = DateTime.UtcNow.AddMinutes(-10);
         registry.Upsert(cached with { LastUsedUtc = oldTimestamp });
 
-        await Task.Delay(20);
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await Task.Delay(20, TestContext.Current.CancellationToken);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.True(registry.TryGetByProfile("profile-1", out var refreshed));
         Assert.True(
@@ -821,14 +821,14 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.ConnectToProfileAsync(profile1, transport, sink);
-        var second = await sut.ConnectToProfileAsync(profile2, transport, sink);
+        await sut.ConnectToProfileAsync(profile1, transport, sink, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectToProfileAsync(profile2, transport, sink, TestContext.Current.CancellationToken);
         staleConnected = false;
         staleBackgroundService
             .Setup(x => x.DisconnectAsync())
             .ThrowsAsync(new InvalidOperationException("stale cleanup failure"));
 
-        var third = await sut.ConnectToProfileAsync(profile2, transport, sink);
+        var third = await sut.ConnectToProfileAsync(profile2, transport, sink, TestContext.Current.CancellationToken);
 
         Assert.Same(second.ChatService, third.ChatService);
         Assert.Equal("agent-p2", sink.AgentName);
@@ -860,7 +860,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var result = await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        var result = await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true, cancellationToken: TestContext.Current.CancellationToken);
 
         oldService.Verify(x => x.DisconnectAsync(), Times.Once);
         Assert.IsType<AcpChatServiceAdapter>(sink.CurrentChatService);
@@ -940,7 +940,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             cancellation.Token);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         cancellation.Cancel();
         allowInitializeCompletion.TrySetResult(null);
@@ -1026,7 +1026,7 @@ public sealed class AcpChatCoordinatorTests
         using var cancellation = new CancellationTokenSource();
 
         var connectTask = sut.ConnectToProfileAsync(profile, transport, sink, cancellation.Token);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         await store.Dispatch(new SetSelectedProfileIntentAction("profile-local"));
         cancellation.Cancel();
@@ -1091,7 +1091,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             cancellation.Token);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         cancellation.Cancel();
         allowInitializeCompletion.TrySetResult(null);
@@ -1169,7 +1169,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             cancellation.Token);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         cancellation.Cancel();
         allowInitializeCompletion.TrySetResult(null);
@@ -1242,7 +1242,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             CancellationToken.None);
-        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         var secondApplyResult = await sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1313,7 +1313,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             CancellationToken.None);
-        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         await sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1382,7 +1382,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             CancellationToken.None);
-        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         await sut.ApplyTransportConfigurationAsync(
             transport,
@@ -1432,7 +1432,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true, cancellationToken: TestContext.Current.CancellationToken);
 
         service.Verify(x => x.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
@@ -1474,7 +1474,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true, cancellationToken: TestContext.Current.CancellationToken);
 
         service.Verify(x => x.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal(0, sink.ResetHydratedConversationForResyncCalls);
@@ -1504,7 +1504,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var result = await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        var result = await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.Equal("remote-session-1", result.RemoteSessionId);
         Assert.Equal("remote-session-1", sink.CurrentRemoteSessionId);
@@ -1544,7 +1544,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.NotNull(capturedParams);
         Assert.Equal(expectedCwd, capturedParams!.Cwd);
@@ -1588,7 +1588,7 @@ public sealed class AcpChatCoordinatorTests
                 new HttpMcpServer("api", "https://api.example.com/mcp")
             ]));
 
-        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.NotNull(capturedParams);
         var http = Assert.IsType<HttpMcpServer>(Assert.Single(capturedParams!.McpServers));
@@ -1633,7 +1633,7 @@ public sealed class AcpChatCoordinatorTests
             EmptyMcpServerProvider,
             sessionCommandOrchestrator: orchestrator);
 
-        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.NotNull(capturedParams);
         Assert.Empty(capturedParams!.McpServers);
@@ -1698,7 +1698,7 @@ public sealed class AcpChatCoordinatorTests
         using var provider = services.BuildServiceProvider(validateScopes: true);
         var sut = provider.GetRequiredService<IAcpConnectionCommands>();
 
-        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        await sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.NotNull(capturedParams);
         var http = Assert.IsType<HttpMcpServer>(Assert.Single(capturedParams!.McpServers));
@@ -1738,7 +1738,7 @@ public sealed class AcpChatCoordinatorTests
             mcpServerProvider: provider);
         SetupProfileChatService(factory, profile, service.Object);
 
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
 
         var stdio = Assert.IsType<StdioMcpServer>(Assert.Single(sink.CurrentMcpServers));
         Assert.Equal("filesystem", stdio.Name);
@@ -1780,7 +1780,7 @@ public sealed class AcpChatCoordinatorTests
             mcpServerProvider: provider);
         SetupProfileChatService(factory, profile, service.Object);
 
-        await sut.ConnectToProfileAsync(profile, transport, sink);
+        await sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken);
         settings.Servers.Clear();
 
         var stdio = Assert.IsType<StdioMcpServer>(Assert.Single(sink.CurrentMcpServers));
@@ -1801,7 +1801,7 @@ public sealed class AcpChatCoordinatorTests
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
-        var servers = await provider.GetMcpServersAsync();
+        var servers = await provider.GetMcpServersAsync(TestContext.Current.CancellationToken);
 
         Assert.Empty(servers);
     }
@@ -1821,7 +1821,7 @@ public sealed class AcpChatCoordinatorTests
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
-        var servers = await provider.GetMcpServersAsync();
+        var servers = await provider.GetMcpServersAsync(TestContext.Current.CancellationToken);
 
         var server = Assert.IsType<HttpMcpServer>(Assert.Single(servers));
         Assert.Equal("enabled", server.Name);
@@ -1846,7 +1846,7 @@ public sealed class AcpChatCoordinatorTests
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
-        var servers = await provider.GetMcpServersAsync();
+        var servers = await provider.GetMcpServersAsync(TestContext.Current.CancellationToken);
         source.Url = "https://mutated.example.com/mcp";
         source.Headers![0].Value = "mutated";
         source.Meta["source"] = "mutated";
@@ -1882,7 +1882,7 @@ public sealed class AcpChatCoordinatorTests
             .Returns(createSessionTcs.Task);
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-        var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         sink.SelectedProfileId = "profile-2";
         createSessionTcs.SetResult(new SessionNewResponse("remote-session-1"));
@@ -1918,7 +1918,7 @@ public sealed class AcpChatCoordinatorTests
             .Returns(createSessionTcs.Task);
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
-        var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true));
+        var ensureTask = sut.EnsureRemoteSessionAsync(sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         sink.CurrentSessionId = "local-session-2";
         createSessionTcs.SetResult(new SessionNewResponse("remote-session-1"));
@@ -1993,7 +1993,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: false),
             CancellationToken.None);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         sink.SelectedProfileId = "profile-2";
         allowInitializeCompletion.TrySetResult(null);
@@ -2027,7 +2027,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true));
+        await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true), cancellationToken: TestContext.Current.CancellationToken);
 
         service.Verify(x => x.SendPromptAsync(It.Is<SessionPromptParams>(p => p.SessionId == "remote-123"), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -2058,7 +2058,7 @@ public sealed class AcpChatCoordinatorTests
             "hi",
             "client-msg-1",
             sink,
-            _ => Task.FromResult(true));
+            _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("remote-123", captured!.SessionId);
@@ -2088,7 +2088,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var result = await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true));
+        var result = await sut.DispatchPromptToRemoteSessionAsync("remote-123", "hi", promptMessageId: null, sink, _ => Task.FromResult(true), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, result.Response.StopReason);
     }
@@ -2135,7 +2135,7 @@ public sealed class AcpChatCoordinatorTests
         IAcpConnectionCommands commands = sut;
 
         var result = await commands.DispatchPromptToRemoteSessionAsync(
-            "remote-stale", "hi", promptMessageId, sink, _ => Task.FromResult(true));
+            "remote-stale", "hi", promptMessageId, sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         // Binding must be cleared and replaced with the new session id.
         Assert.Equal(1, sink.BindingCommands.ClearCalls);
@@ -2182,7 +2182,7 @@ public sealed class AcpChatCoordinatorTests
             "hi",
             null,
             sink,
-            _ => Task.FromResult(true));
+            _ => Task.FromResult(true), TestContext.Current.CancellationToken);
 
         sink.CurrentSessionId = "local-2";
         sendPromptTcs.SetException(new AcpException(JsonRpcErrorCode.ResourceNotFound, "Not found"));
@@ -2227,7 +2227,7 @@ public sealed class AcpChatCoordinatorTests
         // Recovery creates a new session but the second SendPrompt still fails -> must throw.
         await Assert.ThrowsAsync<AcpException>(() =>
             commands.DispatchPromptToRemoteSessionAsync(
-                "remote-stale", "hi", null, sink, _ => Task.FromResult(true)));
+                "remote-stale", "hi", null, sink, _ => Task.FromResult(true), TestContext.Current.CancellationToken));
 
         Assert.Equal(1, sink.BindingCommands.ClearCalls);
         service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
@@ -2261,7 +2261,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var result = await sut.SendPromptAsync("hi", promptMessageId: null, sink, _ => Task.FromResult(true));
+        var result = await sut.SendPromptAsync("hi", promptMessageId: null, sink, _ => Task.FromResult(true), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("remote-1", result.RemoteSessionId);
         service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Once);
@@ -2289,7 +2289,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.CancelPromptAsync(sink, "User cancelled");
+        await sut.CancelPromptAsync(sink, "User cancelled", TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("remote-session-9", captured!.SessionId);
@@ -2323,7 +2323,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        var result = await sut.SendPromptAsync("hello", promptMessageId: null, sink, _ => Task.FromResult(true));
+        var result = await sut.SendPromptAsync("hello", promptMessageId: null, sink, _ => Task.FromResult(true), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("remote-fresh", result.RemoteSessionId);
         service.Verify(x => x.CreateSessionAsync(It.IsAny<SessionNewParams>()), Times.Never);
@@ -2350,7 +2350,7 @@ public sealed class AcpChatCoordinatorTests
 
         var sut = CreateCoordinator(factory.Object, logger.Object, CreateTransportSupportPolicy(), EmptyMcpServerProvider);
 
-        await sut.CancelPromptAsync(sink, "User cancelled");
+        await sut.CancelPromptAsync(sink, "User cancelled", TestContext.Current.CancellationToken);
 
         Assert.NotNull(captured);
         Assert.Equal("remote-fresh", captured!.SessionId);
@@ -2385,7 +2385,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.DisconnectAsync(sink);
+        await sut.DisconnectAsync(sink, TestContext.Current.CancellationToken);
 
         service.Verify(x => x.DisconnectAsync(), Times.Once);
         Assert.Null(sink.CurrentChatService);
@@ -2426,7 +2426,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true, cancellationToken: TestContext.Current.CancellationToken);
 
         service.Raise(
             x => x.SessionUpdateReceived += null,
@@ -2497,7 +2497,7 @@ public sealed class AcpChatCoordinatorTests
             sink,
             new AcpConnectionContext("local-session-1", PreserveConversation: true),
             CancellationToken.None);
-        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await firstInitializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         await sut.ApplyTransportConfigurationAsync(
             transport,
@@ -2554,7 +2554,7 @@ public sealed class AcpChatCoordinatorTests
 
         SetupProfileChatService(factory, profile, service.Object);
 
-        var result = await sut.ConnectProfileInPoolAsync(profile, transport);
+        var result = await sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken);
 
         Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
@@ -2587,8 +2587,8 @@ public sealed class AcpChatCoordinatorTests
                 string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
             .Returns(service.Object);
 
-        var first = await sut.ConnectProfileInPoolAsync(profile, transport);
-        var second = await sut.ConnectProfileInPoolAsync(profile, transport);
+        var first = await sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken);
 
         Assert.Same(first.ChatService, second.ChatService);
         service.Verify(x => x.InitializeAsync(It.IsAny<InitializeParams>()), Times.Once);
@@ -2630,8 +2630,8 @@ public sealed class AcpChatCoordinatorTests
         SetupProfileChatService(factory, firstProfile, firstService.Object);
         SetupProfileChatService(factory, secondProfile, secondService.Object);
 
-        var first = await sut.ConnectProfileInPoolAsync(firstProfile, transport);
-        var second = await sut.ConnectProfileInPoolAsync(secondProfile, transport);
+        var first = await sut.ConnectProfileInPoolAsync(firstProfile, transport, TestContext.Current.CancellationToken);
+        var second = await sut.ConnectProfileInPoolAsync(secondProfile, transport, TestContext.Current.CancellationToken);
 
         Assert.NotSame(first.ChatService, second.ChatService);
         Assert.True(registry.TryGetByProfile("profile-1", out var session));
@@ -2673,9 +2673,9 @@ public sealed class AcpChatCoordinatorTests
                 string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
             .Returns(service.Object);
 
-        var first = sut.ConnectProfileInPoolAsync(profile, firstTransport);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var second = sut.ConnectProfileInPoolAsync(profile, secondTransport);
+        var first = sut.ConnectProfileInPoolAsync(profile, firstTransport, TestContext.Current.CancellationToken);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var second = sut.ConnectProfileInPoolAsync(profile, secondTransport, TestContext.Current.CancellationToken);
 
         releaseInitialize.SetResult();
         var results = await Task.WhenAll(first, second);
@@ -2724,10 +2724,10 @@ public sealed class AcpChatCoordinatorTests
                 string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
             .Returns(service.Object);
 
-        var connectTask = sut.ConnectProfileInPoolAsync(profile, transport);
-        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var connectTask = sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken);
+        await initializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
-        await sut.DisconnectProfileInPoolAsync("profile-1");
+        await sut.DisconnectProfileInPoolAsync("profile-1", TestContext.Current.CancellationToken);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connectTask);
         Assert.False(registry.TryGetByProfile("profile-1", out _));
@@ -2758,7 +2758,7 @@ public sealed class AcpChatCoordinatorTests
         };
 
         var ex = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            sut.ConnectToProfileAsync(profile, transport, sink));
+            sut.ConnectToProfileAsync(profile, transport, sink, TestContext.Current.CancellationToken));
 
         Assert.Contains("Stdio transport requires", ex.Message, StringComparison.Ordinal);
         Assert.Null(sink.SelectedProfileId);
@@ -2792,7 +2792,7 @@ public sealed class AcpChatCoordinatorTests
         };
 
         await Assert.ThrowsAsync<NotSupportedException>(() =>
-            sut.ConnectProfileInPoolAsync(profile, transport));
+            sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken));
 
         Assert.Equal(TransportType.WebSocket, transport.SelectedTransportType);
         factory.Verify(
@@ -2833,10 +2833,10 @@ public sealed class AcpChatCoordinatorTests
                 string.Equals(candidate.Id, profile.Id, StringComparison.Ordinal))))
             .Returns(service.Object);
 
-        await sut.ConnectProfileInPoolAsync(profile, transport);
+        await sut.ConnectProfileInPoolAsync(profile, transport, TestContext.Current.CancellationToken);
         Assert.True(registry.TryGetByProfile("profile-1", out _));
 
-        await sut.DisconnectProfileInPoolAsync("profile-1");
+        await sut.DisconnectProfileInPoolAsync("profile-1", TestContext.Current.CancellationToken);
 
         Assert.False(registry.TryGetByProfile("profile-1", out _));
         service.Verify(x => x.DisconnectAsync(), Times.Once);
@@ -2873,7 +2873,7 @@ public sealed class AcpChatCoordinatorTests
             transportSupportPolicy: CreateTransportSupportPolicy(),
             mcpServerProvider: EmptyMcpServerProvider);
 
-        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true);
+        await sut.ApplyTransportConfigurationAsync(transport, sink, preserveConversation: true, cancellationToken: TestContext.Current.CancellationToken);
         sink.CurrentChatService!.SessionUpdateReceived += (_, args) => updates.Add(args);
 
         service.Raise(

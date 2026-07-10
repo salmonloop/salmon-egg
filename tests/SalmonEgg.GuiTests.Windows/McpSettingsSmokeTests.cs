@@ -7,7 +7,7 @@ namespace SalmonEgg.GuiTests.Windows;
 
 public sealed class McpSettingsSmokeTests
 {
-    [SkippableFact]
+    [Fact]
     public void PerServerEnabledToggle_PersistsWhenLeavingAndReturningToSettingsPage()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
@@ -43,7 +43,7 @@ public sealed class McpSettingsSmokeTests
         Assert.Equal(ToggleState.On, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
     }
 
-    [SkippableFact]
+    [Fact]
     public void AddCloseAddServerEditor_DoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();

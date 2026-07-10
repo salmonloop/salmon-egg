@@ -45,7 +45,7 @@ public sealed class FileSystemAppFileStoreTests : IDisposable
         };
         var store = new FileSystemAppFileStore(persistence);
 
-        var content = await store.ReadAllTextAsync(path);
+        var content = await store.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
 
         Assert.Equal("theme: Dark", content);
         Assert.Equal(1, persistence.LoadCount);
@@ -58,7 +58,7 @@ public sealed class FileSystemAppFileStoreTests : IDisposable
         var store = new FileSystemAppFileStore(persistence);
         var path = Path.Combine(_testDirectory, "config", "app.yaml");
 
-        await store.WriteAllTextAsync(path, "theme: Dark");
+        await store.WriteAllTextAsync(path, "theme: Dark", TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "load", "flush" }, persistence.Operations);
     }
@@ -70,7 +70,7 @@ public sealed class FileSystemAppFileStoreTests : IDisposable
         var store = new FileSystemAppFileStore(persistence);
         var path = Path.Combine(_testDirectory, "config", "app.yaml");
 
-        await store.WriteAllTextAsync(path, "theme: Dark");
+        await store.WriteAllTextAsync(path, "theme: Dark", TestContext.Current.CancellationToken);
 
         Assert.Equal(1, persistence.FlushCount);
     }
@@ -82,9 +82,9 @@ public sealed class FileSystemAppFileStoreTests : IDisposable
         var store = new FileSystemAppFileStore(persistence);
         var path = Path.Combine(_testDirectory, "config", "app.yaml");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, "theme: Dark");
+        await File.WriteAllTextAsync(path, "theme: Dark", TestContext.Current.CancellationToken);
 
-        await store.DeleteAsync(path);
+        await store.DeleteAsync(path, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, persistence.FlushCount);
     }

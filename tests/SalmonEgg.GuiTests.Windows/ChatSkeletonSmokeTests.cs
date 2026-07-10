@@ -19,7 +19,7 @@ public sealed class ChatSkeletonSmokeTests
     private const string LongSessionHeaderTitle = "GUI Session 01 - Long Title For Responsive Header Validation Across Narrow Layout Widths";
     private static readonly string[] ToolCallPayloadDetailHeaders = ["调用参数详情", "Payload details"];
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithToolCall_CanOpenToolCallPillWithoutCrashing()
     {
         using var appData = GuiAppDataScope.CreateDeterministicToolCallData();
@@ -76,7 +76,7 @@ public sealed class ChatSkeletonSmokeTests
         Assert.Contains("GUI Tool Call Session 01", chatHeader.Name, StringComparison.Ordinal);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithLongTitle_WhenWindowNarrows_KeepsFullAccessibilityName_AndMovesAgentToSecondRow()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
@@ -123,7 +123,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Expected agent display to wrap below the long session title in narrow layout. title={titleText.BoundingRectangle} agent={agentDisplay.BoundingRectangle}");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithMarkdownMessages_UnclosedFenceStaysRaw_ClosedFenceRendersCodeWithoutFenceMarkers()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
@@ -186,7 +186,7 @@ public sealed class ChatSkeletonSmokeTests
                     && text.Contains("var partial = true;", StringComparison.Ordinal));
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithMarkdownMessages_DoubleClickCodeBlock_DoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
@@ -216,7 +216,7 @@ public sealed class ChatSkeletonSmokeTests
         Assert.NotNull(stillVisible);
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalSession_WithLongTranscript_PageUpDetachesViewportFromBottom()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
@@ -252,7 +252,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Transcript viewport stayed locked to bottom after PageUp input. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalSession_WithLargeVariableHeightTranscript_ScrollPercentDoesNotSnapToStart()
     {
         using var appData = GuiAppDataScope.CreateDeterministicVariableHeightTranscriptData(messageCount: 400);
@@ -319,7 +319,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Expected final scroll percent near 33, actual {finalPercent:0.##}. State='{viewportState}'. Debug='{viewportDebug}'. Observed percents=[{string.Join(", ", observedPercents.Select(value => value.ToString("0.##")))}]. Visible=[{string.Join(" | ", observedVisibleMessages)}].");
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalSession_WithMarkdownHeavyTranscript_CanManuallyScrollToLastMessage()
     {
         const int MessageCount = 180;
@@ -354,7 +354,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Expected the final markdown message '{finalMessageText}' to be reachable at scroll percent 100. ActualPercent={scroll.VerticalScrollPercent.Value:0.##}. State='{viewportState}'. Debug='{viewportDebug}'. Visible=[{string.Join(" | ", visibleTexts.Take(12))}].");
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalSession_WithMarkdownHeavyTranscript_AutoSettleReachesLastMessage()
     {
         const int MessageCount = 180;
@@ -375,7 +375,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Markdown-heavy transcript did not auto-settle to the final message. settledToBottom={settledToBottom}. finalVisible={finalMessageVisible}. State='{session.TryGetElementName("ChatView.TranscriptViewportState", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. Debug='{session.TryGetElementName("ChatView.TranscriptViewportDebug", TimeSpan.FromMilliseconds(200)) ?? "<missing>"}'. Visible=[{string.Join(" | ", visibleTexts.Take(12))}].");
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalSession_WithTallLastMessage_CanReachNativeBottom()
     {
         const int MessageCount = 80;
@@ -409,7 +409,7 @@ public sealed class ChatSkeletonSmokeTests
             $"Expected the native ListView bottom to reveal '{finalMessageText}'. ActualPercent={scroll.VerticalScrollPercent.Value:0.##}. State='{viewportState}'. Debug='{viewportDebug}'. Visible=[{string.Join(" | ", visibleTexts.Take(12))}].");
     }
 
-    [SkippableFact]
+    [Fact]
     public void MarkdownSession_AfterDiscoverRoundTrip_RetainsRenderedCodeAndDoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
@@ -429,7 +429,7 @@ public sealed class ChatSkeletonSmokeTests
         AssertMarkdownSessionStableAfterReturn(session);
     }
 
-    [SkippableFact]
+    [Fact]
     public void MarkdownSession_AfterAcpSettingsRoundTrip_RetainsRenderedCodeAndDoesNotCrash()
     {
         using var appData = GuiAppDataScope.CreateDeterministicMarkdownRenderData();
@@ -445,7 +445,7 @@ public sealed class ChatSkeletonSmokeTests
         AssertMarkdownSessionStableAfterReturn(session);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithContent_ShowsSkeletonLoader_ThenContent()
     {
         // Use withContent: true to ensure there are messages to be rendered.
@@ -473,7 +473,7 @@ public sealed class ChatSkeletonSmokeTests
         Assert.Contains("GUI Session 01", chatHeader.Name, StringComparison.Ordinal);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectSessionWithLongTranscript_AutoScrollsToLatestMessageAfterLoad()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
@@ -502,7 +502,7 @@ public sealed class ChatSkeletonSmokeTests
         Assert.NotNull(lastMessageVisible);
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionWithSlowReplay_AutoScrollsToLatestMessageAfterHydration()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -567,7 +567,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SendPrompt_WhenPromptResponseOmitsUserMessageId_AndLateAuthoritativeUserUpdateArrives_ShowsSingleOutgoingBubble()
     {
         using var appData = GuiAppDataScope.CreateDeterministicPromptAckRaceData();
@@ -618,7 +618,7 @@ public sealed class ChatSkeletonSmokeTests
         Assert.DoesNotContain("projectId=__unclassified__", appLogTail, StringComparison.Ordinal);
     }
 
-    [SkippableFact]
+    [Fact]
     public void LargeRemoteSession_AfterHydration_InputTextStaysStableWhileProjectionsSettle()
     {
         const string promptText = "review the hydrated transcript and summarize the last three tool changes";
@@ -669,7 +669,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectLocalSession_TerminalPanel_ShowsPrompt_AndExecutesCommand()
     {
         const string guiLocalTerminalSmokeCommandEnvVar = "SALMONEGG_GUI_LOCAL_TERMINAL_SMOKE_COMMAND";
@@ -754,7 +754,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void AuxiliaryPanels_AfterCloseAndReopen_RetainContentInsteadOfBlankSurface()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
@@ -841,7 +841,7 @@ public sealed class ChatSkeletonSmokeTests
             "Task overview panel reopened without empty-state content.");
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionFromStart_FirstFrame_DoesNotExposeAnyChatShellContentBeforeLoadingOverlay()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -869,7 +869,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionFromStart_ShowsLoadingOverlayBeforeChatShell()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -915,7 +915,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionFromMiniWindow_WhenMainChatIsWarmCached_ShowsOverlayBeforeRemoteShellAndDoesNotLeakStaleTranscript()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1005,7 +1005,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSession_RepeatedClicksWithLocalDetour_DoesNotHangAndHydratesLatestSelection()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1082,7 +1082,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RandomSwitchWithOneSecondCadence_FinalSelectionAlwaysDrivesRightPane()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1177,7 +1177,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSession_ClickStormWithLocalInterruption_DoesNotFreezeAndHydratesFinalSelection()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1263,7 +1263,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectBetweenTwoRemoteSessions_ClickStorm_DoesNotFreezeAndSettlesOnLatestRemote()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1359,7 +1359,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectBetweenTwoRemoteSessions_DoubleTapPattern_DoesNotFreezeAndSettlesOnLatestIntent()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1447,7 +1447,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectMixedRemoteAndLocal_RandomOrderBurst_FinalLocalIntent_DoesNotFreeze()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1549,7 +1549,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectMixedRemoteAndLocal_DeterministicFailurePrefix_FinalLocalIntent_DoesNotFreeze()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1654,7 +1654,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionWithSlowReplay_ViewportStateReportsBottomAfterHydration()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1701,7 +1701,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionWithSlowReplay_PageUpDetachesViewportAfterHydration()
     {
         const int replayMessageCount = 24;
@@ -1829,7 +1829,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void HydratedRemoteSession_NavigateToDiscoverAndBack_ReturnsHotWithoutRemoteReload()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1872,7 +1872,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void HydratedRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -1966,7 +1966,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void HydratedCrossProfileRemoteSession_SwitchToOtherRemoteSessionAndBack_ReturnsHotWithoutRemoteReload()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2058,7 +2058,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void BackgroundRemoteSession_LiveAgentUpdate_ShowsUnreadAndClearsWhenActivated()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2131,7 +2131,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void BackgroundRemoteSessions_TwoWayProjection_ShowsUnreadForBackgroundSessionOnly()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2253,7 +2253,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiscoverProfileSwitch_SlowPreviousProfile_DoesNotOverwriteLatestSessionsList()
     {
         try
@@ -2335,7 +2335,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void DiscoverImportRemoteSession_ActivatesAndHydratesImportedSession()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2388,7 +2388,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void ArchiveRemoteSession_DuringHydration_RemoteSessionUpdateDoesNotResurrectSessionItem()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2455,7 +2455,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectLargeCachedRemoteSession_FirstOpen_HeaderVisibleWithinBudget()
     {
         // Performance guardrail: first-open of a large cached session should not regress into
@@ -2503,7 +2503,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectHugeCachedRemoteSession_FirstOpen_LoadingPillAppearsWithinBudget()
     {
         using var appData = GuiAppDataScope.CreateDeterministicSlowRemoteReplayData(
@@ -2550,7 +2550,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void RemoteFirstOpen_ImmediateSwitchToLocal_CompletesWithinResponsivenessBudget()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2644,7 +2644,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectRemoteSessionWithSlowReplay_PersistsLoadedModeAfterHydration()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2719,7 +2719,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectAcrossProfilesAndLocal_LongRandomSwitch_RemainsInteractive()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2837,7 +2837,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void SelectAcrossProfilesAndLocal_OneSecondCadence_FinalIntentAlwaysWins()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");
@@ -2943,7 +2943,7 @@ public sealed class ChatSkeletonSmokeTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public void AlternateBetweenTwoRemoteSessions_ClickStorm_FinalIntentWins_AndAppStaysResponsive()
     {
         var previousSlowLoadDelay = Environment.GetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS");

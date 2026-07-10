@@ -53,8 +53,8 @@ public sealed class ConversationStoreTests : IDisposable
             }
         };
 
-        await sut.SaveAsync(document);
-        var loaded = await sut.LoadAsync();
+        await sut.SaveAsync(document, TestContext.Current.CancellationToken);
+        var loaded = await sut.LoadAsync(TestContext.Current.CancellationToken);
 
         var conversation = Assert.Single(loaded.Conversations);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(conversation.SessionInfo);

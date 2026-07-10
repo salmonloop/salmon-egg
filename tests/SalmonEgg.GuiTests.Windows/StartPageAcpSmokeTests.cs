@@ -38,7 +38,7 @@ public sealed class StartPageAcpSmokeTests
         "Unable to load session configuration. Check the connection and try again."
     ];
 
-    [SkippableFact]
+    [Fact]
     public void StartupRemoteProfile_CannotPrepareDraft_ThenSwitchingToLocalStdio_RecoversReadyModes()
     {
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
@@ -63,7 +63,7 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Switching from the startup remote profile to local stdio did not recover ready modes.", session, appData));
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalToRemoteToLocalStartPageRoundTrip_RecoversReadyModes()
     {
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(
@@ -101,7 +101,7 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Returning from remote back to local stdio did not recover ready modes.", session, appData));
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalStdioStartup_WithoutExplicitCwd_StillYieldsUsableModes()
     {
         using var appData = StartPageAcpSmokeData.CreateUnclassifiedScenario(
@@ -120,7 +120,7 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Local stdio startup without an explicit cwd did not yield usable modes.", session, appData));
     }
 
-    [SkippableFact]
+    [Fact]
     public void RemoteProfile_WithoutRemoteDirectorySelection_RemainsLocallyUnavailable()
     {
         using var appData = StartPageAcpSmokeData.CreateUnclassifiedScenario(
@@ -145,7 +145,7 @@ public sealed class StartPageAcpSmokeTests
             StringComparison.Ordinal);
     }
 
-    [SkippableFact]
+    [Fact]
     public void LocalToRemoteProfile_ThenRemoteDirectorySelected_RecoversReadyModes()
     {
         // Reproduces a variant of the reported bug: start on a connected local stdio profile
@@ -196,7 +196,7 @@ public sealed class StartPageAcpSmokeTests
             BuildFailureMessage("Switching the project to a configured remote project did not recover ready modes after a local->remote profile switch.", session, appData));
     }
 
-    [SkippableFact]
+    [Fact]
     public void RemoteProfile_WhenConnectedAndRemoteDirectorySelected_RecoversReadyModes()
     {
         // Reproduces the reported bug: on the Start page, selecting a remote WebSocket ACP profile
@@ -246,7 +246,7 @@ public sealed class StartPageAcpSmokeTests
             StringComparison.Ordinal);
     }
 
-    [SkippableFact]
+    [Fact]
     public void RemoteProfile_WhenRemoteRejectsSelectedCwd_ProjectsRemoteFailureAfterSendingSessionNew()
     {
         using var appData = StartPageAcpSmokeData.CreateMappedProjectScenario(

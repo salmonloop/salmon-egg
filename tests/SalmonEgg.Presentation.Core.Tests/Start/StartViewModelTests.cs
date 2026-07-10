@@ -761,7 +761,7 @@ public sealed class StartViewModelTests
             chatService
                 .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
                 .ThrowsAsync(new InvalidOperationException("session/new failed"));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
             await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
@@ -849,7 +849,7 @@ public sealed class StartViewModelTests
                             }
                         });
                 });
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -895,7 +895,7 @@ public sealed class StartViewModelTests
                 }
 
                 Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for profile-2 new-session draft to become ready.");
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             }
 
             var finalState = await chat.GetConnectionStateAsync();
@@ -954,7 +954,7 @@ public sealed class StartViewModelTests
                             new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
             await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-remote"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connecting));
 
@@ -1074,7 +1074,7 @@ public sealed class StartViewModelTests
                             ]
                         }));
                 });
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
             var profileConnectionStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
             commands
                 .Setup(command => command.ConnectToProfileAsync(
@@ -1116,7 +1116,7 @@ public sealed class StartViewModelTests
                 timeoutMilliseconds: 3000);
 
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
-            await profileConnectionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await profileConnectionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
             await WaitPastPreviousFixedDraftIdentityWaitAsync();
 
@@ -1149,7 +1149,7 @@ public sealed class StartViewModelTests
         }
         finally
         {
-            allowProfileConnection.TrySetCanceled();
+            allowProfileConnection.TrySetCanceled(TestContext.Current.CancellationToken);
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
     }
@@ -1223,7 +1223,7 @@ public sealed class StartViewModelTests
                         _ => throw new Xunit.Sdk.XunitException("Unexpected extra session/new request.")
                     };
                 });
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1266,7 +1266,7 @@ public sealed class StartViewModelTests
                 }
 
                 Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for the latest profile draft to become ready before the superseded response completed.");
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             }
 
             slowResponseTcs.SetResult(new SessionNewResponse(
@@ -1280,7 +1280,7 @@ public sealed class StartViewModelTests
                     ]
                 }));
 
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
 
             var finalState = await chat.GetConnectionStateAsync();
             Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
@@ -1299,7 +1299,7 @@ public sealed class StartViewModelTests
         }
         finally
         {
-            slowResponseTcs.TrySetCanceled();
+            slowResponseTcs.TrySetCanceled(TestContext.Current.CancellationToken);
             SynchronizationContext.SetSynchronizationContext(originalContext);
         }
     }
@@ -1359,7 +1359,7 @@ public sealed class StartViewModelTests
                             new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             // Simulate the startup race from the real log: the visible selector still shows the
             // stale local profile, but connection intent and authoritative foreground transport
@@ -1396,7 +1396,7 @@ public sealed class StartViewModelTests
                 }
 
                 Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for the start draft to follow the authoritative foreground profile instead of the stale displayed profile.");
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             }
         }
         finally
@@ -1465,7 +1465,7 @@ public sealed class StartViewModelTests
                             }
                         ]
                     }]));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1515,7 +1515,7 @@ public sealed class StartViewModelTests
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             var chatService = CreateConnectedChatService();
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1607,7 +1607,7 @@ public sealed class StartViewModelTests
                             new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
             commands
                 .Setup(command => command.ConnectToProfileAsync(
                     It.IsAny<ServerConfiguration>(),
@@ -1666,7 +1666,7 @@ public sealed class StartViewModelTests
                 }
 
                 Assert.True(DateTime.UtcNow < selectionTimeoutAt, "Timed out waiting for the selected profile intent to advance to profile-2.");
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             }
 
             var recovered = await WaitForConditionOrFalseAsync(
@@ -1742,7 +1742,7 @@ public sealed class StartViewModelTests
                             new SalmonEgg.Acp.Protocol.SessionMode { Id = "plan", Name = "Plan" }
                         ]
                     }));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -1848,7 +1848,7 @@ public sealed class StartViewModelTests
             var authoritativeAdapter = new AcpChatServiceAdapter(
                 sharedChatService.Object,
                 new AcpEventAdapter(_ => { }, new ImmediateUiDispatcher()));
-            await chat.ViewModel.ReplaceChatServiceAsync(sharedChatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(sharedChatService.Object, TestContext.Current.CancellationToken);
 
             // Record a session whose ConnectionInstanceId matches the foreground state below.
             registry.Upsert(new AcpConnectionSession(
@@ -1962,7 +1962,7 @@ public sealed class StartViewModelTests
             chatService
                 .Setup(service => service.CreateSessionAsync(It.IsAny<SessionNewParams>()))
                 .ThrowsAsync(new InvalidOperationException("session/new failed"));
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
 
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
@@ -2074,7 +2074,7 @@ public sealed class StartViewModelTests
             });
 
             var chatService = CreateConnectedChatService();
-            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+            await chat.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
             commands
                 .Setup(command => command.ConnectToProfileAsync(
                     It.IsAny<ServerConfiguration>(),
@@ -2283,7 +2283,7 @@ public sealed class StartViewModelTests
             preferences.AcpEnabled = true;
 
             Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
             var connectionState = await chat.GetConnectionStateAsync();
             Assert.Null(chat.ViewModel.SelectedProfileIntentId);
             Assert.Null(connectionState.SelectedProfileIntentId);
@@ -2357,7 +2357,7 @@ public sealed class StartViewModelTests
             });
 
             Assert.Equal("profile-remote", chat.ViewModel.SelectedAcpProfile?.Id);
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
             var connectionState = await chat.GetConnectionStateAsync();
             Assert.Null(chat.ViewModel.SelectedProfileIntentId);
             Assert.Null(connectionState.SelectedProfileIntentId);

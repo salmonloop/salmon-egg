@@ -208,9 +208,9 @@ namespace SalmonEgg.Acp.JsonRpc
         {
             // ACP session/update payloads may place protocol extension fields like `_meta`
             // before the polymorphic discriminator (`sessionUpdate`).
-            // Newer System.Text.Json versions expose an opt-in switch for this, but our
-            // infrastructure library still multi-targets netstandard2.1, so enable it
-            // reflectively when the runtime supports it.
+            // Newer System.Text.Json versions expose an opt-in switch for this, but the
+            // ACP SDK still multi-targets netstandard2.1, so enable it reflectively when
+            // the runtime supports it.
             var property = typeof(JsonSerializerOptions).GetProperty("AllowOutOfOrderMetadataProperties");
             if (property?.CanWrite == true && property.PropertyType == typeof(bool))
             {
