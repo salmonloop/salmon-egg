@@ -23,14 +23,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"
-                      GlobalPropertiesToRemove="RuntimeIdentifier" />
-    <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj"
-                      GlobalPropertiesToRemove="RuntimeIdentifier" />
-    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj"
-                      GlobalPropertiesToRemove="RuntimeIdentifier" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Application\SalmonEgg.Application.csproj" />
+    <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure\SalmonEgg.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\SalmonEgg.Infrastructure.Desktop\SalmonEgg.Infrastructure.Desktop.csproj"
-                      GlobalPropertiesToRemove="RuntimeIdentifier"
                       Condition="'$(SalmonEggSupportsDesktopProcessHost)' != 'false'" />
     <ProjectReference Include="..\..\src\SalmonEgg.Presentation.Core\SalmonEgg.Presentation.Core.csproj" />
   </ItemGroup>
@@ -398,3 +394,4 @@
   </Target>
 
 </Project>
+
