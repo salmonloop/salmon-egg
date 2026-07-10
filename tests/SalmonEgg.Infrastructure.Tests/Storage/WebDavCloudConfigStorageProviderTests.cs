@@ -12,10 +12,14 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
 
-namespace SalmonEgg.Application.Tests.Cloud;
+namespace SalmonEgg.Infrastructure.Tests.Storage;
 
-public sealed class WebDavCloudConfigStorageProviderTests
+public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
 {
+    private readonly HttpClient _httpClient = new(new SocketsHttpHandler { UseProxy = false });
+
+    public void Dispose() => _httpClient.Dispose();
+
     [Fact]
     public async Task TryDownloadAsync_WhenDirectoryUrlConfigured_GetsDefaultPackageFileWithBasicAuth()
     {
@@ -195,7 +199,7 @@ public sealed class WebDavCloudConfigStorageProviderTests
         Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:wrong-password")), request.Authorization);
     }
 
-    private static WebDavCloudConfigStorageProvider CreateProvider(string webDavUrl)
+    private WebDavCloudConfigStorageProvider CreateProvider(string webDavUrl)
     {
         var settings = new AppSettings
         {
@@ -210,7 +214,8 @@ public sealed class WebDavCloudConfigStorageProviderTests
 
         return new WebDavCloudConfigStorageProvider(
             new InMemoryAppSettingsService(settings),
-            new InMemorySecureStorage());
+            new InMemorySecureStorage(),
+            _httpClient);
     }
 
     private static Dictionary<string, string> CreateOptions(string webDavUrl, string username) =>

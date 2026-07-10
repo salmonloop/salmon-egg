@@ -226,6 +226,9 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <UnoFeatures>SkiaRenderer;WebView;</UnoFeatures>
     <PlatformTarget Condition="'$(PlatformTarget)' == ''">AnyCPU</PlatformTarget>
+    <SalmonEggGeneratedManifestDirectory>$(BaseIntermediateOutputPath)generated\desktop\</SalmonEggGeneratedManifestDirectory>
+    <SalmonEggGeneratedApplicationManifest>$(SalmonEggGeneratedManifestDirectory)app.manifest</SalmonEggGeneratedApplicationManifest>
+    <ApplicationManifest>$(SalmonEggGeneratedApplicationManifest)</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
@@ -270,19 +273,20 @@
     <DisableImplicitUnoPackages>true</DisableImplicitUnoPackages>
   </PropertyGroup>
 
-  <Target Name="GenerateVersionedWindowsManifests"
+  <Target Name="GenerateVersionedApplicationManifests"
           BeforeTargets="_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild"
-          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+          Condition="'$(SalmonEggGeneratedApplicationManifest)' != ''">
     <PropertyGroup>
-      <_SalmonEggPackageManifestTemplate>$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>
+      <_SalmonEggPackageManifestTemplate Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>
       <_SalmonEggApplicationManifestTemplate>$(MSBuildProjectDirectory)\app.manifest</_SalmonEggApplicationManifestTemplate>
-      <_SalmonEggGeneratedPackageManifestContent>$([System.IO.File]::ReadAllText('$(_SalmonEggPackageManifestTemplate)').Replace('__SALMONEGG_PACKAGE_VERSION__', '$(SalmonEggPackageVersion)'))</_SalmonEggGeneratedPackageManifestContent>
+      <_SalmonEggGeneratedPackageManifestContent Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">$([System.IO.File]::ReadAllText('$(_SalmonEggPackageManifestTemplate)').Replace('__SALMONEGG_PACKAGE_VERSION__', '$(SalmonEggPackageVersion)'))</_SalmonEggGeneratedPackageManifestContent>
       <_SalmonEggGeneratedApplicationManifestContent>$([System.IO.File]::ReadAllText('$(_SalmonEggApplicationManifestTemplate)').Replace('__SALMONEGG_PACKAGE_VERSION__', '$(SalmonEggPackageVersion)'))</_SalmonEggGeneratedApplicationManifestContent>
     </PropertyGroup>
 
     <MakeDir Directories="$(SalmonEggGeneratedManifestDirectory)" />
 
-    <WriteLinesToFile File="$(SalmonEggGeneratedPackageManifest)"
+    <WriteLinesToFile Condition="'$(SalmonEggGeneratedPackageManifest)' != ''"
+                      File="$(SalmonEggGeneratedPackageManifest)"
                       Lines="$(_SalmonEggGeneratedPackageManifestContent)"
                       Overwrite="true" />
     <WriteLinesToFile File="$(SalmonEggGeneratedApplicationManifest)"
@@ -290,11 +294,13 @@
                       Overwrite="true" />
 
     <ItemGroup>
+      <Manifest Remove="@(Manifest)" />
+      <Manifest Include="$(SalmonEggGeneratedApplicationManifest)" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">
       <AppxManifest Remove="@(AppxManifest)" />
       <CustomAppxManifest Remove="@(CustomAppxManifest)" />
-      <Manifest Remove="@(Manifest)" />
       <AppxManifest Include="$(SalmonEggGeneratedPackageManifest)" />
-      <Manifest Include="$(SalmonEggGeneratedApplicationManifest)" />
     </ItemGroup>
   </Target>
 

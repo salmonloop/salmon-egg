@@ -27,9 +27,13 @@ public sealed class WindowsVersioningContractTests
             "<ApplicationDisplayVersion>$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>",
             projectFile,
             StringComparison.Ordinal);
-        Assert.Contains("GenerateVersionedWindowsManifests", projectFile, StringComparison.Ordinal);
+        Assert.Contains("GenerateVersionedApplicationManifests", projectFile, StringComparison.Ordinal);
         Assert.Contains(
             "<WindowsAppxManifestPath>$(SalmonEggGeneratedPackageManifest)</WindowsAppxManifestPath>",
+            projectFile,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<CustomAppxManifest Include=\"$(SalmonEggGeneratedPackageManifest)\"",
             projectFile,
             StringComparison.Ordinal);
         Assert.Contains(

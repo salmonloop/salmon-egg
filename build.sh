@@ -74,9 +74,7 @@ case "$1" in
     dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj \
       --configuration Release \
       --framework net10.0-browserwasm \
-      --output publish/wasm \
-      -p:PublishTrimmed=true \
-      -p:TrimMode=link || exit 1
+      --output publish/wasm || exit 1
 
     echo
     echo "========================================"

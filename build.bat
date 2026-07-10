@@ -36,7 +36,7 @@ echo Install: Visual Studio Installer -^> Workloads: "Desktop development with C
 exit /b 1
 
 :vsok
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
 if defined VSINSTALL goto :build
 echo.
 echo ERROR: MSVC C++ toolchain not installed.
@@ -96,7 +96,7 @@ echo Install: Visual Studio Installer -^> Workloads: "Desktop development with C
 exit /b 1
 
 :msix_vsok
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
+for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -prerelease -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%I"
 if defined VSINSTALL goto :msix_build
 echo.
 echo ERROR: MSVC C++ toolchain not installed.
@@ -136,9 +136,7 @@ echo [2/3] Publishing WebAssembly...
 dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj ^
   --configuration Release ^
   --framework net10.0-browserwasm ^
-  --output publish/wasm ^
-  -p:PublishTrimmed=true ^
-  -p:TrimMode=link
+  --output publish/wasm
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
