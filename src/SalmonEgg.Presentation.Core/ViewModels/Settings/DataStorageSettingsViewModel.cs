@@ -65,6 +65,8 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private readonly IUiInteractionService _ui;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<DataStorageSettingsViewModel> _logger;
+    private string _connectedCloudConfigProviderId = string.Empty;
+    private long _selectedProviderConfigurationRefreshVersion;
 
     public AppPreferencesViewModel Preferences { get; }
     public ChatViewModel Chat { get; }
@@ -95,7 +97,10 @@ public partial class DataStorageSettingsViewModel : ObservableObject
                 ? string.IsNullOrEmpty(WebDavValidationMessage)
                 : IsS3CloudConfigProviderSelected && string.IsNullOrEmpty(S3ValidationMessage));
 
-    public bool CanSyncCloudConfig => CloudConfigConnectionState == CloudConfigConnectionState.Connected && !IsCloudConfigSyncBusy;
+    public bool CanSyncCloudConfig =>
+        CloudConfigConnectionState == CloudConfigConnectionState.Connected &&
+        IsSelectedCloudConfigProviderConnected &&
+        !IsCloudConfigSyncBusy;
 
     public bool CanDisconnectCloudConfig => HasActiveCloudConfigProvider && !IsCloudConfigSyncBusy;
 
@@ -129,7 +134,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         CloudConfigConnectionState.Connected => string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
             _localizer["DataStorage_CloudSyncConnectionConnected"],
-            SelectedCloudConfigProviderDisplayName),
+            ConnectedCloudConfigProviderDisplayName),
         CloudConfigConnectionState.NeedsConfiguration => _localizer["DataStorage_CloudSyncConnectionNeedsConfiguration"],
         CloudConfigConnectionState.ConnectionFailed => _localizer["DataStorage_CloudSyncConnectionFailed"],
         _ => _localizer["DataStorage_CloudSyncConnectionDisconnected"]
@@ -148,13 +153,33 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     public string SelectedCloudConfigProviderDisplayName => GetSelectedProvider()?.DisplayName
         ?? SelectedCloudConfigProviderId;
 
+    private string ConnectedCloudConfigProviderDisplayName => string.IsNullOrWhiteSpace(_connectedCloudConfigProviderId)
+        ? SelectedCloudConfigProviderDisplayName
+        : GetProviderDisplayName(_connectedCloudConfigProviderId);
+
+    private bool IsSelectedCloudConfigProviderConnected =>
+        !string.IsNullOrWhiteSpace(_connectedCloudConfigProviderId) &&
+        string.Equals(_connectedCloudConfigProviderId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase);
+
     public string CloudConfigRemoteTargetText => IsWebDavCloudConfigProviderSelected
         ? WebDavFileUrl.Trim()
         : IsS3CloudConfigProviderSelected
-            ? $"{S3Endpoint.TrimEnd('/')}/{S3Bucket.Trim('/')}/{S3ObjectKey.TrimStart('/')}"
+            ? FormatS3RemoteTarget()
             : string.Empty;
 
     public bool IsCloudConfigProgressActive => IsCloudConfigSyncBusy;
+
+    public bool IsCloudConfigStatusGlyphVisible => !IsCloudConfigProgressActive;
+
+    public string CloudConfigStatusGlyph => CloudConfigConnectionState switch
+    {
+        CloudConfigConnectionState.Connected when CloudConfigTransferState == CloudConfigTransferState.Failed => "\uE783",
+        CloudConfigConnectionState.Connected => "\uE930",
+        CloudConfigConnectionState.ConnectionFailed => "\uE783",
+        CloudConfigConnectionState.NeedsConfiguration => "\uE7BA",
+        CloudConfigConnectionState.Connecting => "\uE895",
+        _ => "\uE753"
+    };
 
     public bool HasCloudConfigSyncError => !string.IsNullOrWhiteSpace(CloudConfigSyncErrorText);
 
@@ -216,6 +241,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanSyncCloudConfig))]
     [NotifyPropertyChangedFor(nameof(CanDisconnectCloudConfig))]
     [NotifyPropertyChangedFor(nameof(IsCloudConfigProgressActive))]
+    [NotifyPropertyChangedFor(nameof(IsCloudConfigStatusGlyphVisible))]
     private bool _isCloudConfigSyncBusy;
 
     [ObservableProperty]
@@ -227,10 +253,12 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CloudConfigConnectionStatusText))]
     [NotifyPropertyChangedFor(nameof(ConnectCloudConfigProviderButtonText))]
     [NotifyPropertyChangedFor(nameof(CanSyncCloudConfig))]
+    [NotifyPropertyChangedFor(nameof(CloudConfigStatusGlyph))]
     private CloudConfigConnectionState _cloudConfigConnectionState;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CloudConfigTransferStatusText))]
+    [NotifyPropertyChangedFor(nameof(CloudConfigStatusGlyph))]
     private CloudConfigTransferState _cloudConfigTransferState;
 
     [ObservableProperty]
@@ -294,6 +322,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedCloudConfigProviderHasStoredCredentials))]
     [NotifyPropertyChangedFor(nameof(CloudConfigProviderCredentialStatusText))]
     [NotifyPropertyChangedFor(nameof(IsCloudConfigSyncConfigured))]
+    [NotifyPropertyChangedFor(nameof(WebDavValidationMessage))]
     [NotifyPropertyChangedFor(nameof(S3ValidationMessage))]
     private bool _selectedProviderHasStoredCredentials;
 
@@ -678,6 +707,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
             CloudConfigTransferState = CloudConfigTransferState.Failed;
             if (isConnectionOperation || CloudConfigConnectionState != CloudConfigConnectionState.Connected)
             {
+                _connectedCloudConfigProviderId = string.Empty;
                 CloudConfigConnectionState = CloudConfigConnectionState.ConnectionFailed;
             }
         }
@@ -694,6 +724,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         if (CloudConfigConnectionState == CloudConfigConnectionState.Connected &&
             string.Equals(Preferences.CloudConfigSync?.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))
         {
+            _connectedCloudConfigProviderId = string.Empty;
             CloudConfigConnectionState = CloudConfigConnectionState.NeedsConfiguration;
             CloudConfigTransferState = CloudConfigTransferState.NotSynced;
             CloudConfigSyncErrorText = string.Empty;
@@ -732,6 +763,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     private async Task RefreshSelectedProviderConfigurationStatusAsync()
     {
+        var refreshVersion = ++_selectedProviderConfigurationRefreshVersion;
         var providerId = SelectedCloudConfigProviderId;
         if (string.IsNullOrWhiteSpace(providerId) || IsOneDriveCloudConfigProviderSelected)
         {
@@ -742,10 +774,11 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
         try
         {
+            var options = CreateSelectedProviderOptions();
             var status = await _cloudConfigSync.GetProviderConfigurationStatusAsync(
                 providerId,
-                CreateSelectedProviderOptions()).ConfigureAwait(true);
-            if (!string.Equals(providerId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase))
+                options).ConfigureAwait(true);
+            if (!IsCurrentSelectedProviderConfigurationRefresh(refreshVersion, providerId, options))
             {
                 return;
             }
@@ -756,7 +789,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Cloud config provider configuration status refresh failed for provider {ProviderId}", providerId);
-            if (string.Equals(providerId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase))
+            if (IsCurrentSelectedProviderConfigurationRefresh(refreshVersion, providerId, CreateSelectedProviderOptions()))
             {
                 SelectedProviderHasStoredCredentials = false;
                 RefreshCloudConfigDerivedState();
@@ -792,6 +825,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     private void RefreshCloudConfigDerivedState()
     {
+        RefreshCloudConfigConnectionProjection();
         OnPropertyChanged(nameof(IsCloudConfigSyncConfigured));
         OnPropertyChanged(nameof(CanSyncCloudConfig));
         OnPropertyChanged(nameof(CanDisconnectCloudConfig));
@@ -809,10 +843,90 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedCloudConfigProviderDisplayName));
         OnPropertyChanged(nameof(CloudConfigRemoteTargetText));
         OnPropertyChanged(nameof(IsCloudConfigProgressActive));
+        OnPropertyChanged(nameof(IsCloudConfigStatusGlyphVisible));
+        OnPropertyChanged(nameof(CloudConfigStatusGlyph));
+    }
+
+    private void RefreshCloudConfigConnectionProjection()
+    {
+        if (IsCloudConfigSyncBusy)
+        {
+            return;
+        }
+
+        if (SelectedCloudConfigProviderNeedsConfiguration())
+        {
+            CloudConfigConnectionState = CloudConfigConnectionState.NeedsConfiguration;
+            CloudConfigTransferState = CloudConfigTransferState.NotSynced;
+            return;
+        }
+
+        if (IsSelectedProviderDifferentFromActive)
+        {
+            CloudConfigConnectionState = CloudConfigConnectionState.NeedsConfiguration;
+            CloudConfigTransferState = CloudConfigTransferState.NotSynced;
+            return;
+        }
+
+        if (IsCloudConfigSyncEnabled && IsSelectedCloudConfigProviderConnected)
+        {
+            CloudConfigConnectionState = CloudConfigConnectionState.Connected;
+        }
+    }
+
+    private bool SelectedCloudConfigProviderNeedsConfiguration()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedCloudConfigProviderId))
+        {
+            return false;
+        }
+
+        if (IsOneDriveCloudConfigProviderSelected)
+        {
+            return GetSelectedProvider()?.IsConfigured != true;
+        }
+
+        if (IsWebDavCloudConfigProviderSelected)
+        {
+            return !string.IsNullOrWhiteSpace(WebDavValidationMessage);
+        }
+
+        if (IsS3CloudConfigProviderSelected)
+        {
+            return !string.IsNullOrWhiteSpace(S3ValidationMessage);
+        }
+
+        return true;
+    }
+
+    private bool IsCurrentSelectedProviderConfigurationRefresh(
+        long refreshVersion,
+        string providerId,
+        IReadOnlyDictionary<string, string> options)
+    {
+        return refreshVersion == _selectedProviderConfigurationRefreshVersion &&
+               string.Equals(providerId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase) &&
+               StringDictionariesEqual(options, CreateSelectedProviderOptions());
+    }
+
+    private string FormatS3RemoteTarget()
+    {
+        var endpoint = S3Endpoint.Trim().TrimEnd('/');
+        var bucket = S3Bucket.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(bucket))
+        {
+            return string.Empty;
+        }
+
+        var objectKey = S3ObjectKey.Trim().TrimStart('/');
+        return string.IsNullOrWhiteSpace(objectKey)
+            ? $"{endpoint}/{bucket}"
+            : $"{endpoint}/{bucket}/{objectKey}";
     }
 
     private void ApplyCloudConfigSyncSettings(CloudConfigSyncSettings? settings)
     {
+        _connectedCloudConfigProviderId = string.Empty;
         IsCloudConfigSyncEnabled = settings?.Enabled == true;
         ApplyWebDavOptions(settings);
         ApplyS3Options(settings);
@@ -828,11 +942,20 @@ public partial class DataStorageSettingsViewModel : ObservableObject
 
     private void ApplyCloudConfigSyncResult(CloudConfigSyncResult result)
     {
-        var wasConnected = CloudConfigConnectionState == CloudConfigConnectionState.Connected;
+        var wasConnected = CloudConfigConnectionState == CloudConfigConnectionState.Connected && IsSelectedCloudConfigProviderConnected;
+        var resultProviderId = result.ProviderId ?? SelectedCloudConfigProviderId;
         IsCloudConfigSyncEnabled = result.Status is CloudConfigSyncStatus.Uploaded
             or CloudConfigSyncStatus.Restored
             or CloudConfigSyncStatus.ConflictRemoteApplied
             || result.Status == CloudConfigSyncStatus.Failed && wasConnected;
+        _connectedCloudConfigProviderId = result.Status switch
+        {
+            CloudConfigSyncStatus.Uploaded or CloudConfigSyncStatus.Restored or CloudConfigSyncStatus.ConflictRemoteApplied
+                => resultProviderId,
+            CloudConfigSyncStatus.Failed when wasConnected
+                => _connectedCloudConfigProviderId,
+            _ => string.Empty
+        };
         CloudConfigConnectionState = result.Status switch
         {
             CloudConfigSyncStatus.Uploaded or CloudConfigSyncStatus.Restored or CloudConfigSyncStatus.ConflictRemoteApplied
@@ -885,7 +1008,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         Preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
         {
             Enabled = IsCloudConfigSyncEnabled,
-            ProviderId = IsCloudConfigSyncEnabled ? result.ProviderId ?? SelectedCloudConfigProviderId : string.Empty,
+            ProviderId = IsCloudConfigSyncEnabled ? resultProviderId : string.Empty,
             IncludeSecrets = true,
             ProviderOptions = CreateProviderOptionsSnapshot()
         });
@@ -933,6 +1056,11 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private CloudConfigProviderOptionViewModel? GetSelectedProvider()
         => CloudConfigProviders.FirstOrDefault(provider =>
             string.Equals(provider.ProviderId, SelectedCloudConfigProviderId, StringComparison.OrdinalIgnoreCase));
+
+    private string GetProviderDisplayName(string providerId)
+        => CloudConfigProviders.FirstOrDefault(provider =>
+               string.Equals(provider.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))?.DisplayName
+           ?? providerId;
 
     private string ResolveInitialProviderId(CloudConfigSyncSettings? settings)
     {
@@ -982,6 +1110,27 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private static bool IsAbsoluteHttpUrl(string value) =>
         Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    private static bool StringDictionariesEqual(
+        IReadOnlyDictionary<string, string> left,
+        IReadOnlyDictionary<string, string> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var item in left)
+        {
+            if (!right.TryGetValue(item.Key, out var value) ||
+                !string.Equals(item.Value, value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static Dictionary<string, Dictionary<string, string>> CloneProviderOptions(
         IReadOnlyDictionary<string, Dictionary<string, string>>? options)

@@ -85,11 +85,12 @@
                                             </Grid.ColumnDefinitions>
 
                                             <Grid Width="32" Height="32" VerticalAlignment="Top">
-                                                <FontIcon Glyph="&#xE753;"
+                                                <FontIcon Glyph="{x:Bind ViewModel.CloudConfigStatusGlyph, Mode=OneWay}"
                                                           FontSize="18"
                                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                                                           HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
+                                                          VerticalAlignment="Center"
+                                                          Visibility="{x:Bind ViewModel.IsCloudConfigStatusGlyphVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 <ProgressRing AutomationProperties.AutomationId="DataStorage.CloudSync.Progress"
                                                               IsActive="{x:Bind ViewModel.IsCloudConfigProgressActive, Mode=OneWay}"
                                                               Visibility="{x:Bind ViewModel.IsCloudConfigProgressActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
