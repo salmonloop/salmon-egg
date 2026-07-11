@@ -16,7 +16,7 @@
 - Build and run commands: `BUILD_GUIDE.md`.
 - Coding standards: `docs/coding-standards.md`.
 - Session/navigation/search constraints: `docs/hard-constraints-session-navigation-and-search.md`.
-- ACP standard versus extension boundary: `docs/audit/acp-standard-vs-extension-contracts.md`.
+- ACP standard and extension boundary: the official ACP specification plus the protocol rules in `AGENTS.md` and `docs/hard-constraints-session-navigation-and-search.md`.
 
 ## Status Policy
 

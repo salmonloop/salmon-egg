@@ -1,6 +1,6 @@
 # SalmonEgg 项目设置指南
 
-> Status: bootstrap reference. This document describes how the project was originally scaffolded; package commands and versions below are historical and not the current dependency source of truth. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, `PROJECT_STATUS.md`, and `../SalmonEgg/Directory.Packages.props`.
+> Status: historical bootstrap record. Do not execute the scaffolding, package installation, target-framework, or troubleshooting commands in this document against the current repository. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, `PROJECT_STATUS.md`, `../global.json`, and `../SalmonEgg/Directory.Packages.props`.
 
 ## 概述
 
@@ -268,7 +268,7 @@ dotnet workload install wasm-tools  # 仅 WebAssembly
 - 使用 FluentValidation 11.9.2 版本（支持 netstandard2.1）
 - 或者将 Application 层升级到 net8.0
 
-## 开发工作流
+## 历史开发工作流（不可作为当前命令参考）
 
 ### 日常开发
 
@@ -310,14 +310,14 @@ dotnet run
 # 浏览器会自动打开 http://localhost:5000
 ```
 
-## 下一步
+## 当前文档入口
 
-完成项目初始化后，请参考以下文档继续开发：
+当前开发请参考：
 
-1. **架构文档**: `.kiro/specs/uno-acp-client/design.md`
-2. **需求文档**: `.kiro/specs/uno-acp-client/requirements.md`
-3. **任务列表**: `.kiro/specs/uno-acp-client/tasks.md`
-4. **构建指南**: `BUILD_GUIDE.md`
+1. **仓库规则**: `../AGENTS.md`
+2. **构建指南**: `../BUILD_GUIDE.md`
+3. **架构文档**: `architecture.md`
+4. **项目状态**: `PROJECT_STATUS.md`
 
 ## 参考资源
 

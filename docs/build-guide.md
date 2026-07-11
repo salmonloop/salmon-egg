@@ -39,8 +39,8 @@
 
 #### iOS/macOS (可选)
 - macOS 12.0+
-- Xcode 14.0+
-- Visual Studio for Mac
+- 当前目标所需的 Xcode 与 .NET workload
+- Visual Studio 2022、VS Code/C# Dev Kit 或命令行工具链
 
 ## 快速开始
 
@@ -210,37 +210,44 @@ scripts/gates/verify-mobile-target-contracts.sh
 ### 运行所有测试
 
 ```bash
-dotnet test SalmonEgg.sln
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
 ```
 
 ### 运行特定项目测试
 
 ```bash
 # 基础设施测试
-dotnet test tests/SalmonEgg.Infrastructure.Tests
+dotnet test --project tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj --output Normal
 
 # 应用层测试
-dotnet test tests/SalmonEgg.Application.Tests
+dotnet test --project tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj --output Normal
 
 # 领域层测试
-dotnet test tests/SalmonEgg.Domain.Tests
+dotnet test --project tests/SalmonEgg.Domain.Tests/SalmonEgg.Domain.Tests.csproj --output Normal
 ```
 
 ### 运行特定测试
 
 ```bash
-# 使用过滤器
-dotnet test --filter "FullyQualifiedName~ConnectionManager"
+# 使用 xUnit v3 / Microsoft.Testing.Platform 类过滤器
+dotnet test --project tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj \
+  --filter-class SalmonEgg.Application.Tests.UiConventionsTests \
+  --output Normal
 
 # 显示详细输出
-dotnet test --verbosity normal
+dotnet test --solution SalmonEgg.sln --output Normal
 ```
 
 ### 代码覆盖率
 
 ```bash
-# 生成覆盖率报告（需要 coverlet.collector）
-dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
+# 生成 TRX 与 Cobertura 覆盖率
+dotnet test --solution SalmonEgg.sln \
+  --results-directory TestResults \
+  --report-xunit-trx \
+  --coverlet \
+  --coverlet-output-format cobertura \
+  --output Normal
 ```
 
 ## 调试
@@ -351,40 +358,9 @@ dotnet publish -c Release -r win-x64 --self-contained true
 
 ## 持续集成
 
-### GitHub Actions 示例
+### GitHub Actions
 
-创建 `.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: windows-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '10.0.x'
-    
-    - name: Restore dependencies
-      run: dotnet restore
-    
-    - name: Build
-      run: dotnet build --no-restore --configuration Release
-    
-    - name: Test
-      run: dotnet test --no-build --configuration Release --verbosity normal
-```
+仓库现有 GitHub Actions 是唯一 CI 配置来源：`ci-core.yml`、`code-quality.yml`、`gui-smoke-gates.yml`、`wasm-smoke-gates.yml` 和 `release-packaging.yml`。不要从文档复制一套平行 CI；门禁变更时直接修改对应 workflow。
 
 ## 参考资源
 

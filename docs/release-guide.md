@@ -28,8 +28,8 @@
 |------|---------|
 | Windows | Windows 10 1809+ |
 | Android | Android SDK, Java JDK 17+ |
-| iOS | macOS, Xcode 15+, Visual Studio for Mac |
-| macOS | macOS 12+, Xcode 15+ |
+| iOS | macOS、当前目标所需的 Xcode 与 iOS workload |
+| macOS | macOS 12+、当前目标所需的 Xcode/.NET 工具链 |
 | WebAssembly | 无额外要求 |
 
 ---
@@ -62,17 +62,7 @@ dotnet publish -f net10.0-desktop -c Release \
   -o ../../publish/windows-desktop
 ```
 
-### 创建安装包（可选）
-
-使用 WiX Toolset 或 Inno Setup 创建安装程序：
-
-```bash
-# 使用 WiX Toolset（需要 .wixproj）
-dotnet publish -c Release -p:PublishProfile=Properties/PublishProfiles/WinExe.pubxml
-
-# 或使用 Inno Setup
-iscc windows-installer.iss
-```
+仓库当前的 Windows 发布事实源是 `.github/workflows/release-packaging.yml` 和 `.tools/run-winui3-msix.ps1`。不要引用仓库中不存在的 WiX、Inno Setup 或 publish profile。
 
 ### 验证发布
 
@@ -92,14 +82,11 @@ cd SalmonEgg/SalmonEgg
 
 # 发布为 WebAssembly（优化后）
 dotnet publish -f net10.0-browserwasm -c Release \
-  --no-build \
   -o ../../publish/wasm
 
-# 或使用 AOT 编译（更快但包更大）
-dotnet publish -f net10.0-browserwasm -c Release \
-  -p:PublishTrimmed=true \
-  -p:TrimMode=link \
-  -o ../../publish/wasm-aot
+# Vercel 使用仓库脚本与固定输出目录
+cd ../..
+scripts/vercel-build.sh
 ```
 
 ### 部署到 Web 服务器
@@ -108,13 +95,7 @@ dotnet publish -f net10.0-browserwasm -c Release \
 
 ```bash
 # 复制到 Web 服务器
-cp -r publish/wasm/wwwroot/* /var/www/unacpclient/
-
-# 或使用 Azure Static Web Apps
-az staticwebapp create \
-  --name unacpclient \
-  --source publish/wasm/wwwroot \
-  --branch main
+cp -r publish/wasm/wwwroot/* /var/www/salmonegg/
 ```
 
 #### Nginx 配置示例
@@ -122,8 +103,8 @@ az staticwebapp create \
 ```nginx
 server {
     listen 80;
-    server_name unacpclient.example.com;
-    root /var/www/unacpclient;
+    server_name salmonegg.example.com;
+    root /var/www/salmonegg;
     index index.html;
 
     # 启用 gzip 压缩
@@ -145,15 +126,10 @@ server {
 
 ### 验证发布
 
-在浏览器中打开 `publish/wasm/wwwroot/index.html` 或使用本地服务器：
+WASM 产物必须通过 HTTP 服务器验证，不能直接打开 `index.html`：
 
 ```bash
-# 使用 .NET HTTP 服务器
 cd publish/wasm/wwwroot
-dotnet run --project ../../../SalmonEgg/SalmonEgg/SalmonEgg.csproj \
-  -f net10.0-browserwasm
-
-# 或使用任意 HTTP 服务器
 python -m http.server 8080
 ```
 
@@ -169,7 +145,7 @@ python -m http.server 8080
 
 ```bash
 # 创建密钥库（首次发布）
-keytool -genkey -v -keystore uno-acp-client.keystore -alias uno-acp -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkeypair -v -keystore salmonegg.keystore -alias salmonegg -keyalg RSA -keysize 2048 -validity 10000
 ```
 
 ### 发布 APK
@@ -186,8 +162,8 @@ dotnet publish -f net10.0-android36.0 -c Release \
 dotnet publish -f net10.0-android36.0 -c Release \
   -p:AndroidPackageFormat=apk \
   -p:AndroidKeyStore=true \
-  -p:AndroidSigningKeyStore=uno-acp-client.keystore \
-  -p:AndroidSigningKeyAlias=uno-acp \
+  -p:AndroidSigningKeyStore=salmonegg.keystore \
+  -p:AndroidSigningKeyAlias=salmonegg \
   -p:AndroidSigningKeyPass=YOUR_KEY_PASS \
   -p:AndroidSigningStorePass=YOUR_STORE_PASS \
   -o ../../publish/android-signed
@@ -199,8 +175,8 @@ dotnet publish -f net10.0-android36.0 -c Release \
 dotnet publish -f net10.0-android36.0 -c Release \
   -p:AndroidPackageFormat=aab \
   -p:AndroidKeyStore=true \
-  -p:AndroidSigningKeyStore=uno-acp-client.keystore \
-  -p:AndroidSigningKeyAlias=uno-acp \
+  -p:AndroidSigningKeyStore=salmonegg.keystore \
+  -p:AndroidSigningKeyAlias=salmonegg \
   -o ../../publish/android-aab
 ```
 
@@ -244,12 +220,7 @@ dotnet publish -f net10.0-ios -c Release \
 
 ### 提交到 App Store Connect
 
-```bash
-# 使用 Xcode 上传
-cd publish/ios
-xcrun altool --upload-app --type ios -f SalmonEgg.ipa \
-  -u your.apple.id@apple.com -p your-app-specific-password
-```
+使用当前 Xcode Organizer 或 App Store Connect 支持的 Transporter 流程上传并验证归档；不要再使用已淘汰的 `xcrun altool` 上传命令。
 
 ---
 
@@ -304,41 +275,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-### Azure DevOps 配置
-
-```yaml
-# azure-pipelines.yml
-trigger:
-  branches:
-    include: [main, develop]
-  tags:
-    include: ['v*']
-
-pool:
-  vmImage: 'windows-latest'
-
-steps:
-- task: UseDotNet@2
-  inputs:
-    packageType: 'sdk'
-    version: '10.0.x'
-
-- script: dotnet build -c Release
-  displayName: 'Build'
-
-- script: dotnet test -c Release --no-build
-  displayName: 'Test'
-
-- script: |
-    cd SalmonEgg/SalmonEgg
-    dotnet publish -f net10.0-browserwasm -c Release -o ../../publish/wasm
-  displayName: 'Publish WebAssembly'
-
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: 'publish/wasm'
-    ArtifactName: 'wasm-drop'
-```
+发布自动化由 `.github/workflows/release-packaging.yml` 维护。不要在文档中维护另一套 Azure DevOps 示例，以免包格式、签名和产物名称偏离实际 workflow。
 
 ---
 
@@ -348,7 +285,7 @@ steps:
 
 - [ ] 所有测试通过
 - [ ] 版本号已更新
-- [ ] 更新 CHANGELOG.md
+- [ ] 确认 GitHub 自动生成的 release notes 或维护中的变更记录已覆盖本版本
 - [ ] 更新 README.md（如需要）
 - [ ] 构建发布版本
 - [ ] 在测试环境验证
@@ -387,16 +324,12 @@ export ANDROID_HOME=/path/to/android/sdk
 #### WebAssembly 加载慢
 
 ```bash
-# 启用 AOT 编译
-dotnet publish -p:PublishTrimmed=true -p:TrimMode=link
-
-# 优化资源加载
-# 使用 gzip 压缩
-# 启用浏览器缓存
+# 使用当前仓库发布命令重新生成产物，并通过真实 HTTP host 验证
+dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj -f net10.0-browserwasm -c Release -o publish/wasm
 ```
 
 ### 获取帮助
 
 - [Uno Platform 文档](https://platform.uno/docs/)
 - [.NET 发布指南](https://docs.microsoft.com/dotnet/core/deploying/)
-- [GitHub Issues](https://github.com/your-org/SalmonEgg/issues)
+- [GitHub Issues](https://github.com/salmonloop/salmon-egg/issues)
