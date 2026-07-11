@@ -68,20 +68,59 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <StackPanel VerticalAlignment="Center" Spacing="8">
                                         <TextBlock x:Uid="DataStorage_CloudSyncProviderTitle"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                         <TextBlock x:Uid="DataStorage_CloudSyncDescription"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         <TextBlock x:Uid="DataStorage_CloudSyncProviderSelectionDescription"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncStatusText, Mode=OneWay}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncLastSyncText, Mode=OneWay}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                        <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncErrorText, Mode=OneWay}"
-                                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+
+                                        <Grid Padding="12"
+                                              ColumnSpacing="12"
+                                              Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="32"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Grid Width="32" Height="32" VerticalAlignment="Top">
+                                                <FontIcon Glyph="&#xE753;"
+                                                          FontSize="18"
+                                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                                <ProgressRing AutomationProperties.AutomationId="DataStorage.CloudSync.Progress"
+                                                              IsActive="{x:Bind ViewModel.IsCloudConfigProgressActive, Mode=OneWay}"
+                                                              Visibility="{x:Bind ViewModel.IsCloudConfigProgressActive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                              Width="32"
+                                                              Height="32"/>
+                                            </Grid>
+
+                                            <StackPanel Grid.Column="1" Spacing="3">
+                                                <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.ConnectionStatus"
+                                                           Text="{x:Bind ViewModel.CloudConfigConnectionStatusText, Mode=OneWay}"
+                                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.TransferStatus"
+                                                           Text="{x:Bind ViewModel.CloudConfigTransferStatusText, Mode=OneWay}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.RemoteTarget"
+                                                           Text="{x:Bind ViewModel.CloudConfigRemoteTargetText, Mode=OneWay}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Visibility="{x:Bind ViewModel.CloudConfigRemoteTargetText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                <TextBlock Text="{x:Bind ViewModel.CloudConfigSyncLastSyncText, Mode=OneWay}"
+                                                           Visibility="{x:Bind ViewModel.CloudConfigSyncLastSyncText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                                <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.Error"
+                                                           Text="{x:Bind ViewModel.CloudConfigSyncErrorText, Mode=OneWay}"
+                                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                           TextWrapping="Wrap"
+                                                           Visibility="{x:Bind ViewModel.HasCloudConfigSyncError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                            </StackPanel>
+                                        </Grid>
+
                                         <TextBlock Text="{x:Bind ViewModel.CloudConfigProviderCredentialStatusText, Mode=OneWay}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     </StackPanel>

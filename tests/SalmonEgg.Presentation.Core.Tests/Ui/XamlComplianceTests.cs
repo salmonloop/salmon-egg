@@ -2059,6 +2059,22 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void DataStorageSettingsPage_ProjectsCloudSyncStatusAsPersistentTwoLayerSummary()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml");
+
+        Assert.Contains("DataStorage.CloudSync.ConnectionStatus", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.CloudSync.TransferStatus", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.CloudSync.Error", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.CloudSync.Progress", xaml, StringComparison.Ordinal);
+        Assert.Contains("DataStorage.CloudSync.RemoteTarget", xaml, StringComparison.Ordinal);
+        Assert.Contains("ProgressRing", xaml, StringComparison.Ordinal);
+        Assert.Contains("CloudConfigConnectionStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("CloudConfigTransferStatusText", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AboutPage_DisplaysGeneratedOpenSourceAcknowledgements()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml");

@@ -16,6 +16,143 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class DataStorageSettingsViewModelTests
 {
     [Fact]
+    public void PersistedActiveProvider_RequiresRuntimeValidationBeforeShowingConnected()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
+        preferences.SetCloudConfigSyncSettings(new CloudConfigSyncSettings
+        {
+            Enabled = true,
+            ProviderId = "webdav"
+        });
+
+        var viewModel = CreateViewModel(cloudSync: cloudSync, preferences: preferences);
+
+        Assert.Equal(CloudConfigConnectionState.NeedsConfiguration, viewModel.CloudConfigConnectionState);
+        Assert.False(viewModel.CanSyncCloudConfig);
+    }
+
+    [Fact]
+    public async Task ConnectSelectedCloudConfigProviderCommand_WhenWebDavUploads_ProjectsConnectedAndUploadedSeparately()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        cloudSync
+            .Setup(service => service.ConfigureProviderAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(new CloudConfigSyncResult(CloudConfigSyncStatus.Disabled, "webdav"));
+        cloudSync
+            .Setup(service => service.AuthorizeAndSyncAsync("webdav", default))
+            .ReturnsAsync(new CloudConfigSyncResult(
+                CloudConfigSyncStatus.Uploaded,
+                "webdav",
+                LastSyncUtc: new DateTimeOffset(2026, 7, 11, 12, 0, 0, TimeSpan.Zero)));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        Assert.Equal(CloudConfigConnectionState.Connected, viewModel.CloudConfigConnectionState);
+        Assert.Equal(CloudConfigTransferState.Uploaded, viewModel.CloudConfigTransferState);
+        Assert.Contains("WebDAV", viewModel.CloudConfigConnectionStatusText);
+        Assert.Contains("上传", viewModel.CloudConfigTransferStatusText);
+    }
+
+    [Fact]
+    public async Task SyncCloudConfigCommand_WhenSyncFailsAfterConnection_KeepsConnectionAndShowsTransferFailure()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        cloudSync
+            .Setup(service => service.ConfigureProviderAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(new CloudConfigSyncResult(CloudConfigSyncStatus.Disabled, "webdav"));
+        cloudSync
+            .Setup(service => service.AuthorizeAndSyncAsync("webdav", default))
+            .ReturnsAsync(new CloudConfigSyncResult(CloudConfigSyncStatus.Uploaded, "webdav"));
+        cloudSync
+            .Setup(service => service.SyncNowAsync(default))
+            .ReturnsAsync(CloudConfigSyncResult.Failed("webdav", "服务器暂时不可用。"));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        await viewModel.SyncCloudConfigCommand.ExecuteAsync(null);
+
+        Assert.Equal(CloudConfigConnectionState.Connected, viewModel.CloudConfigConnectionState);
+        Assert.Equal(CloudConfigTransferState.Failed, viewModel.CloudConfigTransferState);
+        Assert.Equal("服务器暂时不可用。", viewModel.CloudConfigSyncErrorText);
+        Assert.True(viewModel.IsCloudConfigSyncEnabled);
+        Assert.Equal("webdav", viewModel.Preferences.CloudConfigSync.ProviderId);
+        Assert.True(viewModel.CanDisconnectCloudConfig);
+    }
+
+    [Fact]
+    public async Task EditingActiveProviderConfiguration_MarksConnectionAsNeedsConfiguration()
+    {
+        var cloudSync = new Mock<ICloudConfigSyncService>();
+        cloudSync.SetupGet(service => service.Providers).Returns(new[]
+        {
+            new CloudConfigProviderDescriptor("webdav", "WebDAV", true)
+        });
+        cloudSync
+            .Setup(service => service.GetProviderConfigurationStatusAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(CloudConfigProviderConfigurationStatus.NotRequired());
+        cloudSync
+            .Setup(service => service.ConfigureProviderAsync(
+                "webdav",
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                default))
+            .ReturnsAsync(new CloudConfigSyncResult(CloudConfigSyncStatus.Disabled, "webdav"));
+        cloudSync
+            .Setup(service => service.AuthorizeAndSyncAsync("webdav", default))
+            .ReturnsAsync(new CloudConfigSyncResult(CloudConfigSyncStatus.Uploaded, "webdav"));
+        var viewModel = CreateViewModel(cloudSync: cloudSync);
+        viewModel.SelectedCloudConfigProviderId = "webdav";
+        viewModel.WebDavFileUrl = "https://dav.example.test/config-sync/";
+        await viewModel.ConnectSelectedCloudConfigProviderCommand.ExecuteAsync(null);
+
+        viewModel.WebDavFileUrl = "https://dav.example.test/changed/";
+
+        Assert.Equal(CloudConfigConnectionState.NeedsConfiguration, viewModel.CloudConfigConnectionState);
+        Assert.Equal("应用更改并重新连接", viewModel.ConnectCloudConfigProviderButtonText);
+    }
+
+    [Fact]
     public async Task ExportCurrentSessionJsonCommand_WhenLocalFileExportUnsupported_DoesNotExport()
     {
         var sessionExport = new Mock<ISessionExportService>();
@@ -451,9 +588,10 @@ public sealed class DataStorageSettingsViewModelTests
         Mock<IDiagnosticsBundleService>? diagnostics = null,
         Mock<ISessionExportService>? sessionExport = null,
         Mock<ICloudConfigSyncService>? cloudSync = null,
-        Mock<IUiInteractionService>? ui = null)
+        Mock<IUiInteractionService>? ui = null,
+        AppPreferencesViewModel? preferences = null)
     {
-        var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
+        preferences ??= (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
         var chat = (ChatViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ChatViewModel));
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(service => service.SupportsExternalFileOpen).Returns(true);

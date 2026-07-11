@@ -698,6 +698,19 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncConnectSelected" xml:space="preserve">
     <value>Connect selected provider</value>
   </data>
+  <data name="DataStorage_CloudSyncRetryConnection" xml:space="preserve"><value>Retry connection</value></data>
+  <data name="DataStorage_CloudSyncApplyAndReconnect" xml:space="preserve"><value>Apply changes and reconnect</value></data>
+  <data name="DataStorage_CloudSyncConnectionDisconnected" xml:space="preserve"><value>Cloud sync is not connected</value></data>
+  <data name="DataStorage_CloudSyncConnectionNeedsConfiguration" xml:space="preserve"><value>Complete or apply the connection settings</value></data>
+  <data name="DataStorage_CloudSyncConnectionConnecting" xml:space="preserve"><value>Connecting to {0}…</value></data>
+  <data name="DataStorage_CloudSyncConnectionConnected" xml:space="preserve"><value>{0} connected</value></data>
+  <data name="DataStorage_CloudSyncConnectionFailed" xml:space="preserve"><value>Connection failed</value></data>
+  <data name="DataStorage_CloudSyncTransferNotSynced" xml:space="preserve"><value>No sync has completed yet</value></data>
+  <data name="DataStorage_CloudSyncTransferSyncing" xml:space="preserve"><value>Syncing configuration…</value></data>
+  <data name="DataStorage_CloudSyncTransferUploaded" xml:space="preserve"><value>Local configuration uploaded to the cloud</value></data>
+  <data name="DataStorage_CloudSyncTransferRestored" xml:space="preserve"><value>Configuration restored from the cloud</value></data>
+  <data name="DataStorage_CloudSyncTransferConflict" xml:space="preserve"><value>Cloud version applied; local backup retained</value></data>
+  <data name="DataStorage_CloudSyncTransferFailed" xml:space="preserve"><value>Sync failed; retry is available</value></data>
   <data name="DataStorage_CloudSyncSwitchConfirmTitle" xml:space="preserve">
     <value>Switch cloud sync provider</value>
   </data>

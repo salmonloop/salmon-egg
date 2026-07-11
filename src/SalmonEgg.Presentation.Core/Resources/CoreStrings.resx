@@ -704,6 +704,19 @@
   <data name="DataStorage_CloudSyncConnectSelected" xml:space="preserve">
     <value>连接所选 provider</value>
   </data>
+  <data name="DataStorage_CloudSyncRetryConnection" xml:space="preserve"><value>重试连接</value></data>
+  <data name="DataStorage_CloudSyncApplyAndReconnect" xml:space="preserve"><value>应用更改并重新连接</value></data>
+  <data name="DataStorage_CloudSyncConnectionDisconnected" xml:space="preserve"><value>尚未连接云同步</value></data>
+  <data name="DataStorage_CloudSyncConnectionNeedsConfiguration" xml:space="preserve"><value>需要完善或应用连接配置</value></data>
+  <data name="DataStorage_CloudSyncConnectionConnecting" xml:space="preserve"><value>正在连接 {0}…</value></data>
+  <data name="DataStorage_CloudSyncConnectionConnected" xml:space="preserve"><value>{0} 已连接</value></data>
+  <data name="DataStorage_CloudSyncConnectionFailed" xml:space="preserve"><value>连接失败</value></data>
+  <data name="DataStorage_CloudSyncTransferNotSynced" xml:space="preserve"><value>尚未完成同步</value></data>
+  <data name="DataStorage_CloudSyncTransferSyncing" xml:space="preserve"><value>正在同步配置…</value></data>
+  <data name="DataStorage_CloudSyncTransferUploaded" xml:space="preserve"><value>本地配置已上传到云端</value></data>
+  <data name="DataStorage_CloudSyncTransferRestored" xml:space="preserve"><value>已从云端恢复配置</value></data>
+  <data name="DataStorage_CloudSyncTransferConflict" xml:space="preserve"><value>已采用云端版本并保留本地备份</value></data>
+  <data name="DataStorage_CloudSyncTransferFailed" xml:space="preserve"><value>同步失败，可以重试</value></data>
   <data name="DataStorage_CloudSyncSwitchConfirmTitle" xml:space="preserve">
     <value>切换云同步 provider</value>
   </data>

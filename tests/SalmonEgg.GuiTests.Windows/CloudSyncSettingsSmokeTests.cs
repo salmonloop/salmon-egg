@@ -19,6 +19,8 @@ public sealed class CloudSyncSettingsSmokeTests
         NavigateToDataStorageSettings(session, appData);
 
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ProviderPicker", TimeSpan.FromSeconds(10)));
+        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ConnectionStatus", TimeSpan.FromSeconds(5)));
+        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.TransferStatus", TimeSpan.FromSeconds(5)));
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ConnectSelected", TimeSpan.FromSeconds(5)));
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.SyncNow", TimeSpan.FromSeconds(5)));
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.Disconnect", TimeSpan.FromSeconds(5)));
