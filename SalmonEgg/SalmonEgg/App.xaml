@@ -143,6 +143,24 @@
                 <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
+            <Style x:Key="SettingsTextBoxStyle"
+                   TargetType="TextBox"
+                   BasedOn="{StaticResource DefaultTextBoxStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
+            <Style x:Key="SettingsPasswordBoxStyle"
+                   TargetType="PasswordBox"
+                   BasedOn="{StaticResource DefaultPasswordBoxStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
+            <Style x:Key="SettingsNumberBoxStyle" TargetType="NumberBox">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+
             <!-- 定义 SubtleButtonStyle 兼容样式 -->
             <!-- 解决 "Couldn't statically resolve resource SubtleButtonStyle" 警告 -->
             <Style x:Key="SubtleButtonStyle" TargetType="Button">

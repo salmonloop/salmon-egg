@@ -39,7 +39,8 @@
                             <TextBox x:Name="AgentProfileEditorNameBox"
                                      x:Uid="AgentProfileEditorName"
                                      AutomationProperties.AutomationId="Acp.ProfileEditor.Name"
-                                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
+                                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"
+                                     Style="{StaticResource SettingsTextBoxStyle}"/>
 
                             <ComboBox x:Uid="AgentProfileEditorTransport"
                                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
@@ -56,16 +57,19 @@
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBox x:Uid="AgentProfileEditorCommand"
-                                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
+                                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"
+                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                                 <TextBox x:Uid="AgentProfileEditorArgs"
-                                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"/>
+                                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"
+                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                             </StackPanel>
 
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBox x:Uid="AgentProfileEditorServerUrl"
                                          AutomationProperties.AutomationId="Acp.ProfileEditor.ServerUrl"
-                                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
+                                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"
+                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -82,22 +86,28 @@
                                   Padding="0">
                             <Expander.Header>
                                 <Grid Padding="16,12" HorizontalAlignment="Stretch">
-                                    <TextBlock x:Uid="AgentProfileEditorAdvancedTitle" FontWeight="SemiBold"/>
+                                    <TextBlock x:Uid="AgentProfileEditorAdvancedTitle"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                 </Grid>
                             </Expander.Header>
 
                             <StackPanel Padding="16" Spacing="12" HorizontalAlignment="Stretch">
-                                <TextBlock x:Uid="AgentProfileEditorAuthTitle" FontWeight="SemiBold"/>
+                                <TextBlock x:Uid="AgentProfileEditorAuthTitle"
+                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                 <PasswordBox x:Name="TokenBox"
                                              x:Uid="AgentProfileEditorToken"
                                              HorizontalAlignment="Stretch"
-                                             Password="{x:Bind ViewModel.Token, Mode=TwoWay}"/>
+                                             Password="{x:Bind ViewModel.Token, Mode=TwoWay}"
+                                             Style="{StaticResource SettingsPasswordBoxStyle}"/>
                                 <PasswordBox x:Name="ApiKeyBox"
                                              x:Uid="AgentProfileEditorApiKey"
                                              HorizontalAlignment="Stretch"
-                                             Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"/>
+                                             Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"
+                                             Style="{StaticResource SettingsPasswordBoxStyle}"/>
 
-                                <TextBlock x:Uid="AgentProfileEditorProxyTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <TextBlock x:Uid="AgentProfileEditorProxyTitle"
+                                           Margin="0,8,0,0"
+                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                 <ComboBox x:Uid="AgentProfileEditorProxyMode"
                                           HorizontalAlignment="Stretch"
                                           ItemsSource="{x:Bind ViewModel.ProxyModeOptions, Mode=OneWay}"
@@ -112,18 +122,22 @@
                                 <TextBox x:Uid="AgentProfileEditorProxyUrl"
                                          HorizontalAlignment="Stretch"
                                          IsEnabled="{x:Bind ViewModel.IsCustomProxy, Mode=OneWay}"
-                                         Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"/>
+                                         Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"
+                                         Style="{StaticResource SettingsTextBoxStyle}"/>
 
-                                <TextBlock x:Uid="AgentProfileEditorConnectionTitle" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <TextBlock x:Uid="AgentProfileEditorConnectionTitle"
+                                           Margin="0,8,0,0"
+                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
                                 <NumberBox x:Name="TimeoutBox"
                                            x:Uid="AgentProfileEditorTimeout"
                                            HorizontalAlignment="Stretch"
                                            Minimum="{x:Bind ViewModel.ConnectionTimeoutMinimum, Mode=OneWay}"
                                            Maximum="{x:Bind ViewModel.ConnectionTimeoutMaximum, Mode=OneWay}"
-                                           SpinButtonPlacementMode="Inline"
-                                           IsFocusEngagementEnabled="True"
-                                           UseSystemFocusVisuals="True"
-                                           Value="{x:Bind ViewModel.ConnectionTimeout, Mode=TwoWay}"/>
+                                          SpinButtonPlacementMode="Inline"
+                                          IsFocusEngagementEnabled="True"
+                                          UseSystemFocusVisuals="True"
+                                          Value="{x:Bind ViewModel.ConnectionTimeout, Mode=TwoWay}"
+                                          Style="{StaticResource SettingsNumberBoxStyle}"/>
                             </StackPanel>
                         </Expander>
                     </Border>

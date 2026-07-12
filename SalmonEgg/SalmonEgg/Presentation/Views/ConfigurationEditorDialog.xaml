@@ -26,7 +26,8 @@
                      Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"/>
 
             <TextBox x:Uid="ConfigurationEditorDialogName"
-                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
+                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"
+                     Style="{StaticResource SettingsTextBoxStyle}"/>
 
             <ComboBox x:Uid="ConfigurationEditorDialogTransport"
                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
@@ -42,20 +43,22 @@
             <StackPanel Spacing="12"
                         Visibility="{x:Bind ViewModel.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <TextBox x:Uid="ConfigurationEditorDialogCommand"
-                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
+                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"
+                         Style="{StaticResource SettingsTextBoxStyle}"/>
                 <TextBox x:Uid="ConfigurationEditorDialogArgs"
-                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"/>
+                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"
+                         Style="{StaticResource SettingsTextBoxStyle}"/>
             </StackPanel>
 
             <StackPanel Spacing="12"
                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                 <TextBox x:Uid="ConfigurationEditorDialogServerUrl"
-                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
+                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"
+                         Style="{StaticResource SettingsTextBoxStyle}"/>
             </StackPanel>
 
             <TextBlock x:Uid="ConfigurationEditorDialogHint"
-                       Opacity="0.65"
-                       FontSize="12"
+                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
                        TextWrapping="Wrap"/>
         </StackPanel>
     </ScrollViewer>

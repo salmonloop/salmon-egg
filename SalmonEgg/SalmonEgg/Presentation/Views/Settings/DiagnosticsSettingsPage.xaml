@@ -109,7 +109,7 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_VoiceHeader"
                                                AutomationProperties.AutomationId="Diagnostics.VoiceHeader"
-                                               FontWeight="SemiBold" />
+                                               Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
 
                                 <StackPanel Spacing="8"
@@ -135,7 +135,7 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_VoiceProbeHeader"
                                                AutomationProperties.AutomationId="Diagnostics.VoiceProbeHeader"
-                                               FontWeight="SemiBold" />
+                                               Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
 
                                 <StackPanel Spacing="8"
@@ -400,7 +400,7 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_GamepadMonitorHeader"
                                                AutomationProperties.AutomationId="Diagnostics.GamepadMonitorHeader"
-                                               FontWeight="SemiBold" />
+                                               Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
 
                                 <StackPanel Spacing="8"
@@ -624,7 +624,8 @@
                                   Padding="0">
                             <Expander.Header>
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
-                                    <TextBlock x:Uid="Diagnostics_LiveLogHeader" FontWeight="SemiBold" />
+                                    <TextBlock x:Uid="Diagnostics_LiveLogHeader"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
                             </Expander.Header>
 
@@ -632,9 +633,9 @@
                                         Spacing="12"
                                         HorizontalAlignment="Stretch">
                                 <TextBlock Text="{x:Bind ViewModel.LiveLogViewer.StatusText, Mode=OneWay}"
-                                           FontWeight="Medium" />
+                                           Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 <TextBlock Text="{x:Bind ViewModel.LiveLogViewer.CurrentLogFilePath, Mode=OneWay}"
-                                           Opacity="0.7"
+                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                            TextWrapping="Wrap" />
 
                                 <StackPanel Spacing="8">
@@ -661,11 +662,11 @@
                                          AcceptsReturn="True"
                                          TextChanged="OnLiveLogTextChanged"
                                          TextWrapping="Wrap"
-                                         Height="320" />
+                                         Height="320"
+                                         Style="{StaticResource SettingsTextBoxStyle}" />
 
                                 <TextBlock x:Uid="Diagnostics_LiveLogHint"
-                                           FontSize="12"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </Expander>

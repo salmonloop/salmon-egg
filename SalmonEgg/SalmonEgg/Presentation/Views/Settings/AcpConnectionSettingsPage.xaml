@@ -123,7 +123,8 @@
                                                   ColumnSpacing="10"
                                                   VerticalAlignment="Center">
                                                 <TextBlock Text="{x:Bind Name}"
-                                                           FontWeight="SemiBold"
+                                                           Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                           TextWrapping="NoWrap"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
 
@@ -164,8 +165,8 @@
                                             <TextBlock Grid.Row="1"
                                                        Grid.Column="1"
                                                        Text="{x:Bind EndpointDescription}"
-                                                       FontSize="12"
-                                                       Opacity="0.65"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="NoWrap"
                                                        TextTrimming="CharacterEllipsis"/>
 
                                             <Grid Grid.RowSpan="2"
@@ -279,10 +280,12 @@
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
                                                          x:Name="AcpRemoteDirectoryDisplayNameBox"
                                                          AutomationProperties.AutomationId="Acp.RemoteDirectories.DisplayName"
-                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
+                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"
+                                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
                                                          AutomationProperties.AutomationId="Acp.RemoteDirectories.RemotePath"
-                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
+                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"
+                                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                                                 <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"

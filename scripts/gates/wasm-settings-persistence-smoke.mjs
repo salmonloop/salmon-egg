@@ -333,6 +333,7 @@ async function changeDataStorageSettings(page) {
     dataStorageCacheRetentionControl,
     updatedValue,
     "cache retention");
+  await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, "data storage cache retention");
   await verifyDataStorageSettings(page, updatedValue, "after edit");
   return updatedValue;
 }
@@ -410,6 +411,7 @@ async function changeMcpSettings(page) {
     sections.mcp.label);
   await clickVisibleControl(page, { labels: ["新建", "New", "添加服务器", "Add server"], automationIds: ["Mcp.AddServer"] });
   await waitForBodyText(page, /Launch command|启动命令/, "MCP server editor");
+  await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, "MCP server editor");
   await typeIntoVisibleTextField(
     page,
     { labels: ["mcp-filesystem", "Launch command", "启动命令", "Command", "命令"], automationIds: [] },
@@ -430,6 +432,69 @@ async function verifyMcpSettings(page, suffix = "") {
     `${sections.mcp.label} ${suffix}`.trim());
   await waitForBodyText(page, /new-mcp-server/, `MCP server row ${suffix}`.trim());
   await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
+}
+
+async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label) {
+  const projections = await page.evaluate(() => Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const type = element.getAttribute("type")?.toLowerCase() ?? "";
+      const textBoxContainer = element.closest(".uno-textbox,.uno-passwordbox");
+      return {
+        color: style.color,
+        opacity: Number(style.opacity || "1"),
+        value: element.value ?? element.textContent ?? "",
+        placeholder: element.getAttribute("placeholder") ?? "",
+        aria: element.getAttribute("aria-label") ?? "",
+        automationId:
+          element.getAttribute("data-automation-id")
+          ?? element.getAttribute("data-automationid")
+          ?? element.getAttribute("automationid")
+          ?? "",
+        className: element.className?.toString?.() ?? "",
+        containerClassName: textBoxContainer?.className?.toString?.() ?? "",
+        rect: {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height
+        },
+        visible: rect.width > 0
+          && rect.height > 0
+          && style.display !== "none"
+          && style.visibility !== "hidden"
+          && !["button", "checkbox", "radio", "submit"].includes(type)
+          && rect.left >= 0
+          && rect.top >= 0
+          && rect.left <= innerWidth
+          && rect.top <= innerHeight
+      };
+    })
+    .filter(projection => projection.visible));
+
+  if (projections.length === 0) {
+    throw new Error(`No visible settings text inputs found for ${label}.`);
+  }
+
+  const failures = projections
+    .map(projection => ({
+      ...projection,
+      parsedColor: parseCssColor(projection.color)
+    }))
+    .map(projection => ({
+      ...projection,
+      luminance: relativeLuminance(projection.parsedColor)
+    }))
+    .filter(projection => projection.opacity <= 0.1
+      || projection.parsedColor.a <= 0.1
+      || projection.luminance < 120);
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Settings text input foreground did not resolve to a readable dark-theme color for ${label}. `
+      + `Failures=${JSON.stringify(failures)} All=${JSON.stringify(projections)}`);
+  }
 }
 
 async function waitForLocalFileContains(page, path, requiredSnippets, label, timeoutMs = 15_000) {

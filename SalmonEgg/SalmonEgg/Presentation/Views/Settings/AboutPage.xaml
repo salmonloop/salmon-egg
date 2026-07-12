@@ -179,10 +179,21 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="2*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock x:Uid="About_OpenSourcePackageHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="1" x:Uid="About_OpenSourceVersionHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="2" x:Uid="About_OpenSourceLicenseHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="3" x:Uid="About_OpenSourceSourceHeader" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock x:Uid="About_OpenSourcePackageHeader"
+                                               FontWeight="SemiBold"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}" />
+                                    <TextBlock Grid.Column="1"
+                                               x:Uid="About_OpenSourceVersionHeader"
+                                               FontWeight="SemiBold"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}" />
+                                    <TextBlock Grid.Column="2"
+                                               x:Uid="About_OpenSourceLicenseHeader"
+                                               FontWeight="SemiBold"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}" />
+                                    <TextBlock Grid.Column="3"
+                                               x:Uid="About_OpenSourceSourceHeader"
+                                               FontWeight="SemiBold"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}" />
                                 </Grid>
                             </ListView.Header>
                             <ListView.ItemTemplate>
@@ -195,10 +206,21 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="2*" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="1" Text="{x:Bind Version, Mode=OneWay}" Opacity="0.72" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="2" Text="{x:Bind License, Mode=OneWay}" Opacity="0.72" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="3" Text="{x:Bind SourceUrl, Mode=OneWay}" Opacity="0.72" TextWrapping="Wrap" />
+                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{x:Bind Version, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{x:Bind License, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{x:Bind SourceUrl, Mode=OneWay}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap" />
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>

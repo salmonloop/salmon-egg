@@ -122,7 +122,8 @@
                                                             <TextBox x:Uid="Mcp_ServerName"
                                                                      Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="filesystem"
-                                                                     HorizontalAlignment="Stretch"/>
+                                                                     HorizontalAlignment="Stretch"
+                                                                     Style="{StaticResource SettingsTextBoxStyle}"/>
                                                             <ComboBox x:Uid="Mcp_ServerTransport"
                                                                       ItemsSource="{x:Bind TransportOptions, Mode=OneWay}"
                                                                       DisplayMemberPath="Name"
@@ -138,12 +139,14 @@
                                                             <TextBox x:Uid="Mcp_ServerCommand"
                                                                      Text="{x:Bind Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="C:\tools\mcp-filesystem.exe"
-                                                                     HorizontalAlignment="Stretch"/>
+                                                                     HorizontalAlignment="Stretch"
+                                                                     Style="{StaticResource SettingsTextBoxStyle}"/>
                                                             <StackPanel Spacing="4">
                                                                 <TextBox x:Uid="Mcp_ServerArguments"
                                                                          Text="{x:Bind ArgumentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                          PlaceholderText="--root C:\repo"
-                                                                         HorizontalAlignment="Stretch"/>
+                                                                         HorizontalAlignment="Stretch"
+                                                                         Style="{StaticResource SettingsTextBoxStyle}"/>
                                                                 <TextBlock x:Uid="Mcp_ServerArgumentsHelp"
                                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                            TextWrapping="Wrap"/>
@@ -158,7 +161,8 @@
                                                                              PlaceholderText="API_KEY=value"
                                                                              AcceptsReturn="True"
                                                                              TextWrapping="Wrap"
-                                                                             MinHeight="72"/>
+                                                                             MinHeight="72"
+                                                                             Style="{StaticResource SettingsTextBoxStyle}"/>
                                                                     <TextBlock x:Uid="Mcp_ServerEnvironmentHelp"
                                                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                TextWrapping="Wrap"/>
@@ -172,7 +176,8 @@
                                                             <TextBox x:Uid="Mcp_ServerUrl"
                                                                      Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                      PlaceholderText="https://example.com/mcp"
-                                                                     HorizontalAlignment="Stretch"/>
+                                                                     HorizontalAlignment="Stretch"
+                                                                     Style="{StaticResource SettingsTextBoxStyle}"/>
                                                             <Expander x:Uid="Mcp_ServerAdvanced"
                                                                       IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
                                                                       HorizontalAlignment="Stretch"
@@ -183,7 +188,8 @@
                                                                              PlaceholderText="Authorization: Bearer token"
                                                                              AcceptsReturn="True"
                                                                              TextWrapping="Wrap"
-                                                                             MinHeight="72"/>
+                                                                             MinHeight="72"
+                                                                             Style="{StaticResource SettingsTextBoxStyle}"/>
                                                                     <TextBlock x:Uid="Mcp_ServerHeadersHelp"
                                                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                TextWrapping="Wrap"/>
