@@ -152,7 +152,6 @@
             <Style TargetType="PasswordBox"
                    BasedOn="{StaticResource DefaultPasswordBoxStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
             <Style TargetType="NumberBox">

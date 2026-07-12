@@ -902,7 +902,9 @@ public sealed class XamlComplianceTests
 
         Assert.Equal("{StaticResource DefaultPasswordBoxStyle}", GetAttributeByLocalName(passwordBoxStyle, "BasedOn"));
         AssertStyleSetter(passwordBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
-        AssertStyleSetter(passwordBoxStyle, "PlaceholderForeground", "{ThemeResource TextFillColorSecondaryBrush}");
+        Assert.DoesNotContain(
+            passwordBoxStyle.Elements(),
+            element => string.Equals(GetAttributeByLocalName(element, "Property"), "PlaceholderForeground", StringComparison.Ordinal));
 
         Assert.Null(GetAttributeByLocalName(numberBoxStyle, "BasedOn"));
         AssertStyleSetter(numberBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
