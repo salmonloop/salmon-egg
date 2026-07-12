@@ -889,26 +889,23 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void SettingsInputBoxes_UseThemeAwareStyles()
+    public void InputBoxes_UseThemeAwareImplicitStyles()
     {
         var appXaml = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml"));
-        var settingsTextBoxStyle = FindStyleByKey(appXaml, "SettingsTextBoxStyle");
-        var settingsPasswordBoxStyle = FindStyleByKey(appXaml, "SettingsPasswordBoxStyle");
-        var settingsNumberBoxStyle = FindStyleByKey(appXaml, "SettingsNumberBoxStyle");
+        var textBoxStyle = FindImplicitStyleByTargetType(appXaml, "TextBox");
+        var passwordBoxStyle = FindImplicitStyleByTargetType(appXaml, "PasswordBox");
+        var numberBoxStyle = FindImplicitStyleByTargetType(appXaml, "NumberBox");
 
-        Assert.Equal("TextBox", GetAttributeByLocalName(settingsTextBoxStyle, "TargetType"));
-        Assert.Equal("{StaticResource DefaultTextBoxStyle}", GetAttributeByLocalName(settingsTextBoxStyle, "BasedOn"));
-        AssertStyleSetter(settingsTextBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
-        AssertStyleSetter(settingsTextBoxStyle, "PlaceholderForeground", "{ThemeResource TextFillColorSecondaryBrush}");
+        Assert.Equal("{StaticResource DefaultTextBoxStyle}", GetAttributeByLocalName(textBoxStyle, "BasedOn"));
+        AssertStyleSetter(textBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
+        AssertStyleSetter(textBoxStyle, "PlaceholderForeground", "{ThemeResource TextFillColorSecondaryBrush}");
 
-        Assert.Equal("PasswordBox", GetAttributeByLocalName(settingsPasswordBoxStyle, "TargetType"));
-        Assert.Equal("{StaticResource DefaultPasswordBoxStyle}", GetAttributeByLocalName(settingsPasswordBoxStyle, "BasedOn"));
-        AssertStyleSetter(settingsPasswordBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
-        AssertStyleSetter(settingsPasswordBoxStyle, "PlaceholderForeground", "{ThemeResource TextFillColorSecondaryBrush}");
+        Assert.Equal("{StaticResource DefaultPasswordBoxStyle}", GetAttributeByLocalName(passwordBoxStyle, "BasedOn"));
+        AssertStyleSetter(passwordBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
+        AssertStyleSetter(passwordBoxStyle, "PlaceholderForeground", "{ThemeResource TextFillColorSecondaryBrush}");
 
-        Assert.Equal("NumberBox", GetAttributeByLocalName(settingsNumberBoxStyle, "TargetType"));
-        Assert.Null(GetAttributeByLocalName(settingsNumberBoxStyle, "BasedOn"));
-        AssertStyleSetter(settingsNumberBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
+        Assert.Null(GetAttributeByLocalName(numberBoxStyle, "BasedOn"));
+        AssertStyleSetter(numberBoxStyle, "Foreground", "{ThemeResource TextFillColorPrimaryBrush}");
 
         var settingsPages = new[]
         {
@@ -929,20 +926,17 @@ public sealed class XamlComplianceTests
                 .ToArray();
 
             Assert.True(textBoxes.Length > 0, $"Expected at least one TextBox in {page}");
-            Assert.All(textBoxes, textBox =>
-                Assert.Equal("{StaticResource SettingsTextBoxStyle}", GetAttributeByLocalName(textBox, "Style")));
+            Assert.All(textBoxes, AssertNoInputStyleOverride);
 
             var passwordBoxes = document
                 .Descendants()
                 .Where(element => string.Equals(element.Name.LocalName, "PasswordBox", StringComparison.Ordinal));
-            Assert.All(passwordBoxes, passwordBox =>
-                Assert.Equal("{StaticResource SettingsPasswordBoxStyle}", GetAttributeByLocalName(passwordBox, "Style")));
+            Assert.All(passwordBoxes, AssertNoInputStyleOverride);
 
             var numberBoxes = document
                 .Descendants()
                 .Where(element => string.Equals(element.Name.LocalName, "NumberBox", StringComparison.Ordinal));
-            Assert.All(numberBoxes, numberBox =>
-                Assert.Equal("{StaticResource SettingsNumberBoxStyle}", GetAttributeByLocalName(numberBox, "Style")));
+            Assert.All(numberBoxes, AssertNoInputStyleOverride);
         }
     }
 
@@ -2995,6 +2989,26 @@ public sealed class XamlComplianceTests
 
         Assert.NotNull(style);
         return style!;
+    }
+
+    private static XElement FindImplicitStyleByTargetType(XDocument document, string targetType)
+    {
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+        var style = document.Descendants()
+            .FirstOrDefault(element =>
+                string.Equals(element.Name.LocalName, "Style", StringComparison.Ordinal)
+                && string.Equals(element.Attribute("TargetType")?.Value, targetType, StringComparison.Ordinal)
+                && element.Attribute(xNamespace + "Key") is null);
+
+        Assert.NotNull(style);
+        return style!;
+    }
+
+    private static void AssertNoInputStyleOverride(XElement element)
+    {
+        var style = GetAttributeByLocalName(element, "Style");
+
+        Assert.Null(style);
     }
 
     private static void AssertStyleSetter(XElement style, string property, string value)

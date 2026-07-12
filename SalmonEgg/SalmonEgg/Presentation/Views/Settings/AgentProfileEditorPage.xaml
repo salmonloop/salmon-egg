@@ -39,8 +39,7 @@
                             <TextBox x:Name="AgentProfileEditorNameBox"
                                      x:Uid="AgentProfileEditorName"
                                      AutomationProperties.AutomationId="Acp.ProfileEditor.Name"
-                                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"
-                                     Style="{StaticResource SettingsTextBoxStyle}"/>
+                                     Text="{x:Bind ViewModel.Name, Mode=TwoWay}"/>
 
                             <ComboBox x:Uid="AgentProfileEditorTransport"
                                       ItemsSource="{x:Bind ViewModel.TransportOptions, Mode=OneWay}"
@@ -57,19 +56,16 @@
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBox x:Uid="AgentProfileEditorCommand"
-                                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"
-                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                         Text="{x:Bind ViewModel.StdioCommand, Mode=TwoWay}"/>
                                 <TextBox x:Uid="AgentProfileEditorArgs"
-                                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"
-                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                         Text="{x:Bind ViewModel.StdioArgumentsText, Mode=TwoWay}"/>
                             </StackPanel>
 
                             <StackPanel Spacing="12"
                                         Visibility="{x:Bind ViewModel.IsRemote, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <TextBox x:Uid="AgentProfileEditorServerUrl"
                                          AutomationProperties.AutomationId="Acp.ProfileEditor.ServerUrl"
-                                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"
-                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                         Text="{x:Bind ViewModel.ServerUrl, Mode=TwoWay}"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -97,13 +93,11 @@
                                 <PasswordBox x:Name="TokenBox"
                                              x:Uid="AgentProfileEditorToken"
                                              HorizontalAlignment="Stretch"
-                                             Password="{x:Bind ViewModel.Token, Mode=TwoWay}"
-                                             Style="{StaticResource SettingsPasswordBoxStyle}"/>
+                                             Password="{x:Bind ViewModel.Token, Mode=TwoWay}"/>
                                 <PasswordBox x:Name="ApiKeyBox"
                                              x:Uid="AgentProfileEditorApiKey"
                                              HorizontalAlignment="Stretch"
-                                             Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"
-                                             Style="{StaticResource SettingsPasswordBoxStyle}"/>
+                                             Password="{x:Bind ViewModel.ApiKey, Mode=TwoWay}"/>
 
                                 <TextBlock x:Uid="AgentProfileEditorProxyTitle"
                                            Margin="0,8,0,0"
@@ -122,8 +116,7 @@
                                 <TextBox x:Uid="AgentProfileEditorProxyUrl"
                                          HorizontalAlignment="Stretch"
                                          IsEnabled="{x:Bind ViewModel.IsCustomProxy, Mode=OneWay}"
-                                         Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"
-                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                         Text="{x:Bind ViewModel.ProxyUrl, Mode=TwoWay}"/>
 
                                 <TextBlock x:Uid="AgentProfileEditorConnectionTitle"
                                            Margin="0,8,0,0"
@@ -136,8 +129,7 @@
                                           SpinButtonPlacementMode="Inline"
                                           IsFocusEngagementEnabled="True"
                                           UseSystemFocusVisuals="True"
-                                          Value="{x:Bind ViewModel.ConnectionTimeout, Mode=TwoWay}"
-                                          Style="{StaticResource SettingsNumberBoxStyle}"/>
+                                          Value="{x:Bind ViewModel.ConnectionTimeout, Mode=TwoWay}"/>
                             </StackPanel>
                         </Expander>
                     </Border>

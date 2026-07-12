@@ -662,8 +662,7 @@
                                          AcceptsReturn="True"
                                          TextChanged="OnLiveLogTextChanged"
                                          TextWrapping="Wrap"
-                                         Height="320"
-                                         Style="{StaticResource SettingsTextBoxStyle}" />
+                                         Height="320" />
 
                                 <TextBlock x:Uid="Diagnostics_LiveLogHint"
                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"

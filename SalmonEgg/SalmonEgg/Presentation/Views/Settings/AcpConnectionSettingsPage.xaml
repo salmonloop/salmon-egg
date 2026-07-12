@@ -280,12 +280,10 @@
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesDisplayName"
                                                          x:Name="AcpRemoteDirectoryDisplayNameBox"
                                                          AutomationProperties.AutomationId="Acp.RemoteDirectories.DisplayName"
-                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"
-                                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                                         Text="{x:Bind DisplayNameDraft, Mode=TwoWay}"/>
                                                 <TextBox x:Uid="Acp_RemoteDirectoriesRemotePath"
                                                          AutomationProperties.AutomationId="Acp.RemoteDirectories.RemotePath"
-                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"
-                                                         Style="{StaticResource SettingsTextBoxStyle}"/>
+                                                         Text="{x:Bind RemotePathDraft, Mode=TwoWay}"/>
                                                 <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"

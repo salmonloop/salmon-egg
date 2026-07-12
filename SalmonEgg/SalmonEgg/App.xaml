@@ -143,21 +143,19 @@
                 <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
-            <Style x:Key="SettingsTextBoxStyle"
-                   TargetType="TextBox"
+            <Style TargetType="TextBox"
                    BasedOn="{StaticResource DefaultTextBoxStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
-            <Style x:Key="SettingsPasswordBoxStyle"
-                   TargetType="PasswordBox"
+            <Style TargetType="PasswordBox"
                    BasedOn="{StaticResource DefaultPasswordBoxStyle}">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 <Setter Property="PlaceholderForeground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
-            <Style x:Key="SettingsNumberBoxStyle" TargetType="NumberBox">
+            <Style TargetType="NumberBox">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             </Style>
 
