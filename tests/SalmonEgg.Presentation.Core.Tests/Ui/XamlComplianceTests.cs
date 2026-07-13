@@ -2088,6 +2088,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("<Expander", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerTitle", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage_DangerWarning", xaml, StringComparison.Ordinal);
+        Assert.Equal("Stretch", GetAttributeByLocalName(dangerExpander, "HorizontalAlignment"));
+        Assert.Equal("Stretch", GetAttributeByLocalName(dangerExpander, "HorizontalContentAlignment"));
+        Assert.Equal("0", GetAttributeByLocalName(dangerExpander, "Padding"));
         Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(resetDefaultsTitle, "Style"));
         Assert.Equal("{StaticResource SettingsRowTitleTextStyle}", GetAttributeByLocalName(clearAllDataTitle, "Style"));
         Assert.NotSame(resetDefaults.Parent, clearAllData.Parent);
@@ -2128,6 +2131,49 @@ public sealed class XamlComplianceTests
         Assert.Contains("ViewModel.CloudConfig.ConnectionContextText", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.CloudConfig.ActiveRemoteTarget", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("{Binding", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DataStorageSettingsPage_HidesCloudSyncDestructiveActionsBehindMoreActions()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
+        var disable = FindElementByUid(document, "DataStorage_CloudSyncDisable");
+        var remove = FindElementByUid(document, "DataStorage_CloudSyncForget");
+        var moreActionsTitle = FindElementByUid(document, "DataStorage_CloudSyncMoreActions");
+        var moreActionsExpander = Assert.Single(
+            moreActionsTitle.Ancestors(),
+            element => element.Name.LocalName == "Expander");
+
+        Assert.Equal("False", GetAttributeByLocalName(moreActionsExpander, "IsExpanded"));
+        Assert.Contains(disable, moreActionsExpander.Descendants());
+        Assert.Contains(remove, moreActionsExpander.Descendants());
+    }
+
+    [Fact]
+    public void DiagnosticsSettingsPage_DefaultsDeepDiagnosticsToCollapsedSections()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml"));
+
+        AssertCollapsedExpanderOwnsUid(document, "Diagnostics_VoiceTitle");
+        AssertCollapsedExpanderOwnsUid(document, "Diagnostics_GamepadTitle");
+        AssertExpanderOwnsUid(document, "Diagnostics_LiveLogHeader");
+        AssertCollapsedExpanderOwnsUid(document, "Diagnostics_ConnectionTitle");
+    }
+
+    [Fact]
+    public void AboutPage_DefaultsOpenSourceAcknowledgementsToCollapsedDisclosure()
+    {
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml"));
+        var openSourceTitle = FindElementByUid(document, "About_OpenSourceTitle");
+        var openSourceExpander = Assert.Single(
+            openSourceTitle.Ancestors(),
+            element => element.Name.LocalName == "Expander");
+
+        Assert.Equal("False", GetAttributeByLocalName(openSourceExpander, "IsExpanded"));
+        Assert.Contains(
+            document.Descendants().Single(element =>
+                string.Equals(GetAttributeByLocalName(element, "AutomationProperties.AutomationId"), "About.OpenSourceAcknowledgements", StringComparison.Ordinal)),
+            openSourceExpander.Descendants());
     }
 
     [Fact]
@@ -2958,6 +3004,21 @@ public sealed class XamlComplianceTests
         }
 
         return element;
+    }
+
+    private static void AssertCollapsedExpanderOwnsUid(XDocument document, string uid)
+    {
+        var expander = AssertExpanderOwnsUid(document, uid);
+
+        Assert.Equal("False", GetAttributeByLocalName(expander, "IsExpanded"));
+    }
+
+    private static XElement AssertExpanderOwnsUid(XDocument document, string uid)
+    {
+        var element = FindElementByUid(document, uid);
+        return Assert.Single(
+            element.Ancestors(),
+            ancestor => ancestor.Name.LocalName == "Expander");
     }
 
     private static void AssertTitleBarStyleKeepsNativeRoundedBorderlessAppearance(

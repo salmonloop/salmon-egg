@@ -100,10 +100,13 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Diagnostics_VoiceTitle"
-                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-
+                    <Expander IsExpanded="False"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock x:Uid="Diagnostics_VoiceTitle"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                        </Expander.Header>
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
@@ -389,12 +392,15 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Expander>
 
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Diagnostics_GamepadTitle"
-                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-
+                    <Expander IsExpanded="False"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock x:Uid="Diagnostics_GamepadTitle"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                        </Expander.Header>
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
@@ -547,7 +553,7 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Expander>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_LogsTitle"
@@ -673,10 +679,13 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="Diagnostics_ConnectionTitle"
-                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-
+                    <Expander IsExpanded="False"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock x:Uid="Diagnostics_ConnectionTitle"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                        </Expander.Header>
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <controls:ResponsiveFormRow>
@@ -729,7 +738,7 @@
                                 </controls:ResponsiveFormRow>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Expander>
 
                     <StackPanel Spacing="12">
                         <TextBlock x:Uid="Diagnostics_BundleTitle"

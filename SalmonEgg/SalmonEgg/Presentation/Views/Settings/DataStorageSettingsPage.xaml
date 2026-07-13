@@ -203,21 +203,30 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <StackPanel Spacing="8">
-                                    <Button x:Uid="DataStorage_CloudSyncDisable"
-                                            AutomationProperties.AutomationId="DataStorage.CloudSync.Disable"
-                                            Command="{x:Bind ViewModel.CloudConfig.DisableCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanDisable, Mode=OneWay}"
-                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowDisableAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            HorizontalAlignment="Stretch"/>
-                                    <Button x:Uid="DataStorage_CloudSyncForget"
-                                            AutomationProperties.AutomationId="DataStorage.CloudSync.Forget"
-                                            Command="{x:Bind ViewModel.CloudConfig.ForgetCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanForget, Mode=OneWay}"
-                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowRemoveAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                            HorizontalAlignment="Stretch"/>
-                                </StackPanel>
+                                <Expander IsExpanded="False"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock x:Uid="DataStorage_CloudSyncMoreActions"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    </Expander.Header>
+                                    <StackPanel Spacing="8"
+                                                Padding="0,8,0,0">
+                                        <Button x:Uid="DataStorage_CloudSyncDisable"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.Disable"
+                                                Command="{x:Bind ViewModel.CloudConfig.DisableCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CloudConfig.CanDisable, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.CloudConfig.ShowDisableAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                HorizontalAlignment="Stretch"/>
+                                        <Button x:Uid="DataStorage_CloudSyncForget"
+                                                AutomationProperties.AutomationId="DataStorage.CloudSync.Forget"
+                                                Command="{x:Bind ViewModel.CloudConfig.ForgetCommand}"
+                                                IsEnabled="{x:Bind ViewModel.CloudConfig.CanForget, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.CloudConfig.ShowRemoveAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                HorizontalAlignment="Stretch"/>
+                                    </StackPanel>
+                                </Expander>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -358,7 +367,11 @@
                         </Border>
                     </StackPanel>
 
-                    <Expander IsExpanded="False">
+                    <Expander IsExpanded="False"
+                              Background="Transparent"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch"
+                              Padding="0">
                         <Expander.Header>
                             <TextBlock x:Uid="DataStorage_DangerTitle"
                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"

@@ -1449,6 +1449,7 @@
   <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText" xml:space="preserve"><value>留空以继续使用已保存的密钥</value></data>
   <data name="DataStorage_CloudSyncAdvancedSettings.Header" xml:space="preserve"><value>高级设置</value></data>
   <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>保存并同步</value></data>
+  <data name="DataStorage_CloudSyncMoreActions.Text" xml:space="preserve"><value>更多云同步操作</value></data>
   <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>关闭云同步（保留设置）</value></data>
   <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>移除本机云同步设置</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>取消</value></data>

@@ -151,10 +151,13 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Spacing="12">
-                        <TextBlock x:Uid="About_OpenSourceTitle"
-                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-
+                    <Expander IsExpanded="False"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch">
+                        <Expander.Header>
+                            <TextBlock x:Uid="About_OpenSourceTitle"
+                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                        </Expander.Header>
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <StackPanel>
                                 <Grid Style="{StaticResource SettingsRowGridStyle}">
@@ -227,7 +230,7 @@
                         </ListView>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Expander>
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>

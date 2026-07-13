@@ -1554,6 +1554,7 @@
   <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText" xml:space="preserve"><value>Leave blank to keep the saved key</value></data>
   <data name="DataStorage_CloudSyncAdvancedSettings.Header" xml:space="preserve"><value>Advanced settings</value></data>
   <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>Save and sync</value></data>
+  <data name="DataStorage_CloudSyncMoreActions.Text" xml:space="preserve"><value>More cloud sync actions</value></data>
   <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>Turn off sync (keep settings)</value></data>
   <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>Remove cloud sync setup</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>Cancel</value></data>
