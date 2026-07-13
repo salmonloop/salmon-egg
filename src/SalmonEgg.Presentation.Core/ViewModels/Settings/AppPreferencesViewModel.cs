@@ -295,8 +295,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
 
         ScheduleSave();
-        _ = _languageService.ApplyLanguageOverrideAsync(normalized);
-        _uiRuntime.ReloadShell();
+        _ = ApplyLanguageChangeAsync(normalized);
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
@@ -359,6 +358,20 @@ public partial class AppPreferencesViewModel : ObservableObject
     private void NotifyShortcutConfigurationChanged()
     {
         ShortcutConfigurationChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task ApplyLanguageChangeAsync(string normalized)
+    {
+        try
+        {
+            await _languageService.ApplyLanguageOverrideAsync(normalized).ConfigureAwait(false);
+            _uiRuntime.RefreshLocalizedText();
+            _uiRuntime.ReloadShell();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply language override");
+        }
     }
 
     public void SetKeyBinding(string actionId, string gesture)

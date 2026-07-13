@@ -4,5 +4,6 @@ public interface IUiRuntimeService
 {
     void InitializeAnimations();
     void SetAnimationsEnabled(bool enabled);
+    void RefreshLocalizedText();
     void ReloadShell();
 }

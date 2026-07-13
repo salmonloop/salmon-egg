@@ -39,7 +39,7 @@ public sealed class NavItemViewModelTests
         var navState = new FakeNavigationPaneState();
         var label = new SessionsLabelNavItemViewModel(navState, new ImmediateUiDispatcher());
 
-        Assert.Equal("会话", label.Title);
+        Assert.Equal("Sessions", label.Title);
     }
 
     [Fact]

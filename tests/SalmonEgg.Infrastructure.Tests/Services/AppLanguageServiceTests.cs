@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using SalmonEgg.Infrastructure.Services;
 
 namespace SalmonEgg.Infrastructure.Tests.Services;
@@ -19,10 +20,20 @@ public sealed class AppLanguageServiceTests
 
             await service.ApplyLanguageOverrideAsync("en-US");
 
-            Assert.Equal("en-US", CultureInfo.CurrentCulture.Name);
-            Assert.Equal("en-US", CultureInfo.CurrentUICulture.Name);
-            Assert.Equal("en-US", CultureInfo.DefaultThreadCurrentCulture?.Name);
-            Assert.Equal("en-US", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Assert.Equal("en-US", CultureInfo.CurrentCulture.Name);
+                Assert.Equal("en-US", CultureInfo.CurrentUICulture.Name);
+                Assert.Equal("en-US", CultureInfo.DefaultThreadCurrentCulture?.Name);
+                Assert.Equal("en-US", CultureInfo.DefaultThreadCurrentUICulture?.Name);
+            }
+            else
+            {
+                Assert.Equal(previousCulture, CultureInfo.CurrentCulture);
+                Assert.Equal(previousUiCulture, CultureInfo.CurrentUICulture);
+                Assert.Equal(previousDefaultCulture, CultureInfo.DefaultThreadCurrentCulture);
+                Assert.Equal(previousDefaultUiCulture, CultureInfo.DefaultThreadCurrentUICulture);
+            }
         }
         finally
         {

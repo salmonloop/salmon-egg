@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Domain.Models;
@@ -11,30 +12,65 @@ namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
 public sealed partial class StartNavItemViewModel : MainNavItemViewModel
 {
-    public string Title { get; } = "开始";
+    private string _title = "Start";
 
-    public StartNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
+
+    public StartNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher, string title = "Start")
         : base(navigationState, uiDispatcher)
     {
+        Title = title;
+    }
+
+    public void UpdateTitle(string title)
+    {
+        Title = title;
     }
 }
 
 public sealed partial class DiscoverSessionsNavItemViewModel : MainNavItemViewModel
 {
-    public string Title { get; } = "发现更多会话";
+    private string _title = "Discover sessions";
 
-    public DiscoverSessionsNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
+
+    public DiscoverSessionsNavItemViewModel(INavigationPaneState navigationState, IUiDispatcher uiDispatcher, string title = "Discover sessions")
         : base(navigationState, uiDispatcher)
     {
+        Title = title;
+    }
+
+    public void UpdateTitle(string title)
+    {
+        Title = title;
     }
 }
 
 public sealed partial class SettingsNavItemViewModel : MainNavItemViewModel
 {
-    public string Title { get; }
+    private string _title = "Settings";
+
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
 
     public SettingsNavItemViewModel(string title, INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
         : base(navigationState, uiDispatcher)
+    {
+        Title = title;
+    }
+
+    public void UpdateTitle(string title)
     {
         Title = title;
     }
@@ -234,6 +270,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
+    private string _titleFormat;
     private int _count;
     public int Count
     {
@@ -247,15 +284,35 @@ public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
         }
     }
 
-    public string Title => Count > 0 ? $"展开显示（+{Count}）" : "展开显示";
+    public string Title => Count > 0
+        ? string.Format(CultureInfo.CurrentCulture, _titleFormat, Count)
+        : string.Format(CultureInfo.CurrentCulture, _titleFormat, 0);
 
     public IAsyncRelayCommand ShowMoreCommand { get; }
 
-    public MoreSessionsNavItemViewModel(string projectId, int remainingCount, IAsyncRelayCommand showMoreCommand, INavigationPaneState navigationState, IUiDispatcher uiDispatcher)
+    public MoreSessionsNavItemViewModel(
+        string projectId,
+        int remainingCount,
+        IAsyncRelayCommand showMoreCommand,
+        INavigationPaneState navigationState,
+        IUiDispatcher uiDispatcher,
+        string titleFormat = "Show more (+{0})")
         : base(navigationState, uiDispatcher)
     {
         ProjectId = projectId;
         _count = remainingCount;
+        _titleFormat = titleFormat;
         ShowMoreCommand = showMoreCommand;
+    }
+
+    public void UpdateTitleFormat(string titleFormat)
+    {
+        if (string.Equals(_titleFormat, titleFormat, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _titleFormat = titleFormat;
+        OnPropertyChanged(nameof(Title));
     }
 }

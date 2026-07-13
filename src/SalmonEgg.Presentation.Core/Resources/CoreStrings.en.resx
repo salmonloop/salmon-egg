@@ -18,6 +18,18 @@
   <data name="Nav_Sessions" xml:space="preserve">
     <value>Sessions</value>
   </data>
+  <data name="Nav_Start" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="Nav_DiscoverSessions" xml:space="preserve">
+    <value>Discover sessions</value>
+  </data>
+  <data name="Nav_MoreSessionsFormat" xml:space="preserve">
+    <value>Show more (+{0})</value>
+  </data>
+  <data name="Nav_LoadingSessions" xml:space="preserve">
+    <value>Loading...</value>
+  </data>
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>Unclassified</value>
   </data>

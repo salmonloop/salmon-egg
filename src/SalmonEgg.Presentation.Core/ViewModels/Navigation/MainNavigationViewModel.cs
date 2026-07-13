@@ -47,6 +47,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly IShellSelectionReadModel _shellSelection;
     private readonly IShellNavigationRuntimeState _shellRuntimeState;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
     private readonly Timer _relativeTimeTimer;
     private static readonly TimeSpan RelativeTimeRefreshInterval = TimeSpan.FromSeconds(30);
@@ -176,12 +177,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync, () => CanAddProject);
 
-        StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher);
-        DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher);
-        SettingsItem = new SettingsNavItemViewModel(localizer["Nav_Settings"], _navigationState, _uiDispatcher);
-        SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, localizer["Nav_Sessions"]);
+        StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Start", "Start"));
+        DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_DiscoverSessions", "Discover sessions"));
+        SettingsItem = new SettingsNavItemViewModel(Localize("Nav_Settings", "Settings"), _navigationState, _uiDispatcher);
+        SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Sessions", "Sessions"));
         AddProjectItem = new AddProjectNavItemViewModel(AddProjectCommand, _navigationState, _uiDispatcher);
 
         FooterItems.Add(DiscoverSessionsItem);
@@ -212,6 +214,36 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             RelativeTimeRefreshInterval);
 
         _navigationState.PaneStateChanged += OnServicePaneStateChanged;
+    }
+
+    public void RefreshLocalizedText()
+    {
+        _uiDispatcher.Enqueue(ApplyLocalizedText);
+    }
+
+    private void ApplyLocalizedText()
+    {
+        StartItem.UpdateTitle(Localize("Nav_Start", "Start"));
+        DiscoverSessionsItem.UpdateTitle(Localize("Nav_DiscoverSessions", "Discover sessions"));
+        SettingsItem.UpdateTitle(Localize("Nav_Settings", "Settings"));
+        SessionsLabelItem.UpdateTitle(Localize("Nav_Sessions", "Sessions"));
+
+        var moreTitleFormat = Localize("Nav_MoreSessionsFormat", "Show more (+{0})");
+        foreach (var moreItem in Items
+                     .OfType<ProjectNavItemViewModel>()
+                     .SelectMany(project => project.Children.OfType<MoreSessionsNavItemViewModel>()))
+        {
+            moreItem.UpdateTitleFormat(moreTitleFormat);
+        }
+
+        var loadingTitle = Localize("Nav_LoadingSessions", "Loading...");
+        foreach (var placeholder in Items
+                     .OfType<ProjectNavItemViewModel>()
+                     .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+                     .Where(session => session.IsPlaceholder))
+        {
+            placeholder.Title = loadingTitle;
+        }
     }
 
     public void Dispose()
@@ -387,7 +419,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             sessionId: "__loading__",
             remoteSessionId: null,
             projectId: UnclassifiedProjectId,
-            title: "加载中…",
+            title: Localize("Nav_LoadingSessions", "Loading..."),
             relativeTimeText: string.Empty,
             ui: _ui,
             shell: _shell,
@@ -395,6 +427,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             navigationState: _navigationState,
             uiDispatcher: _uiDispatcher,
             isPlaceholder: true);
+    }
+
+    private string Localize(string key, string fallback)
+    {
+        var localized = _localizer[key];
+        return localized is null || localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private void ActivateSessionFromSessionsList(string sessionId, string projectId)
@@ -722,7 +762,15 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 }
 
                 var showMore = new AsyncRelayCommand(() => ShowAllSessionsForProjectAsync(projectVm.ProjectId));
-                children.Insert(childIndex, new MoreSessionsNavItemViewModel(projectVm.ProjectId, remainingCount, showMore, _navigationState, _uiDispatcher));
+                children.Insert(
+                    childIndex,
+                    new MoreSessionsNavItemViewModel(
+                        projectVm.ProjectId,
+                        remainingCount,
+                        showMore,
+                        _navigationState,
+                        _uiDispatcher,
+                        Localize("Nav_MoreSessionsFormat", "Show more (+{0})")));
             }
             childIndex++;
         }

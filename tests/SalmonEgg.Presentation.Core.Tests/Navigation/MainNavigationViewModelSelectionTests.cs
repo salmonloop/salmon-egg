@@ -1573,6 +1573,76 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RefreshLocalizedText_ReevaluatesSingletonNavigationLabels()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var sessions = Enumerable.Range(1, 21)
+                .Select(i => new Session($"session-{i}", @"C:\repo\demo")
+                {
+                    DisplayName = $"Session {i}"
+                })
+                .ToArray();
+            var sessionManager = CreateSessionManager(sessions);
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog(sessions.Select(session => session.SessionId).ToArray());
+            var localizer = new MutableNavigationLocalizer
+            {
+                Start = "开始",
+                Discover = "发现更多会话",
+                Settings = "设置",
+                Sessions = "会话",
+                MoreSessions = "展开显示（+{0}）"
+            };
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out _,
+                out _,
+                localizerOverride: localizer);
+
+            navVm.RebuildTree();
+            var more = navVm.Items
+                .OfType<ProjectNavItemViewModel>()
+                .SelectMany(project => project.Children.OfType<MoreSessionsNavItemViewModel>())
+                .Single();
+
+            Assert.Equal("开始", navVm.StartItem.Title);
+            Assert.Equal("发现更多会话", navVm.DiscoverSessionsItem.Title);
+            Assert.Equal("设置", navVm.SettingsItem.Title);
+            Assert.Equal("会话", navVm.SessionsLabelItem.Title);
+            Assert.Equal("展开显示（+1）", more.Title);
+
+            localizer.Start = "Start";
+            localizer.Discover = "Discover sessions";
+            localizer.Settings = "Settings";
+            localizer.Sessions = "Sessions";
+            localizer.MoreSessions = "Show more (+{0})";
+
+            navVm.RefreshLocalizedText();
+
+            Assert.Equal("Start", navVm.StartItem.Title);
+            Assert.Equal("Discover sessions", navVm.DiscoverSessionsItem.Title);
+            Assert.Equal("Settings", navVm.SettingsItem.Title);
+            Assert.Equal("Sessions", navVm.SessionsLabelItem.Title);
+            Assert.Equal("Show more (+1)", more.Title);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task PrepareStartForProjectAsync_DoesNotStorePendingProjectRoot_WhenCoordinatorFails()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1815,7 +1885,8 @@ public sealed class MainNavigationViewModelSelectionTests
         out ShellSelectionStateStore selectionStore,
         out ShellNavigationRuntimeStateStore runtimeState,
         IConversationCatalogDisplayReadModel? presenterOverride = null,
-        IUiInteractionService? uiOverride = null)
+        IUiInteractionService? uiOverride = null,
+        IStringLocalizer<CoreStrings>? localizerOverride = null)
     {
         var ui = new Mock<IUiInteractionService>();
         ui.SetupGet(service => service.CanPickFolder).Returns(true);
@@ -1841,7 +1912,7 @@ public sealed class MainNavigationViewModelSelectionTests
             presenter,
             new ProjectAffinityResolver(),
             uiDispatcher,
-            Mock.Of<IStringLocalizer<CoreStrings>>());
+            localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>());
     }
 
     private static MutableConversationCatalogDisplayReadModel CreatePresenter(IConversationCatalog chatCatalog)
@@ -1949,6 +2020,35 @@ public sealed class MainNavigationViewModelSelectionTests
             IsPaneOpen = isOpen;
             PaneStateChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private sealed class MutableNavigationLocalizer : IStringLocalizer<CoreStrings>
+    {
+        public string Start { get; set; } = string.Empty;
+        public string Discover { get; set; } = string.Empty;
+        public string Settings { get; set; } = string.Empty;
+        public string Sessions { get; set; } = string.Empty;
+        public string MoreSessions { get; set; } = string.Empty;
+
+        public LocalizedString this[string name] => new(name, Resolve(name));
+
+        public LocalizedString this[string name, params object[] arguments]
+            => new(name, string.Format(System.Globalization.CultureInfo.InvariantCulture, Resolve(name), arguments));
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+
+        public IStringLocalizer WithCulture(System.Globalization.CultureInfo culture) => this;
+
+        private string Resolve(string name)
+            => name switch
+            {
+                "Nav_Start" => Start,
+                "Nav_DiscoverSessions" => Discover,
+                "Nav_Settings" => Settings,
+                "Nav_Sessions" => Sessions,
+                "Nav_MoreSessionsFormat" => MoreSessions,
+                _ => name
+            };
     }
 
     private sealed class ImmediateSynchronizationContext : SynchronizationContext, IUiDispatcher

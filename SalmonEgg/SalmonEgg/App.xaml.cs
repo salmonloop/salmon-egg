@@ -60,6 +60,23 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         }
     }
 
+    internal static void RefreshMainShellLocalizedText()
+    {
+        try
+        {
+            if (MainWindowInstance?.Content is not Frame frame ||
+                frame.Content is not MainPage mainPage)
+            {
+                return;
+            }
+
+            mainPage.RefreshLocalizedText();
+        }
+        catch
+        {
+        }
+    }
+
     public App()
     {
         var services = new global::Microsoft.Extensions.DependencyInjection.ServiceCollection();
