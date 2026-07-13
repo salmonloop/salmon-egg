@@ -263,36 +263,6 @@ public class AppPreferencesViewModelTests
             });
     }
 
-    [Fact]
-    public async Task AcpEnabledChanged_PersistsGlobalAcpPolicy()
-    {
-        var appSettingsService = new Mock<IAppSettingsService>();
-        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
-        {
-            AcpEnabled = true
-        });
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
-
-        var vm = new AppPreferencesViewModel(
-            appSettingsService.Object,
-            Mock.Of<IAppStartupService>(),
-            Mock.Of<IAppLanguageService>(),
-            Mock.Of<IPlatformCapabilityService>(),
-            Mock.Of<IUiRuntimeService>(),
-            Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
-
-        await vm.InitializeAsync(TestContext.Current.CancellationToken);
-
-        vm.AcpEnabled = false;
-
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
-
-        appSettingsService.Verify(
-            service => service.SaveAsync(It.Is<AppSettings>(settings => settings.AcpEnabled == false)),
-            Times.AtLeastOnce);
-    }
-
     private static AppPreferencesViewModel CreateViewModel(FakeAppSettingsService settingsService)
     {
         var startupService = new Mock<IAppStartupService>();

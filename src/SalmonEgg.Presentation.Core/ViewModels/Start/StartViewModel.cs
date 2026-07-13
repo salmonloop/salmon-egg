@@ -685,10 +685,6 @@ public sealed partial class StartViewModel : ObservableObject
             OnPropertyChanged(nameof(CanStartSessionAndSendUi));
         }
 
-        if (string.Equals(e.PropertyName, nameof(AppPreferencesViewModel.AcpEnabled), StringComparison.Ordinal))
-        {
-            SelectSingleAvailableAgentIfNeeded();
-        }
     }
 
     private void OnNavigationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -1181,7 +1177,6 @@ public sealed partial class StartViewModel : ObservableObject
     private void SelectSingleAvailableAgentIfNeeded()
     {
         if (_isComposerLoaded
-            && _preferences.AcpEnabled
             && Chat.SelectedAcpProfile is null
             && Chat.AcpProfileList.Count == 1)
         {

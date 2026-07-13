@@ -28,7 +28,6 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
 {
     private readonly IAcpChatServiceFactory _chatServiceFactory;
     private readonly ITransportSupportPolicy _transportSupportPolicy;
-    private readonly IAcpAvailabilityPolicy _availabilityPolicy;
     private readonly ILogger<DiscoverSessionsConnectionFacade> _logger;
     private readonly object _connectSync = new();
     private CancellationTokenSource? _connectCts;
@@ -45,13 +44,11 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
     public DiscoverSessionsConnectionFacade(
         IAcpChatServiceFactory chatServiceFactory,
         ITransportSupportPolicy transportSupportPolicy,
-        ILogger<DiscoverSessionsConnectionFacade> logger,
-        IAcpAvailabilityPolicy? availabilityPolicy = null)
+        ILogger<DiscoverSessionsConnectionFacade> logger)
     {
         _chatServiceFactory = chatServiceFactory ?? throw new ArgumentNullException(nameof(chatServiceFactory));
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _availabilityPolicy = availabilityPolicy ?? AlwaysEnabledAcpAvailabilityPolicy.Instance;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -90,19 +87,6 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
     {
         ArgumentNullException.ThrowIfNull(profile);
         ThrowIfDisposed();
-
-        if (!_availabilityPolicy.IsAcpEnabled)
-        {
-            var message = "ACP is disabled by global settings.";
-            UpdateConnectedTarget(null, DiscoverConnectionTarget.None);
-            UpdateConnectionState(
-                isConnecting: false,
-                isInitializing: false,
-                isConnected: false,
-                errorMessage: message,
-                currentChatService: null);
-            throw new InvalidOperationException(message);
-        }
 
         var target = DiscoverConnectionTarget.FromProfile(profile);
         if (TryReuseConnectedService(profile.Id, target))

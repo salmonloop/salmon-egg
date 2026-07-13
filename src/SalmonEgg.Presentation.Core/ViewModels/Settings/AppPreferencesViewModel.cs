@@ -52,9 +52,6 @@ public partial class AppPreferencesViewModel : ObservableObject
     private string? _lastSelectedServerId;
 
     [ObservableProperty]
-    private bool _acpEnabled = true;
-
-    [ObservableProperty]
     private bool _saveLocalHistory = true;
 
     [ObservableProperty]
@@ -189,7 +186,6 @@ public partial class AppPreferencesViewModel : ObservableObject
                 MinimizeToTray = settings.MinimizeToTray;
                 Language = AppLanguageCatalog.NormalizeTag(settings.Language);
                 LastSelectedServerId = settings.LastSelectedServerId;
-                AcpEnabled = settings.AcpEnabled;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
                 CloudConfigSync = CloneCloudConfigSyncSettings(settings.CloudConfigSync);
@@ -303,7 +299,6 @@ public partial class AppPreferencesViewModel : ObservableObject
         _uiRuntime.ReloadShell();
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
-    partial void OnAcpEnabledChanged(bool value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
     partial void OnCloudConfigSyncChanged(CloudConfigSyncSettings value) => ScheduleSave();
@@ -414,7 +409,6 @@ public partial class AppPreferencesViewModel : ObservableObject
             MinimizeToTray = true;
             Language = "System";
             LastSelectedServerId = null;
-            AcpEnabled = true;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
             CloudConfigSync = new CloudConfigSyncSettings();
@@ -480,7 +474,6 @@ public partial class AppPreferencesViewModel : ObservableObject
             MinimizeToTray = MinimizeToTray,
             Language = AppLanguageCatalog.NormalizeTag(Language),
             LastSelectedServerId = LastSelectedServerId,
-            AcpEnabled = AcpEnabled,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
             CloudConfigSync = CloneCloudConfigSyncSettings(CloudConfigSync),

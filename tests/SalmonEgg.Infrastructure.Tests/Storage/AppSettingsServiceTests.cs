@@ -186,12 +186,11 @@ public sealed class AppSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveThenLoad_RoundTripsAcpConnectionGovernanceOptions()
+    public async Task SaveThenLoad_RoundTripsAcpConnectionGovernanceOptionsWithoutGlobalDisable()
     {
         var service = CreateService();
         var settings = new AppSettings
         {
-            AcpEnabled = false,
             AcpEnableConnectionEviction = true,
             AcpConnectionIdleTtlMinutes = 15,
             AcpMaxWarmProfiles = 3,
@@ -201,7 +200,6 @@ public sealed class AppSettingsServiceTests : IDisposable
         await service.SaveAsync(settings);
 
         var loaded = await service.LoadAsync();
-        Assert.False(loaded.AcpEnabled);
         Assert.True(loaded.AcpEnableConnectionEviction);
         Assert.Equal(15, loaded.AcpConnectionIdleTtlMinutes);
         Assert.Equal(3, loaded.AcpMaxWarmProfiles);
@@ -209,7 +207,7 @@ public sealed class AppSettingsServiceTests : IDisposable
 
         var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
         var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
-        Assert.Contains("acp_enabled: false", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("acp_enabled", yaml, StringComparison.Ordinal);
     }
 
     [Fact]
