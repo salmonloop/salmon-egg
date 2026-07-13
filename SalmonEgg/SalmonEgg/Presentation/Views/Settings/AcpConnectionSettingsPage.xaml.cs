@@ -31,7 +31,7 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
     }
 
     protected override Control? GetSectionEntryFocusTarget()
-        => AcpGlobalEnabledToggle;
+        => AcpProfilesRefreshButton;
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {

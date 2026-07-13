@@ -8,34 +8,16 @@ namespace SalmonEgg.GuiTests.Windows;
 public sealed class AcpSettingsSmokeTests
 {
     [Fact]
-    public void GlobalAcpEnabledToggle_PersistsAcrossRestart()
+    public void AcpSettingsPage_OpensProfilesManagementByDefault()
     {
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData();
-        using (var session = WindowsGuiAppSession.LaunchFresh())
-        {
-            EnsureMainWindowWide(session);
-            NavigateToAcpSettings(session);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWide(session);
+        NavigateToAcpSettings(session);
 
-            var toggle = session.FindByAutomationId("Acp.Global.Enabled", TimeSpan.FromSeconds(10));
-            Assert.Equal(ToggleState.On, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
-
-            session.ClickElement(toggle);
-
-            Assert.True(
-                session.WaitUntil(
-                    () => appData.ReadAppYaml().Contains("acp_enabled: false", StringComparison.Ordinal),
-                    TimeSpan.FromSeconds(5)),
-                $"Global ACP toggle did not persist false to app.yaml.{Environment.NewLine}{appData.ReadAppYaml()}");
-        }
-
-        using (var session = WindowsGuiAppSession.LaunchFresh())
-        {
-            EnsureMainWindowWide(session);
-            NavigateToAcpSettings(session);
-
-            var toggle = session.FindByAutomationId("Acp.Global.Enabled", TimeSpan.FromSeconds(10));
-            Assert.Equal(ToggleState.Off, toggle.Patterns.Toggle.Pattern.ToggleState.Value);
-        }
+        Assert.True(
+            session.WaitUntilOnscreen("Acp.Profiles.Refresh", TimeSpan.FromSeconds(10)),
+            $"ACP profiles management did not become visible.{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     private static void NavigateToAcpSettings(WindowsGuiAppSession session)
@@ -62,8 +44,8 @@ public sealed class AcpSettingsSmokeTests
         session.ActivateElement(acpSettingsItem!);
 
         Assert.True(
-            session.WaitUntilOnscreen("Acp.Global.Enabled", TimeSpan.FromSeconds(10)),
-            "ACP global toggle did not become visible.");
+            session.WaitUntilOnscreen("Acp.Profiles.Refresh", TimeSpan.FromSeconds(10)),
+            "ACP profiles section did not become visible.");
     }
 
     private static void EnsureMainWindowWide(WindowsGuiAppSession session)

@@ -18,7 +18,7 @@ import {
 } from "./wasm-smoke-lib/settings-shell.mjs";
 import {
   createWebSocketProfile,
-  ensureGlobalAcpEnabled,
+  ensureAcpProfilesReady,
   clickProfileConnectionToggle,
   waitForInitializeWithDiagnostics
 } from "./wasm-smoke-lib/acp-ui-fixture.mjs";
@@ -44,7 +44,7 @@ try {
       "ACP Agent settings page");
 
     await createWebSocketProfile(page, profileName, acpServer.url);
-    await ensureGlobalAcpEnabled(page);
+    await ensureAcpProfilesReady(page);
     await clickProfileConnectionToggle(page, profileName);
     const initializeRequest = await waitForInitializeWithDiagnostics(acpServer, page, profileName);
     expectNoAdvertisedFileSystemCapability(initializeRequest);

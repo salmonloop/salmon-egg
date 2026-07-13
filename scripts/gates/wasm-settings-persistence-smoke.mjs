@@ -18,6 +18,7 @@ import {
   expectComboBoxSelectionText,
   clickVisibleNavigationTargetUntilBodyText,
   clickVisibleControl,
+  waitForControlState,
   scrollToVisibleControl,
   typeIntoAutomationTextBox,
   typeIntoVisibleTextField,
@@ -74,7 +75,6 @@ const controls = {
     automationIds: ["DataStorage.SaveLocalHistory"]
   },
   shortcutsEnabled: { labels: ["启用快捷键", "Enable shortcuts"], automationIds: ["Shortcuts.Enabled"] },
-  acpEnabled: { labels: ["启用 ACP Agent", "Enable ACP agents"], automationIds: ["Acp.Global.Enabled"] },
   mcpServerEnabled: { labels: ["启用", "Enabled"], automationIds: ["Mcp.Server.Enabled"] }
 };
 
@@ -98,7 +98,7 @@ try {
     await changeAppearanceSettings(page);
     const updatedCacheRetention = await changeDataStorageSettings(page);
     await changeShortcutsSettings(page);
-    await changeAcpSettings(page);
+    await verifyAcpSettings(page);
     await changeMcpSettings(page);
 
     await waitForLocalFileContains(
@@ -110,8 +110,7 @@ try {
         "backdrop: Acrylic",
         "save_local_history: false",
         `cache_retention_days: ${updatedCacheRetention}`,
-        "keyboard_shortcuts_enabled: false",
-        "acp_enabled: false"
+        "keyboard_shortcuts_enabled: false"
       ],
       "app settings YAML");
     await waitForLocalFileContains(
@@ -384,23 +383,16 @@ async function verifyShortcutsSettings(page, suffix = "") {
   await expectToggleSwitchValue(page, controls.shortcutsEnabled, false, `keyboard shortcuts ${suffix}`.trim());
 }
 
-async function changeAcpSettings(page) {
-  await navigateToSettingsSection(
-    page,
-    sections.acp.target,
-    sections.acp.bodyPattern,
-    sections.acp.label);
-  await setToggleSwitchValue(page, controls.acpEnabled, false, "ACP global enabled");
-  await verifyAcpSettings(page, "after edit");
-}
-
 async function verifyAcpSettings(page, suffix = "") {
   await navigateToSettingsSection(
     page,
     sections.acp.target,
     sections.acp.bodyPattern,
     `${sections.acp.label} ${suffix}`.trim());
-  await expectToggleSwitchValue(page, controls.acpEnabled, false, `ACP global enabled ${suffix}`.trim());
+  await waitForControlState(
+    page,
+    { labels: ["刷新", "Refresh"], automationIds: ["Acp.Profiles.Refresh"] },
+    `ACP profiles refresh ${suffix}`.trim());
 }
 
 async function changeMcpSettings(page) {

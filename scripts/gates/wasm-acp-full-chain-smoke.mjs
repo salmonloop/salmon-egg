@@ -16,7 +16,7 @@ import {
   createRemoteDirectory,
   expectPersistedProfileAfterReload,
   expectRemoteDirectoryPresence,
-  ensureGlobalAcpEnabled,
+  ensureAcpProfilesReady,
   clickProfileConnectionToggle,
   waitForInitializeWithDiagnostics,
   createSessionAndSendPromptFromStart
@@ -54,7 +54,7 @@ try {
     await expectPersistedProfileAfterReload(page, baseUrl, profileName);
     await expectRemoteDirectoryPresence(page, remoteDirectoryName, remoteDirectoryPath, "persisted remote directory");
 
-    await ensureGlobalAcpEnabled(page);
+    await ensureAcpProfilesReady(page);
     await clickProfileConnectionToggle(page, profileName);
     await waitForInitializeWithDiagnostics(acpServer, page, profileName);
     await createSessionAndSendPromptFromStart(

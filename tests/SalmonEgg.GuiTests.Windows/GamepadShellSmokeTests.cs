@@ -1970,8 +1970,8 @@ public sealed class ShellFocusedActivationSmokeTests
             session,
             appData,
             sectionAutomationId: "SettingsNav.AgentAcp",
-            expectedFirstControlAutomationId: "Acp.Global.Enabled",
-            firstControlAutomationId: "Acp.Global.Enabled",
+            expectedFirstControlAutomationId: "Acp.Profiles.Refresh",
+            firstControlAutomationId: "Acp.Profiles.Refresh",
             sectionDescription: "ACP");
 
         var focusedBefore = session.DescribeFocusedElement();

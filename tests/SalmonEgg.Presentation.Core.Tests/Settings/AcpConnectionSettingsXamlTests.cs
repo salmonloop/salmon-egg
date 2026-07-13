@@ -181,17 +181,17 @@ public sealed class AcpConnectionSettingsXamlTests
     }
 
     [Fact]
-    public void AcpConnectionSettingsPage_ExposesPageTitleSummaryAndAdvancedHydrationDisclosure()
+    public void AcpConnectionSettingsPage_ExposesPageTitleSummaryWithoutGlobalAcpToggle()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
 
         Assert.Contains("x:Uid=\"Acp_PageTitle\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"Acp_PageSummary\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"Acp_GlobalTitle\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"Acp_GlobalEnabledTitle\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"Acp_GlobalEnabledDescription\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("IsOn=\"{x:Bind ViewModel.IsAcpEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"Acp.Global.Enabled\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"Acp_GlobalTitle\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"Acp_GlobalEnabledTitle\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"Acp_GlobalEnabledDescription\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsOn=\"{x:Bind ViewModel.IsAcpEnabled, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"Acp.Global.Enabled\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{x:Bind ViewModel.Profiles", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SettingsPageTitleTextStyle}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Style=\"{StaticResource SettingsPageSummaryTextStyle}\"", xaml, StringComparison.Ordinal);
@@ -200,7 +200,7 @@ public sealed class AcpConnectionSettingsXamlTests
     }
 
     [Fact]
-    public void AcpConnectionSettingsPage_HasLocalizedGlobalAcpResources()
+    public void AcpConnectionSettingsPage_HasLocalizedProfileResources()
     {
         string[] resourceFiles =
         [
@@ -210,11 +210,6 @@ public sealed class AcpConnectionSettingsXamlTests
         ];
         string[] requiredResources =
         [
-            "Acp_GlobalTitle.Text",
-            "Acp_GlobalEnabledTitle.Text",
-            "Acp_GlobalEnabledDescription.Text",
-            "Acp_GlobalEnabledSwitch.OnContent",
-            "Acp_GlobalEnabledSwitch.OffContent",
             "Acp_ProfileReconnect.Text",
             "AgentProfileEditor_CurrentConnectionSavedNoticeMessage"
         ];

@@ -205,32 +205,17 @@ export async function clickProfileConnectionToggle(page, profileName) {
   await page.waitForTimeout(500);
 }
 
-export async function ensureGlobalAcpEnabled(page) {
-  const state = await readControlState(page, {
-    labels: ["启用 ACP Agent", "Enable ACP Agent"],
-    automationIds: ["Acp.Global.Enabled"]
-  });
-
-  if (!state?.found) {
-    throw new Error(`Global ACP toggle was not found. State=${JSON.stringify(state)}`);
-  }
-
-  const checked = await page.evaluate(readGlobalAcpToggleState);
-  if (checked !== false) {
-    return;
-  }
-
-  await page.mouse.click(state.x, state.y);
+export async function ensureAcpProfilesReady(page) {
   try {
-    await page.waitForFunction(readGlobalAcpToggleState, null, { timeout: 10_000 });
+    await page.waitForFunction(readAcpProfilesAnchorState, null, { timeout: 10_000 });
   } catch (error) {
     const debug = {
-      checked: await page.evaluate(readGlobalAcpToggleState).catch(diagnosticError => `read error: ${diagnosticError?.message ?? diagnosticError}`),
+      profilesAnchor: await page.evaluate(readAcpProfilesAnchorState).catch(diagnosticError => `read error: ${diagnosticError?.message ?? diagnosticError}`),
       interactive: await page.evaluate(collectVisibleInteractiveDebug).catch(diagnosticError => [`read error: ${diagnosticError?.message ?? diagnosticError}`]),
       body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000)
     };
     throw new Error(
-      `Global ACP toggle remained disabled after click. State=${JSON.stringify(state)} Debug=${JSON.stringify(debug)} `
+      `ACP settings profiles section was not visible. Debug=${JSON.stringify(debug)} `
       + `Cause=${error?.message ?? error}`);
   }
 }
@@ -241,7 +226,7 @@ export async function waitForInitializeWithDiagnostics(acpServer, page, profileN
   } catch (error) {
     const debug = {
       body: (await page.locator("body").innerText().catch(() => "")).slice(0, 2_000),
-      globalAcpEnabled: await page.evaluate(readGlobalAcpToggleState).catch(diagnosticError => `read error: ${diagnosticError?.message ?? diagnosticError}`),
+      profilesAnchor: await page.evaluate(readAcpProfilesAnchorState).catch(diagnosticError => `read error: ${diagnosticError?.message ?? diagnosticError}`),
       rowState: await page.evaluate(readProfileConnectionRowState, profileName).catch(diagnosticError => `read error: ${diagnosticError?.message ?? diagnosticError}`),
       interactive: await page.evaluate(collectVisibleInteractiveDebug).catch(diagnosticError => [`read error: ${diagnosticError?.message ?? diagnosticError}`])
     };
@@ -387,32 +372,12 @@ function extractPromptText(promptRequest) {
     .join("");
 }
 
-function readGlobalAcpToggleState() {
+function readAcpProfilesAnchorState() {
   const control = window.__salmoneggSmoke.findVisibleControl(
-    { automationIds: ["Acp.Global.Enabled"] },
-    ["启用 ACP Agent", "Enable ACP Agent"],
-    ["Acp.Global.Enabled"]);
-  if (!control) {
-    return null;
-  }
-
-  const toggle = control.matches("input,[role='switch'],[aria-checked]")
-    ? control
-    : control.querySelector("input,[role='switch'],[aria-checked]") ?? control;
-  const ariaChecked = toggle.getAttribute("aria-checked");
-  if (ariaChecked === "true") {
-    return true;
-  }
-
-  if (ariaChecked === "false") {
-    return false;
-  }
-
-  if (typeof toggle.checked === "boolean") {
-    return toggle.checked;
-  }
-
-  return null;
+    { automationIds: ["Acp.Profiles.Refresh"] },
+    ["刷新", "Refresh"],
+    ["Acp.Profiles.Refresh"]);
+  return control ? { found: true } : null;
 }
 
 function findProfileConnectionTogglePoint(profileName) {

@@ -151,7 +151,7 @@ public sealed class McpSettingsSmokeTests
         session.ActivateElement(acpSettingsItem!);
 
         Assert.True(
-            session.WaitUntilOnscreen("Acp.Global.Enabled", TimeSpan.FromSeconds(10)),
+            session.WaitUntilOnscreen("Acp.Profiles.Refresh", TimeSpan.FromSeconds(10)),
             "ACP settings page did not become visible.");
     }
 
