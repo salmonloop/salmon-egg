@@ -1375,16 +1375,16 @@
     <value>Configuration cloud sync</value>
   </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
-    <value>Cloud sync provider</value>
+    <value>Cloud sync service</value>
   </data>
   <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
-    <value>Syncs the full configuration folder and saved credentials to the selected cloud provider. Credentials are included in the cloud package.</value>
+    <value>Sync app configuration across devices.</value>
   </data>
   <data name="DataStorage_CloudSyncProviderSelectionDescription.Text" xml:space="preserve">
-    <value>Only one provider can be active at a time; connecting a new provider replaces the current cloud sync target.</value>
+    <value>Only one service can be active at a time. Connecting a new service replaces the current cloud sync service.</value>
   </data>
   <data name="DataStorage_CloudSyncProviderPicker.Header" xml:space="preserve">
-    <value>Provider</value>
+    <value>Service</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFileUrl.Header" xml:space="preserve">
     <value>WebDAV folder URL</value>
@@ -1457,13 +1457,14 @@
   </data>
   <data name="DataStorage_CloudSyncEdit.Content" xml:space="preserve"><value>Edit connection</value></data>
   <data name="DataStorage_CloudSyncUnsavedChanges.Text" xml:space="preserve"><value>You have unapplied changes.</value></data>
+  <data name="DataStorage_CloudSyncSecurityNotice.Text" xml:space="preserve"><value>The sync package contains readable app configuration and sign-in details. Use only cloud storage you trust.</value></data>
   <data name="DataStorage_CloudSyncWebDavPasswordReplacement.Header" xml:space="preserve"><value>New password (optional)</value></data>
   <data name="DataStorage_CloudSyncWebDavPasswordReplacement.PlaceholderText" xml:space="preserve"><value>Leave blank to keep the saved password</value></data>
   <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.Header" xml:space="preserve"><value>New secret access key (optional)</value></data>
   <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText" xml:space="preserve"><value>Leave blank to keep the saved key</value></data>
   <data name="DataStorage_CloudSyncAdvancedSettings.Header" xml:space="preserve"><value>Advanced settings</value></data>
-  <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>Apply and verify</value></data>
-  <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>Turn off sync</value></data>
-  <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>Forget provider</value></data>
+  <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>Save and sync</value></data>
+  <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>Turn off sync (keep settings)</value></data>
+  <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>Remove cloud sync setup</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>Cancel</value></data>
 </root>

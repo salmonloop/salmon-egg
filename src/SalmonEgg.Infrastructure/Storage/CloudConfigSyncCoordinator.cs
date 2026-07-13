@@ -229,7 +229,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                 Configuration = configuration,
                 Credential = CloudCredentialState.Unknown,
                 Readiness = CloudProviderReadiness.Disabled,
-                Transfer = await LoadIdleTransferStateAsync(cancellationToken).ConfigureAwait(false),
+                Transfer = await LoadIdleTransferStateAsync(configuration.ProviderId, cancellationToken).ConfigureAwait(false),
                 Operation = null,
                 LastFailure = null
             });
@@ -272,7 +272,7 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             Configuration = configuration,
             Credential = credential.State,
             Readiness = CloudProviderReadiness.Ready,
-            Transfer = await LoadIdleTransferStateAsync(cancellationToken).ConfigureAwait(false),
+            Transfer = await LoadIdleTransferStateAsync(configuration.ProviderId, cancellationToken).ConfigureAwait(false),
             Operation = null,
             LastFailure = null
         });
@@ -480,6 +480,9 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             Configuration = CreateConfiguration(settings.CloudConfigSync),
             Credential = wasActive ? CloudCredentialState.Unknown : Current.Credential,
             Readiness = wasActive ? CloudProviderReadiness.Disabled : Current.Readiness,
+            Transfer = wasActive
+                ? new CloudTransferState(CloudTransferPhase.Idle)
+                : Current.Transfer,
             Operation = null,
             LastFailure = null
         });
@@ -658,10 +661,17 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                 Directory.Exists(backupPath) ? backupPath : null));
     }
 
-    private async Task<CloudTransferState> LoadIdleTransferStateAsync(CancellationToken cancellationToken)
+    private async Task<CloudTransferState> LoadIdleTransferStateAsync(
+        string providerId,
+        CancellationToken cancellationToken)
     {
         var state = await _stateStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return new CloudTransferState(CloudTransferPhase.Idle, CreateLastSuccess(state));
+        var lastSuccess = !string.IsNullOrWhiteSpace(providerId) &&
+            !string.IsNullOrWhiteSpace(state.ProviderId) &&
+            string.Equals(state.ProviderId, providerId, StringComparison.OrdinalIgnoreCase)
+            ? CreateLastSuccess(state)
+            : null;
+        return new CloudTransferState(CloudTransferPhase.Idle, lastSuccess);
     }
 
     private void PublishConfigurationFailure(
@@ -671,13 +681,19 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         CloudSyncFailure failure,
         CloudCredentialState? credential = null)
     {
+        var transfer = string.Equals(
+            Current.Configuration.ProviderId,
+            configuration.ProviderId,
+            StringComparison.OrdinalIgnoreCase)
+            ? Current.Transfer with { Phase = CloudTransferPhase.Failed, Failure = failure }
+            : new CloudTransferState(CloudTransferPhase.Failed, Failure: failure);
         PublishIfLatest(intentVersion, Current with
         {
             Initialization = CloudSyncInitializationState.Ready,
             Configuration = configuration,
             Credential = credential ?? ToCredentialState(failure),
             Readiness = readiness,
-            Transfer = Current.Transfer with { Phase = CloudTransferPhase.Failed, Failure = failure },
+            Transfer = transfer,
             Operation = null,
             LastFailure = failure
         });

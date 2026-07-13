@@ -74,6 +74,26 @@ public sealed class OneDriveBuildConfigurationContractTests
     }
 
     [Fact]
+    public void OneDriveProvider_ForgetCredentialsRemovesEveryCachedAccount()
+    {
+        var provider = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Cloud\OneDriveCloudConfigStorageProvider.cs");
+
+        var forgetMethod = provider[provider.IndexOf(
+            "public async Task ForgetCredentialsAsync",
+            StringComparison.Ordinal)..];
+        var registerCache = forgetMethod.IndexOf("await TryRegisterCacheAsync(application)", StringComparison.Ordinal);
+        var enumerateAccounts = forgetMethod.IndexOf("application.GetAccountsAsync()", StringComparison.Ordinal);
+
+        Assert.True(
+            registerCache >= 0 && registerCache < enumerateAccounts,
+            "OneDrive removal must attach the persistent MSAL cache before enumerating accounts.");
+        Assert.Matches(
+            @"foreach\s*\(var account in await application\.GetAccountsAsync\(\)\.ConfigureAwait\(false\)\)\s*\{[^}]*application\.RemoveAsync\(account\)",
+            forgetMethod);
+    }
+
+    [Fact]
     public void GitHubActions_InjectOneDriveBuildEnvironmentFromSecretsOrVariables()
     {
         var workflowPaths = Directory.EnumerateFiles(

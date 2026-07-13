@@ -18,12 +18,18 @@ public sealed class CloudSyncSettingsSmokeTests
         session.ResizeMainWindow(width: 1400, height: 900);
         NavigateToDataStorageSettings(session, appData);
 
-        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ProviderPicker", TimeSpan.FromSeconds(10)));
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ConnectionStatus", TimeSpan.FromSeconds(5)));
         Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.TransferStatus", TimeSpan.FromSeconds(5)));
-        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ConnectSelected", TimeSpan.FromSeconds(5)));
-        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.SyncNow", TimeSpan.FromSeconds(5)));
-        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.Disconnect", TimeSpan.FromSeconds(5)));
+        Assert.False(session.IsOnscreen("DataStorage.CloudSync.SyncNow", TimeSpan.FromMilliseconds(500)));
+        Assert.False(session.IsOnscreen("DataStorage.CloudSync.Disable", TimeSpan.FromMilliseconds(500)));
+        Assert.False(session.IsOnscreen("DataStorage.CloudSync.Forget", TimeSpan.FromMilliseconds(500)));
+        var editButton = FindAndScrollIntoView(session, "DataStorage.CloudSync.Edit", TimeSpan.FromSeconds(5));
+        session.ActivateElement(editButton);
+
+        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.ProviderPicker", TimeSpan.FromSeconds(10)));
+        Assert.NotNull(FindAndScrollIntoView(session, "DataStorage.CloudSync.Apply", TimeSpan.FromSeconds(5)));
+        Assert.False(session.IsOnscreen("DataStorage.CloudSync.Disable", TimeSpan.FromMilliseconds(500)));
+        Assert.False(session.IsOnscreen("DataStorage.CloudSync.Forget", TimeSpan.FromMilliseconds(500)));
 
         SelectCloudSyncProvider(session, "S3 compatible");
         Assert.True(

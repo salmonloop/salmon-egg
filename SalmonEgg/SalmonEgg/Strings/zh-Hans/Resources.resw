@@ -1375,16 +1375,16 @@
     <value>配置云同步</value>
   </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
-    <value>云同步 provider</value>
+    <value>云同步服务</value>
   </data>
   <data name="DataStorage_CloudSyncDescription.Text" xml:space="preserve">
-    <value>将完整配置目录和已保存凭据同步到所选云端。凭据会包含在云端配置包中。</value>
+    <value>在设备之间同步应用配置。</value>
   </data>
   <data name="DataStorage_CloudSyncProviderSelectionDescription.Text" xml:space="preserve">
-    <value>一次只能启用一个 provider；连接新的 provider 会替换当前云同步目标。</value>
+    <value>一次只能使用一个云服务；选择其他服务会替换当前同步目标。</value>
   </data>
   <data name="DataStorage_CloudSyncProviderPicker.Header" xml:space="preserve">
-    <value>Provider</value>
+    <value>云服务</value>
   </data>
   <data name="DataStorage_CloudSyncWebDavFileUrl.Header" xml:space="preserve">
     <value>WebDAV 文件夹 URL</value>
@@ -1405,40 +1405,40 @@
     <value>WebDAV 密码或应用密码</value>
   </data>
   <data name="DataStorage_CloudSyncS3Endpoint.Header" xml:space="preserve">
-    <value>S3 Endpoint</value>
+    <value>S3 服务地址（Endpoint）</value>
   </data>
   <data name="DataStorage_CloudSyncS3Endpoint.PlaceholderText" xml:space="preserve">
     <value>https://s3.example.com</value>
   </data>
   <data name="DataStorage_CloudSyncS3Bucket.Header" xml:space="preserve">
-    <value>Bucket</value>
+    <value>存储桶（Bucket）</value>
   </data>
   <data name="DataStorage_CloudSyncS3Bucket.PlaceholderText" xml:space="preserve">
     <value>salmonegg</value>
   </data>
   <data name="DataStorage_CloudSyncS3Region.Header" xml:space="preserve">
-    <value>Region</value>
+    <value>区域（Region）</value>
   </data>
   <data name="DataStorage_CloudSyncS3Region.PlaceholderText" xml:space="preserve">
     <value>us-east-1</value>
   </data>
   <data name="DataStorage_CloudSyncS3ObjectKey.Header" xml:space="preserve">
-    <value>对象 Key</value>
+    <value>对象路径（Object key）</value>
   </data>
   <data name="DataStorage_CloudSyncS3ObjectKey.PlaceholderText" xml:space="preserve">
     <value>config-sync/salmonegg-config.zip</value>
   </data>
   <data name="DataStorage_CloudSyncS3ObjectKeyDescription.Text" xml:space="preserve">
-    <value>S3 使用对象 Key，不需要创建文件夹。除非需要改对象名称，否则保留默认值即可。</value>
+    <value>配置包在存储桶中的保存路径。通常保留默认值即可。</value>
   </data>
   <data name="DataStorage_CloudSyncS3ForcePathStyle.Header" xml:space="preserve">
-    <value>使用 path-style URL</value>
+    <value>使用路径样式 URL</value>
   </data>
   <data name="DataStorage_CloudSyncS3ForcePathStyle.OffContent" xml:space="preserve">
-    <value>Virtual-hosted</value>
+    <value>虚拟主机样式</value>
   </data>
   <data name="DataStorage_CloudSyncS3ForcePathStyle.OnContent" xml:space="preserve">
-    <value>Path-style</value>
+    <value>路径样式</value>
   </data>
   <data name="DataStorage_CloudSyncS3AccessKeyId.Header" xml:space="preserve">
     <value>Access Key ID</value>
@@ -1457,13 +1457,14 @@
   </data>
   <data name="DataStorage_CloudSyncEdit.Content" xml:space="preserve"><value>编辑连接</value></data>
   <data name="DataStorage_CloudSyncUnsavedChanges.Text" xml:space="preserve"><value>有尚未应用的更改。</value></data>
+  <data name="DataStorage_CloudSyncSecurityNotice.Text" xml:space="preserve"><value>同步包包含可读取的应用配置和登录信息。请仅使用你信任的云存储。</value></data>
   <data name="DataStorage_CloudSyncWebDavPasswordReplacement.Header" xml:space="preserve"><value>新密码（可选）</value></data>
   <data name="DataStorage_CloudSyncWebDavPasswordReplacement.PlaceholderText" xml:space="preserve"><value>留空以继续使用已保存的密码</value></data>
-  <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.Header" xml:space="preserve"><value>新的 Secret Access Key（可选）</value></data>
+  <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.Header" xml:space="preserve"><value>新访问密钥（Secret Access Key，可选）</value></data>
   <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText" xml:space="preserve"><value>留空以继续使用已保存的密钥</value></data>
   <data name="DataStorage_CloudSyncAdvancedSettings.Header" xml:space="preserve"><value>高级设置</value></data>
-  <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>应用并验证</value></data>
-  <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>关闭同步</value></data>
-  <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>忘记云服务</value></data>
+  <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>保存并同步</value></data>
+  <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>关闭云同步（保留设置）</value></data>
+  <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>移除本机云同步设置</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>取消</value></data>
 </root>

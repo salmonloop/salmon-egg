@@ -138,6 +138,7 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
             return;
         }
 
+        await TryRegisterCacheAsync(application).ConfigureAwait(false);
         foreach (var account in await application.GetAccountsAsync().ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();

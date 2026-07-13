@@ -101,6 +101,76 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task InitializeAsync_WhenTransferHistoryBelongsToAnotherProvider_DoesNotProjectHistory()
+    {
+        await SaveEnabledSettingsAsync(
+            "webdav",
+            new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/config.zip" });
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "s3",
+            RemoteETag = "s3-etag",
+            LastSyncUtc = DateTimeOffset.UtcNow.ToString("O")
+        }, TestContext.Current.CancellationToken);
+        var provider = new FakeProvider("webdav");
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("webdav", coordinator.Current.Configuration.ProviderId);
+        Assert.Null(coordinator.Current.Transfer.LastSuccess);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithoutConfiguredProvider_DoesNotProjectOwnerlessHistory()
+    {
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = string.Empty,
+            RemoteETag = "legacy-etag",
+            LastSyncUtc = DateTimeOffset.UtcNow.ToString("O")
+        }, TestContext.Current.CancellationToken);
+        using var coordinator = CreateCoordinator(new FakeProvider("webdav"));
+
+        await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(coordinator.Current.Configuration.ProviderId);
+        Assert.Null(coordinator.Current.Transfer.LastSuccess);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WhenNewProviderConfigurationFails_DropsPreviousProviderHistory()
+    {
+        await SaveEnabledSettingsAsync(
+            "webdav",
+            new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/config.zip" });
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "webdav",
+            RemoteETag = "webdav-etag",
+            LastSyncUtc = DateTimeOffset.UtcNow.ToString("O")
+        }, TestContext.Current.CancellationToken);
+        var webDav = new FakeProvider("webdav");
+        var s3 = new FakeProvider("s3")
+        {
+            Validation = CloudProviderValidationResult.Failed("Invalid S3 configuration.")
+        };
+        using var coordinator = CreateCoordinator(webDav, s3);
+        await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(coordinator.Current.Transfer.LastSuccess);
+        var settings = await _appSettings.LoadAsync();
+        settings.CloudConfigSync.ProviderId = "s3";
+        settings.CloudConfigSync.ProviderOptions["s3"] = new Dictionary<string, string>();
+        await _appSettings.SaveAsync(settings);
+
+        await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("s3", coordinator.Current.Configuration.ProviderId);
+        Assert.Equal(CloudProviderReadiness.NeedsConfiguration, coordinator.Current.Readiness);
+        Assert.Null(coordinator.Current.Transfer.LastSuccess);
+    }
+
+    [Fact]
     public async Task SyncNowAsync_WhenRemoteMissing_UploadsLocalPackageWithSecrets()
     {
         await SaveEnabledSettingsAsync();
@@ -336,6 +406,29 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task ForgetProviderAsync_WhenActiveProviderHasHistory_ClearsPublishedTransfer()
+    {
+        await SaveEnabledSettingsAsync(
+            "webdav",
+            new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/config.zip" });
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "webdav",
+            RemoteETag = "webdav-etag",
+            LastSyncUtc = DateTimeOffset.UtcNow.ToString("O")
+        }, TestContext.Current.CancellationToken);
+        var provider = new FakeProvider("webdav");
+        using var coordinator = CreateCoordinator(provider);
+        await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.NotNull(coordinator.Current.Transfer.LastSuccess);
+
+        await coordinator.ForgetProviderAsync("webdav", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CloudTransferPhase.Idle, coordinator.Current.Transfer.Phase);
+        Assert.Null(coordinator.Current.Transfer.LastSuccess);
+    }
+
+    [Fact]
     public async Task DisableAsync_CancelsInFlightSyncBeforeItCanUpload()
     {
         await SaveEnabledSettingsAsync();
@@ -566,6 +659,8 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
 
         public CloudCredentialInspection CredentialInspection { get; set; } = new(CloudCredentialState.Available);
 
+        public CloudProviderValidationResult Validation { get; set; } = CloudProviderValidationResult.Success();
+
         public CloudProviderSessionResult SessionResult { get; set; }
 
         public int CreateSessionCount { get; private set; }
@@ -582,8 +677,7 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
 
         public IReadOnlyDictionary<string, CloudSecretUpdate>? ResolvedSecrets { get; set; }
 
-        public CloudProviderValidationResult Validate(IReadOnlyDictionary<string, string> options) =>
-            CloudProviderValidationResult.Success();
+        public CloudProviderValidationResult Validate(IReadOnlyDictionary<string, string> options) => Validation;
 
         public Task<CloudCredentialInspection> InspectCredentialAsync(
             IReadOnlyDictionary<string, string> options,

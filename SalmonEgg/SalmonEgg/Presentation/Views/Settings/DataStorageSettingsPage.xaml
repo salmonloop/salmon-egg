@@ -86,14 +86,14 @@
                                         <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.ConnectionStatus"
                                                    Text="{x:Bind ViewModel.CloudConfig.StatusHeadline, Mode=OneWay}"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.RemoteTarget"
+                                                   AutomationProperties.Name="{x:Bind ViewModel.CloudConfig.ConnectionContextText, Mode=OneWay}"
+                                                   Text="{x:Bind ViewModel.CloudConfig.ConnectionContextText, Mode=OneWay}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="{x:Bind ViewModel.CloudConfig.ConnectionContextText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.TransferStatus"
                                                    Text="{x:Bind ViewModel.CloudConfig.TransferStatusText, Mode=OneWay}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
-                                        <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.RemoteTarget"
-                                                   AutomationProperties.Name="{x:Bind ViewModel.CloudConfig.ActiveRemoteTarget, Mode=OneWay}"
-                                                   Text="{x:Bind ViewModel.CloudConfig.ActiveRemoteTarget, Mode=OneWay}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Visibility="{x:Bind ViewModel.CloudConfig.ActiveRemoteTarget, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         <TextBlock AutomationProperties.AutomationId="DataStorage.CloudSync.Error"
                                                    Text="{x:Bind ViewModel.CloudConfig.ErrorText, Mode=OneWay}"
@@ -110,17 +110,22 @@
                                     <Button x:Uid="DataStorage_CloudSyncNow"
                                             AutomationProperties.AutomationId="DataStorage.CloudSync.SyncNow"
                                             Command="{x:Bind ViewModel.CloudConfig.SyncNowCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanSync, Mode=OneWay}"/>
-                                    <Button x:Uid="DataStorage_CloudSyncEdit"
-                                            AutomationProperties.AutomationId="DataStorage.CloudSync.Edit"
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanSync, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowSyncAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <Button AutomationProperties.AutomationId="DataStorage.CloudSync.Edit"
+                                            Content="{x:Bind ViewModel.CloudConfig.EditActionText, Mode=OneWay}"
                                             Command="{x:Bind ViewModel.CloudConfig.EditCommand}"
-                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanEdit, Mode=OneWay}"/>
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanEdit, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowEditAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 </StackPanel>
 
                                 <StackPanel Spacing="8"
                                             Visibility="{x:Bind ViewModel.CloudConfig.IsEditing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                                     <TextBlock x:Uid="DataStorage_CloudSyncUnsavedChanges"
                                                Visibility="{x:Bind ViewModel.CloudConfig.HasUnsavedChanges, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    <TextBlock x:Uid="DataStorage_CloudSyncSecurityNotice"
+                                               TextWrapping="Wrap"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                     <ComboBox x:Uid="DataStorage_CloudSyncProviderPicker"
                                               AutomationProperties.AutomationId="DataStorage.CloudSync.ProviderPicker"
@@ -139,8 +144,9 @@
                                                  AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavUsername"
                                                  Text="{x:Bind ViewModel.CloudConfig.WebDavUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                         <PasswordBox x:Name="WebDavPasswordBox"
-                                                     x:Uid="DataStorage_CloudSyncWebDavPasswordReplacement"
                                                      AutomationProperties.AutomationId="DataStorage.CloudSync.WebDavPassword"
+                                                     Header="{x:Bind ViewModel.CloudConfig.WebDavPasswordHeaderText, Mode=OneWay}"
+                                                     PlaceholderText="{x:Bind ViewModel.CloudConfig.WebDavPasswordPlaceholderText, Mode=OneWay}"
                                                      PasswordChanged="OnWebDavPasswordChanged"/>
                                         <TextBlock Text="{x:Bind ViewModel.CloudConfig.CredentialStatusText, Mode=OneWay}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
@@ -155,10 +161,12 @@
                                                  Text="{x:Bind ViewModel.CloudConfig.S3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                         <TextBox x:Uid="DataStorage_CloudSyncS3AccessKeyId"
                                                  AutomationProperties.AutomationId="DataStorage.CloudSync.S3AccessKeyId"
+                                                 PlaceholderText="{x:Bind ViewModel.CloudConfig.S3AccessKeyIdPlaceholderText, Mode=OneWay}"
                                                  Text="{x:Bind ViewModel.CloudConfig.S3AccessKeyId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                         <PasswordBox x:Name="S3SecretAccessKeyBox"
-                                                     x:Uid="DataStorage_CloudSyncS3SecretAccessKeyReplacement"
                                                      AutomationProperties.AutomationId="DataStorage.CloudSync.S3SecretAccessKey"
+                                                     Header="{x:Bind ViewModel.CloudConfig.S3SecretAccessKeyHeaderText, Mode=OneWay}"
+                                                     PlaceholderText="{x:Bind ViewModel.CloudConfig.S3SecretAccessKeyPlaceholderText, Mode=OneWay}"
                                                      PasswordChanged="OnS3SecretAccessKeyChanged"/>
                                         <TextBlock Text="{x:Bind ViewModel.CloudConfig.CredentialStatusText, Mode=OneWay}"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
@@ -200,11 +208,13 @@
                                             AutomationProperties.AutomationId="DataStorage.CloudSync.Disable"
                                             Command="{x:Bind ViewModel.CloudConfig.DisableCommand}"
                                             IsEnabled="{x:Bind ViewModel.CloudConfig.CanDisable, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowDisableAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                             HorizontalAlignment="Stretch"/>
                                     <Button x:Uid="DataStorage_CloudSyncForget"
                                             AutomationProperties.AutomationId="DataStorage.CloudSync.Forget"
                                             Command="{x:Bind ViewModel.CloudConfig.ForgetCommand}"
                                             IsEnabled="{x:Bind ViewModel.CloudConfig.CanForget, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.ShowRemoveAction, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                             HorizontalAlignment="Stretch"/>
                                 </StackPanel>

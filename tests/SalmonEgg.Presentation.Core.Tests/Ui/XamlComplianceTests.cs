@@ -2125,6 +2125,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("ProgressRing", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.CloudConfig.StatusHeadline", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.CloudConfig.TransferStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.CloudConfig.ConnectionContextText", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.CloudConfig.ActiveRemoteTarget", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("{Binding", xaml, StringComparison.Ordinal);
     }
 

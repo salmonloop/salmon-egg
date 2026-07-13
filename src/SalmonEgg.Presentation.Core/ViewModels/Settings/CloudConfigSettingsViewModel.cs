@@ -82,7 +82,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
     public bool IsEnabled => _snapshot.Configuration.Enabled;
 
-    public bool HasActiveProvider => !string.IsNullOrWhiteSpace(_snapshot.Configuration.ProviderId);
+    public bool HasConfiguredProvider => !string.IsNullOrWhiteSpace(_snapshot.Configuration.ProviderId);
 
     public bool CanSync =>
         IsEnabled && _snapshot.Readiness == CloudProviderReadiness.Ready && !IsBusy;
@@ -91,12 +91,26 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
     public bool CanDisable => IsEnabled && !IsBusy;
 
-    public bool CanForget => HasActiveProvider && !IsBusy;
+    public bool CanForget => HasConfiguredProvider && !IsBusy;
 
     public bool CanApply =>
         !IsBusy &&
         _draftCredential is not (CloudCredentialState.Checking or CloudCredentialState.StoreUnavailable or CloudCredentialState.Faulted) &&
         string.IsNullOrEmpty(ValidationMessage);
+
+    public bool ShowSyncAction => !IsEditing && IsEnabled;
+
+    public bool ShowEditAction => !IsEditing;
+
+    public bool ShowDisableAction => !IsEditing && IsEnabled;
+
+    public bool ShowRemoveAction => !IsEditing && HasConfiguredProvider;
+
+    public string EditActionText => !HasConfiguredProvider
+        ? _localizer["DataStorage_CloudSyncSetupAction"]
+        : IsEnabled
+            ? _localizer["DataStorage_CloudSyncEditAction"]
+            : _localizer["DataStorage_CloudSyncReopenAction"];
 
     public bool IsOneDriveSelected => string.Equals(SelectedProviderId, OneDriveProviderId, StringComparison.OrdinalIgnoreCase);
 
@@ -112,17 +126,20 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
     {
         CloudSyncInitializationState.NotStarted or CloudSyncInitializationState.Loading =>
             _localizer["DataStorage_CloudSyncCheckingStatus"],
+        _ when !HasConfiguredProvider => _localizer["DataStorage_CloudSyncNotConfiguredHeadline"],
         _ when !_snapshot.Configuration.Enabled => _localizer["DataStorage_CloudSyncDisabledHeadline"],
         _ when _snapshot.Readiness == CloudProviderReadiness.Ready => string.Format(
-            CultureInfo.CurrentCulture,
+            CultureInfo.CurrentUICulture,
             _localizer["DataStorage_CloudSyncEnabledHeadline"],
-            ActiveProviderDisplayName),
+            ConfiguredServiceDisplayName),
         _ when _snapshot.Readiness == CloudProviderReadiness.AuthenticationRequired =>
             _localizer["DataStorage_CloudSyncAuthenticationRequiredHeadline"],
         _ when _snapshot.Readiness == CloudProviderReadiness.NeedsConfiguration =>
             _localizer["DataStorage_CloudSyncNeedsConfigurationHeadline"],
         _ when _snapshot.Readiness == CloudProviderReadiness.Unavailable =>
             _localizer["DataStorage_CloudSyncUnavailableHeadline"],
+        _ when _snapshot.Readiness == CloudProviderReadiness.Faulted =>
+            _localizer["DataStorage_CloudSyncFaultedHeadline"],
         _ => _localizer["DataStorage_CloudSyncCheckingStatus"]
     };
 
@@ -130,16 +147,6 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
     {
         get
         {
-            if (_snapshot.Transfer.Phase == CloudTransferPhase.Syncing)
-            {
-                return _localizer["DataStorage_CloudSyncComparing"];
-            }
-
-            if (_snapshot.Transfer.Phase == CloudTransferPhase.Failed)
-            {
-                return _localizer["DataStorage_CloudSyncTransferAttemptFailed"];
-            }
-
             var success = _snapshot.Transfer.LastSuccess;
             if (success is null)
             {
@@ -154,7 +161,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
                 _ => _localizer["DataStorage_CloudSyncLastSucceeded"]
             };
             return string.Format(
-                CultureInfo.CurrentCulture,
+                CultureInfo.CurrentUICulture,
                 _localizer["DataStorage_CloudSyncTransferWithTime"],
                 outcome,
                 success.CompletedAt.ToLocalTime());
@@ -185,11 +192,65 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         _ => string.Empty
     };
 
-    public string ActiveProviderDisplayName => GetProviderDisplayName(_snapshot.Configuration.ProviderId);
+    public string WebDavPasswordHeaderText => _draftCredential == CloudCredentialState.Available
+        ? _localizer["DataStorage_CloudSyncWebDavPasswordSavedHeader"]
+        : _localizer["DataStorage_CloudSyncWebDavPasswordHeader"];
 
-    public string ActiveRemoteTarget => FormatRemoteTarget(
-        _snapshot.Configuration.ProviderId,
-        _snapshot.Configuration.Options);
+    public string WebDavPasswordPlaceholderText => _draftCredential switch
+    {
+        CloudCredentialState.Available => _localizer["DataStorage_CloudSyncWebDavPasswordSavedPlaceholder"],
+        CloudCredentialState.Missing => _localizer["DataStorage_CloudSyncWebDavPasswordMissingPlaceholder"],
+        _ => string.Empty
+    };
+
+    public string S3AccessKeyIdPlaceholderText => _draftCredential switch
+    {
+        CloudCredentialState.Available => _localizer["DataStorage_CloudSyncS3AccessKeyIdSavedPlaceholder"],
+        CloudCredentialState.Missing => _localizer["DataStorage_CloudSyncS3AccessKeyIdMissingPlaceholder"],
+        _ => string.Empty
+    };
+
+    public string S3SecretAccessKeyHeaderText => _draftCredential == CloudCredentialState.Available
+        ? _localizer["DataStorage_CloudSyncS3SecretAccessKeySavedHeader"]
+        : _localizer["DataStorage_CloudSyncS3SecretAccessKeyHeader"];
+
+    public string S3SecretAccessKeyPlaceholderText => _draftCredential switch
+    {
+        CloudCredentialState.Available => _localizer["DataStorage_CloudSyncS3SecretAccessKeySavedPlaceholder"],
+        CloudCredentialState.Missing => _localizer["DataStorage_CloudSyncS3SecretAccessKeyMissingPlaceholder"],
+        _ => string.Empty
+    };
+
+    public string ConfiguredServiceDisplayName => GetProviderDisplayName(_snapshot.Configuration.ProviderId);
+
+    public string ConnectionContextText
+    {
+        get
+        {
+            if (!HasConfiguredProvider)
+            {
+                return string.Empty;
+            }
+
+            if (!IsEnabled)
+            {
+                return string.Format(
+                    CultureInfo.CurrentUICulture,
+                    _localizer["DataStorage_CloudSyncSavedConnectionContext"],
+                    ConfiguredServiceDisplayName);
+            }
+
+            var target = FormatRemoteTarget(
+                _snapshot.Configuration.ProviderId,
+                _snapshot.Configuration.Options);
+            return string.IsNullOrWhiteSpace(target)
+                ? string.Empty
+                : string.Format(
+                    CultureInfo.CurrentUICulture,
+                    _localizer["DataStorage_CloudSyncTargetContext"],
+                    target);
+        }
+    }
 
     public string ValidationMessage
     {
@@ -246,6 +307,10 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasUnsavedChanges))]
+    [NotifyPropertyChangedFor(nameof(ShowSyncAction))]
+    [NotifyPropertyChangedFor(nameof(ShowEditAction))]
+    [NotifyPropertyChangedFor(nameof(ShowDisableAction))]
+    [NotifyPropertyChangedFor(nameof(ShowRemoveAction))]
     private bool _isEditing;
 
     [ObservableProperty]
@@ -344,6 +409,11 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
             return;
         }
 
+        if (!await ConfirmProviderActivationAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
         await _coordinator.ApplyAndActivateAsync(CreateDraft()).ConfigureAwait(true);
         if (_coordinator.Current.Readiness == CloudProviderReadiness.Ready &&
             _coordinator.Current.Transfer.Phase == CloudTransferPhase.Succeeded)
@@ -370,8 +440,10 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         }
 
         var confirmed = await _ui.ConfirmAsync(
-            _localizer["DataStorage_CloudSyncForgetTitle"],
-            _localizer["DataStorage_CloudSyncForgetMessage"],
+            _localizer["DataStorage_CloudSyncForgetTitle", ConfiguredServiceDisplayName],
+            string.Equals(_snapshot.Configuration.ProviderId, OneDriveProviderId, StringComparison.OrdinalIgnoreCase)
+                ? _localizer["DataStorage_CloudSyncForgetOneDriveMessage"]
+                : _localizer["DataStorage_CloudSyncForgetMessage"],
             _localizer["DataStorage_CloudSyncForgetPrimary"],
             _localizer["Common_Cancel"]).ConfigureAwait(true);
         if (confirmed)
@@ -383,6 +455,36 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
     [RelayCommand]
     private Task RetryCredentialCheckAsync() => RefreshCredentialAsync(TimeSpan.Zero);
+
+    private Task<bool> ConfirmProviderActivationAsync()
+    {
+        var selectedService = GetProviderDisplayName(SelectedProviderId);
+        if (!HasConfiguredProvider)
+        {
+            return _ui.ConfirmAsync(
+                _localizer["DataStorage_CloudSyncActivationConfirmTitle", selectedService],
+                _localizer["DataStorage_CloudSyncActivationConfirmMessage", selectedService],
+                _localizer["DataStorage_CloudSyncActivationConfirmPrimary"],
+                _localizer["Common_Cancel"]);
+        }
+
+        if (string.Equals(
+                _snapshot.Configuration.ProviderId,
+                SelectedProviderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(true);
+        }
+
+        return _ui.ConfirmAsync(
+            _localizer["DataStorage_CloudSyncSwitchConfirmTitle", selectedService],
+            _localizer[
+                "DataStorage_CloudSyncSwitchConfirmMessage",
+                ConfiguredServiceDisplayName,
+                selectedService],
+            _localizer["DataStorage_CloudSyncSwitchConfirmPrimary"],
+            _localizer["Common_Cancel"]);
+    }
 
     private CloudProviderDraft CreateDraft()
     {
@@ -459,19 +561,25 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsChecking));
         OnPropertyChanged(nameof(IsEnabled));
-        OnPropertyChanged(nameof(HasActiveProvider));
+        OnPropertyChanged(nameof(HasConfiguredProvider));
         OnPropertyChanged(nameof(CanSync));
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanDisable));
         OnPropertyChanged(nameof(CanForget));
         OnPropertyChanged(nameof(CanApply));
+        OnPropertyChanged(nameof(ShowSyncAction));
+        OnPropertyChanged(nameof(ShowEditAction));
+        OnPropertyChanged(nameof(ShowDisableAction));
+        OnPropertyChanged(nameof(ShowRemoveAction));
+        OnPropertyChanged(nameof(EditActionText));
         OnPropertyChanged(nameof(StatusHeadline));
         OnPropertyChanged(nameof(TransferStatusText));
         OnPropertyChanged(nameof(ErrorText));
         OnPropertyChanged(nameof(HasError));
-        OnPropertyChanged(nameof(ActiveProviderDisplayName));
-        OnPropertyChanged(nameof(ActiveRemoteTarget));
+        OnPropertyChanged(nameof(ConfiguredServiceDisplayName));
+        OnPropertyChanged(nameof(ConnectionContextText));
         OnPropertyChanged(nameof(CredentialStatusText));
+        NotifyCredentialInputProjectionChanged();
     }
 
     private void LoadDraftFromSnapshot()
@@ -494,6 +602,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         S3SecretAccessKey = string.Empty;
         _draftCredential = _snapshot.Credential;
         OnPropertyChanged(nameof(CredentialStatusText));
+        NotifyCredentialInputProjectionChanged();
         OnPropertyChanged(nameof(IsChecking));
         OnPropertyChanged(nameof(CanRetryCredentialCheck));
         OnPropertyChanged(nameof(ValidationMessage));
@@ -523,6 +632,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         {
             _draftCredential = CloudCredentialState.Checking;
             OnPropertyChanged(nameof(CredentialStatusText));
+            NotifyCredentialInputProjectionChanged();
             OnPropertyChanged(nameof(IsChecking));
             OnPropertyChanged(nameof(CanRetryCredentialCheck));
             if (delay > TimeSpan.Zero)
@@ -541,6 +651,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
             _draftCredential = inspection.State;
             OnPropertyChanged(nameof(CredentialStatusText));
+            NotifyCredentialInputProjectionChanged();
             OnPropertyChanged(nameof(IsChecking));
             OnPropertyChanged(nameof(CanRetryCredentialCheck));
             OnPropertyChanged(nameof(ValidationMessage));
@@ -549,6 +660,15 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+    }
+
+    private void NotifyCredentialInputProjectionChanged()
+    {
+        OnPropertyChanged(nameof(WebDavPasswordHeaderText));
+        OnPropertyChanged(nameof(WebDavPasswordPlaceholderText));
+        OnPropertyChanged(nameof(S3AccessKeyIdPlaceholderText));
+        OnPropertyChanged(nameof(S3SecretAccessKeyHeaderText));
+        OnPropertyChanged(nameof(S3SecretAccessKeyPlaceholderText));
     }
 
     private bool DraftMatchesActiveConfiguration()

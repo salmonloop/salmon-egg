@@ -128,6 +128,26 @@ public sealed class CloudSyncProviderContractTests
     }
 
     [Fact]
+    public void DataStoragePage_CloudSyncActionsDescribeTheirEffects()
+    {
+        var expectations = new[]
+        {
+            new { Path = @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw", Apply = "保存并同步", Disable = "关闭云同步（保留设置）", Remove = "移除本机云同步设置" },
+            new { Path = @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw", Apply = "Save and sync", Disable = "Turn off sync (keep settings)", Remove = "Remove cloud sync setup" },
+            new { Path = @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw", Apply = "Save and sync", Disable = "Turn off sync (keep settings)", Remove = "Remove cloud sync setup" }
+        };
+
+        foreach (var expectation in expectations)
+        {
+            var resources = XDocument.Parse(TestSourceFiles.ReadAllText(expectation.Path));
+
+            Assert.Equal(expectation.Apply, GetResourceValue(resources, "DataStorage_CloudSyncApplyAndVerify.Content", expectation.Path));
+            Assert.Equal(expectation.Disable, GetResourceValue(resources, "DataStorage_CloudSyncDisable.Content", expectation.Path));
+            Assert.Equal(expectation.Remove, GetResourceValue(resources, "DataStorage_CloudSyncForget.Content", expectation.Path));
+        }
+    }
+
+    [Fact]
     public void DataStoragePage_CloudSyncSmokeHasLocalizedUxCopy()
     {
         var requiredCoreKeys = new[]
@@ -184,7 +204,9 @@ public sealed class CloudSyncProviderContractTests
             "DataStorage_CloudSyncS3AccessKeyId.Header",
             "DataStorage_CloudSyncS3SecretAccessKey.Header",
             "DataStorage_CloudSyncNow.Content",
-            "DataStorage_CloudSyncDisconnect.Content"
+            "DataStorage_CloudSyncApplyAndVerify.Content",
+            "DataStorage_CloudSyncDisable.Content",
+            "DataStorage_CloudSyncForget.Content"
         };
 
         foreach (var resourcePath in new[]
