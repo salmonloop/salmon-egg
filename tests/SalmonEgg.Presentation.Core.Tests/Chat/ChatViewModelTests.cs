@@ -13815,6 +13815,28 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
+            var overlayShown = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var overlayHiddenAfterShown = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var hasShownOverlay = false;
+            void OnViewModelPropertyChanged(object? _, System.ComponentModel.PropertyChangedEventArgs args)
+            {
+                if (!string.Equals(args.PropertyName, nameof(ChatViewModel.IsOverlayVisible), StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (fixture.ViewModel.IsOverlayVisible)
+                {
+                    hasShownOverlay = true;
+                    overlayShown.TrySetResult(null);
+                }
+                else if (hasShownOverlay)
+                {
+                    overlayHiddenAfterShown.TrySetResult(null);
+                }
+            }
+
+            fixture.ViewModel.PropertyChanged += OnViewModelPropertyChanged;
             fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
             var restoreTask = fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             await syncContext.RunUntilCompletedAsync(restoreTask);
@@ -13853,12 +13875,8 @@ public partial class ChatViewModelTests
             syncContext.RunAll();
 
             var remoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
-
-            await WaitForConditionAsync(() =>
-            {
-                syncContext.RunAll();
-                return Task.FromResult(fixture.ViewModel.IsOverlayVisible || remoteSwitchTask.IsCompleted);
-            });
+            await syncContext.RunUntilCompletedAsync(
+                overlayShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
             Assert.False(remoteSwitchTask.IsCompleted);
 
@@ -13866,14 +13884,17 @@ public partial class ChatViewModelTests
             await syncContext.RunUntilCompletedAsync(localSwitchTask);
 
             Assert.True(await localSwitchTask);
-            await WaitForConditionAsync(async () =>
+            syncContext.RunAll();
+            if (fixture.ViewModel.IsOverlayVisible)
             {
-                syncContext.RunAll();
-                var state = await fixture.GetStateAsync();
-                return string.Equals(state.HydratedConversationId, "conv-local", StringComparison.Ordinal)
-                    && string.Equals(fixture.ViewModel.CurrentSessionId, "conv-local", StringComparison.Ordinal)
-                    && !fixture.ViewModel.IsOverlayVisible;
-            });
+                await syncContext.RunUntilCompletedAsync(
+                    overlayHiddenAfterShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            }
+
+            var stateAfterLocalSwitch = await fixture.GetStateAsync();
+            Assert.Equal("conv-local", stateAfterLocalSwitch.HydratedConversationId);
+            Assert.Equal("conv-local", fixture.ViewModel.CurrentSessionId);
+            Assert.False(fixture.ViewModel.IsOverlayVisible);
 
             allowConnectCompletion.TrySetResult(null);
             await syncContext.RunUntilCompletedAsync(remoteSwitchTask);
@@ -13883,6 +13904,7 @@ public partial class ChatViewModelTests
 
             var finalState = await fixture.GetStateAsync();
             Assert.Equal("conv-local", finalState.HydratedConversationId);
+            fixture.ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
     }
 
