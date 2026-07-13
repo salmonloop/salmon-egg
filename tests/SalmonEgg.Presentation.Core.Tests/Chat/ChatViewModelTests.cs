@@ -13837,74 +13837,80 @@ public partial class ChatViewModelTests
             }
 
             fixture.ViewModel.PropertyChanged += OnViewModelPropertyChanged;
-            fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
-            var restoreTask = fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
-            await syncContext.RunUntilCompletedAsync(restoreTask);
-
-            fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-                ConversationId: "conv-local",
-                Transcript:
-                [
-                    new ConversationMessageSnapshot
-                    {
-                        Id = "local-1",
-                        Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                        IsOutgoing = true,
-                        ContentType = "text",
-                        TextContent = "local"
-                    }
-                ],
-                Plan: [],
-                ShowPlanPanel: false,
-                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-            fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
-                ConversationId: "conv-remote",
-                Transcript: [],
-                Plan: [],
-                ShowPlanPanel: false,
-                CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
-                LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
-
-            await fixture.UpdateStateAsync(state => state with
+            try
             {
-                HydratedConversationId = "conv-local",
-                Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
-                    .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
-            });
-            syncContext.RunAll();
+                fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
+                var restoreTask = fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+                await syncContext.RunUntilCompletedAsync(restoreTask);
 
-            var remoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
-            await syncContext.RunUntilCompletedAsync(
-                overlayShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+                fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                    ConversationId: "conv-local",
+                    Transcript:
+                    [
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "local-1",
+                            Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                            IsOutgoing = true,
+                            ContentType = "text",
+                            TextContent = "local"
+                        }
+                    ],
+                    Plan: [],
+                    ShowPlanPanel: false,
+                    CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+                fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                    ConversationId: "conv-remote",
+                    Transcript: [],
+                    Plan: [],
+                    ShowPlanPanel: false,
+                    CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                    LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
 
-            Assert.False(remoteSwitchTask.IsCompleted);
+                await fixture.UpdateStateAsync(state => state with
+                {
+                    HydratedConversationId = "conv-local",
+                    Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                        .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+                });
+                syncContext.RunAll();
 
-            var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
-            await syncContext.RunUntilCompletedAsync(localSwitchTask);
-
-            Assert.True(await localSwitchTask);
-            syncContext.RunAll();
-            if (fixture.ViewModel.IsOverlayVisible)
-            {
+                var remoteSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
                 await syncContext.RunUntilCompletedAsync(
-                    overlayHiddenAfterShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+                    overlayShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+
+                Assert.False(remoteSwitchTask.IsCompleted);
+
+                var localSwitchTask = fixture.ViewModel.SwitchConversationAsync("conv-local", TestContext.Current.CancellationToken);
+                await syncContext.RunUntilCompletedAsync(localSwitchTask);
+
+                Assert.True(await localSwitchTask);
+                syncContext.RunAll();
+                if (fixture.ViewModel.IsOverlayVisible)
+                {
+                    await syncContext.RunUntilCompletedAsync(
+                        overlayHiddenAfterShown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+                }
+
+                var stateAfterLocalSwitch = await fixture.GetStateAsync();
+                Assert.Equal("conv-local", stateAfterLocalSwitch.HydratedConversationId);
+                Assert.Equal("conv-local", fixture.ViewModel.CurrentSessionId);
+                Assert.False(fixture.ViewModel.IsOverlayVisible);
+
+                allowConnectCompletion.TrySetResult(null);
+                await syncContext.RunUntilCompletedAsync(remoteSwitchTask);
+
+                Assert.False(await remoteSwitchTask);
+                syncContext.RunAll();
+
+                var finalState = await fixture.GetStateAsync();
+                Assert.Equal("conv-local", finalState.HydratedConversationId);
             }
-
-            var stateAfterLocalSwitch = await fixture.GetStateAsync();
-            Assert.Equal("conv-local", stateAfterLocalSwitch.HydratedConversationId);
-            Assert.Equal("conv-local", fixture.ViewModel.CurrentSessionId);
-            Assert.False(fixture.ViewModel.IsOverlayVisible);
-
-            allowConnectCompletion.TrySetResult(null);
-            await syncContext.RunUntilCompletedAsync(remoteSwitchTask);
-
-            Assert.False(await remoteSwitchTask);
-            syncContext.RunAll();
-
-            var finalState = await fixture.GetStateAsync();
-            Assert.Equal("conv-local", finalState.HydratedConversationId);
-            fixture.ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            finally
+            {
+                fixture.ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            }
         }
     }
 
