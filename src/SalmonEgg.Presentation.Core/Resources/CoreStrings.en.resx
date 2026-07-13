@@ -726,4 +726,34 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
     <value>Last sync: {0:g}</value>
   </data>
+  <data name="Common_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="DataStorage_CloudSyncCheckingStatus" xml:space="preserve"><value>Checking cloud sync status…</value></data>
+  <data name="DataStorage_CloudSyncDisabledHeadline" xml:space="preserve"><value>Configuration cloud sync is off</value></data>
+  <data name="DataStorage_CloudSyncEnabledHeadline" xml:space="preserve"><value>Configuration cloud sync is on with {0}</value></data>
+  <data name="DataStorage_CloudSyncAuthenticationRequiredHeadline" xml:space="preserve"><value>Cloud sync credentials need attention</value></data>
+  <data name="DataStorage_CloudSyncNeedsConfigurationHeadline" xml:space="preserve"><value>Cloud sync needs to be configured</value></data>
+  <data name="DataStorage_CloudSyncUnavailableHeadline" xml:space="preserve"><value>Cloud sync is temporarily unavailable</value></data>
+  <data name="DataStorage_CloudSyncComparing" xml:space="preserve"><value>Comparing local and cloud configuration…</value></data>
+  <data name="DataStorage_CloudSyncTransferAttemptFailed" xml:space="preserve"><value>The latest sync attempt failed</value></data>
+  <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>No sync has completed yet</value></data>
+  <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>Local configuration uploaded</value></data>
+  <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>Cloud configuration applied</value></data>
+  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>Cloud configuration applied; local backup retained</value></data>
+  <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>Sync succeeded</value></data>
+  <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>{0} · {1:g}</value></data>
+  <data name="DataStorage_CloudSyncCredentialChecking" xml:space="preserve"><value>Checking saved credentials…</value></data>
+  <data name="DataStorage_CloudSyncCredentialAvailable" xml:space="preserve"><value>Saved credentials found. Leave password or key fields blank to keep using them.</value></data>
+  <data name="DataStorage_CloudSyncCredentialNotRequired" xml:space="preserve"><value>This provider does not require a saved password or key.</value></data>
+  <data name="DataStorage_CloudSyncCredentialMissingAction" xml:space="preserve"><value>No saved credentials were found. Enter credentials, then apply.</value></data>
+  <data name="DataStorage_CloudSyncCredentialStoreUnavailable" xml:space="preserve"><value>Secure credential storage is unavailable. Try again.</value></data>
+  <data name="DataStorage_CloudSyncCredentialCheckFailed" xml:space="preserve"><value>Saved credentials could not be checked. Try again.</value></data>
+  <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>The cloud provider rejected these credentials. Update them and try again.</value></data>
+  <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>The cloud provider could not be reached. Check your network and try again.</value></data>
+  <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>The cloud configuration conflict could not be resolved. Local configuration was not replaced.</value></data>
+  <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>The configuration sync package could not be created or applied.</value></data>
+  <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>OneDrive is not configured in this build. Choose another provider.</value></data>
+  <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>Forget cloud sync configuration?</value></data>
+  <data name="DataStorage_CloudSyncForgetMessage" xml:space="preserve"><value>This removes the current provider configuration and saved credentials. The cloud package is not deleted.</value></data>
+  <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>Forget provider</value></data>
+  <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>The saved cloud sync configuration is invalid. Edit the connection and check the required fields.</value></data>
 </root>

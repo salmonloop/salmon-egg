@@ -13,6 +13,7 @@ public sealed class ConfigurationSecretSnapshotService
 {
     private const string BearerTokenMode = "bearer_token";
     private const string ApiKeyMode = "api_key";
+    private const string CloudProviderProfilePrefix = "cloud-provider/";
 
     private readonly ISecureStorage _secureStorage;
     private readonly IAppFileStore _fileStore;
@@ -30,6 +31,12 @@ public sealed class ConfigurationSecretSnapshotService
     }
 
     public async Task<ConfigurationSecretSnapshot> ExportAsync(CancellationToken cancellationToken = default)
+        => await ExportAsync(null, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<ConfigurationSecretSnapshot> ExportAsync(
+        string? providerId,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
+        CancellationToken cancellationToken = default)
     {
         var snapshot = new ConfigurationSecretSnapshot();
 
@@ -56,6 +63,21 @@ public sealed class ConfigurationSecretSnapshotService
             }
         }
 
+        foreach (var registration in CloudConfigSecureStorageKeys.Registrations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var value = await ResolveCloudSecretAsync(
+                    registration,
+                    providerId,
+                    secretOverrides)
+                .ConfigureAwait(false);
+            AddSecret(
+                snapshot.Entries,
+                CloudProviderProfilePrefix + registration.ProviderId,
+                registration.SecretName,
+                value);
+        }
+
         return snapshot;
     }
 
@@ -72,6 +94,17 @@ public sealed class ConfigurationSecretSnapshotService
             }
 
             var kind = entry.Kind.Trim().ToLowerInvariant();
+            if (entry.ProfileId.StartsWith(CloudProviderProfilePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var providerId = entry.ProfileId.Substring(CloudProviderProfilePrefix.Length).Trim();
+                if (CloudConfigSecureStorageKeys.TryGetStorageKey(providerId, kind, out var storageKey))
+                {
+                    await _secureStorage.SaveAsync(storageKey, entry.Value ?? string.Empty).ConfigureAwait(false);
+                }
+
+                continue;
+            }
+
             if (kind == BearerTokenMode)
             {
                 await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetTokenKey(entry.ProfileId.Trim()), entry.Value ?? string.Empty)
@@ -85,6 +118,22 @@ public sealed class ConfigurationSecretSnapshotService
                     .ConfigureAwait(false);
             }
         }
+    }
+
+    private async Task<string?> ResolveCloudSecretAsync(
+        CloudConfigSecretRegistration registration,
+        string? providerId,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides)
+    {
+        if (!string.Equals(registration.ProviderId, providerId, StringComparison.OrdinalIgnoreCase) ||
+            secretOverrides is null ||
+            !secretOverrides.TryGetValue(registration.SecretName, out var update) ||
+            update.Kind == CloudSecretUpdateKind.KeepExisting)
+        {
+            return await _secureStorage.LoadAsync(registration.StorageKey).ConfigureAwait(false);
+        }
+
+        return update.Kind == CloudSecretUpdateKind.Clear ? null : update.Value;
     }
 
     private async Task<ServerConfigurationYaml?> TryLoadServerYamlAsync(string path, CancellationToken cancellationToken)

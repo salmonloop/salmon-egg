@@ -145,13 +145,16 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         Func<long, CancellationToken, Task> operation,
         CancellationToken cancellationToken)
     {
-        var intentVersion = Interlocked.Increment(ref _intentVersion);
         var intentCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        long intentVersion;
         lock (_intentGate)
         {
+            intentVersion = ++_intentVersion;
             _activeIntentCts?.Cancel();
             _activeIntentCts = intentCts;
         }
+
+        CancelPendingAutoSync();
 
         var operationToken = intentCts.Token;
         var gateHeld = false;
@@ -263,35 +266,17 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             return;
         }
 
-        var sessionResult = await provider.CreateSessionAsync(
-            configuration.Options,
-            new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase),
-            interactive: false,
-            cancellationToken).ConfigureAwait(false);
-        if (!sessionResult.Succeeded)
-        {
-            PublishConfigurationFailure(
-                intentVersion,
-                configuration,
-                ToReadiness(sessionResult.Credential),
-                sessionResult.Failure!);
-            return;
-        }
-
         PublishIfLatest(intentVersion, Current with
         {
             Initialization = CloudSyncInitializationState.Ready,
             Configuration = configuration,
-            Credential = sessionResult.Credential,
-            Readiness = CloudProviderReadiness.Checking,
-            Transfer = Current.Transfer with { Phase = CloudTransferPhase.Syncing, Failure = null }
+            Credential = credential.State,
+            Readiness = CloudProviderReadiness.Ready,
+            Transfer = await LoadIdleTransferStateAsync(cancellationToken).ConfigureAwait(false),
+            Operation = null,
+            LastFailure = null
         });
-        await SynchronizeAndPublishAsync(
-            intentVersion,
-            configuration,
-            sessionResult.Session!,
-            settings.CloudConfigSync.IncludeSecrets,
-            cancellationToken).ConfigureAwait(false);
+        ScheduleAutoSync(AutoSyncDebounce);
     }
 
     private async Task ApplyAndActivateCoreAsync(
@@ -330,10 +315,20 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             return;
         }
 
+        var resolvedSecrets = await provider.ResolveSecretUpdatesAsync(draft.Secrets, cancellationToken)
+            .ConfigureAwait(false);
+        var packageSettings = await _appSettings.LoadAsync().ConfigureAwait(false);
+        var candidate = CreateCandidateConfiguration(
+            packageSettings.CloudConfigSync,
+            provider.Descriptor.ProviderId,
+            normalizedOptions);
+        ApplyCandidateConfiguration(packageSettings, candidate, draft.IncludeSecrets);
         var transfer = await SynchronizeAsync(
             sessionResult.Session!,
             provider.Descriptor.ProviderId,
             draft.IncludeSecrets,
+            packageSettings,
+            resolvedSecrets,
             cancellationToken).ConfigureAwait(false);
         if (transfer.Phase == CloudTransferPhase.Failed)
         {
@@ -349,27 +344,33 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             return;
         }
 
-        // A successful synchronization may have restored the authoritative remote app settings.
-        // Reload before committing the cloud-sync subtree so those restored values are preserved.
-        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
-        var nextRevision = Math.Max(settings.CloudConfigSync.Revision, Current.Configuration.Revision) + 1;
-        var candidate = new CloudSyncConfiguration(true, provider.Descriptor.ProviderId, nextRevision, normalizedOptions);
-        var previous = settings.CloudConfigSync;
-        var providerOptions = CloneProviderOptions(previous.ProviderOptions);
-        providerOptions[candidate.ProviderId] = new Dictionary<string, string>(normalizedOptions, StringComparer.OrdinalIgnoreCase);
-        settings.CloudConfigSync = new CloudConfigSyncSettings
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsLatestIntent(intentVersion))
         {
-            Enabled = true,
-            ProviderId = candidate.ProviderId,
-            Revision = candidate.Revision,
-            IncludeSecrets = draft.IncludeSecrets,
-            ProviderOptions = providerOptions
-        };
+            return;
+        }
 
-        await SaveSettingsAsync(settings).ConfigureAwait(false);
+        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
+        var previous = settings.CloudConfigSync;
+        candidate = CreateCandidateConfiguration(previous, provider.Descriptor.ProviderId, normalizedOptions);
+        ApplyCandidateConfiguration(settings, candidate, draft.IncludeSecrets);
+        await using var secretTransaction = await provider.BeginSecretUpdateAsync(resolvedSecrets, cancellationToken)
+            .ConfigureAwait(false);
         try
         {
-            await provider.CommitSecretsAsync(draft.Secrets, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsLatestIntent(intentVersion))
+            {
+                return;
+            }
+
+            await SaveSettingsAsync(settings).ConfigureAwait(false);
+            if (!TryCompleteLatestIntent(intentVersion, secretTransaction))
+            {
+                settings.CloudConfigSync = previous;
+                await SaveSettingsAsync(settings).ConfigureAwait(false);
+                return;
+            }
         }
         catch
         {
@@ -495,6 +496,8 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             session,
             configuration.ProviderId,
             includeSecrets,
+            null,
+            null,
             cancellationToken).ConfigureAwait(false);
         PublishIfLatest(intentVersion, Current with
         {
@@ -513,16 +516,26 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         ICloudConfigStorageSession session,
         string providerId,
         bool includeSecrets,
+        AppSettings? settingsOverride,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
         CancellationToken cancellationToken)
     {
         try
         {
             var state = await _stateStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var previousSuccess = CreateLastSuccess(state);
             var remote = await session.TryDownloadAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (remote is null)
             {
-                return await UploadLocalAsync(session, state, providerId, null, includeSecrets, cancellationToken)
+                return await UploadLocalAsync(
+                        session,
+                        state,
+                        providerId,
+                        null,
+                        includeSecrets,
+                        settingsOverride,
+                        secretOverrides,
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -549,6 +562,8 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
                 providerId,
                 remote.ETag,
                 includeSecrets,
+                settingsOverride,
+                secretOverrides,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -570,13 +585,23 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         string providerId,
         string? expectedETag,
         bool includeSecrets,
+        AppSettings? settingsOverride,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
         CancellationToken cancellationToken)
     {
-        var package = await _packageService.CreatePackageAsync(includeSecrets, cancellationToken).ConfigureAwait(false);
+        var package = await _packageService.CreatePackageAsync(
+                includeSecrets,
+                settingsOverride,
+                providerId,
+                secretOverrides,
+                cancellationToken)
+            .ConfigureAwait(false);
         var upload = await session.UploadAsync(package, expectedETag, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         if (upload.Status == CloudConfigUploadStatus.PreconditionFailed)
         {
             var remote = await session.TryDownloadAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (remote is null)
             {
                 return new CloudTransferState(
@@ -726,6 +751,50 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             option => new Dictionary<string, string>(option.Value, StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
 
+    private CloudSyncConfiguration CreateCandidateConfiguration(
+        CloudConfigSyncSettings current,
+        string providerId,
+        IReadOnlyDictionary<string, string> options)
+    {
+        var nextRevision = Math.Max(current.Revision, Current.Configuration.Revision) + 1;
+        return new CloudSyncConfiguration(true, providerId, nextRevision, options);
+    }
+
+    private static void ApplyCandidateConfiguration(
+        AppSettings settings,
+        CloudSyncConfiguration candidate,
+        bool includeSecrets)
+    {
+        var providerOptions = CloneProviderOptions(settings.CloudConfigSync.ProviderOptions);
+        providerOptions[candidate.ProviderId] = new Dictionary<string, string>(
+            candidate.Options,
+            StringComparer.OrdinalIgnoreCase);
+        settings.CloudConfigSync = new CloudConfigSyncSettings
+        {
+            Enabled = true,
+            ProviderId = candidate.ProviderId,
+            Revision = candidate.Revision,
+            IncludeSecrets = includeSecrets,
+            ProviderOptions = providerOptions
+        };
+    }
+
+    private bool TryCompleteLatestIntent(
+        long intentVersion,
+        ICloudSecretUpdateTransaction secretTransaction)
+    {
+        lock (_intentGate)
+        {
+            if (!IsLatestIntent(intentVersion))
+            {
+                return false;
+            }
+
+            secretTransaction.Complete();
+            return true;
+        }
+    }
+
     private static CloudTransferSuccess? CreateLastSuccess(CloudConfigSyncState state)
     {
         var timestamp = CloudConfigSyncStateStore.ParseLastSync(state.LastSyncUtc);
@@ -806,6 +875,11 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             return;
         }
 
+        ScheduleAutoSync(AutoSyncDebounce);
+    }
+
+    private void ScheduleAutoSync(TimeSpan delay)
+    {
         CancellationToken token;
         lock (_autoSyncGate)
         {
@@ -815,15 +889,45 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             token = _autoSyncCts.Token;
         }
 
-        _ = RunAutoSyncAsync(token);
+        _ = RunAutoSyncAsync(delay, token);
     }
 
-    private async Task RunAutoSyncAsync(CancellationToken cancellationToken)
+    private void CancelPendingAutoSync()
     {
+        lock (_autoSyncGate)
+        {
+            _autoSyncCts?.Cancel();
+            _autoSyncCts?.Dispose();
+            _autoSyncCts = null;
+        }
+    }
+
+    private async Task RunAutoSyncAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var gateHeld = false;
         try
         {
-            await Task.Delay(AutoSyncDebounce, cancellationToken).ConfigureAwait(false);
-            await SyncNowAsync(cancellationToken).ConfigureAwait(false);
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            var intentVersion = Volatile.Read(ref _intentVersion);
+            if (!CanRunAutoSync(Current) ||
+                !await _operationGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            gateHeld = true;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsLatestIntent(intentVersion) || !CanRunAutoSync(Current))
+            {
+                return;
+            }
+
+            PublishIfLatest(intentVersion, Current with
+            {
+                Operation = new CloudSyncOperation(intentVersion, CloudSyncOperationKind.SyncNow, DateTimeOffset.UtcNow),
+                LastFailure = null
+            });
+            await SyncNowCoreAsync(intentVersion, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -832,7 +936,20 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
         {
             _logger.LogError(ex, "Automatic cloud config sync failed");
         }
+        finally
+        {
+            if (gateHeld)
+            {
+                _operationGate.Release();
+            }
+        }
     }
+
+    private static bool CanRunAutoSync(CloudConfigSyncSnapshot snapshot) =>
+        snapshot.Initialization == CloudSyncInitializationState.Ready &&
+        snapshot.Configuration.Enabled &&
+        snapshot.Readiness == CloudProviderReadiness.Ready &&
+        snapshot.Operation is null;
 
     private bool IsUnderConfigRoot(string path)
     {

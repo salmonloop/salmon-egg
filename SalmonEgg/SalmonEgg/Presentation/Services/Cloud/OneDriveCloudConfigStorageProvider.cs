@@ -119,9 +119,16 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
         }
     }
 
-    public Task CommitSecretsAsync(
+    public Task<IReadOnlyDictionary<string, CloudSecretUpdate>> ResolveSecretUpdatesAsync(
         IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
-        CancellationToken cancellationToken = default) => Task.CompletedTask;
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, CloudSecretUpdate>>(
+            new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase));
+
+    public Task<ICloudSecretUpdateTransaction> BeginSecretUpdateAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(CloudSecretUpdateTransaction.None());
 
     public async Task ForgetCredentialsAsync(CancellationToken cancellationToken = default)
     {

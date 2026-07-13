@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Infrastructure.Storage;
@@ -35,11 +37,25 @@ public sealed class ConfigSyncPackageService
     }
 
     public async Task<byte[]> CreatePackageAsync(bool includeSecrets, CancellationToken cancellationToken = default)
+        => await CreatePackageAsync(includeSecrets, null, null, null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<byte[]> CreatePackageAsync(
+        bool includeSecrets,
+        AppSettings? settingsOverride,
+        string? providerId,
+        IReadOnlyDictionary<string, CloudSecretUpdate>? secretOverrides,
+        CancellationToken cancellationToken = default)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             var files = GetConfigFiles().ToList();
+            var appSettingsPath = Path.Combine(_appData.ConfigRootPath, "app.yaml");
+            if (settingsOverride is not null && !files.Contains(appSettingsPath, StringComparer.Ordinal))
+            {
+                files.Add(appSettingsPath);
+            }
+
             var manifest = new ConfigSyncPackageManifest
             {
                 CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
@@ -52,13 +68,24 @@ public sealed class ConfigSyncPackageService
             foreach (var path in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (settingsOverride is not null && string.Equals(path, appSettingsPath, StringComparison.Ordinal))
+                {
+                    await WriteBytesEntryAsync(
+                            archive,
+                            ConfigEntryPrefix + "app.yaml",
+                            Encoding.UTF8.GetBytes(AppSettingsService.Serialize(settingsOverride)),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
                 await WriteFileEntryAsync(archive, ConfigEntryPrefix + ToZipPath(GetRelativeConfigPath(path)), path, cancellationToken)
                     .ConfigureAwait(false);
             }
 
             if (includeSecrets)
             {
-                var snapshot = await _secrets.ExportAsync(cancellationToken).ConfigureAwait(false);
+                var snapshot = await _secrets.ExportAsync(providerId, secretOverrides, cancellationToken).ConfigureAwait(false);
                 await WriteSecretsEntryAsync(archive, snapshot, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -207,6 +234,17 @@ public sealed class ConfigSyncPackageService
         using var input = File.OpenRead(path);
         using var output = entry.Open();
         await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task WriteBytesEntryAsync(
+        ZipArchive archive,
+        string entryName,
+        byte[] content,
+        CancellationToken cancellationToken)
+    {
+        var entry = archive.CreateEntry(entryName, CompressionLevel.Optimal);
+        using var output = entry.Open();
+        await output.WriteAsync(content, cancellationToken).ConfigureAwait(false);
     }
 
     private void ValidateArchive(ZipArchive archive)

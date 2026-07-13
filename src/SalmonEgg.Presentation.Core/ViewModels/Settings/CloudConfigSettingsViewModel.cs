@@ -167,7 +167,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         CloudSyncFailureKind.CredentialStoreUnavailable => _localizer["DataStorage_CloudSyncCredentialStoreUnavailable"],
         CloudSyncFailureKind.Authentication => _localizer["DataStorage_CloudSyncAuthenticationRejected"],
         CloudSyncFailureKind.Network => _localizer["DataStorage_CloudSyncNetworkUnavailable"],
-        CloudSyncFailureKind.Validation => _snapshot.LastFailure.Message,
+        CloudSyncFailureKind.Validation => _localizer["DataStorage_CloudSyncValidationFailed"],
         CloudSyncFailureKind.RemoteConflict => _localizer["DataStorage_CloudSyncConflictFailed"],
         CloudSyncFailureKind.LocalPackage => _localizer["DataStorage_CloudSyncLocalPackageFailed"],
         CloudSyncFailureKind.Unknown => _localizer["DataStorage_CloudSyncStatusFailed"],

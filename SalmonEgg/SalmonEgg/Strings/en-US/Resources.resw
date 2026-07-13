@@ -1455,4 +1455,15 @@
   <data name="DataStorage_CloudSyncDisconnect.Content" xml:space="preserve">
     <value>Disconnect</value>
   </data>
+  <data name="DataStorage_CloudSyncEdit.Content" xml:space="preserve"><value>Edit connection</value></data>
+  <data name="DataStorage_CloudSyncUnsavedChanges.Text" xml:space="preserve"><value>You have unapplied changes.</value></data>
+  <data name="DataStorage_CloudSyncWebDavPasswordReplacement.Header" xml:space="preserve"><value>New password (optional)</value></data>
+  <data name="DataStorage_CloudSyncWebDavPasswordReplacement.PlaceholderText" xml:space="preserve"><value>Leave blank to keep the saved password</value></data>
+  <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.Header" xml:space="preserve"><value>New secret access key (optional)</value></data>
+  <data name="DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText" xml:space="preserve"><value>Leave blank to keep the saved key</value></data>
+  <data name="DataStorage_CloudSyncAdvancedSettings.Header" xml:space="preserve"><value>Advanced settings</value></data>
+  <data name="DataStorage_CloudSyncApplyAndVerify.Content" xml:space="preserve"><value>Apply and verify</value></data>
+  <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>Turn off sync</value></data>
+  <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>Forget provider</value></data>
+  <data name="Common_Cancel.Content" xml:space="preserve"><value>Cancel</value></data>
 </root>

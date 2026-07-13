@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace SalmonEgg.Presentation.Core.Tests.Build;
@@ -197,6 +198,80 @@ public sealed class CloudSyncProviderContractTests
             foreach (var key in requiredXamlKeys)
             {
                 AssertResourceValue(resources, key, resourcePath);
+            }
+        }
+    }
+
+    [Fact]
+    public void CloudConfigSettingsViewModel_LocalizedMessagesExistInEveryCoreResource()
+    {
+        var source = TestSourceFiles.ReadAllText(
+            @"src\SalmonEgg.Presentation.Core\ViewModels\Settings\CloudConfigSettingsViewModel.cs");
+        var referencedKeys = Regex.Matches(source, "_localizer\\[\"([^\"]+)\"\\]")
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var resourcePath in new[]
+        {
+            @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.resx",
+            @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.zh-Hans.resx",
+            @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en.resx",
+            @"src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en-US.resx"
+        })
+        {
+            var resources = XDocument.Parse(TestSourceFiles.ReadAllText(resourcePath));
+            foreach (var key in referencedKeys)
+            {
+                AssertResourceValue(resources, key, resourcePath);
+            }
+        }
+    }
+
+    [Fact]
+    public void DataStoragePage_CloudSyncUidsDefineVisibleTextInEveryAppResource()
+    {
+        var page = XDocument.Parse(TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml"));
+        var localizedElements = page.Descendants()
+            .Select(element => new
+            {
+                Element = element,
+                Uid = element.Attributes().FirstOrDefault(attribute =>
+                    string.Equals(attribute.Name.LocalName, "Uid", StringComparison.Ordinal))?.Value
+            })
+            .Where(item => item.Uid?.StartsWith("DataStorage_CloudSync", StringComparison.Ordinal) == true)
+            .Select(item => new
+            {
+                Uid = item.Uid!,
+                Property = item.Element.Name.LocalName is "TextBlock" ? "Text" :
+                    item.Element.Name.LocalName is "Button" ? "Content" : "Header"
+            })
+            .Append(new { Uid = "Common_Cancel", Property = "Content" })
+            .ToArray();
+
+        foreach (var resourcePath in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        })
+        {
+            var resources = XDocument.Parse(TestSourceFiles.ReadAllText(resourcePath));
+            foreach (var item in localizedElements)
+            {
+                AssertResourceValue(resources, $"{item.Uid}.{item.Property}", resourcePath);
+            }
+
+            foreach (var auxiliaryKey in new[]
+            {
+                "DataStorage_CloudSyncWebDavPasswordReplacement.PlaceholderText",
+                "DataStorage_CloudSyncS3SecretAccessKeyReplacement.PlaceholderText",
+                "DataStorage_CloudSyncS3ForcePathStyle.OnContent",
+                "DataStorage_CloudSyncS3ForcePathStyle.OffContent"
+            })
+            {
+                AssertResourceValue(resources, auxiliaryKey, resourcePath);
             }
         }
     }

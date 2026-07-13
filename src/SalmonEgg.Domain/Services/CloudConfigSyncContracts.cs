@@ -222,11 +222,20 @@ public interface ICloudConfigStorageProvider
         bool interactive,
         CancellationToken cancellationToken = default);
 
-    Task CommitSecretsAsync(
+    Task<IReadOnlyDictionary<string, CloudSecretUpdate>> ResolveSecretUpdatesAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default);
+
+    Task<ICloudSecretUpdateTransaction> BeginSecretUpdateAsync(
         IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         CancellationToken cancellationToken = default);
 
     Task ForgetCredentialsAsync(CancellationToken cancellationToken = default);
+}
+
+public interface ICloudSecretUpdateTransaction : IAsyncDisposable
+{
+    void Complete();
 }
 
 public interface ICloudConfigSyncCoordinator

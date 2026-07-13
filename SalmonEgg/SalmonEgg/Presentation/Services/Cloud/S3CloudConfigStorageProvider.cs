@@ -27,8 +27,8 @@ public sealed class S3CloudConfigStorageProvider : ICloudConfigStorageProvider
     public const string AccessKeyIdSecretKey = "access_key_id";
     public const string SecretAccessKeySecretKey = "secret_access_key";
 
-    private const string SecureStorageAccessKeyIdKey = "salmonegg/cloud-sync/s3/access-key-id";
-    private const string SecureStorageSecretAccessKeyKey = "salmonegg/cloud-sync/s3/secret-access-key";
+    private const string SecureStorageAccessKeyIdKey = CloudConfigSecureStorageKeys.S3AccessKeyId;
+    private const string SecureStorageSecretAccessKeyKey = CloudConfigSecureStorageKeys.S3SecretAccessKey;
     private const string DefaultRegion = "us-east-1";
     private const string DefaultObjectKey = CloudConfigSyncDefaults.RemotePackagePath;
     private const string ServiceName = "s3";
@@ -113,18 +113,50 @@ public sealed class S3CloudConfigStorageProvider : ICloudConfigStorageProvider
         return CloudProviderSessionResult.Success(new Session(this, configuration!), CloudCredentialState.Available);
     }
 
-    public async Task CommitSecretsAsync(
+    public async Task<IReadOnlyDictionary<string, CloudSecretUpdate>> ResolveSecretUpdatesAsync(
         IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         CancellationToken cancellationToken = default)
     {
-        await CommitSecretAsync(secrets, AccessKeyIdSecretKey, SecureStorageAccessKeyIdKey).ConfigureAwait(false);
-        await CommitSecretAsync(secrets, SecretAccessKeySecretKey, SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+        var resolved = new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase);
+        resolved[AccessKeyIdSecretKey] = await ResolveSecretUpdateAsync(
+                secrets,
+                AccessKeyIdSecretKey,
+                SecureStorageAccessKeyIdKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+        resolved[SecretAccessKeySecretKey] = await ResolveSecretUpdateAsync(
+                secrets,
+                SecretAccessKeySecretKey,
+                SecureStorageSecretAccessKeyKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return resolved;
+    }
+
+    public Task<ICloudSecretUpdateTransaction> BeginSecretUpdateAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default)
+    {
+        var updates = new Dictionary<string, CloudSecretUpdate>(StringComparer.Ordinal);
+        AddSecretUpdate(updates, secrets, AccessKeyIdSecretKey, SecureStorageAccessKeyIdKey);
+        AddSecretUpdate(updates, secrets, SecretAccessKeySecretKey, SecureStorageSecretAccessKeyKey);
+        return updates.Count == 0
+            ? Task.FromResult(CloudSecretUpdateTransaction.None())
+            : CloudSecretUpdateTransaction.BeginAsync(_secureStorage, updates, cancellationToken);
     }
 
     public async Task ForgetCredentialsAsync(CancellationToken cancellationToken = default)
     {
-        await _secureStorage.DeleteAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
-        await _secureStorage.DeleteAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+        await using var transaction = await CloudSecretUpdateTransaction.BeginAsync(
+                _secureStorage,
+                new Dictionary<string, CloudSecretUpdate>(StringComparer.Ordinal)
+                {
+                    [SecureStorageAccessKeyIdKey] = CloudSecretUpdate.Clear(),
+                    [SecureStorageSecretAccessKeyKey] = CloudSecretUpdate.Clear()
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        transaction.Complete();
     }
 
     private async Task<CloudConfigRemoteFile?> TryDownloadAsync(
@@ -228,7 +260,25 @@ public sealed class S3CloudConfigStorageProvider : ICloudConfigStorageProvider
         return update.Kind == CloudSecretUpdateKind.Clear ? string.Empty : update.Value ?? string.Empty;
     }
 
-    private async Task CommitSecretAsync(
+    private async Task<CloudSecretUpdate> ResolveSecretUpdateAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        string secretName,
+        string storageKey,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (secrets.TryGetValue(secretName, out var update) &&
+            update.Kind != CloudSecretUpdateKind.KeepExisting)
+        {
+            return update;
+        }
+
+        var value = await _secureStorage.LoadAsync(storageKey).ConfigureAwait(false);
+        return value is null ? CloudSecretUpdate.Clear() : CloudSecretUpdate.Replace(value);
+    }
+
+    private static void AddSecretUpdate(
+        IDictionary<string, CloudSecretUpdate> updates,
         IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         string secretName,
         string storageKey)
@@ -238,13 +288,7 @@ public sealed class S3CloudConfigStorageProvider : ICloudConfigStorageProvider
             return;
         }
 
-        if (update.Kind == CloudSecretUpdateKind.Clear)
-        {
-            await _secureStorage.DeleteAsync(storageKey).ConfigureAwait(false);
-            return;
-        }
-
-        await _secureStorage.SaveAsync(storageKey, update.Value ?? string.Empty).ConfigureAwait(false);
+        updates[storageKey] = update;
     }
 
     private static bool TryCreateConfiguration(

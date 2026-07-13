@@ -86,6 +86,13 @@ public sealed class AppSettingsService : IAppSettingsService
 
         await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
 
+        await _fileStore.WriteAllTextAsync(_appYamlPath, Serialize(settings)).ConfigureAwait(false);
+    }
+
+    internal static string Serialize(AppSettings settings)
+    {
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
+
         var model = new AppSettingsYamlV1
         {
             SchemaVersion = CurrentSchemaVersion,
@@ -115,8 +122,7 @@ public sealed class AppSettingsService : IAppSettingsService
                 : settings.AcpHydrationCompletionMode.Trim()
         };
 
-        var yaml = YamlSerialization.CreateSerializer().Serialize(model);
-        await _fileStore.WriteAllTextAsync(_appYamlPath, yaml).ConfigureAwait(false);
+        return YamlSerialization.CreateSerializer().Serialize(model);
     }
 
     private async Task EnsureWritableSchemaAsync(string appYamlPath)

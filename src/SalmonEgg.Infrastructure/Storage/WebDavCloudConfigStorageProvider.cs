@@ -21,7 +21,7 @@ public sealed class WebDavCloudConfigStorageProvider : ICloudConfigStorageProvid
     public const string UsernameOptionKey = "username";
     public const string PasswordSecretKey = "password";
 
-    private const string SecureStoragePasswordKey = "salmonegg/cloud-sync/webdav/password";
+    private const string SecureStoragePasswordKey = CloudConfigSecureStorageKeys.WebDavPassword;
     private static readonly HttpMethod MkColMethod = new("MKCOL");
     private static readonly ProductInfoHeaderValue UserAgent = new("SalmonEgg", "1.0");
 
@@ -118,23 +118,48 @@ public sealed class WebDavCloudConfigStorageProvider : ICloudConfigStorageProvid
         return CloudProviderSessionResult.Success(new Session(this, configuration), credential);
     }
 
-    public async Task CommitSecretsAsync(
+    public async Task<IReadOnlyDictionary<string, CloudSecretUpdate>> ResolveSecretUpdatesAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var update = secrets.TryGetValue(PasswordSecretKey, out var requested)
+            ? requested
+            : CloudSecretUpdate.KeepExisting();
+        if (update.Kind != CloudSecretUpdateKind.KeepExisting)
+        {
+            return new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase)
+            {
+                [PasswordSecretKey] = update
+            };
+        }
+
+        var password = await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false);
+        return new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase)
+        {
+            [PasswordSecretKey] = password is null
+                ? CloudSecretUpdate.Clear()
+                : CloudSecretUpdate.Replace(password)
+        };
+    }
+
+    public Task<ICloudSecretUpdateTransaction> BeginSecretUpdateAsync(
         IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         CancellationToken cancellationToken = default)
     {
         if (!secrets.TryGetValue(PasswordSecretKey, out var update) ||
             update.Kind == CloudSecretUpdateKind.KeepExisting)
         {
-            return;
+            return Task.FromResult(CloudSecretUpdateTransaction.None());
         }
 
-        if (update.Kind == CloudSecretUpdateKind.Clear)
-        {
-            await _secureStorage.DeleteAsync(SecureStoragePasswordKey).ConfigureAwait(false);
-            return;
-        }
-
-        await _secureStorage.SaveAsync(SecureStoragePasswordKey, update.Value ?? string.Empty).ConfigureAwait(false);
+        return CloudSecretUpdateTransaction.BeginAsync(
+            _secureStorage,
+            new Dictionary<string, CloudSecretUpdate>(StringComparer.Ordinal)
+            {
+                [SecureStoragePasswordKey] = update
+            },
+            cancellationToken);
     }
 
     public Task ForgetCredentialsAsync(CancellationToken cancellationToken = default) =>

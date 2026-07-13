@@ -732,4 +732,34 @@
   <data name="DataStorage_CloudSyncLastSyncFormat" xml:space="preserve">
     <value>上次同步：{0:g}</value>
   </data>
+  <data name="Common_Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="DataStorage_CloudSyncCheckingStatus" xml:space="preserve"><value>正在检查云同步状态…</value></data>
+  <data name="DataStorage_CloudSyncDisabledHeadline" xml:space="preserve"><value>配置云同步已关闭</value></data>
+  <data name="DataStorage_CloudSyncEnabledHeadline" xml:space="preserve"><value>配置云同步已通过 {0} 启用</value></data>
+  <data name="DataStorage_CloudSyncAuthenticationRequiredHeadline" xml:space="preserve"><value>需要重新验证云同步凭据</value></data>
+  <data name="DataStorage_CloudSyncNeedsConfigurationHeadline" xml:space="preserve"><value>需要配置云同步</value></data>
+  <data name="DataStorage_CloudSyncUnavailableHeadline" xml:space="preserve"><value>云同步暂时不可用</value></data>
+  <data name="DataStorage_CloudSyncComparing" xml:space="preserve"><value>正在比较本地与云端配置…</value></data>
+  <data name="DataStorage_CloudSyncTransferAttemptFailed" xml:space="preserve"><value>最近一次同步失败</value></data>
+  <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>尚未完成同步</value></data>
+  <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>已上传本地配置</value></data>
+  <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>已应用云端配置</value></data>
+  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>已应用云端配置，并保留本地备份</value></data>
+  <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>同步成功</value></data>
+  <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>{0} · {1:g}</value></data>
+  <data name="DataStorage_CloudSyncCredentialChecking" xml:space="preserve"><value>正在检查已保存的凭据…</value></data>
+  <data name="DataStorage_CloudSyncCredentialAvailable" xml:space="preserve"><value>已找到保存的凭据。密码或密钥留空会继续使用它。</value></data>
+  <data name="DataStorage_CloudSyncCredentialNotRequired" xml:space="preserve"><value>此云服务不需要保存密码或密钥。</value></data>
+  <data name="DataStorage_CloudSyncCredentialMissingAction" xml:space="preserve"><value>未找到保存的凭据。请输入凭据后应用。</value></data>
+  <data name="DataStorage_CloudSyncCredentialStoreUnavailable" xml:space="preserve"><value>无法访问安全凭据存储。请重试。</value></data>
+  <data name="DataStorage_CloudSyncCredentialCheckFailed" xml:space="preserve"><value>无法检查已保存的凭据。请重试。</value></data>
+  <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>云服务拒绝了凭据。请更新凭据后重试。</value></data>
+  <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>无法连接云服务。请检查网络后重试。</value></data>
+  <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>无法解决云端配置冲突。本地配置未被替换。</value></data>
+  <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>无法创建或应用配置同步包。</value></data>
+  <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>此版本未配置 OneDrive。请选择其他云服务。</value></data>
+  <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>忘记云同步配置？</value></data>
+  <data name="DataStorage_CloudSyncForgetMessage" xml:space="preserve"><value>这会删除当前云服务的配置和已保存凭据。云端配置包不会被删除。</value></data>
+  <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>忘记云服务</value></data>
+  <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>已保存的云同步配置无效。请编辑连接并检查必填项。</value></data>
 </root>
