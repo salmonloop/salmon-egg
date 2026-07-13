@@ -142,10 +142,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         AppPreferencesViewModel? preferences = null;
         try
         {
-            var cloudSync = ServiceProvider.GetService<ICloudConfigSyncService>();
+            var cloudSync = ServiceProvider.GetService<ICloudConfigSyncCoordinator>();
             if (cloudSync is not null)
             {
-                _ = await cloudSync.InitializeAsync();
+                await cloudSync.InitializeAsync();
                 BootLog("OnLaunched: cloud config sync initialized");
             }
         }

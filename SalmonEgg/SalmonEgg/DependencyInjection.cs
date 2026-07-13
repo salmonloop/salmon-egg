@@ -323,7 +323,7 @@ public static class DependencyInjection
         services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, WebDavCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, S3CloudConfigStorageProvider>();
-        services.AddSingleton<ICloudConfigSyncService, CloudConfigSyncService>();
+        services.AddSingleton<ICloudConfigSyncCoordinator, CloudConfigSyncCoordinator>();
 
         services.AddSingleton<IState<ChatState>>(sp => State.Value(sp, () => ChatState.Empty));
         services.AddSingleton<IChatStore, ChatStore>();
@@ -682,6 +682,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<IUiDispatcher>()));
 
         // Settings pages (Data/Shortcuts/Diagnostics/About)
+        services.AddSingleton<CloudConfigSettingsViewModel>();
         services.AddSingleton<DataStorageSettingsViewModel>();
         services.AddSingleton<McpSettingsViewModel>(sp =>
             new McpSettingsViewModel(

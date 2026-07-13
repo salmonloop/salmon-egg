@@ -8,6 +8,8 @@ public sealed class CloudConfigSyncSettings
 
     public string ProviderId { get; set; } = string.Empty;
 
+    public long Revision { get; set; }
+
     public bool IncludeSecrets { get; set; } = true;
 
     public Dictionary<string, Dictionary<string, string>> ProviderOptions { get; set; } = new();

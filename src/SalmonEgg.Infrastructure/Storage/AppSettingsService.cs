@@ -185,6 +185,7 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             Enabled = yaml.Enabled,
             ProviderId = yaml.ProviderId?.Trim() ?? string.Empty,
+            Revision = yaml.Revision,
             IncludeSecrets = yaml.IncludeSecrets,
             ProviderOptions = CloneProviderOptions(yaml.ProviderOptions)
         };
@@ -201,6 +202,7 @@ public sealed class AppSettingsService : IAppSettingsService
         {
             Enabled = settings.Enabled,
             ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
+            Revision = settings.Revision,
             IncludeSecrets = settings.IncludeSecrets,
             ProviderOptions = CloneProviderOptions(settings.ProviderOptions)
         };

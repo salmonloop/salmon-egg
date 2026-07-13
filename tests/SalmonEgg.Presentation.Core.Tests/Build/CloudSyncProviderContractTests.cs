@@ -7,31 +7,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Build;
 public sealed class CloudSyncProviderContractTests
 {
     [Fact]
-    public void S3Provider_RequiresStoredCredentialsBeforeAuthorizationSucceeds()
-    {
-        var provider = TestSourceFiles.ReadAllText(
-            @"SalmonEgg\SalmonEgg\Presentation\Services\Cloud\S3CloudConfigStorageProvider.cs");
-
-        Assert.Contains("S3 access key ID is required.", provider, StringComparison.Ordinal);
-        Assert.Contains("S3 secret access key is required.", provider, StringComparison.Ordinal);
-        Assert.Contains("LoadConfigurationAsync", provider, StringComparison.Ordinal);
-        Assert.Contains("string.IsNullOrWhiteSpace(accessKeyId)", provider, StringComparison.Ordinal);
-        Assert.Contains("string.IsNullOrEmpty(secretAccessKey)", provider, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void S3Provider_DoesNotSavePartialCredentialsBeforeValidationCompletes()
-    {
-        var provider = TestSourceFiles.ReadAllText(
-            @"SalmonEgg\SalmonEgg\Presentation\Services\Cloud\S3CloudConfigStorageProvider.cs");
-
-        var firstSave = provider.IndexOf("await _secureStorage.SaveAsync", StringComparison.Ordinal);
-        var missingSecretCheck = provider.IndexOf("S3 secret access key is required.", StringComparison.Ordinal);
-
-        Assert.True(firstSave > missingSecretCheck, "S3 provider must validate the complete credential pair before writing either secret.");
-    }
-
-    [Fact]
     public void S3Provider_UsesLocalSigV4WithoutAwsSdkDependency()
     {
         var provider = TestSourceFiles.ReadAllText(
@@ -51,9 +26,9 @@ public sealed class CloudSyncProviderContractTests
             @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml");
 
         Assert.Contains("DataStorage.CloudSync.ProviderPicker", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.SelectedCloudConfigProviderId, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("ViewModel.IsWebDavCloudConfigProviderSelected", xaml, StringComparison.Ordinal);
-        Assert.Contains("ViewModel.IsS3CloudConfigProviderSelected", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.CloudConfig.SelectedProviderId, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.CloudConfig.IsWebDavSelected", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.CloudConfig.IsS3Selected", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,36 +39,37 @@ public sealed class CloudSyncProviderContractTests
         var document = XDocument.Parse(xaml);
 
         AssertElement(document, "DataStorage.CloudSync.ProviderPicker", "ComboBox",
-            ("ItemsSource", "{x:Bind ViewModel.CloudConfigProviders, Mode=OneWay}"),
-            ("SelectedValue", "{x:Bind ViewModel.SelectedCloudConfigProviderId, Mode=TwoWay}"));
+            ("ItemsSource", "{x:Bind ViewModel.CloudConfig.Providers, Mode=OneWay}"),
+            ("SelectedValue", "{x:Bind ViewModel.CloudConfig.SelectedProviderId, Mode=TwoWay}"));
         AssertElement(document, "DataStorage.CloudSync.WebDavFileUrl", "TextBox",
-            ("Text", "{x:Bind ViewModel.WebDavFileUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+            ("Text", "{x:Bind ViewModel.CloudConfig.WebDavFileUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.WebDavUsername", "TextBox",
-            ("Text", "{x:Bind ViewModel.WebDavUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+            ("Text", "{x:Bind ViewModel.CloudConfig.WebDavUsername, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.WebDavPassword", "PasswordBox",
             ("PasswordChanged", "OnWebDavPasswordChanged"));
         AssertElement(document, "DataStorage.CloudSync.S3Endpoint", "TextBox",
-            ("Text", "{x:Bind ViewModel.S3Endpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+            ("Text", "{x:Bind ViewModel.CloudConfig.S3Endpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3Bucket", "TextBox",
-            ("Text", "{x:Bind ViewModel.S3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+            ("Text", "{x:Bind ViewModel.CloudConfig.S3Bucket, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3ObjectKey", "TextBox",
-            ("Text", "{x:Bind ViewModel.S3ObjectKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
-        Assert.Contains("DataStorage_CloudSyncS3ObjectKeyDescription", xaml, StringComparison.Ordinal);
+            ("Text", "{x:Bind ViewModel.CloudConfig.S3ObjectKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3AccessKeyId", "TextBox",
-            ("Text", "{x:Bind ViewModel.S3AccessKeyId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
+            ("Text", "{x:Bind ViewModel.CloudConfig.S3AccessKeyId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.S3SecretAccessKey", "PasswordBox",
             ("PasswordChanged", "OnS3SecretAccessKeyChanged"));
 
-        AssertElement(document, "DataStorage.CloudSync.ConnectSelected", "Button",
-            ("Content", "{x:Bind ViewModel.ConnectCloudConfigProviderButtonText, Mode=OneWay}"),
-            ("Command", "{x:Bind ViewModel.ConnectSelectedCloudConfigProviderCommand}"),
-            ("IsEnabled", "{x:Bind ViewModel.IsCloudConfigSyncConfigured, Mode=OneWay}"));
+        AssertElement(document, "DataStorage.CloudSync.Apply", "Button",
+            ("Command", "{x:Bind ViewModel.CloudConfig.ApplyCommand}"),
+            ("IsEnabled", "{x:Bind ViewModel.CloudConfig.CanApply, Mode=OneWay}"));
         AssertElement(document, "DataStorage.CloudSync.SyncNow", "Button",
-            ("Command", "{x:Bind ViewModel.SyncCloudConfigCommand}"),
-            ("IsEnabled", "{x:Bind ViewModel.CanSyncCloudConfig, Mode=OneWay}"));
-        AssertElement(document, "DataStorage.CloudSync.Disconnect", "Button",
-            ("Command", "{x:Bind ViewModel.DisconnectCloudConfigCommand}"),
-            ("IsEnabled", "{x:Bind ViewModel.CanDisconnectCloudConfig, Mode=OneWay}"));
+            ("Command", "{x:Bind ViewModel.CloudConfig.SyncNowCommand}"),
+            ("IsEnabled", "{x:Bind ViewModel.CloudConfig.CanSync, Mode=OneWay}"));
+        AssertElement(document, "DataStorage.CloudSync.Disable", "Button",
+            ("Command", "{x:Bind ViewModel.CloudConfig.DisableCommand}"),
+            ("IsEnabled", "{x:Bind ViewModel.CloudConfig.CanDisable, Mode=OneWay}"));
+        AssertElement(document, "DataStorage.CloudSync.Forget", "Button",
+            ("Command", "{x:Bind ViewModel.CloudConfig.ForgetCommand}"),
+            ("IsEnabled", "{x:Bind ViewModel.CloudConfig.CanForget, Mode=OneWay}"));
     }
 
     [Fact]
@@ -108,10 +84,10 @@ public sealed class CloudSyncProviderContractTests
 
         Assert.NotSame(webDavPanel, s3Panel);
         Assert.Equal(
-            "{x:Bind ViewModel.IsWebDavCloudConfigProviderSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            "{x:Bind ViewModel.CloudConfig.IsWebDavSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
             GetAttributeByLocalName(webDavPanel, "Visibility"));
         Assert.Equal(
-            "{x:Bind ViewModel.IsS3CloudConfigProviderSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            "{x:Bind ViewModel.CloudConfig.IsS3Selected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
             GetAttributeByLocalName(s3Panel, "Visibility"));
         Assert.DoesNotContain(s3Endpoint, webDavPanel.Descendants());
         Assert.DoesNotContain(webDavFileUrl, s3Panel.Descendants());
@@ -255,8 +231,12 @@ public sealed class CloudSyncProviderContractTests
            || string.Equals(attribute.Name.LocalName, "AutomationProperties.AutomationId", StringComparison.Ordinal);
 
     private static bool IsProviderVisibilityPanel(XElement element)
-        => string.Equals(element.Name.LocalName, "StackPanel", StringComparison.Ordinal)
-           && (GetAttributeByLocalName(element, "Visibility")?.Contains("CloudConfigProviderSelected", StringComparison.Ordinal) == true);
+    {
+        var visibility = GetAttributeByLocalName(element, "Visibility");
+        return string.Equals(element.Name.LocalName, "StackPanel", StringComparison.Ordinal)
+               && (visibility?.Contains("ViewModel.CloudConfig.IsWebDavSelected", StringComparison.Ordinal) == true
+                   || visibility?.Contains("ViewModel.CloudConfig.IsS3Selected", StringComparison.Ordinal) == true);
+    }
 
     private static string? GetAttributeByLocalName(XElement element, string localName)
         => element.Attributes()

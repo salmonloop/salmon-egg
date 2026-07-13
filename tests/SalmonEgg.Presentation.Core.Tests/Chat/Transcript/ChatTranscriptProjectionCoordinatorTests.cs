@@ -198,9 +198,18 @@ public partial class ChatViewModelTests
                 });
             shell.Setup(service => service.OpenFileAsync(It.IsAny<string>())).ReturnsAsync(true);
             var preferences = (AppPreferencesViewModel)RuntimeHelpers.GetUninitializedObject(typeof(AppPreferencesViewModel));
+            var cloudCoordinator = new Mock<ICloudConfigSyncCoordinator>();
+            cloudCoordinator.SetupGet(service => service.Current).Returns(CloudConfigSyncSnapshot.Initial);
+            cloudCoordinator.SetupGet(service => service.Providers).Returns([]);
+            var cloudConfig = new CloudConfigSettingsViewModel(
+                cloudCoordinator.Object,
+                ui.Object,
+                Mock.Of<SalmonEgg.Presentation.Core.Services.IUiDispatcher>(),
+                new TestCoreStringLocalizer());
             var settings = new DataStorageSettingsViewModel(
                 preferences,
                 fixture.ViewModel,
+                cloudConfig,
                 paths.Object,
                 maintenance.Object,
                 diagnostics.Object,
@@ -208,7 +217,6 @@ public partial class ChatViewModelTests
                 capabilities.Object,
                 storageLocations.Object,
                 sessionExport.Object,
-                Mock.Of<ICloudConfigSyncService>(),
                 ui.Object,
                 new TestCoreStringLocalizer(),
                 Mock.Of<ILogger<DataStorageSettingsViewModel>>());

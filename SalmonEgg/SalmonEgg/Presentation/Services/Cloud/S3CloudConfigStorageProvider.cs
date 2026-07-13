@@ -16,7 +16,7 @@ using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Presentation.Services.Cloud;
 
-public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStorageProvider
+public sealed class S3CloudConfigStorageProvider : ICloudConfigStorageProvider
 {
     public const string ProviderId = "s3";
     public const string EndpointOptionKey = "endpoint";
@@ -34,104 +34,103 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
     private const string ServiceName = "s3";
     private const string EmptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-    private readonly IAppSettingsService _appSettings;
     private readonly ISecureStorage _secureStorage;
     private readonly HttpClient _httpClient;
 
-    public S3CloudConfigStorageProvider(IAppSettingsService appSettings, ISecureStorage secureStorage)
-        : this(appSettings, secureStorage, new HttpClient())
+    public S3CloudConfigStorageProvider(ISecureStorage secureStorage)
+        : this(secureStorage, new HttpClient())
     {
     }
 
     internal S3CloudConfigStorageProvider(
-        IAppSettingsService appSettings,
         ISecureStorage secureStorage,
         HttpClient httpClient)
     {
-        _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _secureStorage = secureStorage ?? throw new ArgumentNullException(nameof(secureStorage));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
     public CloudConfigProviderDescriptor Descriptor => new(ProviderId, "S3 compatible", true);
 
-    public async Task<CloudConfigProviderConfigurationResult> ConfigureAsync(
-        IReadOnlyDictionary<string, string> options,
-        IReadOnlyDictionary<string, string> secrets,
-        CancellationToken cancellationToken = default)
+    public CloudProviderValidationResult Validate(IReadOnlyDictionary<string, string> options)
     {
         if (!TryCreateConfiguration(options, accessKeyId: string.Empty, secretAccessKey: string.Empty, out _, out var validationError))
         {
-            return CloudConfigProviderConfigurationResult.Failed(validationError);
+            return CloudProviderValidationResult.Failed(validationError);
         }
 
-        var accessKeyId = GetValue(secrets, AccessKeyIdSecretKey).Trim();
-        var secretAccessKey = GetValue(secrets, SecretAccessKeySecretKey);
-        var storedAccessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
-        var storedSecretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(accessKeyId) && string.IsNullOrWhiteSpace(storedAccessKeyId))
-        {
-            return CloudConfigProviderConfigurationResult.Failed("S3 access key ID is required.");
-        }
-
-        if (string.IsNullOrEmpty(secretAccessKey) && string.IsNullOrEmpty(storedSecretAccessKey))
-        {
-            return CloudConfigProviderConfigurationResult.Failed("S3 secret access key is required.");
-        }
-
-        if (!string.IsNullOrEmpty(accessKeyId))
-        {
-            await _secureStorage.SaveAsync(SecureStorageAccessKeyIdKey, accessKeyId).ConfigureAwait(false);
-        }
-
-        if (!string.IsNullOrEmpty(secretAccessKey))
-        {
-            await _secureStorage.SaveAsync(SecureStorageSecretAccessKeyKey, secretAccessKey).ConfigureAwait(false);
-        }
-
-        return CloudConfigProviderConfigurationResult.Success();
+        return CloudProviderValidationResult.Success();
     }
 
-    public async Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+    public async Task<CloudCredentialInspection> InspectCredentialAsync(
         IReadOnlyDictionary<string, string> options,
         CancellationToken cancellationToken = default)
     {
-        if (!TryCreateConfiguration(options, accessKeyId: string.Empty, secretAccessKey: string.Empty, out _, out var validationError))
+        if (!Validate(options).Succeeded)
         {
-            return CloudConfigProviderConfigurationStatus.Missing(validationError);
+            return new CloudCredentialInspection(CloudCredentialState.Unknown);
         }
 
-        var accessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
-        var secretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
-        return string.IsNullOrWhiteSpace(accessKeyId) || string.IsNullOrEmpty(secretAccessKey)
-            ? CloudConfigProviderConfigurationStatus.Missing("S3 access key ID and secret access key are required.")
-            : CloudConfigProviderConfigurationStatus.NotRequired();
+        try
+        {
+            var accessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
+            var secretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+            return new CloudCredentialInspection(
+                string.IsNullOrWhiteSpace(accessKeyId) || string.IsNullOrEmpty(secretAccessKey)
+                    ? CloudCredentialState.Missing
+                    : CloudCredentialState.Available);
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            return new CloudCredentialInspection(
+                CloudCredentialState.StoreUnavailable,
+                new CloudSyncFailure(CloudSyncFailureKind.CredentialStoreUnavailable, ex.Message));
+        }
     }
 
-    public async Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(
+    public async Task<CloudProviderSessionResult> CreateSessionAsync(
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         bool interactive,
         CancellationToken cancellationToken = default)
     {
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        return configuration.IsConfigured
-            ? CloudConfigAuthorizationResult.Success()
-            : CloudConfigAuthorizationResult.Failed(configuration.ErrorMessage ?? "S3 configuration is incomplete.");
+        var accessKeyId = await ResolveSecretAsync(secrets, AccessKeyIdSecretKey, SecureStorageAccessKeyIdKey).ConfigureAwait(false);
+        var secretAccessKey = await ResolveSecretAsync(secrets, SecretAccessKeySecretKey, SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+        if (!TryCreateConfiguration(options, accessKeyId, secretAccessKey, out var configuration, out var validationError))
+        {
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Unknown,
+                new CloudSyncFailure(CloudSyncFailureKind.Validation, validationError));
+        }
+
+        if (string.IsNullOrWhiteSpace(accessKeyId) || string.IsNullOrEmpty(secretAccessKey))
+        {
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Missing,
+                new CloudSyncFailure(CloudSyncFailureKind.CredentialMissing, "S3 access key ID and secret access key are required."));
+        }
+
+        return CloudProviderSessionResult.Success(new Session(this, configuration!), CloudCredentialState.Available);
     }
 
-    public async Task SignOutAsync(CancellationToken cancellationToken = default)
+    public async Task CommitSecretsAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default)
+    {
+        await CommitSecretAsync(secrets, AccessKeyIdSecretKey, SecureStorageAccessKeyIdKey).ConfigureAwait(false);
+        await CommitSecretAsync(secrets, SecretAccessKeySecretKey, SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
+    }
+
+    public async Task ForgetCredentialsAsync(CancellationToken cancellationToken = default)
     {
         await _secureStorage.DeleteAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false);
         await _secureStorage.DeleteAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false);
     }
 
-    public async Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default)
+    private async Task<CloudConfigRemoteFile?> TryDownloadAsync(
+        S3Configuration configuration,
+        CancellationToken cancellationToken)
     {
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        if (!configuration.IsConfigured)
-        {
-            return null;
-        }
-
         using var request = CreateRequest(HttpMethod.Get, configuration, payloadHash: EmptyPayloadHash);
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
@@ -158,18 +157,13 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
             response.Content.Headers.LastModified ?? response.Headers.Date);
     }
 
-    public async Task<CloudConfigUploadResult> UploadAsync(
+    private async Task<CloudConfigUploadResult> UploadAsync(
+        S3Configuration configuration,
         byte[] content,
         string? expectedETag,
         CancellationToken cancellationToken = default)
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
-
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        if (!configuration.IsConfigured)
-        {
-            return CloudConfigUploadResult.Failed(configuration.ErrorMessage ?? "S3 configuration is incomplete.");
-        }
 
         try
         {
@@ -191,17 +185,22 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
             if (!response.IsSuccessStatusCode)
             {
                 return CloudConfigUploadResult.Failed(
-                    string.Format(
+                    new CloudSyncFailure(
+                        response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                            ? CloudSyncFailureKind.Authentication
+                            : CloudSyncFailureKind.Network,
+                        string.Format(
                         CultureInfo.InvariantCulture,
                         "S3 upload failed with status {0}.",
-                        (int)response.StatusCode));
+                        (int)response.StatusCode)));
             }
 
             return CloudConfigUploadResult.Uploaded(response.Headers.ETag?.Tag);
         }
         catch (HttpRequestException ex)
         {
-            return CloudConfigUploadResult.Failed(ex.Message);
+            return CloudConfigUploadResult.Failed(
+                new CloudSyncFailure(CloudSyncFailureKind.Network, ex.Message));
         }
     }
 
@@ -216,32 +215,36 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
         return request;
     }
 
-    private async Task<S3Configuration> LoadConfigurationAsync()
+    private async Task<string> ResolveSecretAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        string secretName,
+        string storageKey)
     {
-        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
-        if (!settings.CloudConfigSync.ProviderOptions.TryGetValue(ProviderId, out var options))
+        if (!secrets.TryGetValue(secretName, out var update) || update.Kind == CloudSecretUpdateKind.KeepExisting)
         {
-            return S3Configuration.NotConfigured("S3 endpoint and bucket are required.");
+            return await _secureStorage.LoadAsync(storageKey).ConfigureAwait(false) ?? string.Empty;
         }
 
-        var accessKeyId = await _secureStorage.LoadAsync(SecureStorageAccessKeyIdKey).ConfigureAwait(false) ?? string.Empty;
-        var secretAccessKey = await _secureStorage.LoadAsync(SecureStorageSecretAccessKeyKey).ConfigureAwait(false) ?? string.Empty;
-        if (!TryCreateConfiguration(options, accessKeyId, secretAccessKey, out var configuration, out var validationError))
+        return update.Kind == CloudSecretUpdateKind.Clear ? string.Empty : update.Value ?? string.Empty;
+    }
+
+    private async Task CommitSecretAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        string secretName,
+        string storageKey)
+    {
+        if (!secrets.TryGetValue(secretName, out var update) || update.Kind == CloudSecretUpdateKind.KeepExisting)
         {
-            return S3Configuration.NotConfigured(validationError);
+            return;
         }
 
-        if (string.IsNullOrWhiteSpace(accessKeyId))
+        if (update.Kind == CloudSecretUpdateKind.Clear)
         {
-            return S3Configuration.NotConfigured("S3 access key ID is required.");
+            await _secureStorage.DeleteAsync(storageKey).ConfigureAwait(false);
+            return;
         }
 
-        if (string.IsNullOrEmpty(secretAccessKey))
-        {
-            return S3Configuration.NotConfigured("S3 secret access key is required.");
-        }
-
-        return configuration!;
+        await _secureStorage.SaveAsync(storageKey, update.Value ?? string.Empty).ConfigureAwait(false);
     }
 
     private static bool TryCreateConfiguration(
@@ -401,6 +404,27 @@ public sealed class S3CloudConfigStorageProvider : IConfigurableCloudConfigStora
 
     private static string GetValue(IReadOnlyDictionary<string, string> values, string key)
         => values.FirstOrDefault(value => string.Equals(value.Key, key, StringComparison.OrdinalIgnoreCase)).Value ?? string.Empty;
+
+    private sealed class Session : ICloudConfigStorageSession
+    {
+        private readonly S3CloudConfigStorageProvider _provider;
+        private readonly S3Configuration _configuration;
+
+        public Session(S3CloudConfigStorageProvider provider, S3Configuration configuration)
+        {
+            _provider = provider;
+            _configuration = configuration;
+        }
+
+        public Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default) =>
+            _provider.TryDownloadAsync(_configuration, cancellationToken);
+
+        public Task<CloudConfigUploadResult> UploadAsync(
+            byte[] content,
+            string? expectedETag,
+            CancellationToken cancellationToken = default) =>
+            _provider.UploadAsync(_configuration, content, expectedETag, cancellationToken);
+    }
 
     private sealed record S3Configuration(
         Uri? Endpoint,

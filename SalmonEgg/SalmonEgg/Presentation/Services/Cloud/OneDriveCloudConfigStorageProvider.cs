@@ -19,7 +19,7 @@ using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Presentation.Services.Cloud;
 
-public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProvider
+public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProvider, ICloudConfigStorageSession
 {
     public const string ProviderId = "onedrive";
 
@@ -47,14 +47,39 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
     public CloudConfigProviderDescriptor Descriptor =>
         new(ProviderId, "OneDrive", _options.IsConfigured);
 
-    public async Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(
+    public CloudProviderValidationResult Validate(IReadOnlyDictionary<string, string> options) =>
+        Descriptor.IsConfigured
+            ? CloudProviderValidationResult.Success()
+            : CloudProviderValidationResult.Failed("OneDrive app registration is not configured.");
+
+    public async Task<CloudCredentialInspection> InspectCredentialAsync(
+        IReadOnlyDictionary<string, string> options,
+        CancellationToken cancellationToken = default)
+    {
+        var application = _publicClientApplication.Value;
+        if (application is null)
+        {
+            return new CloudCredentialInspection(CloudCredentialState.NotRequired);
+        }
+
+        await TryRegisterCacheAsync(application).ConfigureAwait(false);
+        var account = (await application.GetAccountsAsync().ConfigureAwait(false)).FirstOrDefault();
+        return new CloudCredentialInspection(
+            account is null ? CloudCredentialState.Missing : CloudCredentialState.Available);
+    }
+
+    public async Task<CloudProviderSessionResult> CreateSessionAsync(
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         bool interactive,
         CancellationToken cancellationToken = default)
     {
         var application = _publicClientApplication.Value;
         if (application is null)
         {
-            return CloudConfigAuthorizationResult.Failed("OneDrive app registration is not configured.");
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.NotRequired,
+                new CloudSyncFailure(CloudSyncFailureKind.Validation, "OneDrive app registration is not configured."));
         }
 
         await TryRegisterCacheAsync(application).ConfigureAwait(false);
@@ -65,30 +90,40 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
             {
                 await application.AcquireTokenInteractive(_options.Scopes).ExecuteAsync(cancellationToken).ConfigureAwait(false);
                 EnsureGraphClient(application);
-                return CloudConfigAuthorizationResult.Success();
+                return CloudProviderSessionResult.Success(this, CloudCredentialState.Available);
             }
 
             var account = (await application.GetAccountsAsync().ConfigureAwait(false)).FirstOrDefault();
             if (account is null)
             {
-                return CloudConfigAuthorizationResult.InteractionRequired("OneDrive authorization is required.");
+                return CloudProviderSessionResult.Failed(
+                    CloudCredentialState.Missing,
+                    new CloudSyncFailure(CloudSyncFailureKind.Authentication, "OneDrive authorization is required."));
             }
 
             await application.AcquireTokenSilent(_options.Scopes, account).ExecuteAsync(cancellationToken).ConfigureAwait(false);
             EnsureGraphClient(application);
-            return CloudConfigAuthorizationResult.Success();
+            return CloudProviderSessionResult.Success(this, CloudCredentialState.Available);
         }
         catch (MsalUiRequiredException)
         {
-            return CloudConfigAuthorizationResult.InteractionRequired("OneDrive authorization is required.");
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Missing,
+                new CloudSyncFailure(CloudSyncFailureKind.Authentication, "OneDrive authorization is required."));
         }
         catch (MsalException ex)
         {
-            return CloudConfigAuthorizationResult.Failed(ex.Message);
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Faulted,
+                new CloudSyncFailure(CloudSyncFailureKind.Authentication, ex.Message));
         }
     }
 
-    public async Task SignOutAsync(CancellationToken cancellationToken = default)
+    public Task CommitSecretsAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public async Task ForgetCredentialsAsync(CancellationToken cancellationToken = default)
     {
         var application = _publicClientApplication.Value;
         if (application is null)
@@ -174,7 +209,8 @@ public sealed class OneDriveCloudConfigStorageProvider : ICloudConfigStorageProv
         }
         catch (Exception ex)
         {
-            return CloudConfigUploadResult.Failed(ex.Message);
+            return CloudConfigUploadResult.Failed(
+                new CloudSyncFailure(CloudSyncFailureKind.Network, ex.Message));
         }
     }
 

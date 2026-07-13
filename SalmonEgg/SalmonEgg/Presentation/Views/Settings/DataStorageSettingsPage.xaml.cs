@@ -26,7 +26,7 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
     {
         if (sender is PasswordBox passwordBox)
         {
-            ViewModel.WebDavPassword = passwordBox.Password;
+            ViewModel.CloudConfig.WebDavPassword = passwordBox.Password;
         }
     }
 
@@ -34,7 +34,7 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
     {
         if (sender is PasswordBox passwordBox)
         {
-            ViewModel.S3SecretAccessKey = passwordBox.Password;
+            ViewModel.CloudConfig.S3SecretAccessKey = passwordBox.Password;
         }
     }
 

@@ -14,7 +14,7 @@ using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Infrastructure.Storage;
 
-public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigStorageProvider
+public sealed class WebDavCloudConfigStorageProvider : ICloudConfigStorageProvider
 {
     public const string ProviderId = "webdav";
     public const string FileUrlOptionKey = "file_url";
@@ -25,96 +25,125 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
     private static readonly HttpMethod MkColMethod = new("MKCOL");
     private static readonly ProductInfoHeaderValue UserAgent = new("SalmonEgg", "1.0");
 
-    private readonly IAppSettingsService _appSettings;
     private readonly ISecureStorage _secureStorage;
     private readonly HttpClient _httpClient;
 
-    public WebDavCloudConfigStorageProvider(IAppSettingsService appSettings, ISecureStorage secureStorage)
-        : this(appSettings, secureStorage, new HttpClient())
+    public WebDavCloudConfigStorageProvider(ISecureStorage secureStorage)
+        : this(secureStorage, new HttpClient())
     {
     }
 
     internal WebDavCloudConfigStorageProvider(
-        IAppSettingsService appSettings,
         ISecureStorage secureStorage,
         HttpClient httpClient)
     {
-        _appSettings = appSettings ?? throw new ArgumentNullException(nameof(appSettings));
         _secureStorage = secureStorage ?? throw new ArgumentNullException(nameof(secureStorage));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
     public CloudConfigProviderDescriptor Descriptor => new(ProviderId, "WebDAV", true);
 
-    public async Task<CloudConfigProviderConfigurationResult> ConfigureAsync(
-        IReadOnlyDictionary<string, string> options,
-        IReadOnlyDictionary<string, string> secrets,
-        CancellationToken cancellationToken = default)
+    public CloudProviderValidationResult Validate(IReadOnlyDictionary<string, string> options)
     {
         if (!TryGetNormalizedFileUrl(options, out _, out _, out var validationError))
         {
-            return CloudConfigProviderConfigurationResult.Failed(validationError);
+            return CloudProviderValidationResult.Failed(validationError);
         }
 
-        var password = GetValue(secrets, PasswordSecretKey);
-        if (!string.IsNullOrEmpty(password))
-        {
-            await _secureStorage.SaveAsync(SecureStoragePasswordKey, password).ConfigureAwait(false);
-        }
-        else if (!string.IsNullOrWhiteSpace(GetValue(options, UsernameOptionKey)) &&
-                 string.IsNullOrEmpty(await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false)))
-        {
-            return CloudConfigProviderConfigurationResult.Failed("WebDAV password is required when a username is set.");
-        }
-
-        return CloudConfigProviderConfigurationResult.Success();
+        return CloudProviderValidationResult.Success();
     }
 
-    public async Task<CloudConfigProviderConfigurationStatus> GetConfigurationStatusAsync(
+    public async Task<CloudCredentialInspection> InspectCredentialAsync(
         IReadOnlyDictionary<string, string> options,
         CancellationToken cancellationToken = default)
     {
-        if (!TryGetNormalizedFileUrl(options, out _, out _, out var validationError))
+        if (!Validate(options).Succeeded)
         {
-            return CloudConfigProviderConfigurationStatus.Missing(validationError);
+            return new CloudCredentialInspection(CloudCredentialState.Unknown);
         }
 
-        var username = GetValue(options, UsernameOptionKey).Trim();
-        if (string.IsNullOrWhiteSpace(username))
+        if (string.IsNullOrWhiteSpace(GetValue(options, UsernameOptionKey)))
         {
-            return CloudConfigProviderConfigurationStatus.NotRequired();
+            return new CloudCredentialInspection(CloudCredentialState.NotRequired);
         }
 
-        var password = await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false);
-        return string.IsNullOrEmpty(password)
-            ? CloudConfigProviderConfigurationStatus.Missing("WebDAV password is required when a username is set.")
-            : CloudConfigProviderConfigurationStatus.NotRequired();
+        try
+        {
+            var password = await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false);
+            return new CloudCredentialInspection(
+                string.IsNullOrEmpty(password) ? CloudCredentialState.Missing : CloudCredentialState.Available);
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            return new CloudCredentialInspection(
+                CloudCredentialState.StoreUnavailable,
+                new CloudSyncFailure(CloudSyncFailureKind.CredentialStoreUnavailable, ex.Message));
+        }
     }
 
-    public async Task<CloudConfigAuthorizationResult> EnsureAuthorizedAsync(
+    public async Task<CloudProviderSessionResult> CreateSessionAsync(
+        IReadOnlyDictionary<string, string> options,
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
         bool interactive,
         CancellationToken cancellationToken = default)
     {
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        if (!configuration.IsConfigured)
+        if (!TryGetNormalizedFileUrl(options, out var fileUrl, out var directoryUrl, out var validationError))
         {
-            return CloudConfigAuthorizationResult.Failed(configuration.ErrorMessage ?? "WebDAV configuration is incomplete.");
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Unknown,
+                new CloudSyncFailure(CloudSyncFailureKind.Validation, validationError));
         }
 
-        return CloudConfigAuthorizationResult.Success();
+        var username = GetValue(options, UsernameOptionKey).Trim();
+        var update = secrets.TryGetValue(PasswordSecretKey, out var requested)
+            ? requested
+            : CloudSecretUpdate.KeepExisting();
+        var password = update.Kind switch
+        {
+            CloudSecretUpdateKind.Replace => update.Value ?? string.Empty,
+            CloudSecretUpdateKind.Clear => string.Empty,
+            _ => await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false) ?? string.Empty
+        };
+        if (!string.IsNullOrWhiteSpace(username) && string.IsNullOrEmpty(password))
+        {
+            return CloudProviderSessionResult.Failed(
+                CloudCredentialState.Missing,
+                new CloudSyncFailure(CloudSyncFailureKind.CredentialMissing, "WebDAV password is required when a username is set."));
+        }
+
+        var configuration = new WebDavConfiguration(fileUrl, directoryUrl, username, password, null);
+        var credential = string.IsNullOrWhiteSpace(username)
+            ? CloudCredentialState.NotRequired
+            : CloudCredentialState.Available;
+        return CloudProviderSessionResult.Success(new Session(this, configuration), credential);
     }
 
-    public Task SignOutAsync(CancellationToken cancellationToken = default)
-        => _secureStorage.DeleteAsync(SecureStoragePasswordKey);
-
-    public async Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default)
+    public async Task CommitSecretsAsync(
+        IReadOnlyDictionary<string, CloudSecretUpdate> secrets,
+        CancellationToken cancellationToken = default)
     {
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        if (!configuration.IsConfigured)
+        if (!secrets.TryGetValue(PasswordSecretKey, out var update) ||
+            update.Kind == CloudSecretUpdateKind.KeepExisting)
         {
-            return null;
+            return;
         }
 
+        if (update.Kind == CloudSecretUpdateKind.Clear)
+        {
+            await _secureStorage.DeleteAsync(SecureStoragePasswordKey).ConfigureAwait(false);
+            return;
+        }
+
+        await _secureStorage.SaveAsync(SecureStoragePasswordKey, update.Value ?? string.Empty).ConfigureAwait(false);
+    }
+
+    public Task ForgetCredentialsAsync(CancellationToken cancellationToken = default) =>
+        _secureStorage.DeleteAsync(SecureStoragePasswordKey);
+
+    private async Task<CloudConfigRemoteFile?> TryDownloadAsync(
+        WebDavConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
         using var request = CreateRequest(HttpMethod.Get, configuration);
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
@@ -141,18 +170,13 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
             response.Content.Headers.LastModified ?? response.Headers.Date);
     }
 
-    public async Task<CloudConfigUploadResult> UploadAsync(
+    private async Task<CloudConfigUploadResult> UploadAsync(
+        WebDavConfiguration configuration,
         byte[] content,
         string? expectedETag,
         CancellationToken cancellationToken = default)
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
-
-        var configuration = await LoadConfigurationAsync().ConfigureAwait(false);
-        if (!configuration.IsConfigured)
-        {
-            return CloudConfigUploadResult.Failed(configuration.ErrorMessage ?? "WebDAV configuration is incomplete.");
-        }
 
         try
         {
@@ -168,7 +192,8 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
                 var creation = await EnsureRemoteCollectionAsync(configuration, cancellationToken).ConfigureAwait(false);
                 if (!creation.Succeeded)
                 {
-                    return CloudConfigUploadResult.Failed(creation.UserMessage);
+                    return CloudConfigUploadResult.Failed(
+                        new CloudSyncFailure(CloudSyncFailureKind.Network, creation.UserMessage));
                 }
 
                 using var retryResponse = await SendUploadRequestAsync(configuration, content, expectedETag, cancellationToken)
@@ -181,10 +206,12 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
                 if (!retryResponse.IsSuccessStatusCode)
                 {
                     return CloudConfigUploadResult.Failed(
-                        string.Format(
+                        CreateHttpFailure(
+                            retryResponse.StatusCode,
+                            string.Format(
                             CultureInfo.InvariantCulture,
                             "WebDAV upload failed with status {0}.",
-                            (int)retryResponse.StatusCode));
+                            (int)retryResponse.StatusCode)));
                 }
 
                 return CloudConfigUploadResult.Uploaded(retryResponse.Headers.ETag?.Tag);
@@ -193,17 +220,20 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
             if (!response.IsSuccessStatusCode)
             {
                 return CloudConfigUploadResult.Failed(
-                    string.Format(
+                    CreateHttpFailure(
+                        response.StatusCode,
+                        string.Format(
                         CultureInfo.InvariantCulture,
                         "WebDAV upload failed with status {0}.",
-                        (int)response.StatusCode));
+                        (int)response.StatusCode)));
             }
 
             return CloudConfigUploadResult.Uploaded(response.Headers.ETag?.Tag);
         }
         catch (HttpRequestException ex)
         {
-            return CloudConfigUploadResult.Failed(ex.Message);
+            return CloudConfigUploadResult.Failed(
+                new CloudSyncFailure(CloudSyncFailureKind.Network, ex.Message));
         }
     }
 
@@ -318,28 +348,12 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
         return request;
     }
 
-    private async Task<WebDavConfiguration> LoadConfigurationAsync()
-    {
-        var settings = await _appSettings.LoadAsync().ConfigureAwait(false);
-        if (!settings.CloudConfigSync.ProviderOptions.TryGetValue(ProviderId, out var options))
-        {
-            return WebDavConfiguration.NotConfigured("WebDAV folder URL is required.");
-        }
-
-        if (!TryGetNormalizedFileUrl(options, out var fileUrl, out var directoryUrl, out var validationError))
-        {
-            return WebDavConfiguration.NotConfigured(validationError);
-        }
-
-        var username = GetValue(options, UsernameOptionKey).Trim();
-        var password = await _secureStorage.LoadAsync(SecureStoragePasswordKey).ConfigureAwait(false) ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(username) && string.IsNullOrEmpty(password))
-        {
-            return WebDavConfiguration.NotConfigured("WebDAV password is required when a username is set.");
-        }
-
-        return new WebDavConfiguration(fileUrl!, directoryUrl!, username, password, null);
-    }
+    private static CloudSyncFailure CreateHttpFailure(HttpStatusCode statusCode, string message) =>
+        new(
+            statusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                ? CloudSyncFailureKind.Authentication
+                : CloudSyncFailureKind.Network,
+            message);
 
     private static bool TryGetNormalizedFileUrl(
         IReadOnlyDictionary<string, string> options,
@@ -423,6 +437,27 @@ public sealed class WebDavCloudConfigStorageProvider : IConfigurableCloudConfigS
 
     private static string GetValue(IReadOnlyDictionary<string, string> values, string key)
         => values.FirstOrDefault(value => string.Equals(value.Key, key, StringComparison.OrdinalIgnoreCase)).Value ?? string.Empty;
+
+    private sealed class Session : ICloudConfigStorageSession
+    {
+        private readonly WebDavCloudConfigStorageProvider _provider;
+        private readonly WebDavConfiguration _configuration;
+
+        public Session(WebDavCloudConfigStorageProvider provider, WebDavConfiguration configuration)
+        {
+            _provider = provider;
+            _configuration = configuration;
+        }
+
+        public Task<CloudConfigRemoteFile?> TryDownloadAsync(CancellationToken cancellationToken = default) =>
+            _provider.TryDownloadAsync(_configuration, cancellationToken);
+
+        public Task<CloudConfigUploadResult> UploadAsync(
+            byte[] content,
+            string? expectedETag,
+            CancellationToken cancellationToken = default) =>
+            _provider.UploadAsync(_configuration, content, expectedETag, cancellationToken);
+    }
 
     private enum WebDavCollectionCreationStatus
     {

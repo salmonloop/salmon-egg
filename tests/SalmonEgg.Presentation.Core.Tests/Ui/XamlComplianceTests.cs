@@ -2123,8 +2123,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("DataStorage.CloudSync.Progress", xaml, StringComparison.Ordinal);
         Assert.Contains("DataStorage.CloudSync.RemoteTarget", xaml, StringComparison.Ordinal);
         Assert.Contains("ProgressRing", xaml, StringComparison.Ordinal);
-        Assert.Contains("CloudConfigConnectionStatusText", xaml, StringComparison.Ordinal);
-        Assert.Contains("CloudConfigTransferStatusText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.CloudConfig.StatusHeadline", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.CloudConfig.TransferStatusText", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("{Binding", xaml, StringComparison.Ordinal);
     }
 

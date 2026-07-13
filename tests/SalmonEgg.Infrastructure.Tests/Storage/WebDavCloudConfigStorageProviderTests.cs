@@ -27,15 +27,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "/dav/config/salmonegg-config.zip",
             "alice",
             "app-password");
-        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/"), "app-password");
 
-        await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.TryDownloadAsync(TestContext.Current.CancellationToken);
+        var result = await session.TryDownloadAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Equal([10, 11, 12], result.Content);
@@ -53,15 +48,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "/dav/config/salmonegg-config.zip",
             "alice",
             "app-password");
-        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/"), "wrong-password");
 
-        await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "wrong-password"
-            }, TestContext.Current.CancellationToken);
-        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => provider.TryDownloadAsync(TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => session.TryDownloadAsync(TestContext.Current.CancellationToken));
 
         Assert.Contains("403", exception.Message, StringComparison.Ordinal);
         var request = Assert.Single(server.Requests);
@@ -79,17 +69,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "/dav/config/salmonegg-config.zip",
             "alice",
             "app-password");
-        var provider = CreateProvider(server.CreateUrl(folderPath));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl(folderPath), "app-password");
 
-        var configuration = await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl(folderPath), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.UploadAsync([1, 2, 3], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(configuration.Succeeded);
+        var result = await session.UploadAsync([1, 2, 3], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         var request = Assert.Single(server.Requests);
         Assert.Equal("PUT", request.Method);
@@ -105,17 +88,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "/dav/config/salmonegg-config.zip",
             "alice",
             "app-password");
-        var provider = CreateProvider(server.CreateUrl("dav/config/salmonegg-config.zip"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/salmonegg-config.zip"), "app-password");
 
-        var configuration = await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/salmonegg-config.zip"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(configuration.Succeeded);
+        var result = await session.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         var request = Assert.Single(server.Requests);
         Assert.Equal("/dav/config/salmonegg-config.zip", request.Path);
@@ -129,15 +105,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "alice",
             "app-password",
             existingCollections: ["/", "/dav/"]);
-        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/"), "app-password");
 
-        await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
+        var result = await session.UploadAsync([4, 5, 6], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         Assert.Equal(
@@ -153,15 +124,10 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "alice",
             "app-password",
             existingCollections: ["/", "/dav/"]);
-        var provider = CreateProvider(server.CreateUrl("dav/config/nested/"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/nested/"), "app-password");
 
-        await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/nested/"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "app-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
+        var result = await session.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(CloudConfigUploadStatus.Uploaded, result.Status);
         Assert.Equal(
@@ -182,41 +148,35 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             "/dav/config/salmonegg-config.zip",
             "alice",
             "app-password");
-        var provider = CreateProvider(server.CreateUrl("dav/config/"));
+        var provider = CreateProvider();
+        var session = await CreateSessionAsync(provider, server.CreateUrl("dav/config/"), "wrong-password");
 
-        var configuration = await provider.ConfigureAsync(
-            CreateOptions(server.CreateUrl("dav/config/"), "alice"),
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = "wrong-password"
-            }, TestContext.Current.CancellationToken);
-        var result = await provider.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(configuration.Succeeded);
+        var result = await session.UploadAsync([7, 8, 9], expectedETag: null, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(CloudConfigUploadStatus.Failed, result.Status);
-        Assert.Contains("403", result.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("403", result.Failure?.Message, StringComparison.Ordinal);
         var request = Assert.Single(server.Requests);
         Assert.Equal("/dav/config/salmonegg-config.zip", request.Path);
         Assert.Equal("Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:wrong-password")), request.Authorization);
     }
 
-    private WebDavCloudConfigStorageProvider CreateProvider(string webDavUrl)
-    {
-        var settings = new AppSettings
-        {
-            CloudConfigSync = new CloudConfigSyncSettings
-            {
-                ProviderOptions =
-                {
-                    [WebDavCloudConfigStorageProvider.ProviderId] = CreateOptions(webDavUrl, "alice")
-                }
-            }
-        };
+    private WebDavCloudConfigStorageProvider CreateProvider() =>
+        new(new InMemorySecureStorage(), _httpClient);
 
-        return new WebDavCloudConfigStorageProvider(
-            new InMemoryAppSettingsService(settings),
-            new InMemorySecureStorage(),
-            _httpClient);
+    private static async Task<ICloudConfigStorageSession> CreateSessionAsync(
+        WebDavCloudConfigStorageProvider provider,
+        string webDavUrl,
+        string password)
+    {
+        var result = await provider.CreateSessionAsync(
+            CreateOptions(webDavUrl, "alice"),
+            new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase)
+            {
+                [WebDavCloudConfigStorageProvider.PasswordSecretKey] = CloudSecretUpdate.Replace(password)
+            },
+            interactive: true,
+            TestContext.Current.CancellationToken);
+        Assert.True(result.Succeeded, result.Failure?.Message);
+        return result.Session!;
     }
 
     private static Dictionary<string, string> CreateOptions(string webDavUrl, string username) =>
@@ -225,19 +185,6 @@ public sealed class WebDavCloudConfigStorageProviderTests : IDisposable
             [WebDavCloudConfigStorageProvider.FileUrlOptionKey] = webDavUrl,
             [WebDavCloudConfigStorageProvider.UsernameOptionKey] = username
         };
-
-    private sealed class InMemoryAppSettingsService(AppSettings settings) : IAppSettingsService
-    {
-        private AppSettings _settings = settings;
-
-        public Task<AppSettings> LoadAsync() => Task.FromResult(_settings);
-
-        public Task SaveAsync(AppSettings value)
-        {
-            _settings = value;
-            return Task.CompletedTask;
-        }
-    }
 
     private sealed class InMemorySecureStorage : ISecureStorage
     {
