@@ -95,6 +95,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     public ObservableCollection<AppLanguageOptionViewModel> LanguageOptions { get; } = CreateLanguageOptions();
     public event EventHandler? ShortcutConfigurationChanged;
 
+    [ObservableProperty]
+    private AppLanguageOptionViewModel? _selectedLanguageOption;
+
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
 
     public bool IsMinimizeToTraySupported => _capabilities.SupportsTray;
@@ -128,6 +131,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
+        SelectedLanguageOption = ResolveLanguageOption(Language);
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -314,6 +318,12 @@ public partial class AppPreferencesViewModel : ObservableObject
             return;
         }
 
+        var option = ResolveLanguageOption(normalized);
+        if (!ReferenceEquals(SelectedLanguageOption, option))
+        {
+            SelectedLanguageOption = option;
+        }
+
         if (_suppressSave)
         {
             return;
@@ -321,6 +331,19 @@ public partial class AppPreferencesViewModel : ObservableObject
 
         ScheduleSave();
         _ = ApplyLanguageChangeAsync(normalized);
+    }
+    partial void OnSelectedLanguageOptionChanged(AppLanguageOptionViewModel? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        var normalized = AppLanguageCatalog.NormalizeTag(value.Tag);
+        if (!string.Equals(Language, normalized, StringComparison.Ordinal))
+        {
+            Language = normalized;
+        }
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
@@ -719,4 +742,13 @@ public partial class AppPreferencesViewModel : ObservableObject
             new AppLanguageOptionViewModel(
                 option.Tag,
                 option.DisplayNameResourceKey)));
+
+    private AppLanguageOptionViewModel ResolveLanguageOption(string? tag)
+    {
+        var normalized = AppLanguageCatalog.NormalizeTag(tag);
+        return LanguageOptions.FirstOrDefault(option =>
+                   string.Equals(option.Tag, normalized, StringComparison.Ordinal))
+               ?? LanguageOptions.First(option =>
+                   string.Equals(option.Tag, AppLanguageCatalog.SystemTag, StringComparison.Ordinal));
+    }
 }

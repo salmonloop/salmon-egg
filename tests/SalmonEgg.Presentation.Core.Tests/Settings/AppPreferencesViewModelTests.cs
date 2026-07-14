@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -151,7 +152,54 @@ public class AppPreferencesViewModelTests
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("zh-Hans", vm.Language);
+        Assert.NotNull(vm.SelectedLanguageOption);
+        Assert.Equal("zh-Hans", vm.SelectedLanguageOption.Tag);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_UpdatesSelectedLanguageOption()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.Language = "en-US";
+
+        Assert.NotNull(vm.SelectedLanguageOption);
+        Assert.Equal("en-US", vm.SelectedLanguageOption.Tag);
+    }
+
+    [Fact]
+    public async Task SelectedLanguageOptionChanged_UpdatesLanguage()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.SelectedLanguageOption = vm.LanguageOptions.Single(option => option.Tag == "en-US");
+
+        Assert.Equal("en-US", vm.Language);
     }
 
     [Fact]

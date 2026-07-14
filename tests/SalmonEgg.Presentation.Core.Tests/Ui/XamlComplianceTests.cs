@@ -1243,7 +1243,9 @@ public sealed class XamlComplianceTests
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml");
 
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Preferences.LanguageOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.Preferences.SelectedLanguageOption, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedValuePath=\"Tag\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedValue=\"{x:Bind ViewModel.Preferences.Language, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:DataType=\"settings:AppLanguageOptionViewModel\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Tag=\"zh-CN\"", xaml, StringComparison.Ordinal);
