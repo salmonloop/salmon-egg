@@ -147,10 +147,22 @@
     <PRIResource Include="Strings\zh-Hans\Resources.resw">
       <Language>zh-Hans</Language>
     </PRIResource>
+    <PRIResource Include="$(IntermediateOutputPath)GeneratedPri\Strings\en\CoreStrings.resw"
+                 Link="Strings\en\CoreStrings.resw">
+      <Language>en</Language>
+    </PRIResource>
+    <PRIResource Include="$(IntermediateOutputPath)GeneratedPri\Strings\en-US\CoreStrings.resw"
+                 Link="Strings\en-US\CoreStrings.resw">
+      <Language>en-US</Language>
+    </PRIResource>
+    <PRIResource Include="$(IntermediateOutputPath)GeneratedPri\Strings\zh-Hans\CoreStrings.resw"
+                 Link="Strings\zh-Hans\CoreStrings.resw">
+      <Language>zh-Hans</Language>
+    </PRIResource>
   </ItemGroup>
 
   <Target Name="PrepareCoreStringPriResources"
-          BeforeTargets="UnoResourcesGeneration">
+          BeforeTargets="UnoResourcesGeneration;BeforeGenerateProjectPriFile">
     <PropertyGroup>
       <CoreStringPriRoot>$(IntermediateOutputPath)GeneratedPri\Strings</CoreStringPriRoot>
     </PropertyGroup>
@@ -164,20 +176,6 @@
     <Copy SourceFiles="..\..\src\SalmonEgg.Presentation.Core\Resources\CoreStrings.zh-Hans.resx"
           DestinationFiles="$(CoreStringPriRoot)\zh-Hans\CoreStrings.resw"
           SkipUnchangedFiles="true" />
-    <ItemGroup>
-      <PRIResource Include="$(CoreStringPriRoot)\en\CoreStrings.resw"
-                   Link="Strings\en\CoreStrings.resw">
-        <Language>en</Language>
-      </PRIResource>
-      <PRIResource Include="$(CoreStringPriRoot)\en-US\CoreStrings.resw"
-                   Link="Strings\en-US\CoreStrings.resw">
-        <Language>en-US</Language>
-      </PRIResource>
-      <PRIResource Include="$(CoreStringPriRoot)\zh-Hans\CoreStrings.resw"
-                   Link="Strings\zh-Hans\CoreStrings.resw">
-        <Language>zh-Hans</Language>
-      </PRIResource>
-    </ItemGroup>
   </Target>
 
   <PropertyGroup>

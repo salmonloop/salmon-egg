@@ -86,3 +86,4 @@
    - 输入设备语义：键盘、手柄、遥控器、RawGameController、虚拟输入和诊断注入必须收敛到一条 authoritative 输入语义链；设备服务只采集事实和处理明确 opt-in 缺口，不在 shell 层平行驱动原生控件焦点、激活、选中或值编辑；验证覆盖真实设备、synthetic 差异、一次物理输入只产生一次用户可见行为，以及 selector/value control 不误改值。
    - 可编辑行与语义 ID：配置项、导航项、远端目录、profile、可编辑行和跨层 semantic id 必须由单一 resolver/catalog/row ViewModel owner 构造、解析和承载命令身份；禁止多处复制前缀、未知远端 id 回退本地路径、父 ViewModel 反复注入 stale command 或静默改写用户配置；验证覆盖本地/远端/未知/冲突 id 和新增、删除、再新增交互。
    - 真实构建验证：GUI smoke、安装包验证、发布前回归、WASM 导航和跨平台验证必须使用本次构建实际产出的安装物、二进制、发布包或静态产物；禁止旧安装、旁路产物、开发服务器缓存、隐藏测试入口或来源不明的运行实例替代；验证报告必须记录产物路径、版本/提交来源和启动实例来源。
+   - 打包本地化资源：当共享 `.resx` 需要投影为 Uno / WinUI 原生资源时，生成项必须在各目标平台收集资源输入前进入对应资源图，并由平台原生资源加载器解析；禁止只挂接单一平台构建目标、用源码字符串扫描代替真实包检查或在 ResourceMap 缺失时静默回退；验证必须检查本次 MSIX 的 `resources.pri` ResourceMap，并覆盖 Desktop/WASM 构建与 Windows 安装包启动 smoke。

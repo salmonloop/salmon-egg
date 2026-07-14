@@ -70,7 +70,9 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("_uiDispatcher.EnqueueAsync", languageService, StringComparison.Ordinal);
         Assert.Contains("ResourceLoader.GetForViewIndependentUse(\"CoreStrings\")", stringLocalizer, StringComparison.Ordinal);
         Assert.Contains("PrepareCoreStringPriResources", project, StringComparison.Ordinal);
+        Assert.Contains("BeforeTargets=\"UnoResourcesGeneration;BeforeGenerateProjectPriFile\"", project, StringComparison.Ordinal);
         Assert.Contains(@"Link=""Strings\en-US\CoreStrings.resw""", project, StringComparison.Ordinal);
+        Assert.Contains("MSIX resources.pri does not contain the required 'CoreStrings' ResourceMap.", LoadFile(@".tools\run-winui3-msix.ps1"), StringComparison.Ordinal);
         Assert.DoesNotContain("RuntimeInformation.IsOSPlatform", cultureService, StringComparison.Ordinal);
         Assert.DoesNotContain("#if WINDOWS", cultureService, StringComparison.Ordinal);
     }

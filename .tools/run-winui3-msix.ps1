@@ -55,6 +55,23 @@ function Get-SignToolPath {
     throw "signtool.exe not found under Windows SDK bin directory '$kitsBin'. Install the Windows 10/11 SDK."
 }
 
+function Get-MakePriPath {
+    $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    if (-not (Test-Path $kitsBin)) {
+        throw "Windows SDK bin directory not found at '$kitsBin'. Install the Windows 10/11 SDK."
+    }
+
+    $makePri = Get-ChildItem -Path $kitsBin -Filter 'makepri.exe' -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.DirectoryName -match '[\\/]x64$' } |
+        Sort-Object { [version]$_.Directory.Parent.Name } -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+    if (-not $makePri) {
+        throw "makepri.exe not found under Windows SDK bin directory '$kitsBin'. Install the Windows 10/11 SDK."
+    }
+
+    return $makePri
+}
+
 function Get-MSBuildPath {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path $vswhere)) {
@@ -398,6 +415,25 @@ function Get-MsixManifestInfo {
         $appId = $manifest.Package.Applications.Application.Id
         if (-not $identityName -or -not $appId) {
             throw "Unable to determine app identity from manifest (Identity.Name='$identityName', Application.Id='$appId')."
+        }
+
+        $resourcesPriPath = Join-Path $tmp 'resources.pri'
+        if (-not (Test-Path $resourcesPriPath)) {
+            throw "resources.pri not found inside MSIX."
+        }
+
+        $priDumpPath = Join-Path $tmp 'resources.pri.xml'
+        $makePri = Get-MakePriPath
+        & $makePri dump /if $resourcesPriPath /of $priDumpPath /o | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $priDumpPath)) {
+            throw "Failed to inspect resources.pri inside MSIX with '$makePri'."
+        }
+
+        [xml]$priDump = Get-Content -Path $priDumpPath
+        $coreStringsMap = $priDump.SelectSingleNode(
+            "//*[@name='CoreStrings' and (local-name()='ResourceMap' or local-name()='ResourceMapSubtree')]")
+        if ($null -eq $coreStringsMap) {
+            throw "MSIX resources.pri does not contain the required 'CoreStrings' ResourceMap."
         }
 
         return [pscustomobject]@{
