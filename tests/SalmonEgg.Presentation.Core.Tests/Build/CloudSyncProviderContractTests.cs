@@ -27,7 +27,8 @@ public sealed class CloudSyncProviderContractTests
             @"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml");
 
         Assert.Contains("DataStorage.CloudSync.ProviderPicker", xaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedValue=\"{x:Bind ViewModel.CloudConfig.SelectedProviderId, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind ViewModel.CloudConfig.SelectedProviderOption, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedValuePath=\"ProviderId\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.CloudConfig.IsWebDavSelected", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.CloudConfig.IsS3Selected", xaml, StringComparison.Ordinal);
     }
@@ -41,7 +42,7 @@ public sealed class CloudSyncProviderContractTests
 
         AssertElement(document, "DataStorage.CloudSync.ProviderPicker", "ComboBox",
             ("ItemsSource", "{x:Bind ViewModel.CloudConfig.Providers, Mode=OneWay}"),
-            ("SelectedValue", "{x:Bind ViewModel.CloudConfig.SelectedProviderId, Mode=TwoWay}"));
+            ("SelectedItem", "{x:Bind ViewModel.CloudConfig.SelectedProviderOption, Mode=TwoWay}"));
         AssertElement(document, "DataStorage.CloudSync.WebDavFileUrl", "TextBox",
             ("Text", "{x:Bind ViewModel.CloudConfig.WebDavFileUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"));
         AssertElement(document, "DataStorage.CloudSync.WebDavUsername", "TextBox",

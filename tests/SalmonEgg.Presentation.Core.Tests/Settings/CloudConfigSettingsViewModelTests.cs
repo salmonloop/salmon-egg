@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
@@ -151,6 +152,35 @@ public sealed class CloudConfigSettingsViewModelTests
         Assert.False(enabled.ShowSyncAction);
         Assert.False(enabled.ShowDisableAction);
         Assert.False(enabled.ShowRemoveAction);
+    }
+
+    [Fact]
+    public void SelectedProviderIdChanged_UpdatesSelectedProviderOption()
+    {
+        var viewModel = CreateViewModel(new FakeCoordinator(CreateSnapshot(
+            enabled: false,
+            providerId: string.Empty,
+            options: new Dictionary<string, string>(),
+            transfer: new CloudTransferState(CloudTransferPhase.Idle))));
+
+        viewModel.SelectedProviderId = "s3";
+
+        Assert.NotNull(viewModel.SelectedProviderOption);
+        Assert.Equal("s3", viewModel.SelectedProviderOption.ProviderId);
+    }
+
+    [Fact]
+    public void SelectedProviderOptionChanged_UpdatesSelectedProviderId()
+    {
+        var viewModel = CreateViewModel(new FakeCoordinator(CreateSnapshot(
+            enabled: false,
+            providerId: string.Empty,
+            options: new Dictionary<string, string>(),
+            transfer: new CloudTransferState(CloudTransferPhase.Idle))));
+
+        viewModel.SelectedProviderOption = viewModel.Providers.Single(provider => provider.ProviderId == "webdav");
+
+        Assert.Equal("webdav", viewModel.SelectedProviderId);
     }
 
     [Fact]

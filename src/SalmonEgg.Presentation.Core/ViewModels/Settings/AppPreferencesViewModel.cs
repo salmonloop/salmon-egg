@@ -93,10 +93,18 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     public ObservableCollection<KeyBindingPairViewModel> KeyBindings { get; } = new();
     public ObservableCollection<AppLanguageOptionViewModel> LanguageOptions { get; } = CreateLanguageOptions();
+    public ObservableCollection<SettingsOptionViewModel> ThemeOptions { get; } = CreateThemeOptions();
+    public ObservableCollection<SettingsOptionViewModel> BackdropOptions { get; } = CreateBackdropOptions();
     public event EventHandler? ShortcutConfigurationChanged;
 
     [ObservableProperty]
     private AppLanguageOptionViewModel? _selectedLanguageOption;
+
+    [ObservableProperty]
+    private SettingsOptionViewModel? _selectedThemeOption;
+
+    [ObservableProperty]
+    private SettingsOptionViewModel? _selectedBackdropOption;
 
     public bool IsLaunchOnStartupSupported => _capabilities.SupportsLaunchOnStartup;
 
@@ -132,6 +140,8 @@ public partial class AppPreferencesViewModel : ObservableObject
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
         SelectedLanguageOption = ResolveLanguageOption(Language);
+        SelectedThemeOption = ResolveSettingsOption(ThemeOptions, Theme, "System");
+        SelectedBackdropOption = ResolveSettingsOption(BackdropOptions, Backdrop, "System");
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -290,7 +300,16 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
     }
 
-    partial void OnThemeChanged(string value) => ScheduleSave();
+    partial void OnThemeChanged(string value)
+    {
+        var option = ResolveSettingsOption(ThemeOptions, value, "System");
+        if (!ReferenceEquals(SelectedThemeOption, option))
+        {
+            SelectedThemeOption = option;
+        }
+
+        ScheduleSave();
+    }
     partial void OnIsAnimationEnabledChanged(bool value)
     {
         _uiRuntime.SetAnimationsEnabled(value);
@@ -302,7 +321,16 @@ public partial class AppPreferencesViewModel : ObservableObject
 
         ScheduleSave();
     }
-    partial void OnBackdropChanged(string value) => ScheduleSave();
+    partial void OnBackdropChanged(string value)
+    {
+        var option = ResolveSettingsOption(BackdropOptions, value, "System");
+        if (!ReferenceEquals(SelectedBackdropOption, option))
+        {
+            SelectedBackdropOption = option;
+        }
+
+        ScheduleSave();
+    }
     partial void OnLaunchOnStartupChanged(bool value)
     {
         ScheduleSave();
@@ -343,6 +371,20 @@ public partial class AppPreferencesViewModel : ObservableObject
         if (!string.Equals(Language, normalized, StringComparison.Ordinal))
         {
             Language = normalized;
+        }
+    }
+    partial void OnSelectedThemeOptionChanged(SettingsOptionViewModel? value)
+    {
+        if (value is not null && !string.Equals(Theme, value.Value, StringComparison.Ordinal))
+        {
+            Theme = value.Value;
+        }
+    }
+    partial void OnSelectedBackdropOptionChanged(SettingsOptionViewModel? value)
+    {
+        if (value is not null && !string.Equals(Backdrop, value.Value, StringComparison.Ordinal))
+        {
+            Backdrop = value.Value;
         }
     }
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
@@ -743,6 +785,23 @@ public partial class AppPreferencesViewModel : ObservableObject
                 option.Tag,
                 option.DisplayNameResourceKey)));
 
+    private static ObservableCollection<SettingsOptionViewModel> CreateThemeOptions() =>
+        new(
+        [
+            new SettingsOptionViewModel("System", "Appearance_ThemeSystem.Content"),
+            new SettingsOptionViewModel("Light", "Appearance_ThemeLight.Content"),
+            new SettingsOptionViewModel("Dark", "Appearance_ThemeDark.Content")
+        ]);
+
+    private static ObservableCollection<SettingsOptionViewModel> CreateBackdropOptions() =>
+        new(
+        [
+            new SettingsOptionViewModel("System", "Appearance_BackdropSystem.Content"),
+            new SettingsOptionViewModel("Mica", "Appearance_BackdropMica.Content"),
+            new SettingsOptionViewModel("Acrylic", "Appearance_BackdropAcrylic.Content"),
+            new SettingsOptionViewModel("Solid", "Appearance_BackdropSolid.Content")
+        ]);
+
     private AppLanguageOptionViewModel ResolveLanguageOption(string? tag)
     {
         var normalized = AppLanguageCatalog.NormalizeTag(tag);
@@ -750,5 +809,17 @@ public partial class AppPreferencesViewModel : ObservableObject
                    string.Equals(option.Tag, normalized, StringComparison.Ordinal))
                ?? LanguageOptions.First(option =>
                    string.Equals(option.Tag, AppLanguageCatalog.SystemTag, StringComparison.Ordinal));
+    }
+
+    private static SettingsOptionViewModel ResolveSettingsOption(
+        IEnumerable<SettingsOptionViewModel> options,
+        string? value,
+        string fallbackValue)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? fallbackValue : value.Trim();
+        return options.FirstOrDefault(option =>
+                   string.Equals(option.Value, normalized, StringComparison.Ordinal))
+               ?? options.First(option =>
+                   string.Equals(option.Value, fallbackValue, StringComparison.Ordinal));
     }
 }

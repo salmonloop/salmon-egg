@@ -132,8 +132,7 @@
                                               IsFocusEngagementEnabled="True"
                                               ItemsSource="{x:Bind ViewModel.CloudConfig.Providers, Mode=OneWay}"
                                               DisplayMemberPath="DisplayName"
-                                              SelectedValuePath="ProviderId"
-                                              SelectedValue="{x:Bind ViewModel.CloudConfig.SelectedProviderId, Mode=TwoWay}"
+                                              SelectedItem="{x:Bind ViewModel.CloudConfig.SelectedProviderOption, Mode=TwoWay}"
                                               HorizontalAlignment="Stretch"/>
                                     <StackPanel Spacing="8"
                                                 Visibility="{x:Bind ViewModel.CloudConfig.IsWebDavSelected, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">

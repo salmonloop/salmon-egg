@@ -1253,6 +1253,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AppearanceSettings_OptionsAreBoundToViewModelCatalog()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml");
+
+        Assert.Contains("ItemsSource=\"{x:Bind Preferences.ThemeOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind Preferences.SelectedThemeOption, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind Preferences.BackdropOptions, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedItem=\"{x:Bind Preferences.SelectedBackdropOption, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectedValuePath=\"Tag\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ComboBoxItem x:Uid=\"Appearance_Theme", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ComboBoxItem x:Uid=\"Appearance_Backdrop", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MiniChatView_TextsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");

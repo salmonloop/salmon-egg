@@ -203,6 +203,56 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
+    public async Task AppearanceOptionChanges_UpdatePreferenceValues()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.SelectedThemeOption = vm.ThemeOptions.Single(option => option.Value == "Dark");
+        vm.SelectedBackdropOption = vm.BackdropOptions.Single(option => option.Value == "Acrylic");
+
+        Assert.Equal("Dark", vm.Theme);
+        Assert.Equal("Acrylic", vm.Backdrop);
+    }
+
+    [Fact]
+    public async Task PreferenceValueChanges_UpdateAppearanceOptions()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.Theme = "Light";
+        vm.Backdrop = "Mica";
+
+        Assert.NotNull(vm.SelectedThemeOption);
+        Assert.NotNull(vm.SelectedBackdropOption);
+        Assert.Equal("Light", vm.SelectedThemeOption.Value);
+        Assert.Equal("Mica", vm.SelectedBackdropOption.Value);
+    }
+
+    [Fact]
     public async Task LanguageChanged_NormalizesBeforeSavingAndReloadingShell()
     {
         var appSettingsService = new Mock<IAppSettingsService>();

@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:SalmonEgg.Controls"
+    xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:views="using:SalmonEgg.Presentation.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -10,6 +11,10 @@
     mc:Ignorable="d"
     Background="Transparent"
     AllowDrop="False">
+
+    <views:SettingsPageBase.Resources>
+        <converters:ResourceStringConverter x:Key="ResourceStringConverter"/>
+    </views:SettingsPageBase.Resources>
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
@@ -49,15 +54,17 @@
                                 <ComboBox Grid.Column="1"
                                           x:Name="AppearanceThemeComboBox"
                                           AutomationProperties.AutomationId="Appearance.Theme"
-                                          SelectedValue="{x:Bind Preferences.Theme, Mode=TwoWay}"
-                                          SelectedValuePath="Tag"
+                                          ItemsSource="{x:Bind Preferences.ThemeOptions, Mode=OneWay}"
+                                          SelectedItem="{x:Bind Preferences.SelectedThemeOption, Mode=TwoWay}"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
                                           IsFocusEngagementEnabled="True"
                                           VerticalAlignment="Center">
-                                    <ComboBoxItem x:Uid="Appearance_ThemeSystem" Tag="System" />
-                                    <ComboBoxItem x:Uid="Appearance_ThemeLight" Tag="Light" />
-                                    <ComboBoxItem x:Uid="Appearance_ThemeDark" Tag="Dark" />
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:SettingsOptionViewModel">
+                                            <TextBlock Text="{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
                                 </ComboBox>
                             </Grid>
                         </Border>
@@ -113,16 +120,17 @@
                                 <ComboBox Grid.Column="1"
                                           x:Name="AppearanceBackdropComboBox"
                                           AutomationProperties.AutomationId="Appearance.Backdrop"
-                                          SelectedValue="{x:Bind Preferences.Backdrop, Mode=TwoWay}"
-                                          SelectedValuePath="Tag"
+                                          ItemsSource="{x:Bind Preferences.BackdropOptions, Mode=OneWay}"
+                                          SelectedItem="{x:Bind Preferences.SelectedBackdropOption, Mode=TwoWay}"
                                           MinWidth="{StaticResource SettingsRowControlMinWidth}"
                                           HorizontalAlignment="Stretch"
                                           IsFocusEngagementEnabled="True"
                                           VerticalAlignment="Center">
-                                    <ComboBoxItem x:Uid="Appearance_BackdropSystem" Tag="System" />
-                                    <ComboBoxItem x:Uid="Appearance_BackdropMica" Content="Mica" Tag="Mica" />
-                                    <ComboBoxItem x:Uid="Appearance_BackdropAcrylic" Content="Acrylic" Tag="Acrylic" />
-                                    <ComboBoxItem x:Uid="Appearance_BackdropSolid" Tag="Solid" />
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:SettingsOptionViewModel">
+                                            <TextBlock Text="{x:Bind DisplayNameResourceKey, Mode=OneWay, Converter={StaticResource ResourceStringConverter}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
                                 </ComboBox>
                             </Grid>
                         </Border>

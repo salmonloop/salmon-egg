@@ -331,6 +331,9 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
     private string _selectedProviderId = string.Empty;
 
     [ObservableProperty]
+    private CloudConfigProviderOptionViewModel? _selectedProviderOption;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ValidationMessage))]
     [NotifyPropertyChangedFor(nameof(CanApply))]
     [NotifyPropertyChangedFor(nameof(HasUnsavedChanges))]
@@ -384,7 +387,25 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(HasUnsavedChanges))]
     private string _s3SecretAccessKey = string.Empty;
 
-    partial void OnSelectedProviderIdChanged(string value) => ScheduleCredentialRefresh();
+    partial void OnSelectedProviderIdChanged(string value)
+    {
+        var option = ResolveProviderOption(value);
+        if (!ReferenceEquals(SelectedProviderOption, option))
+        {
+            SelectedProviderOption = option;
+        }
+
+        ScheduleCredentialRefresh();
+    }
+
+    partial void OnSelectedProviderOptionChanged(CloudConfigProviderOptionViewModel? value)
+    {
+        if (value is not null &&
+            !string.Equals(SelectedProviderId, value.ProviderId, StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedProviderId = value.ProviderId;
+        }
+    }
 
     partial void OnWebDavFileUrlChanged(string value) => ScheduleCredentialRefresh();
 
@@ -711,6 +732,12 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
     private string GetProviderDisplayName(string providerId) =>
         Providers.FirstOrDefault(provider =>
             string.Equals(provider.ProviderId, providerId, StringComparison.OrdinalIgnoreCase))?.DisplayName ?? providerId;
+
+    private CloudConfigProviderOptionViewModel? ResolveProviderOption(string? providerId)
+        => string.IsNullOrWhiteSpace(providerId)
+            ? null
+            : Providers.FirstOrDefault(provider =>
+                string.Equals(provider.ProviderId, providerId, StringComparison.OrdinalIgnoreCase));
 
     private static string FormatRemoteTarget(string providerId, IReadOnlyDictionary<string, string> options)
     {
