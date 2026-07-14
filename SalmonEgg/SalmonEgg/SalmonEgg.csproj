@@ -149,6 +149,37 @@
     </PRIResource>
   </ItemGroup>
 
+  <Target Name="PrepareCoreStringPriResources"
+          BeforeTargets="UnoResourcesGeneration">
+    <PropertyGroup>
+      <CoreStringPriRoot>$(IntermediateOutputPath)GeneratedPri\Strings</CoreStringPriRoot>
+    </PropertyGroup>
+    <MakeDir Directories="$(CoreStringPriRoot)\en;$(CoreStringPriRoot)\en-US;$(CoreStringPriRoot)\zh-Hans" />
+    <Copy SourceFiles="..\..\src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en.resx"
+          DestinationFiles="$(CoreStringPriRoot)\en\CoreStrings.resw"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="..\..\src\SalmonEgg.Presentation.Core\Resources\CoreStrings.en-US.resx"
+          DestinationFiles="$(CoreStringPriRoot)\en-US\CoreStrings.resw"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="..\..\src\SalmonEgg.Presentation.Core\Resources\CoreStrings.zh-Hans.resx"
+          DestinationFiles="$(CoreStringPriRoot)\zh-Hans\CoreStrings.resw"
+          SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <PRIResource Include="$(CoreStringPriRoot)\en\CoreStrings.resw"
+                   Link="Strings\en\CoreStrings.resw">
+        <Language>en</Language>
+      </PRIResource>
+      <PRIResource Include="$(CoreStringPriRoot)\en-US\CoreStrings.resw"
+                   Link="Strings\en-US\CoreStrings.resw">
+        <Language>en-US</Language>
+      </PRIResource>
+      <PRIResource Include="$(CoreStringPriRoot)\zh-Hans\CoreStrings.resw"
+                   Link="Strings\zh-Hans\CoreStrings.resw">
+        <Language>zh-Hans</Language>
+      </PRIResource>
+    </ItemGroup>
+  </Target>
+
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
@@ -400,4 +431,3 @@
   </Target>
 
 </Project>
-

@@ -41,11 +41,6 @@ public sealed class UiRuntimeService : IUiRuntimeService
         ApplyDependentAnimationPolicy();
     }
 
-    public void RefreshLocalizedText()
-    {
-        App.RefreshMainShellLocalizedText();
-    }
-
     public void ReloadShell()
     {
         App.ReloadMainShell();

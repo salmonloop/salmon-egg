@@ -27,6 +27,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
     private readonly ISettingsAcpTransportConfiguration _transportConfig;
     private readonly ITransportSupportPolicy _transportSupportPolicy;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly IUiDispatcher _uiDispatcher;
     private AcpRemoteDirectoryRowViewModel? _editingRemoteDirectory;
     private bool _disposed;
@@ -59,8 +60,9 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IStringLocalizer<CoreStrings> localizer,
-        IUiDispatcher? uiDispatcher = null)
-        : this(new SettingsChatConnectionAdapter(chatViewModel, connectionCommands), profiles, preferences, transportSupportPolicy, logger, localizer, uiDispatcher)
+        IUiDispatcher? uiDispatcher = null,
+        IAppLanguageService? languageService = null)
+        : this(new SettingsChatConnectionAdapter(chatViewModel, connectionCommands), profiles, preferences, transportSupportPolicy, logger, localizer, uiDispatcher, languageService)
     {
     }
 
@@ -71,7 +73,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IStringLocalizer<CoreStrings> localizer,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        IAppLanguageService? languageService = null)
         : this(
             chat,
             chat,
@@ -82,7 +85,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             logger,
             localizer,
             chat,
-            uiDispatcher)
+            uiDispatcher,
+            languageService)
     {
     }
 
@@ -95,7 +99,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ITransportSupportPolicy transportSupportPolicy,
         ILogger<AcpConnectionSettingsViewModel> logger,
         IStringLocalizer<CoreStrings> localizer,
-        IUiDispatcher? uiDispatcher = null)
+        IUiDispatcher? uiDispatcher = null,
+        IAppLanguageService? languageService = null)
         : this(
             connectionState,
             connectionCommands,
@@ -106,7 +111,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             logger,
             localizer,
             chatFacade: null,
-            uiDispatcher)
+            uiDispatcher,
+            languageService)
     {
     }
 
@@ -120,7 +126,8 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         ILogger<AcpConnectionSettingsViewModel> logger,
         IStringLocalizer<CoreStrings> localizer,
         ISettingsChatConnection? chatFacade,
-        IUiDispatcher? uiDispatcher)
+        IUiDispatcher? uiDispatcher,
+        IAppLanguageService? languageService)
     {
         ArgumentNullException.ThrowIfNull(connectionState);
         _connectionCommands = connectionCommands ?? throw new ArgumentNullException(nameof(connectionCommands));
@@ -130,6 +137,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
         _uiDispatcher = uiDispatcher ?? InlineUiDispatcher.Instance;
         Chat = chatFacade ?? new CompositeSettingsChatConnection(connectionState, _connectionCommands, _transportConfig);
         TransportOptions = CreateTransportOptions(_transportSupportPolicy, _localizer);
@@ -146,6 +154,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         Profiles.PropertyChanged += OnProfilesPropertyChanged;
         _preferences.PropertyChanged += OnPreferencesPropertyChanged;
         _preferences.AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesCollectionChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
 
         SelectedHydrationCompletionMode = ResolveHydrationCompletionModeOption(_preferences.AcpHydrationCompletionMode);
         RefreshRemoteDirectoryRows();
@@ -172,6 +184,38 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         {
             PostToUi(() => OnPropertyChanged(nameof(CanRefreshProfiles)));
         }
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        PostToUi(RefreshLocalizedOptions);
+    }
+
+    private void RefreshLocalizedOptions()
+    {
+        var selectedTransportType = SelectedTransport?.Type ?? _transportConfig.SelectedTransportType;
+        var selectedHydrationMode = SelectedHydrationCompletionMode?.Value
+            ?? _preferences.AcpHydrationCompletionMode;
+
+        TransportOptions.Clear();
+        foreach (var option in CreateTransportOptions(_transportSupportPolicy, _localizer))
+        {
+            TransportOptions.Add(option);
+        }
+
+        HydrationCompletionModeOptions.Clear();
+        foreach (var option in CreateHydrationCompletionModeOptions(_localizer))
+        {
+            HydrationCompletionModeOptions.Add(option);
+        }
+
+        SelectedTransport = TransportOptions.FirstOrDefault(option => option.Type == selectedTransportType)
+            ?? TransportOptions.FirstOrDefault();
+        SelectedHydrationCompletionMode = HydrationCompletionModeOptions.FirstOrDefault(option =>
+            string.Equals(option.Value, selectedHydrationMode, StringComparison.Ordinal))
+            ?? HydrationCompletionModeOptions.FirstOrDefault();
+        OnPropertyChanged(nameof(SelectedTransportName));
+        OnPropertyChanged(nameof(SelectedHydrationCompletionModeDescription));
     }
 
     private void OnAgentRemoteDirectoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -615,6 +659,10 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         Profiles.PropertyChanged -= OnProfilesPropertyChanged;
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _preferences.AgentRemoteDirectories.CollectionChanged -= OnAgentRemoteDirectoriesCollectionChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 
     private void PostToUi(Action action)

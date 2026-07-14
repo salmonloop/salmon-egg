@@ -71,6 +71,46 @@ public sealed class CloudConfigSettingsViewModelTests
     }
 
     [Fact]
+    public void LanguageChanged_ReprojectsCachedStatusHeadline()
+    {
+        var snapshot = CreateSnapshot(
+            enabled: true,
+            providerId: "webdav",
+            options: new Dictionary<string, string>
+            {
+                ["file_url"] = "https://dav.example.test/config/"
+            },
+            transfer: new CloudTransferState(CloudTransferPhase.Idle),
+            readiness: CloudProviderReadiness.Ready);
+        var coordinator = new FakeCoordinator(snapshot);
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "DataStorage_CloudSyncEnabledHeadline", "云同步已开启 · {0}");
+        localizer.Set("zh-Hans", "DataStorage_CloudSyncRetryConnection", "重新检查登录信息");
+        localizer.Set("en-US", "DataStorage_CloudSyncEnabledHeadline", "Cloud sync enabled · {0}");
+        localizer.Set("en-US", "DataStorage_CloudSyncRetryConnection", "Retry connection");
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var viewModel = new CloudConfigSettingsViewModel(
+            coordinator,
+            Mock.Of<IUiInteractionService>(),
+            new ImmediateUiDispatcher(),
+            localizer,
+            languageService.Object);
+
+        Assert.Equal("云同步已开启 · WebDAV", viewModel.StatusHeadline);
+        Assert.Equal("重新检查登录信息", viewModel.RetryCredentialCheckText);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Cloud sync enabled · WebDAV", viewModel.StatusHeadline);
+        Assert.Equal("Retry connection", viewModel.RetryCredentialCheckText);
+    }
+
+    [Fact]
     public void ActionProjection_OnlyShowsActionsRelevantToCurrentState()
     {
         var unconfigured = CreateViewModel(new FakeCoordinator(CreateSnapshot(

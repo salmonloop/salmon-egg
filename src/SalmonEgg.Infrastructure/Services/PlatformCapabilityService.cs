@@ -31,7 +31,7 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     public bool SupportsTray => IsWindowsDesktopProcessHost;
 
-    public bool SupportsLanguageOverride => IsWindowsDesktopProcessHost;
+    public bool SupportsLanguageOverride => true;
 
     public bool SupportsMiniWindow => IsWindowsDesktopProcessHost;
 

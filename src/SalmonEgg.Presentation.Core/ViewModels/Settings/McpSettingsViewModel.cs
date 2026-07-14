@@ -13,18 +13,24 @@ using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class McpSettingsViewModel : ObservableObject
+public sealed partial class McpSettingsViewModel : ObservableObject, IDisposable
 {
     private readonly IMcpSettingsService _settingsService;
     private readonly IPlatformShellService _platformShell;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<McpSettingsViewModel> _logger;
+    private readonly IUiDispatcher? _uiDispatcher;
+    private readonly IAppLanguageService? _languageService;
     private readonly SemaphoreSlim _persistenceLock = new(1, 1);
     private List<McpServerCatalogEntry> _persistedServers = [];
     private bool _isLoadingRows;
+    private string? _statusMessageResourceKey;
+    private string? _importStatusMessageResourceKey;
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddServerCommand))]
@@ -44,12 +50,20 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         IMcpSettingsService settingsService,
         IPlatformShellService platformShell,
         IStringLocalizer<CoreStrings> localizer,
-        ILogger<McpSettingsViewModel> logger)
+        ILogger<McpSettingsViewModel> logger,
+        IUiDispatcher? uiDispatcher = null,
+        IAppLanguageService? languageService = null)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
         _platformShell = platformShell ?? throw new ArgumentNullException(nameof(platformShell));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _uiDispatcher = uiDispatcher;
+        _languageService = languageService;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     public ObservableCollection<McpServerRowViewModel> Servers { get; } = new();
@@ -81,16 +95,16 @@ public sealed partial class McpSettingsViewModel : ObservableObject
                     OpenEditor,
                     MarkServerUnsaved,
                     SaveEnabledStateAsync);
-                row.SetStatusMessage(_localizer["McpSettings_RowSaved"]);
+                SetRowStatus(row, "McpSettings_RowSaved");
                 Servers.Add(row);
             }
 
-            StatusMessage = string.Empty;
+            SetStatus(null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load MCP settings");
-            StatusMessage = _localizer["McpSettings_LoadFailed"];
+            SetStatus("McpSettings_LoadFailed");
         }
         finally
         {
@@ -110,7 +124,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             Transport = McpServerTransport.Stdio,
             IsDetailsExpanded = true
         };
-        row.SetStatusMessage(_localizer["McpSettings_RowUnsaved"]);
+        SetRowStatus(row, "McpSettings_RowUnsaved");
         row.SetEditedCallback(MarkServerUnsaved);
         EditingServer = row;
     }
@@ -510,7 +524,19 @@ public sealed partial class McpSettingsViewModel : ObservableObject
 
     private void SetImportStatus(string resourceKey)
     {
+        _importStatusMessageResourceKey = resourceKey;
         ImportStatusMessage = _localizer[resourceKey];
+    }
+
+    private void SetStatus(string? resourceKey)
+    {
+        _statusMessageResourceKey = resourceKey;
+        StatusMessage = resourceKey is null ? string.Empty : _localizer[resourceKey];
+    }
+
+    private void SetRowStatus(McpServerRowViewModel row, string resourceKey)
+    {
+        row.SetStatusMessage(_localizer[resourceKey], resourceKey);
     }
 
     private void ApplyImportedRowToEditor(McpServerRowViewModel editor, McpServerRowViewModel imported)
@@ -526,7 +552,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         editor.EnvironmentText = imported.EnvironmentText;
         editor.Url = imported.Url;
         editor.HeadersText = imported.HeadersText;
-        editor.SetStatusMessage(_localizer["McpSettings_RowUnsaved"]);
+        SetRowStatus(editor, "McpSettings_RowUnsaved");
     }
 
     private void OpenEditor(McpServerRowViewModel server)
@@ -536,7 +562,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
 
     private void MarkServerUnsaved(McpServerRowViewModel server)
     {
-        server.SetStatusMessage(_localizer["McpSettings_RowUnsaved"]);
+        SetRowStatus(server, "McpSettings_RowUnsaved");
     }
 
     private async Task SaveServerAsync(McpServerRowViewModel server)
@@ -546,16 +572,15 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             var validationKey = GetValidationResourceKey(server);
             if (validationKey is not null)
             {
-                var message = _localizer[validationKey];
-                server.SetStatusMessage(message);
-                StatusMessage = message;
+                SetRowStatus(server, validationKey);
+                SetStatus(validationKey);
                 return;
             }
 
             if (server.PersistedName is not null && !Servers.Any(candidate => IsRowPersistedMatch(candidate, server.PersistedName)))
             {
                 EditingServer = null;
-                StatusMessage = _localizer["McpSettings_Removed"];
+                SetStatus("McpSettings_Removed");
                 return;
             }
 
@@ -564,23 +589,24 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             if (!persisted)
             {
                 EditingServer = null;
-                StatusMessage = _localizer["McpSettings_Removed"];
+                SetStatus("McpSettings_Removed");
                 return;
             }
 
-            var savedMessage = _localizer["McpSettings_RowSaved"];
-            var savedRow = CreateListRow(savedEntry, savedMessage);
+            var savedRow = CreateListRow(savedEntry, "McpSettings_RowSaved");
             ReplaceListRow(server.PersistedName, savedRow);
-            server.MarkClean(savedEntry.Name, savedMessage);
+            server.MarkClean(
+                savedEntry.Name,
+                _localizer["McpSettings_RowSaved"],
+                "McpSettings_RowSaved");
             EditingServer = null;
-            StatusMessage = _localizer["McpSettings_Saved"];
+            SetStatus("McpSettings_Saved");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save MCP settings");
-            var message = _localizer["McpSettings_SaveFailed"];
-            server.SetStatusMessage(message);
-            StatusMessage = message;
+            SetRowStatus(server, "McpSettings_SaveFailed");
+            SetStatus("McpSettings_SaveFailed");
         }
     }
 
@@ -597,9 +623,8 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             if (validationKey is not null)
             {
                 server.SetEnabledFromStore(false);
-                var message = _localizer[validationKey];
-                server.SetStatusMessage(message);
-                StatusMessage = message;
+                SetRowStatus(server, validationKey);
+                SetStatus(validationKey);
                 return;
             }
         }
@@ -612,7 +637,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         await SaveServerAsync(server).ConfigureAwait(true);
     }
 
-    private McpServerRowViewModel CreateListRow(McpServerCatalogEntry entry, string statusMessage)
+    private McpServerRowViewModel CreateListRow(McpServerCatalogEntry entry, string statusResourceKey)
     {
         var row = McpServerRowViewModel.FromCatalogEntry(
             entry,
@@ -621,7 +646,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             OpenEditor,
             MarkServerUnsaved,
             SaveEnabledStateAsync);
-        row.SetStatusMessage(statusMessage);
+        SetRowStatus(row, statusResourceKey);
         return row;
     }
 
@@ -646,12 +671,12 @@ public sealed partial class McpSettingsViewModel : ObservableObject
         try
         {
             await PersistRemoveAsync(persistedName, CancellationToken.None).ConfigureAwait(true);
-            StatusMessage = _localizer["McpSettings_Removed"];
+            SetStatus("McpSettings_Removed");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to remove MCP server");
-            StatusMessage = _localizer["McpSettings_SaveFailed"];
+            SetStatus("McpSettings_SaveFailed");
         }
     }
 
@@ -750,5 +775,59 @@ public sealed partial class McpSettingsViewModel : ObservableObject
             && string.IsNullOrWhiteSpace(server.Url)
             ? "McpSettings_SaveValidationUrlRequired"
             : null;
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_uiDispatcher is null)
+        {
+            ReprojectLocalizedState();
+            return;
+        }
+
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            ReprojectLocalizedState();
+            return;
+        }
+
+        _uiDispatcher.Enqueue(ReprojectLocalizedState);
+    }
+
+    private void ReprojectLocalizedState()
+    {
+        if (_statusMessageResourceKey is not null)
+        {
+            StatusMessage = _localizer[_statusMessageResourceKey];
+        }
+
+        if (_importStatusMessageResourceKey is not null)
+        {
+            ImportStatusMessage = _localizer[_importStatusMessageResourceKey];
+        }
+
+        foreach (var server in Servers)
+        {
+            if (server.StatusMessageResourceKey is null)
+            {
+                continue;
+            }
+
+            server.SetStatusMessage(_localizer[server.StatusMessageResourceKey], server.StatusMessageResourceKey);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 }

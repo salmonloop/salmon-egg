@@ -1598,8 +1598,10 @@ public sealed class MainNavigationViewModelSelectionTests
                 Discover = "发现更多会话",
                 Settings = "设置",
                 Sessions = "会话",
+                Unclassified = "未归类",
                 MoreSessions = "展开显示（+{0}）"
             };
+            var languageService = new Mock<IAppLanguageService>();
 
             using var navVm = CreateNavigationViewModel(
                 chatCatalog,
@@ -1608,32 +1610,39 @@ public sealed class MainNavigationViewModelSelectionTests
                 navState,
                 out _,
                 out _,
-                localizerOverride: localizer);
+                localizerOverride: localizer,
+                languageServiceOverride: languageService.Object);
 
             navVm.RebuildTree();
             var more = navVm.Items
                 .OfType<ProjectNavItemViewModel>()
                 .SelectMany(project => project.Children.OfType<MoreSessionsNavItemViewModel>())
                 .Single();
+            var unclassified = navVm.Items
+                .OfType<ProjectNavItemViewModel>()
+                .Single(project => project.ProjectId == MainNavigationViewModel.UnclassifiedProjectId);
 
             Assert.Equal("开始", navVm.StartItem.Title);
             Assert.Equal("发现更多会话", navVm.DiscoverSessionsItem.Title);
             Assert.Equal("设置", navVm.SettingsItem.Title);
             Assert.Equal("会话", navVm.SessionsLabelItem.Title);
+            Assert.Equal("未归类", unclassified.Title);
             Assert.Equal("展开显示（+1）", more.Title);
 
             localizer.Start = "Start";
             localizer.Discover = "Discover sessions";
             localizer.Settings = "Settings";
             localizer.Sessions = "Sessions";
+            localizer.Unclassified = "Unclassified";
             localizer.MoreSessions = "Show more (+{0})";
 
-            navVm.RefreshLocalizedText();
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
 
             Assert.Equal("Start", navVm.StartItem.Title);
             Assert.Equal("Discover sessions", navVm.DiscoverSessionsItem.Title);
             Assert.Equal("Settings", navVm.SettingsItem.Title);
             Assert.Equal("Sessions", navVm.SessionsLabelItem.Title);
+            Assert.Equal("Unclassified", unclassified.Title);
             Assert.Equal("Show more (+1)", more.Title);
         }
         finally
@@ -1886,7 +1895,8 @@ public sealed class MainNavigationViewModelSelectionTests
         out ShellNavigationRuntimeStateStore runtimeState,
         IConversationCatalogDisplayReadModel? presenterOverride = null,
         IUiInteractionService? uiOverride = null,
-        IStringLocalizer<CoreStrings>? localizerOverride = null)
+        IStringLocalizer<CoreStrings>? localizerOverride = null,
+        IAppLanguageService? languageServiceOverride = null)
     {
         var ui = new Mock<IUiInteractionService>();
         ui.SetupGet(service => service.CanPickFolder).Returns(true);
@@ -1912,7 +1922,8 @@ public sealed class MainNavigationViewModelSelectionTests
             presenter,
             new ProjectAffinityResolver(),
             uiDispatcher,
-            localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>());
+            localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>(),
+            languageService: languageServiceOverride);
     }
 
     private static MutableConversationCatalogDisplayReadModel CreatePresenter(IConversationCatalog chatCatalog)
@@ -2028,6 +2039,7 @@ public sealed class MainNavigationViewModelSelectionTests
         public string Discover { get; set; } = string.Empty;
         public string Settings { get; set; } = string.Empty;
         public string Sessions { get; set; } = string.Empty;
+        public string Unclassified { get; set; } = string.Empty;
         public string MoreSessions { get; set; } = string.Empty;
 
         public LocalizedString this[string name] => new(name, Resolve(name));
@@ -2046,6 +2058,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 "Nav_DiscoverSessions" => Discover,
                 "Nav_Settings" => Settings,
                 "Nav_Sessions" => Sessions,
+                "Nav_Unclassified" => Unclassified,
                 "Nav_MoreSessionsFormat" => MoreSessions,
                 _ => name
             };

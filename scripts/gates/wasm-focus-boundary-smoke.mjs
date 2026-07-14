@@ -30,7 +30,7 @@ try {
     await openApp(page, baseUrl);
     await navigateToSettingsSection(
       page,
-      { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
+      { labels: ["诊断与日志", "Diagnostics & Logs", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
       diagnosticsPagePattern,
       "diagnostics settings page");
 
@@ -38,7 +38,7 @@ try {
     await waitForBodyText(page, diagnosticsPagePattern, "diagnostics settings page at mobile viewport");
     await clickTopNavigationOverflowTargetUntilBodyText(
       page,
-      { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
+      { labels: ["诊断与日志", "Diagnostics & Logs", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
       diagnosticsPagePattern,
       "diagnostics settings page from mobile overflow");
     await page.setViewportSize({ width: 1280, height: 900 });

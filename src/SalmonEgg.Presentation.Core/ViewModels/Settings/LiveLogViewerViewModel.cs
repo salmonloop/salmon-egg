@@ -12,8 +12,19 @@ using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class LiveLogViewerViewModel : ObservableObject
+public sealed partial class LiveLogViewerViewModel : ObservableObject, IDisposable
 {
+    private enum LiveLogStatusKind
+    {
+        NotStarted,
+        Streaming,
+        Stopped,
+        Paused,
+        ReadFailed,
+        NoLogFile,
+        SwitchedToLatest
+    }
+
     private const int DefaultMaxVisibleCharacters = 32768;
 
     private readonly ILiveLogStreamService _service;
@@ -22,9 +33,12 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
     private readonly int _maxVisibleCharacters;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private CancellationTokenSource? _streamingCancellationTokenSource;
     private Task? _streamingTask;
     private bool _suppressExpansionSideEffects;
+    private LiveLogStatusKind _statusKind;
+    private bool _disposed;
 
     public LiveLogViewerViewModel(
         ILiveLogStreamService service,
@@ -32,19 +46,26 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         ILogger<LiveLogViewerViewModel> logger,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        int maxVisibleCharacters = DefaultMaxVisibleCharacters)
+        int maxVisibleCharacters = DefaultMaxVisibleCharacters,
+        IAppLanguageService? languageService = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _logsDirectoryPath = logsDirectoryPath ?? throw new ArgumentNullException(nameof(logsDirectoryPath));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
         _maxVisibleCharacters = maxVisibleCharacters > 0
             ? maxVisibleCharacters
             : throw new ArgumentOutOfRangeException(nameof(maxVisibleCharacters));
         _visibleLogText = string.Empty;
-        _statusText = _localizer["LiveLog_StatusNotStarted"];
+        _statusKind = LiveLogStatusKind.NotStarted;
+        _statusText = ResolveStatusText();
         _isAutoFollowEnabled = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     [ObservableProperty]
@@ -84,7 +105,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
 
         IsPaused = false;
         IsStreaming = true;
-        StatusText = _localizer["LiveLog_StatusStreaming"];
+        SetStatus(LiveLogStatusKind.Streaming);
         NotifyStreamingStateChanged();
 
         var cancellationTokenSource = new CancellationTokenSource();
@@ -97,7 +118,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
     public async Task StopStreamingAsync()
     {
         IsPaused = false;
-        await StopStreamingCoreAsync(_localizer["LiveLog_StatusStopped"]).ConfigureAwait(false);
+        await StopStreamingCoreAsync(LiveLogStatusKind.Stopped).ConfigureAwait(false);
     }
 
     public async Task PauseStreamingAsync()
@@ -108,7 +129,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         }
 
         IsPaused = true;
-        await StopStreamingCoreAsync(_localizer["LiveLog_StatusPaused"]).ConfigureAwait(false);
+        await StopStreamingCoreAsync(LiveLogStatusKind.Paused).ConfigureAwait(false);
     }
 
     public async Task ResumeStreamingAsync()
@@ -172,7 +193,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         }
     }
 
-    private async Task StopStreamingCoreAsync(string stoppedStatusText)
+    private async Task StopStreamingCoreAsync(LiveLogStatusKind stoppedStatus)
     {
         var cancellationTokenSource = _streamingCancellationTokenSource;
         var streamingTask = _streamingTask;
@@ -180,7 +201,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         if (cancellationTokenSource is null)
         {
             IsStreaming = false;
-            StatusText = stoppedStatusText;
+            SetStatus(stoppedStatus);
             NotifyStreamingStateChanged();
             return;
         }
@@ -208,7 +229,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         await RunOnCapturedContextAsync(() =>
         {
             IsStreaming = false;
-            StatusText = stoppedStatusText;
+            SetStatus(stoppedStatus);
             NotifyStreamingStateChanged();
         }).ConfigureAwait(false);
     }
@@ -226,7 +247,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
                 }
 
                 IsStreaming = false;
-                StatusText = _localizer["LiveLog_StatusStopped"];
+                SetStatus(LiveLogStatusKind.Stopped);
                 NotifyStreamingStateChanged();
             }).ConfigureAwait(false);
         }
@@ -244,7 +265,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
                 }
 
                 IsStreaming = false;
-                StatusText = _localizer["LiveLog_StatusReadFailed"];
+                SetStatus(LiveLogStatusKind.ReadFailed);
                 NotifyStreamingStateChanged();
             }).ConfigureAwait(false);
         }
@@ -266,9 +287,9 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
 
         if (update.HasFileSwitched)
         {
-            StatusText = string.IsNullOrWhiteSpace(update.CurrentLogFilePath)
-                ? _localizer["LiveLog_StatusNoLogFile"]
-                : _localizer["LiveLog_StatusSwitchedToLatest"];
+            SetStatus(string.IsNullOrWhiteSpace(update.CurrentLogFilePath)
+                ? LiveLogStatusKind.NoLogFile
+                : LiveLogStatusKind.SwitchedToLatest);
         }
 
         if (string.IsNullOrEmpty(update.AppendedText))
@@ -280,7 +301,7 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
 
         if (!IsPaused)
         {
-            StatusText = _localizer["LiveLog_StatusStreaming"];
+            SetStatus(LiveLogStatusKind.Streaming);
         }
     }
 
@@ -320,8 +341,43 @@ public sealed partial class LiveLogViewerViewModel : ObservableObject
         OnPropertyChanged(nameof(CanResumeStreaming));
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = RunOnCapturedContextAsync(() => StatusText = ResolveStatusText());
+
+    private void SetStatus(LiveLogStatusKind statusKind)
+    {
+        _statusKind = statusKind;
+        StatusText = ResolveStatusText();
+    }
+
+    private string ResolveStatusText()
+        => _statusKind switch
+        {
+            LiveLogStatusKind.Streaming => _localizer["LiveLog_StatusStreaming"],
+            LiveLogStatusKind.Stopped => _localizer["LiveLog_StatusStopped"],
+            LiveLogStatusKind.Paused => _localizer["LiveLog_StatusPaused"],
+            LiveLogStatusKind.ReadFailed => _localizer["LiveLog_StatusReadFailed"],
+            LiveLogStatusKind.NoLogFile => _localizer["LiveLog_StatusNoLogFile"],
+            LiveLogStatusKind.SwitchedToLatest => _localizer["LiveLog_StatusSwitchedToLatest"],
+            _ => _localizer["LiveLog_StatusNotStarted"]
+        };
+
     private Task RunOnCapturedContextAsync(Action action)
     {
         return _uiDispatcher.EnqueueAsync(action);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 }

@@ -22,7 +22,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     private readonly ILogger<AcpProfilesViewModel> _logger;
     private readonly IUiDispatcher _dispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
+    private bool _disposed;
 
     // ── Dependencies for per-profile item ViewModels ─────────────────────────
     // Null when the registry/events are not registered (e.g., lightweight contexts
@@ -85,13 +87,19 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         AppPreferencesViewModel preferences,
         ILogger<AcpProfilesViewModel> logger,
         IUiDispatcher dispatcher,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _localizer = localizer;
+        _languageService = languageService;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     /// <summary>
@@ -106,8 +114,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         ISettingsAcpConnectionCommands connectionCommands,
         ILoggerFactory loggerFactory,
         IUiDispatcher dispatcher,
-        IStringLocalizer<CoreStrings> localizer)
-        : this(configurationService, preferences, logger, dispatcher, localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
+        : this(configurationService, preferences, logger, dispatcher, localizer, languageService)
     {
         _sessionRegistry = sessionRegistry ?? throw new ArgumentNullException(nameof(sessionRegistry));
         _sessionEvents = sessionEvents ?? throw new ArgumentNullException(nameof(sessionEvents));
@@ -421,10 +430,38 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SelectedProfileItem));
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = MarshalToUiAsync(ReprojectLocalizedState);
+
+    private void ReprojectLocalizedState()
+    {
+        if (IsSavedCurrentConnectionNoticeOpen)
+        {
+            SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
+                ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+        }
+
+        foreach (var item in ProfileItems)
+        {
+            item.ReprojectLocalizedState();
+        }
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────────
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
         foreach (var vm in ProfileItems)
         {
             vm.Dispose();

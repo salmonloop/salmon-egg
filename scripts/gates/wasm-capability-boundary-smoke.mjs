@@ -51,7 +51,7 @@ try {
 
     await navigateToSettingsSection(
       page,
-      { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
+      { labels: ["数据与存储", "Data & Storage", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
       /数据与存储|Data storage|Save local history|缓存保留天数|Cache retention/,
       "data storage settings page");
 

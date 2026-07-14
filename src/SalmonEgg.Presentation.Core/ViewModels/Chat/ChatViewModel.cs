@@ -1321,6 +1321,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IChatStore _chatStore;
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly IAppLanguageService? _languageService;
 
     public ChatViewModel(
         IChatStore chatStore,
@@ -1357,12 +1358,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ISlashCommandSource? localSlashCommandSource = null,
         IConversationMutationPipeline? conversationMutationPipeline = null,
         IPlatformShellService? platformShell = null,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
         _localizer = localizer;
+        _languageService = languageService;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
@@ -1479,6 +1482,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _preferences.Projects.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _preferences.AgentRemoteDirectories.CollectionChanged += OnProjectAffinityPreferencesCollectionChanged;
         _conversationWorkspace.PropertyChanged += OnConversationWorkspacePropertyChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
+
         if (_shellNavigationRuntimeState is not null)
         {
             _shellNavigationRuntimeState.PropertyChanged += OnShellNavigationRuntimeStatePropertyChanged;
@@ -1655,6 +1663,23 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         if (e.PropertyName == nameof(AppPreferencesViewModel.AcpHydrationCompletionMode))
         {
             _hydrationCompletionMode = ResolveHydrationCompletionMode(_preferences.AcpHydrationCompletionMode);
+        }
+    }
+
+    private async void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        try
+        {
+            NotifyComposerProjectionChanged();
+            RaiseOverlayStateChanged();
+            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to refresh localized chat projection");
         }
     }
 
@@ -3405,6 +3430,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         _preferences.Projects.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
         _preferences.AgentRemoteDirectories.CollectionChanged -= OnProjectAffinityPreferencesCollectionChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
         _conversationWorkspace.PropertyChanged -= OnConversationWorkspacePropertyChanged;
         _voiceInputService.PartialResultReceived -= OnVoiceInputPartialResultReceived;
         _voiceInputService.FinalResultReceived -= OnVoiceInputFinalResultReceived;

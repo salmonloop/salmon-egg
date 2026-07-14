@@ -15,7 +15,7 @@ using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public partial class CloudConfigSettingsViewModel : ObservableObject
+public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposable
 {
     private const string OneDriveProviderId = "onedrive";
     private const string WebDavProviderId = "webdav";
@@ -37,21 +37,25 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
     private readonly IUiInteractionService _ui;
     private readonly IUiDispatcher _dispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private CancellationTokenSource? _credentialRefreshCts;
     private long _credentialRefreshVersion;
     private CloudConfigSyncSnapshot _snapshot;
     private CloudCredentialState _draftCredential = CloudCredentialState.Unknown;
+    private bool _disposed;
 
     public CloudConfigSettingsViewModel(
         ICloudConfigSyncCoordinator coordinator,
         IUiInteractionService ui,
         IUiDispatcher dispatcher,
-        IStringLocalizer<CoreStrings> localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _ui = ui ?? throw new ArgumentNullException(nameof(ui));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
         _snapshot = coordinator.Current;
         foreach (var provider in coordinator.Providers.OrderBy(provider => provider.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
@@ -63,6 +67,10 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
 
         LoadDraftFromSnapshot();
         _coordinator.SnapshotChanged += OnSnapshotChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     public ObservableCollection<CloudConfigProviderOptionViewModel> Providers { get; } = new();
@@ -571,6 +579,7 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowEditAction));
         OnPropertyChanged(nameof(ShowDisableAction));
         OnPropertyChanged(nameof(ShowRemoveAction));
+        OnPropertyChanged(nameof(RetryCredentialCheckText));
         OnPropertyChanged(nameof(EditActionText));
         OnPropertyChanged(nameof(StatusHeadline));
         OnPropertyChanged(nameof(TransferStatusText));
@@ -579,7 +588,19 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ConfiguredServiceDisplayName));
         OnPropertyChanged(nameof(ConnectionContextText));
         OnPropertyChanged(nameof(CredentialStatusText));
+        OnPropertyChanged(nameof(ValidationMessage));
         NotifyCredentialInputProjectionChanged();
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        if (_dispatcher.HasThreadAccess)
+        {
+            NotifySnapshotProjectionChanged();
+            return;
+        }
+
+        _dispatcher.Enqueue(NotifySnapshotProjectionChanged);
     }
 
     private void LoadDraftFromSnapshot()
@@ -717,6 +738,25 @@ public partial class CloudConfigSettingsViewModel : ObservableObject
     private static bool IsAbsoluteHttpUrl(string value) =>
         Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _coordinator.SnapshotChanged -= OnSnapshotChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
+        _credentialRefreshCts?.Cancel();
+        _credentialRefreshCts?.Dispose();
+        _credentialRefreshCts = null;
+    }
 }
 
 public sealed class CloudConfigProviderOptionViewModel

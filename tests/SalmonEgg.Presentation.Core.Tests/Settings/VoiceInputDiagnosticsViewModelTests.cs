@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
@@ -181,6 +182,45 @@ public sealed class VoiceInputDiagnosticsViewModelTests
         Assert.Equal("读取失败，请稍后重试", viewModel.CallbackObservationText);
     }
 
+    [Fact]
+    public async Task LanguageChanged_ReprojectsCachedSnapshotProjection()
+    {
+        var snapshot = new VoiceInputDiagnosticsSnapshot(
+            IsSupported: true,
+            IsListening: false,
+            CurrentLanguageTag: "zh-CN",
+            Permission: VoiceInputPermissionResult.Granted(),
+            DefaultInputDeviceName: "USB Microphone",
+            DefaultInputDeviceId: "device-1",
+            LatestLogFilePath: null,
+            LatestLogTimestamp: null,
+            LatestSession: null);
+        var service = new Mock<IVoiceInputDiagnosticsService>();
+        service.Setup(sut => sut.GetSnapshotAsync(default)).ReturnsAsync(snapshot);
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = CreateLocalizer();
+        languageService.SetupGet(s => s.CurrentLanguageTag).Returns(() => currentLanguageTag);
+        var viewModel = new VoiceInputDiagnosticsViewModel(
+            service.Object,
+            CreateProbeViewModel(),
+            new ImmediateUiDispatcher(),
+            localizer,
+            Mock.Of<ILogger<VoiceInputDiagnosticsViewModel>>(),
+            languageService.Object);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+        Assert.Equal("已支持", viewModel.SupportStatusText);
+        Assert.Equal("最近日志里还没有语音会话记录。", viewModel.SessionStatusText);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Supported", viewModel.SupportStatusText);
+        Assert.Equal("No recent voice session in the latest logs.", viewModel.SessionStatusText);
+    }
+
     private static VoiceInputDiagnosticsProbeViewModel CreateProbeViewModel()
         => new(
             NoOpVoiceInputService.Instance,
@@ -188,6 +228,38 @@ public sealed class VoiceInputDiagnosticsViewModelTests
             new ImmediateUiDispatcher(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<VoiceInputDiagnosticsProbeViewModel>>());
+
+    private static MutableTestCoreStringLocalizer CreateLocalizer()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "VoiceDiagnostics_PendingRefresh", "等待刷新");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_RefreshFailed", "读取失败，请稍后重试");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_Supported", "已支持");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_Unsupported", "当前平台不支持语音输入");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_PermissionGranted", "已通过");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_PermissionDenied", "未通过");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_UnknownLanguage", "未知");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_InputDeviceUnavailable", "未能读取当前默认输入设备。");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_NoRecentSession", "最近日志里还没有语音会话记录。");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_CallbackObservationUnavailable", "最近会话还没有回调观测结果。");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_TimelineUnavailable", "暂无最近会话时间线。");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_RecommendationNoRecentSession", "重新触发一次语音输入后再刷新，这里会显示最近一次启动、ready 和识别结果链路。");
+        localizer.Set("zh-Hans", "VoiceDiagnostics_RecommendationRefreshFailed", "语音诊断刷新失败，请稍后重试。");
+        localizer.Set("en-US", "VoiceDiagnostics_PendingRefresh", "Waiting for refresh");
+        localizer.Set("en-US", "VoiceDiagnostics_RefreshFailed", "Failed to read, try again later");
+        localizer.Set("en-US", "VoiceDiagnostics_Supported", "Supported");
+        localizer.Set("en-US", "VoiceDiagnostics_Unsupported", "Voice input is not supported on this platform");
+        localizer.Set("en-US", "VoiceDiagnostics_PermissionGranted", "Granted");
+        localizer.Set("en-US", "VoiceDiagnostics_PermissionDenied", "Denied");
+        localizer.Set("en-US", "VoiceDiagnostics_UnknownLanguage", "Unknown");
+        localizer.Set("en-US", "VoiceDiagnostics_InputDeviceUnavailable", "Unable to read the current default input device.");
+        localizer.Set("en-US", "VoiceDiagnostics_NoRecentSession", "No recent voice session in the latest logs.");
+        localizer.Set("en-US", "VoiceDiagnostics_CallbackObservationUnavailable", "No callback observations are available for the latest session.");
+        localizer.Set("en-US", "VoiceDiagnostics_TimelineUnavailable", "No recent session timeline is available.");
+        localizer.Set("en-US", "VoiceDiagnostics_RecommendationNoRecentSession", "Trigger voice input again and refresh to inspect the latest start, ready, and recognition path.");
+        localizer.Set("en-US", "VoiceDiagnostics_RecommendationRefreshFailed", "Voice diagnostics refresh failed, try again later.");
+        return localizer;
+    }
 
     private sealed class TrackingUiDispatcher : IUiDispatcher
     {

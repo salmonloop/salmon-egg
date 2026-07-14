@@ -5,12 +5,14 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -82,6 +84,41 @@ public sealed class AcpConnectionSettingsViewModelTests
         using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
 
         Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_RebuildsLocalizedOptionsWithoutChangingSelection()
+    {
+        var preferences = await CreatePreferencesAsync(supportsStdioTransport: true);
+        var profiles = CreateProfiles(preferences);
+        var chat = new TestSettingsChatConnection();
+        var languageService = new Mock<IAppLanguageService>();
+        var languagePrefix = "zh";
+        var localizer = new Mock<IStringLocalizer<CoreStrings>>();
+        localizer
+            .Setup(service => service[It.IsAny<string>()])
+            .Returns((string key) => new LocalizedString(key, $"{languagePrefix}:{key}"));
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            chat,
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            Mock.Of<ILogger<AcpConnectionSettingsViewModel>>(),
+            localizer.Object,
+            new ImmediateUiDispatcher(),
+            languageService.Object);
+        viewModel.SelectedTransport = viewModel.TransportOptions.Single(option => option.Type == TransportType.HttpSse);
+        viewModel.SelectedHydrationCompletionMode = viewModel.HydrationCompletionModeOptions.Single(option => option.Value == "LoadResponse");
+
+        languagePrefix = "en";
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal(TransportType.HttpSse, viewModel.SelectedTransport?.Type);
+        Assert.Equal("en:AcpConnection_TransportHttpSse", viewModel.SelectedTransportName);
+        Assert.Equal("LoadResponse", viewModel.SelectedHydrationCompletionMode?.Value);
+        Assert.Equal(
+            "en:AcpConnection_HydrationLoadResponseDescription",
+            viewModel.SelectedHydrationCompletionModeDescription);
     }
 
     [Fact]
@@ -787,6 +824,58 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         Assert.False(profiles.IsSavedCurrentConnectionNoticeOpen);
         Assert.Empty(profiles.SavedCurrentConnectionNoticeMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsSavedCurrentConnectionNotice()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var configurations = new[]
+        {
+            new ServerConfiguration { Id = "profile-a", Name = "Alpha" }
+        };
+
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(configurations);
+
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            null!,
+            new InitializeResponse(),
+            default));
+
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "AgentProfileEditor_CurrentConnectionSavedNoticeMessage", "配置已保存。当前连接仍使用旧配置，重新连接后生效。");
+        localizer.Set("en-US", "AgentProfileEditor_CurrentConnectionSavedNoticeMessage", "Settings saved. The current connection still uses the old configuration until reconnect.");
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            registry,
+            registry,
+            new TestConnectionCommands(),
+            NullLoggerFactory.Instance,
+            new ImmediateUiDispatcher(),
+            localizer,
+            languageService.Object);
+
+        await profiles.RefreshCommand.ExecuteAsync(null);
+        profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
+
+        Assert.Equal("配置已保存。当前连接仍使用旧配置，重新连接后生效。", profiles.SavedCurrentConnectionNoticeMessage);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Settings saved. The current connection still uses the old configuration until reconnect.", profiles.SavedCurrentConnectionNoticeMessage);
     }
 
     [Fact]

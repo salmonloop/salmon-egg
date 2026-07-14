@@ -13,8 +13,17 @@ using SalmonEgg.Presentation.Core.Services.Input;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
+public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDisposable
 {
+    private enum GamepadStatusKind
+    {
+        NotStarted,
+        Monitoring,
+        Stopped,
+        Unsupported,
+        Failed
+    }
+
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly IGamepadDiagnosticsService _service;
@@ -23,16 +32,21 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<GamepadDiagnosticsViewModel> _logger;
     private readonly TimeSpan _pollInterval;
+    private readonly IAppLanguageService? _languageService;
     private CancellationTokenSource? _monitoringCancellationTokenSource;
     private Task? _monitoringTask;
+    private GamepadDiagnosticsSnapshot _snapshot;
+    private GamepadStatusKind _statusKind;
+    private bool _disposed;
 
     public GamepadDiagnosticsViewModel(
         IGamepadDiagnosticsService service,
         IPlatformCapabilityService capabilities,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        ILogger<GamepadDiagnosticsViewModel> logger)
-        : this(service, capabilities, uiDispatcher, localizer, logger, DefaultPollInterval)
+        ILogger<GamepadDiagnosticsViewModel> logger,
+        IAppLanguageService? languageService = null)
+        : this(service, capabilities, uiDispatcher, localizer, logger, DefaultPollInterval, languageService)
     {
     }
 
@@ -42,26 +56,37 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<GamepadDiagnosticsViewModel> logger,
-        TimeSpan pollInterval)
+        TimeSpan pollInterval,
+        IAppLanguageService? languageService = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _languageService = languageService;
         _pollInterval = pollInterval > TimeSpan.Zero
             ? pollInterval
             : throw new ArgumentOutOfRangeException(nameof(pollInterval));
 
-        _statusText = _capabilities.SupportsGamepadInput
-            ? _localizer["GamepadDiagnostics_StatusNotStarted"]
-            : _localizer["GamepadDiagnostics_StatusUnsupported"];
-        _inputSourceText = _localizer["GamepadDiagnostics_InputSourceNone"];
-        _connectedGamepadsText = FormatCount(0);
-        _connectedRawControllersText = FormatCount(0);
-        _activeInputsText = _localizer["GamepadDiagnostics_ActiveInputsNone"];
-        _thumbstickText = FormatThumbstick(default);
-        _rawControllersText = _localizer["GamepadDiagnostics_RawControllersNone"];
+        _snapshot = GamepadDiagnosticsSnapshot.Unsupported with
+        {
+            IsSupported = _capabilities.SupportsGamepadInput
+        };
+        _statusKind = _capabilities.SupportsGamepadInput
+            ? GamepadStatusKind.NotStarted
+            : GamepadStatusKind.Unsupported;
+        _statusText = ResolveStatusText();
+        _inputSourceText = FormatInputSource(_snapshot.InputSource);
+        _connectedGamepadsText = FormatCount(_snapshot.ConnectedGamepadCount);
+        _connectedRawControllersText = FormatCount(_snapshot.ConnectedRawControllerCount);
+        _activeInputsText = FormatActiveInputs(_snapshot.ActiveIntents, _snapshot.ActiveContextIntents);
+        _thumbstickText = FormatThumbstick(_snapshot.Reading);
+        _rawControllersText = FormatRawControllers(_snapshot.RawControllers);
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     [ObservableProperty]
@@ -101,7 +126,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         }
 
         IsMonitoring = true;
-        StatusText = _localizer["GamepadDiagnostics_StatusMonitoring"];
+        SetStatus(GamepadStatusKind.Monitoring);
         NotifyMonitoringStateChanged();
 
         var cancellationTokenSource = new CancellationTokenSource();
@@ -113,7 +138,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
     [RelayCommand]
     private async Task StopMonitoringAsync()
     {
-        await StopMonitoringCoreAsync(_localizer["GamepadDiagnostics_StatusStopped"]).ConfigureAwait(false);
+        await StopMonitoringCoreAsync(GamepadStatusKind.Stopped).ConfigureAwait(false);
     }
 
     [RelayCommand]
@@ -133,15 +158,15 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gamepad diagnostics snapshot refresh failed.");
-            await _uiDispatcher.EnqueueAsync(() => StatusText = _localizer["GamepadDiagnostics_StatusFailed"])
+            await _uiDispatcher.EnqueueAsync(() => SetStatus(GamepadStatusKind.Failed))
                 .ConfigureAwait(false);
         }
     }
 
     public Task HandlePageUnloadedAsync()
-        => StopMonitoringCoreAsync(_localizer["GamepadDiagnostics_StatusStopped"]);
+        => StopMonitoringCoreAsync(GamepadStatusKind.Stopped);
 
-    private async Task StopMonitoringCoreAsync(string stoppedStatusText)
+    private async Task StopMonitoringCoreAsync(GamepadStatusKind stoppedStatus)
     {
         var cancellationTokenSource = _monitoringCancellationTokenSource;
         var monitoringTask = _monitoringTask;
@@ -149,9 +174,9 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         if (cancellationTokenSource is null)
         {
             IsMonitoring = false;
-            StatusText = _capabilities.SupportsGamepadInput
-                ? stoppedStatusText
-                : _localizer["GamepadDiagnostics_StatusUnsupported"];
+            SetStatus(_capabilities.SupportsGamepadInput
+                ? stoppedStatus
+                : GamepadStatusKind.Unsupported);
             NotifyMonitoringStateChanged();
             return;
         }
@@ -178,7 +203,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
         await _uiDispatcher.EnqueueAsync(() =>
         {
             IsMonitoring = false;
-            StatusText = stoppedStatusText;
+            SetStatus(stoppedStatus);
             NotifyMonitoringStateChanged();
         }).ConfigureAwait(false);
     }
@@ -208,7 +233,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
                 }
 
                 IsMonitoring = false;
-                StatusText = _localizer["GamepadDiagnostics_StatusFailed"];
+                SetStatus(GamepadStatusKind.Failed);
                 NotifyMonitoringStateChanged();
             }).ConfigureAwait(false);
         }
@@ -216,34 +241,36 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
 
     private void ApplySnapshot(GamepadDiagnosticsSnapshot snapshot)
     {
+        _snapshot = snapshot;
         if (!snapshot.IsSupported)
         {
             ApplyUnsupported();
             return;
         }
 
+        ProjectSnapshot(snapshot);
+
+        if (IsMonitoring)
+        {
+            SetStatus(GamepadStatusKind.Monitoring);
+        }
+    }
+
+    private void ProjectSnapshot(GamepadDiagnosticsSnapshot snapshot)
+    {
         ConnectedGamepadsText = FormatCount(snapshot.ConnectedGamepadCount);
         ConnectedRawControllersText = FormatCount(snapshot.ConnectedRawControllerCount);
         InputSourceText = FormatInputSource(snapshot.InputSource);
         ActiveInputsText = FormatActiveInputs(snapshot.ActiveIntents, snapshot.ActiveContextIntents);
         ThumbstickText = FormatThumbstick(snapshot.Reading);
         RawControllersText = FormatRawControllers(snapshot.RawControllers);
-
-        if (IsMonitoring)
-        {
-            StatusText = _localizer["GamepadDiagnostics_StatusMonitoring"];
-        }
     }
 
     private void ApplyUnsupported()
     {
-        ConnectedGamepadsText = FormatCount(0);
-        ConnectedRawControllersText = FormatCount(0);
-        InputSourceText = _localizer["GamepadDiagnostics_InputSourceNone"];
-        ActiveInputsText = _localizer["GamepadDiagnostics_ActiveInputsNone"];
-        ThumbstickText = FormatThumbstick(default);
-        RawControllersText = _localizer["GamepadDiagnostics_RawControllersNone"];
-        StatusText = _localizer["GamepadDiagnostics_StatusUnsupported"];
+        _snapshot = GamepadDiagnosticsSnapshot.Unsupported;
+        ProjectSnapshot(_snapshot);
+        SetStatus(GamepadStatusKind.Unsupported);
     }
 
     private string FormatInputSource(GamepadDiagnosticsInputSource inputSource)
@@ -334,5 +361,44 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CanStartMonitoring));
         OnPropertyChanged(nameof(CanStopMonitoring));
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = _uiDispatcher.EnqueueAsync(ReprojectLocalizedState);
+
+    private void ReprojectLocalizedState()
+    {
+        ProjectSnapshot(_snapshot);
+        StatusText = ResolveStatusText();
+    }
+
+    private void SetStatus(GamepadStatusKind statusKind)
+    {
+        _statusKind = statusKind;
+        StatusText = ResolveStatusText();
+    }
+
+    private string ResolveStatusText()
+        => _statusKind switch
+        {
+            GamepadStatusKind.Monitoring => _localizer["GamepadDiagnostics_StatusMonitoring"],
+            GamepadStatusKind.Stopped => _localizer["GamepadDiagnostics_StatusStopped"],
+            GamepadStatusKind.Unsupported => _localizer["GamepadDiagnostics_StatusUnsupported"],
+            GamepadStatusKind.Failed => _localizer["GamepadDiagnostics_StatusFailed"],
+            _ => _localizer["GamepadDiagnostics_StatusNotStarted"]
+        };
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 }

@@ -34,6 +34,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly ILogger<StartViewModel> _logger;
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
@@ -280,7 +281,8 @@ public sealed partial class StartViewModel : ObservableObject
         IChatConnectionStore chatConnectionStore,
         IChatLaunchWorkflow? chatLaunchWorkflow = null,
         IConversationCatalogReadModel? conversationCatalog = null,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         ArgumentNullException.ThrowIfNull(sessionManager);
@@ -293,6 +295,7 @@ public sealed partial class StartViewModel : ObservableObject
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         _localizer = localizer;
+        _languageService = languageService;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
             new ChatLaunchWorkflowChatFacadeAdapter(
@@ -322,7 +325,21 @@ public sealed partial class StartViewModel : ObservableObject
         ((INotifyCollectionChanged)Chat.AcpProfileList).CollectionChanged += OnAcpProfilesChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModeOptions).CollectionChanged += OnStartModeOptionsChanged;
         ((INotifyCollectionChanged)Chat.NewSessionDraftModelOptions).CollectionChanged += OnStartModelOptionsChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
+
         ApplyPendingProjectIntent();
+    }
+
+    public void RefreshLocalizedText()
+    {
+        Suggestions.Clear();
+        InitializeSuggestions();
+        RefreshStartProjectOptions();
+        RefreshStartSessionDraftErrorProjection();
+        RefreshVoiceProjection();
     }
 
     private void InitializeSuggestions()
@@ -354,6 +371,11 @@ public sealed partial class StartViewModel : ObservableObject
     {
         if (suggestion == null) return;
         StartPrompt = suggestion.Prompt;
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        RefreshLocalizedText();
     }
 
     private void SelectStartMode(SessionModeViewModel? mode)

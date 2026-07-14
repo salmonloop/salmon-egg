@@ -68,6 +68,7 @@ public static class DependencyInjection
         ConfigureLogging(services);
         RegisterDomainServices(services);
         RegisterInfrastructureServices(services);
+        services.AddSingleton<IStringLocalizer<CoreStrings>, UnoCoreStringLocalizer>();
         return services;
     }
 
@@ -273,8 +274,13 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<ITransportEndpointAccessPolicy, TransportEndpointAccessPolicy>();
         services.AddSingleton<IPlatformIconService, PlatformIconService>();
-        services.AddSingleton<IAppStartupService, AppStartupService>();
-        services.AddSingleton<IAppLanguageService, AppLanguageService>();
+#if WINDOWS
+        services.AddSingleton<IAppStartupService, WindowsAppStartupService>();
+#else
+        services.AddSingleton<IAppStartupService, UnsupportedAppStartupService>();
+#endif
+        services.AddSingleton<AppCultureService>();
+        services.AddSingleton<IAppLanguageService, UnoAppLanguageService>();
         services.AddSingleton<IConfigurationService, ConfigurationManager>();
         services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
 #if __WASM__ || __ANDROID__ || __IOS__
@@ -554,7 +560,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IProjectAffinityResolver>(),
                 sp.GetRequiredService<IUiDispatcher>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<IPlatformShellService>()));
+                sp.GetRequiredService<IPlatformShellService>(),
+                sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),
@@ -580,7 +587,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IProjectAffinityResolver>(),
                 sp.GetRequiredService<IGlobalSearchPipeline>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<ILogger<GlobalSearchViewModel>>()));
+                sp.GetRequiredService<ILogger<GlobalSearchViewModel>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
 
         // Discover sessions
         services.AddTransient(sp =>
@@ -609,7 +617,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<IChatLaunchWorkflow>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<IChatLaunchWorkflow>(sp =>
             new ChatLaunchWorkflow(
                 sp.GetRequiredService<IChatLaunchWorkflowChatFacade>(),
@@ -662,7 +671,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<ISettingsAcpConnectionCommands>(),
                 sp.GetRequiredService<ILoggerFactory>(),
                 sp.GetRequiredService<IUiDispatcher>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
 
 
         // ACP connection settings page view model (wraps Chat + Profiles)
@@ -674,17 +684,26 @@ public static class DependencyInjection
                 sp.GetRequiredService<ITransportSupportPolicy>(),
                 sp.GetRequiredService<ILogger<AcpConnectionSettingsViewModel>>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<IUiDispatcher>()));
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IAppLanguageService>()));
 
         // Settings pages (Data/Shortcuts/Diagnostics/About)
-        services.AddSingleton<CloudConfigSettingsViewModel>();
+        services.AddSingleton<CloudConfigSettingsViewModel>(sp =>
+            new CloudConfigSettingsViewModel(
+                sp.GetRequiredService<ICloudConfigSyncCoordinator>(),
+                sp.GetRequiredService<IUiInteractionService>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<DataStorageSettingsViewModel>();
         services.AddSingleton<McpSettingsViewModel>(sp =>
             new McpSettingsViewModel(
                 sp.GetRequiredService<IMcpSettingsService>(),
                 sp.GetRequiredService<IPlatformShellService>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<ILogger<McpSettingsViewModel>>()));
+                sp.GetRequiredService<ILogger<McpSettingsViewModel>>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<ShortcutsSettingsViewModel>();
         services.AddSingleton<LiveLogViewerViewModel>(sp =>
             new LiveLogViewerViewModel(
@@ -692,10 +711,33 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAppDataService>().LogsDirectoryPath,
                 sp.GetRequiredService<ILogger<LiveLogViewerViewModel>>(),
                 sp.GetRequiredService<IUiDispatcher>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
-        services.AddSingleton<VoiceInputDiagnosticsProbeViewModel>();
-        services.AddSingleton<VoiceInputDiagnosticsViewModel>();
-        services.AddSingleton<GamepadDiagnosticsViewModel>();
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                languageService: sp.GetRequiredService<IAppLanguageService>()));
+        services.AddSingleton<VoiceInputDiagnosticsProbeViewModel>(sp =>
+            new VoiceInputDiagnosticsProbeViewModel(
+                sp.GetRequiredService<IVoiceInputService>(),
+                sp.GetRequiredService<IAudioInputSignalDiagnosticsService>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ILogger<VoiceInputDiagnosticsProbeViewModel>>(),
+                sp.GetRequiredService<IApplicationActivationSignalSource>(),
+                sp.GetRequiredService<IAppLanguageService>()));
+        services.AddSingleton<VoiceInputDiagnosticsViewModel>(sp =>
+            new VoiceInputDiagnosticsViewModel(
+                sp.GetRequiredService<IVoiceInputDiagnosticsService>(),
+                sp.GetRequiredService<VoiceInputDiagnosticsProbeViewModel>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ILogger<VoiceInputDiagnosticsViewModel>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
+        services.AddSingleton<GamepadDiagnosticsViewModel>(sp =>
+            new GamepadDiagnosticsViewModel(
+                sp.GetRequiredService<IGamepadDiagnosticsService>(),
+                sp.GetRequiredService<IPlatformCapabilityService>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ILogger<GamepadDiagnosticsViewModel>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
         services.AddSingleton<DiagnosticsSettingsViewModel>();
         services.AddSingleton<IOpenSourceAcknowledgementsProvider, GeneratedOpenSourceAcknowledgementsProvider>();
         services.AddSingleton<AboutViewModel>();

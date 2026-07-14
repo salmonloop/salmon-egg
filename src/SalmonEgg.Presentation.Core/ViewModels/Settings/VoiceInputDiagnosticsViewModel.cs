@@ -5,18 +5,30 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
+public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject, IDisposable
 {
+    private enum VoiceDiagnosticsProjectionKind
+    {
+        Pending,
+        Snapshot,
+        RefreshFailed
+    }
+
     private readonly IVoiceInputDiagnosticsService _service;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<VoiceInputDiagnosticsViewModel> _logger;
+    private readonly IAppLanguageService? _languageService;
+    private VoiceInputDiagnosticsSnapshot? _snapshot;
+    private VoiceDiagnosticsProjectionKind _projectionKind;
+    private bool _disposed;
 
     public VoiceInputDiagnosticsProbeViewModel Probe { get; }
 
@@ -54,22 +66,30 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         VoiceInputDiagnosticsProbeViewModel probe,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        ILogger<VoiceInputDiagnosticsViewModel> logger)
+        ILogger<VoiceInputDiagnosticsViewModel> logger,
+        IAppLanguageService? languageService = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         Probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _languageService = languageService;
 
-        _supportStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
-        _permissionStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
-        _currentLanguageTagText = CultureInfo.CurrentUICulture.Name;
-        _inputDeviceText = _localizer["VoiceDiagnostics_PendingRefresh"];
-        _sessionStatusText = _localizer["VoiceDiagnostics_NoRecentSession"];
-        _callbackObservationText = _localizer["VoiceDiagnostics_CallbackObservationUnavailable"];
-        _timelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
-        _recommendationText = _localizer["VoiceDiagnostics_RecommendationNoRecentSession"];
+        _projectionKind = VoiceDiagnosticsProjectionKind.Pending;
+        _supportStatusText = string.Empty;
+        _permissionStatusText = string.Empty;
+        _currentLanguageTagText = string.Empty;
+        _inputDeviceText = string.Empty;
+        _sessionStatusText = string.Empty;
+        _callbackObservationText = string.Empty;
+        _timelineText = string.Empty;
+        _recommendationText = string.Empty;
+        ProjectPending();
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     public bool CanOpenAuthorizationHelp => RequiresAuthorization;
@@ -90,14 +110,9 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
             _logger.LogError(ex, "Voice diagnostics refresh failed.");
             await RunOnUiAsync(() =>
             {
-                SupportStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-                PermissionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-                InputDeviceText = _localizer["VoiceDiagnostics_RefreshFailed"];
-                SessionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
-                CallbackObservationText = _localizer["VoiceDiagnostics_RefreshFailed"];
-                TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
-                RecommendationText = _localizer["VoiceDiagnostics_RecommendationRefreshFailed"];
-                RequiresAuthorization = false;
+                _projectionKind = VoiceDiagnosticsProjectionKind.RefreshFailed;
+                _snapshot = null;
+                ProjectRefreshFailed();
             }).ConfigureAwait(false);
         }
     }
@@ -110,6 +125,8 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
 
     private void ApplySnapshot(VoiceInputDiagnosticsSnapshot snapshot)
     {
+        _snapshot = snapshot;
+        _projectionKind = VoiceDiagnosticsProjectionKind.Snapshot;
         SupportStatusText = snapshot.IsSupported
             ? _localizer["VoiceDiagnostics_Supported"]
             : _localizer["VoiceDiagnostics_Unsupported"];
@@ -286,5 +303,64 @@ public sealed partial class VoiceInputDiagnosticsViewModel : ObservableObject
         }
 
         return _uiDispatcher.EnqueueAsync(action);
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = RunOnUiAsync(ReprojectLocalizedState);
+
+    private void ReprojectLocalizedState()
+    {
+        switch (_projectionKind)
+        {
+            case VoiceDiagnosticsProjectionKind.Snapshot when _snapshot is not null:
+                ApplySnapshot(_snapshot);
+                break;
+            case VoiceDiagnosticsProjectionKind.RefreshFailed:
+                ProjectRefreshFailed();
+                break;
+            default:
+                ProjectPending();
+                break;
+        }
+    }
+
+    private void ProjectPending()
+    {
+        SupportStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
+        PermissionStatusText = _localizer["VoiceDiagnostics_PendingRefresh"];
+        CurrentLanguageTagText = CultureInfo.CurrentUICulture.Name;
+        InputDeviceText = _localizer["VoiceDiagnostics_PendingRefresh"];
+        SessionStatusText = _localizer["VoiceDiagnostics_NoRecentSession"];
+        CallbackObservationText = _localizer["VoiceDiagnostics_CallbackObservationUnavailable"];
+        TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
+        RecommendationText = _localizer["VoiceDiagnostics_RecommendationNoRecentSession"];
+        RequiresAuthorization = false;
+    }
+
+    private void ProjectRefreshFailed()
+    {
+        SupportStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+        PermissionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+        CurrentLanguageTagText = CultureInfo.CurrentUICulture.Name;
+        InputDeviceText = _localizer["VoiceDiagnostics_RefreshFailed"];
+        SessionStatusText = _localizer["VoiceDiagnostics_RefreshFailed"];
+        CallbackObservationText = _localizer["VoiceDiagnostics_RefreshFailed"];
+        TimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
+        RecommendationText = _localizer["VoiceDiagnostics_RecommendationRefreshFailed"];
+        RequiresAuthorization = false;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
     }
 }

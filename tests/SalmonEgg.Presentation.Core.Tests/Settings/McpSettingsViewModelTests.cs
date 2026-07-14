@@ -8,6 +8,7 @@ using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
@@ -616,6 +617,49 @@ public sealed class McpSettingsViewModelTests
         Assert.NotNull(service.SavedSettings);
         Assert.Empty(service.SavedSettings!.Servers);
         Assert.False(viewModel.IsEditorOpen);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsSavedRowAndPageStatus()
+    {
+        var service = new FakeMcpSettingsService
+        {
+            Settings = new McpSettings
+            {
+                Servers =
+                {
+                    new HttpMcpServer("search", "https://example.com/mcp")
+                }
+            }
+        };
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "McpSettings_RowSaved", "已保存");
+        localizer.Set("zh-Hans", "McpSettings_Saved", "MCP 服务已保存。");
+        localizer.Set("en-US", "McpSettings_RowSaved", "Saved");
+        localizer.Set("en-US", "McpSettings_Saved", "MCP server saved.");
+        languageService.SetupGet(s => s.CurrentLanguageTag).Returns(() => currentLanguageTag);
+        var viewModel = new McpSettingsViewModel(
+            service,
+            new FakePlatformShellService(),
+            localizer,
+            Mock.Of<ILogger<McpSettingsViewModel>>(),
+            new ImmediateUiDispatcher(),
+            languageService.Object);
+
+        await viewModel.LoadCommand.ExecuteAsync(null);
+        await viewModel.Servers[0].SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal("已保存", viewModel.Servers[0].StatusMessage);
+        Assert.Equal("MCP 服务已保存。", viewModel.StatusMessage);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Saved", viewModel.Servers[0].StatusMessage);
+        Assert.Equal("MCP server saved.", viewModel.StatusMessage);
     }
 
     private static McpSettingsViewModel CreateViewModel(

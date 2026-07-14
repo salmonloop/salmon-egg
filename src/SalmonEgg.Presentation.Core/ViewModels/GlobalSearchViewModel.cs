@@ -11,6 +11,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -36,6 +37,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IGlobalSearchPipeline _searchPipeline;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly ILogger<GlobalSearchViewModel> _logger;
 
     private readonly List<SearchHistoryItem> _searchHistory = new();
@@ -81,7 +83,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         IProjectAffinityResolver projectAffinityResolver,
         IGlobalSearchPipeline searchPipeline,
         IStringLocalizer<CoreStrings> localizer,
-        ILogger<GlobalSearchViewModel> logger)
+        ILogger<GlobalSearchViewModel> logger,
+        IAppLanguageService? languageService = null)
     {
         _navViewModel = navViewModel ?? throw new ArgumentNullException(nameof(navViewModel));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
@@ -90,8 +93,13 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _searchPipeline = searchPipeline ?? throw new ArgumentNullException(nameof(searchPipeline));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _resultGroups.CollectionChanged += OnResultGroupsCollectionChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     partial void OnQueryChanged(string value)
@@ -366,6 +374,11 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
 
     public void Dispose()
     {
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
         ResultGroups.CollectionChanged -= OnResultGroupsCollectionChanged;
         _searchCoordinator.Dispose();
     }
@@ -418,6 +431,22 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private void RaiseSuggestionEntriesChanged()
     {
         OnPropertyChanged(nameof(SuggestionEntries));
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        RaiseSuggestionEntriesChanged();
+        if (!HasQuery)
+        {
+            return;
+        }
+
+        CancelPendingSearch();
+        ResultGroups.Clear();
+        ViewState = GlobalSearchViewState.Loading;
+        var ticket = _searchCoordinator.Begin();
+        _ = Interlocked.Increment(ref _activeSearchRequestId);
+        _ = SearchAsync(Query, ticket);
     }
 
     private IReadOnlyList<SearchSuggestionEntry> BuildSuggestionEntries()

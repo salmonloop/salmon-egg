@@ -45,7 +45,7 @@ const sections = {
     label: "appearance settings page"
   },
   dataStorage: {
-    target: { labels: ["数据与存储", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
+    target: { labels: ["数据与存储", "Data & Storage", "Data storage", "Data"], automationIds: ["SettingsNav.DataStorage"] },
     bodyPattern: /保存本地历史|Save local history|缓存保留天数|Cache retention/,
     label: "data storage settings page"
   },
@@ -56,7 +56,7 @@ const sections = {
   },
   acp: {
     target: { labels: ["ACP Agent", "ACP / Agent", "Agent (ACP)"], automationIds: ["SettingsNav.AgentAcp"] },
-    bodyPattern: /Enable ACP agents|启用 ACP Agent|Connection eviction|Hydration/,
+    bodyPattern: /Enable ACP agents|启用 ACP Agent|Connection eviction|Hydration|Session load completion handling|Advanced loading policy/,
     label: "ACP settings page"
   },
   mcp: {
@@ -69,6 +69,7 @@ const sections = {
 const controls = {
   generalAutoStart: { labels: ["开机自启动", "Launch on startup"], automationIds: ["GeneralSettings.AutoStart"] },
   generalMinimizeToTray: { labels: ["关闭到系统托盘", "Minimize to tray"], automationIds: ["GeneralSettings.MinimizeToTray"] },
+  generalLanguage: { labels: ["语言", "Language"], automationIds: ["GeneralSettings.Language"] },
   appearanceAnimation: { labels: ["动画效果", "Animations"], automationIds: ["Appearance.Animation"] },
   dataStorageSaveLocalHistory: {
     labels: ["保存本地历史", "Save local history"],
@@ -94,7 +95,8 @@ try {
 
   try {
     await openApp(page, baseUrl);
-    await verifyUnsupportedGeneralSettings(page);
+    await verifyGeneralSettings(page);
+    await changeLanguage(page);
     await changeAppearanceSettings(page);
     const updatedCacheRetention = await changeDataStorageSettings(page);
     await changeShortcutsSettings(page);
@@ -106,6 +108,7 @@ try {
       appSettingsPath,
       [
         "theme: Dark",
+        "language: en-US",
         "is_animation_enabled: false",
         "backdrop: Acrylic",
         "save_local_history: false",
@@ -126,7 +129,8 @@ try {
 
     await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
     await openApp(page, baseUrl);
-    await verifyUnsupportedGeneralSettings(page, "after reload");
+    await verifyGeneralSettings(page, "after reload");
+    await verifyLanguageSelection(page, "after reload");
     await verifyAppearanceSettings(page, "after reload");
     await verifyDataStorageSettings(page, updatedCacheRetention, "after reload");
     await verifyShortcutsSettings(page, "after reload");
@@ -142,7 +146,7 @@ try {
   await browser.close();
 }
 
-async function verifyUnsupportedGeneralSettings(page, suffix = "") {
+async function verifyGeneralSettings(page, suffix = "") {
   await navigateToSettingsSection(
     page,
     sections.general.target,
@@ -158,10 +162,45 @@ async function verifyUnsupportedGeneralSettings(page, suffix = "") {
     controls.generalMinimizeToTray,
     false,
     `minimize to tray ${suffix}`.trim());
+  if (!suffix) {
+    await expectComboBoxSelectionText(
+      page,
+      "GeneralSettings.Language",
+      ["System", "跟随系统"],
+      "initial language selection");
+  }
+}
+
+async function changeLanguage(page) {
+  await navigateToSettingsSection(
+    page,
+    sections.general.target,
+    sections.general.bodyPattern,
+    "general settings page for language change");
+  await selectComboBoxItem(
+    page,
+    "GeneralSettings.Language",
+    ["English"],
+    { keyboardSelectVisibleItem: true, verifySelectionText: false });
   await waitForBodyText(
     page,
-    /当前平台不支持语言覆盖|Language override is not supported on this platform/,
-    `language unsupported notice ${suffix}`.trim());
+    /Your AI co-pilot for ACP sessions/,
+    "English Start page after shell reload");
+  await waitForBodyText(page, /Recommend tasks/, "English cached Start suggestions after language change");
+  await verifyLanguageSelection(page, "after edit");
+}
+
+async function verifyLanguageSelection(page, suffix = "") {
+  await navigateToSettingsSection(
+    page,
+    sections.general.target,
+    sections.general.bodyPattern,
+    `general settings language ${suffix}`.trim());
+  await expectComboBoxSelectionText(
+    page,
+    "GeneralSettings.Language",
+    ["English"],
+    `language selection ${suffix}`.trim());
 }
 
 async function changeAppearanceSettings(page) {

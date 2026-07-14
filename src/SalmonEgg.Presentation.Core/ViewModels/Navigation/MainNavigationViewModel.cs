@@ -48,6 +48,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly IShellNavigationRuntimeState _shellRuntimeState;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly System.Collections.Specialized.NotifyCollectionChangedEventHandler _projectsChangedHandler;
     private readonly Timer _relativeTimeTimer;
     private static readonly TimeSpan RelativeTimeRefreshInterval = TimeSpan.FromSeconds(30);
@@ -123,7 +124,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IProjectAffinityResolver projectAffinityResolver,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        IPlatformShellService? shell = null)
+        IPlatformShellService? shell = null,
+        IAppLanguageService? languageService = null)
         : this(
             conversationCatalog,
             projectPreferences,
@@ -142,7 +144,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             projectAffinityResolver,
             uiDispatcher,
             localizer,
-            shell)
+            shell,
+            languageService)
     {
     }
 
@@ -161,7 +164,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IProjectAffinityResolver projectAffinityResolver,
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
-        IPlatformShellService? shell = null)
+        IPlatformShellService? shell = null,
+        IAppLanguageService? languageService = null)
     {
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
@@ -178,6 +182,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
         AddProjectCommand = new AsyncRelayCommand(AddProjectAsync, () => CanAddProject);
 
         StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Start", "Start"));
@@ -214,6 +219,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             RelativeTimeRefreshInterval);
 
         _navigationState.PaneStateChanged += OnServicePaneStateChanged;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     public void RefreshLocalizedText()
@@ -227,6 +236,17 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         DiscoverSessionsItem.UpdateTitle(Localize("Nav_DiscoverSessions", "Discover sessions"));
         SettingsItem.UpdateTitle(Localize("Nav_Settings", "Settings"));
         SessionsLabelItem.UpdateTitle(Localize("Nav_Sessions", "Sessions"));
+
+        var unclassifiedTitle = Localize("Nav_Unclassified", "未归类");
+        foreach (var project in Items
+                     .OfType<ProjectNavItemViewModel>()
+                     .Where(project => string.Equals(
+                         project.ProjectId,
+                         UnclassifiedProjectId,
+                         StringComparison.Ordinal)))
+        {
+            project.Title = unclassifiedTitle;
+        }
 
         var moreTitleFormat = Localize("Nav_MoreSessionsFormat", "Show more (+{0})");
         foreach (var moreItem in Items
@@ -248,6 +268,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     public void Dispose()
     {
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
         _navigationState.PaneStateChanged -= OnServicePaneStateChanged;
         _conversationCatalogPresenter.PropertyChanged -= OnConversationCatalogPresenterPropertyChanged;
         _shellSelection.PropertyChanged -= OnShellSelectionPropertyChanged;
@@ -265,6 +290,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             DisposeItem(item);
         }
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
+        RefreshLocalizedText();
     }
 
     private void DisposeItem(object? item)
@@ -823,7 +853,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         var projects = new List<(ProjectDefinition Project, bool IsSystem)>
         {
-            (new ProjectDefinition { ProjectId = UnclassifiedProjectId, Name = "未归类", RootPath = string.Empty }, true)
+            (new ProjectDefinition
+            {
+                ProjectId = UnclassifiedProjectId,
+                Name = Localize("Nav_Unclassified", "未归类"),
+                RootPath = string.Empty
+            }, true)
         };
 
         projects.AddRange(_projectPreferences.Projects
@@ -1021,7 +1056,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         var project = new ProjectDefinition
         {
             ProjectId = UnclassifiedProjectId,
-            Name = "未归类",
+            Name = Localize("Nav_Unclassified", "未归类"),
             RootPath = string.Empty
         };
         var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState, _uiDispatcher) { IsExpanded = true };

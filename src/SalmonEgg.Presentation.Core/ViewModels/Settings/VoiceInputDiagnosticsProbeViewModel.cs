@@ -6,13 +6,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObject
+public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObject, IDisposable
 {
     private enum AuthorizationProbeRetryState
     {
@@ -20,6 +21,22 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         WaitingForActivation,
         WaitingForProbeReady,
         Starting
+    }
+
+    private enum ProbeStatusKind
+    {
+        Idle,
+        Unsupported,
+        Busy,
+        Authorizing,
+        Starting,
+        Listening,
+        Stopping,
+        PartialOnly,
+        FinalReceived,
+        ReadyWithoutRecognition,
+        Failed,
+        FailedWithMessage
     }
 
     private static readonly TimeSpan SignalPollInterval = TimeSpan.FromMilliseconds(100);
@@ -30,6 +47,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<VoiceInputDiagnosticsProbeViewModel> _logger;
+    private readonly IAppLanguageService? _languageService;
     private readonly SemaphoreSlim _signalMonitoringGate = new(1, 1);
     private CancellationTokenSource? _probeCts;
     private CancellationTokenSource? _signalMonitoringCancellationTokenSource;
@@ -44,7 +62,12 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
     private DateTimeOffset? _endedAt;
     private DateTimeOffset? _errorAt;
     private string? _errorMessage;
+    private string? _capturedText;
+    private AudioInputSignalDiagnosticsSnapshot? _signalSnapshot;
+    private string? _signalFailureMessage;
     private AuthorizationProbeRetryState _authorizationProbeRetryState;
+    private ProbeStatusKind _probeStatusKind;
+    private bool _disposed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanStartProbe))]
@@ -72,7 +95,8 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<VoiceInputDiagnosticsProbeViewModel> logger,
-        IApplicationActivationSignalSource? applicationActivationSignalSource = null)
+        IApplicationActivationSignalSource? applicationActivationSignalSource = null,
+        IAppLanguageService? languageService = null)
     {
         _voiceInputService = voiceInputService ?? throw new ArgumentNullException(nameof(voiceInputService));
         _signalDiagnosticsService = signalDiagnosticsService ?? throw new ArgumentNullException(nameof(signalDiagnosticsService));
@@ -80,7 +104,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _probeStatusText = _localizer["VoiceDiagnostics_ProbeIdle"];
+        _languageService = languageService;
+        _probeStatusKind = ProbeStatusKind.Idle;
+        _probeStatusText = ResolveProbeStatusText();
         _probeTimelineText = _localizer["VoiceDiagnostics_ProbeTimelinePending"];
         _probeCapturedText = _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
         _probeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalPending"];
@@ -90,6 +116,10 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         _voiceInputService.SessionEnded += OnSessionEnded;
         _voiceInputService.ErrorOccurred += OnErrorOccurred;
         _applicationActivationSignalSource.Activated += OnApplicationActivated;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
+        }
     }
 
     public bool CanStartProbe => !IsRunning;
@@ -120,9 +150,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         {
             await RunOnUiAsync(() =>
             {
-                ProbeStatusText = _localizer["VoiceDiagnostics_Unsupported"];
+                SetProbeStatus(ProbeStatusKind.Unsupported);
                 ProbeTimelineText = _localizer["VoiceDiagnostics_TimelineUnavailable"];
-                ProbeCapturedText = _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
+                SetCapturedText(null);
             }).ConfigureAwait(false);
             return;
         }
@@ -131,7 +161,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         {
             await RunOnUiAsync(() =>
             {
-                ProbeStatusText = _localizer["VoiceDiagnostics_ProbeBusy"];
+                SetProbeStatus(ProbeStatusKind.Busy);
             }).ConfigureAwait(false);
             return;
         }
@@ -145,11 +175,10 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         {
             ResetProbeState();
             IsRunning = true;
-            ProbeStatusText = _localizer["VoiceDiagnostics_ProbeAuthorizing"];
+            SetProbeStatus(ProbeStatusKind.Authorizing);
             ProbeTimelineText = _localizer["VoiceDiagnostics_ProbeTimelinePending"];
-            ProbeCapturedText = _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
-            ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalPending"];
-            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            SetCapturedText(null);
+            ResetSignalProjection();
         }).ConfigureAwait(false);
 
         TryDisposeProbeCts();
@@ -163,7 +192,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             {
                 _activeRequestId = requestId;
                 _startRequestedAt = DateTimeOffset.Now;
-                ProbeStatusText = _localizer["VoiceDiagnostics_ProbeStarting"];
+                SetProbeStatus(ProbeStatusKind.Starting);
             }).ConfigureAwait(false);
             await StartSignalMonitoringAsync(_probeCts.Token).ConfigureAwait(false);
             _logger.LogInformation(
@@ -188,7 +217,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
                 }
 
                 _recognizerReadyAt = DateTimeOffset.Now;
-                ProbeStatusText = _localizer["VoiceDiagnostics_ProbeListening"];
+                SetProbeStatus(ProbeStatusKind.Listening);
                 ProbeTimelineText = BuildTimelineText();
             }).ConfigureAwait(false);
 
@@ -224,10 +253,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             {
                 _errorAt = DateTimeOffset.Now;
                 _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
-                ProbeStatusText = string.Format(
-                    CultureInfo.InvariantCulture,
-                    _localizer["VoiceDiagnostics_SessionFailedWithMessage"],
-                    _errorMessage);
+                SetProbeStatus(ProbeStatusKind.FailedWithMessage);
                 ProbeTimelineText = BuildTimelineText();
                 IsRunning = false;
                 _activeRequestId = null;
@@ -313,7 +339,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
             requestId = _activeRequestId;
             _stopRequestedAt = DateTimeOffset.Now;
-            ProbeStatusText = _localizer["VoiceDiagnostics_ProbeStopping"];
+            SetProbeStatus(ProbeStatusKind.Stopping);
         }).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(requestId))
@@ -334,10 +360,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             {
                 _errorAt = DateTimeOffset.Now;
                 _errorMessage = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Failed to stop voice input.");
-                ProbeStatusText = string.Format(
-                    CultureInfo.InvariantCulture,
-                    _localizer["VoiceDiagnostics_SessionFailedWithMessage"],
-                    _errorMessage);
+                SetProbeStatus(ProbeStatusKind.FailedWithMessage);
                 ProbeTimelineText = BuildTimelineText();
                 IsRunning = false;
                 _activeRequestId = null;
@@ -363,6 +386,25 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         }
     }
 
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _voiceInputService.PartialResultReceived -= OnPartialResultReceived;
+        _voiceInputService.FinalResultReceived -= OnFinalResultReceived;
+        _voiceInputService.SessionEnded -= OnSessionEnded;
+        _voiceInputService.ErrorOccurred -= OnErrorOccurred;
+        _applicationActivationSignalSource.Activated -= OnApplicationActivated;
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+    }
+
     private void OnPartialResultReceived(object? sender, VoiceInputPartialResult result)
         => _ = _uiDispatcher.EnqueueAsync(() =>
         {
@@ -372,8 +414,8 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             }
 
             _firstPartialAt ??= DateTimeOffset.Now;
-            ProbeCapturedText = result.Text;
-            ProbeStatusText = _localizer["VoiceDiagnostics_SessionPartialOnly"];
+            SetCapturedText(result.Text);
+            SetProbeStatus(ProbeStatusKind.PartialOnly);
             ProbeTimelineText = BuildTimelineText();
         });
 
@@ -386,8 +428,8 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             }
 
             _finalResultAt = DateTimeOffset.Now;
-            ProbeCapturedText = result.Text;
-            ProbeStatusText = _localizer["VoiceDiagnostics_SessionFinalReceived"];
+            SetCapturedText(result.Text);
+            SetProbeStatus(ProbeStatusKind.FinalReceived);
             ProbeTimelineText = BuildTimelineText();
         });
 
@@ -408,7 +450,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             }
 
             _endedAt = DateTimeOffset.Now;
-            ProbeStatusText = ResolveCompletedStatus();
+            SetProbeStatus(ResolveCompletedStatusKind());
             ProbeTimelineText = BuildTimelineText();
             IsRunning = false;
             _activeRequestId = null;
@@ -434,10 +476,7 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
 
             _errorAt = DateTimeOffset.Now;
             _errorMessage = result.Message;
-            ProbeStatusText = string.Format(
-                CultureInfo.InvariantCulture,
-                _localizer["VoiceDiagnostics_SessionFailedWithMessage"],
-                result.Message);
+            SetProbeStatus(ProbeStatusKind.FailedWithMessage);
             ProbeTimelineText = BuildTimelineText();
             IsRunning = false;
             _activeRequestId = null;
@@ -451,34 +490,31 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         }
     }
 
-    private string ResolveCompletedStatus()
+    private ProbeStatusKind ResolveCompletedStatusKind()
     {
         if (_errorAt is not null)
         {
             return string.IsNullOrWhiteSpace(_errorMessage)
-                ? _localizer["VoiceDiagnostics_SessionFailed"]
-                : string.Format(
-                    CultureInfo.InvariantCulture,
-                    _localizer["VoiceDiagnostics_SessionFailedWithMessage"],
-                    _errorMessage);
+                ? ProbeStatusKind.Failed
+                : ProbeStatusKind.FailedWithMessage;
         }
 
         if (_finalResultAt is not null)
         {
-            return _localizer["VoiceDiagnostics_SessionFinalReceived"];
+            return ProbeStatusKind.FinalReceived;
         }
 
         if (_firstPartialAt is not null)
         {
-            return _localizer["VoiceDiagnostics_SessionPartialOnly"];
+            return ProbeStatusKind.PartialOnly;
         }
 
         if (_recognizerReadyAt is not null)
         {
-            return _localizer["VoiceDiagnostics_SessionReadyWithoutRecognition"];
+            return ProbeStatusKind.ReadyWithoutRecognition;
         }
 
-        return _localizer["VoiceDiagnostics_ProbeIdle"];
+        return ProbeStatusKind.Idle;
     }
 
     private string BuildTimelineText()
@@ -541,6 +577,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
         _endedAt = null;
         _errorAt = null;
         _errorMessage = null;
+        _capturedText = null;
+        _signalSnapshot = null;
+        _signalFailureMessage = null;
     }
 
     private void TryDisposeProbeCts()
@@ -588,11 +627,9 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             _logger.LogWarning(ex, "Voice diagnostics signal monitoring failed to start.");
             await RunOnUiAsync(() =>
             {
-                ProbeSignalObservationText = string.Format(
-                    CultureInfo.InvariantCulture,
-                    _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
-                    VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Signal monitoring failed."));
-                ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+                SetSignalFailure(VoiceInputErrorMessageSanitizer.Normalize(
+                    ex.Message,
+                    "Signal monitoring failed."));
             }).ConfigureAwait(false);
             return;
         }
@@ -684,16 +721,17 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             _logger.LogWarning(ex, "Voice diagnostics signal monitoring polling failed.");
             await _uiDispatcher.EnqueueAsync(() =>
             {
-                ProbeSignalObservationText = string.Format(
-                    CultureInfo.InvariantCulture,
-                    _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
-                    VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Signal monitoring failed."));
+                SetSignalFailure(VoiceInputErrorMessageSanitizer.Normalize(
+                    ex.Message,
+                    "Signal monitoring failed."));
             }).ConfigureAwait(false);
         }
     }
 
     private void ApplySignalSnapshot(AudioInputSignalDiagnosticsSnapshot snapshot)
     {
+        _signalSnapshot = snapshot;
+        _signalFailureMessage = null;
         if (!snapshot.IsSupported)
         {
             ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalUnsupported"];
@@ -748,6 +786,87 @@ public sealed partial class VoiceInputDiagnosticsProbeViewModel : ObservableObje
             return;
         }
 
+        ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = RunOnUiAsync(ReprojectLocalizedState);
+
+    private void ReprojectLocalizedState()
+    {
+        ProbeStatusText = ResolveProbeStatusText();
+        ProbeTimelineText = _probeStatusKind == ProbeStatusKind.Unsupported
+            ? _localizer["VoiceDiagnostics_TimelineUnavailable"]
+            : BuildTimelineText();
+        ProbeCapturedText = _capturedText ?? _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
+        ProjectSignalState();
+    }
+
+    private void SetProbeStatus(ProbeStatusKind statusKind)
+    {
+        _probeStatusKind = statusKind;
+        ProbeStatusText = ResolveProbeStatusText();
+    }
+
+    private string ResolveProbeStatusText()
+        => _probeStatusKind switch
+        {
+            ProbeStatusKind.Unsupported => _localizer["VoiceDiagnostics_Unsupported"],
+            ProbeStatusKind.Busy => _localizer["VoiceDiagnostics_ProbeBusy"],
+            ProbeStatusKind.Authorizing => _localizer["VoiceDiagnostics_ProbeAuthorizing"],
+            ProbeStatusKind.Starting => _localizer["VoiceDiagnostics_ProbeStarting"],
+            ProbeStatusKind.Listening => _localizer["VoiceDiagnostics_ProbeListening"],
+            ProbeStatusKind.Stopping => _localizer["VoiceDiagnostics_ProbeStopping"],
+            ProbeStatusKind.PartialOnly => _localizer["VoiceDiagnostics_SessionPartialOnly"],
+            ProbeStatusKind.FinalReceived => _localizer["VoiceDiagnostics_SessionFinalReceived"],
+            ProbeStatusKind.ReadyWithoutRecognition => _localizer["VoiceDiagnostics_SessionReadyWithoutRecognition"],
+            ProbeStatusKind.Failed => _localizer["VoiceDiagnostics_SessionFailed"],
+            ProbeStatusKind.FailedWithMessage => string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_SessionFailedWithMessage"],
+                _errorMessage),
+            _ => _localizer["VoiceDiagnostics_ProbeIdle"]
+        };
+
+    private void SetCapturedText(string? capturedText)
+    {
+        _capturedText = capturedText;
+        ProbeCapturedText = capturedText ?? _localizer["VoiceDiagnostics_ProbeNoCapturedText"];
+    }
+
+    private void ResetSignalProjection()
+    {
+        _signalSnapshot = null;
+        _signalFailureMessage = null;
+        ProjectSignalState();
+    }
+
+    private void SetSignalFailure(string failureMessage)
+    {
+        _signalSnapshot = null;
+        _signalFailureMessage = failureMessage;
+        ProjectSignalState();
+    }
+
+    private void ProjectSignalState()
+    {
+        if (!string.IsNullOrWhiteSpace(_signalFailureMessage))
+        {
+            ProbeSignalObservationText = string.Format(
+                CultureInfo.InvariantCulture,
+                _localizer["VoiceDiagnostics_ProbeSignalFailureFormat"],
+                _signalFailureMessage);
+            ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
+            return;
+        }
+
+        if (_signalSnapshot is not null)
+        {
+            ApplySignalSnapshot(_signalSnapshot);
+            return;
+        }
+
+        ProbeSignalObservationText = _localizer["VoiceDiagnostics_ProbeSignalPending"];
         ProbeSignalTimelineText = _localizer["VoiceDiagnostics_ProbeSignalTimelinePending"];
     }
 

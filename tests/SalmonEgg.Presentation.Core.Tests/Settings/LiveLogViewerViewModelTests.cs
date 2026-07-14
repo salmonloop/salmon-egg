@@ -171,6 +171,36 @@ public sealed class LiveLogViewerViewModelTests
         Assert.Equal("tick\n", viewModel.VisibleLogText);
     }
 
+    [Fact]
+    public async Task LanguageChanged_ReprojectsCachedStatusText()
+    {
+        var service = new TestLiveLogStreamService();
+        var logger = new Mock<ILogger<LiveLogViewerViewModel>>();
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = CreateLocalizer();
+        languageService.SetupGet(s => s.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var viewModel = new LiveLogViewerViewModel(
+            service,
+            "C:/logs",
+            logger.Object,
+            new ImmediateUiDispatcher(),
+            localizer,
+            languageService: languageService.Object);
+
+        await viewModel.StartStreamingAsync();
+        await service.Started.Task;
+
+        Assert.Equal("正在实时查看", viewModel.StatusText);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Streaming live logs", viewModel.StatusText);
+    }
+
     private sealed class TestLiveLogStreamService : ILiveLogStreamService
     {
         private Func<LiveLogStreamUpdate, Task>? _onUpdate;
@@ -206,5 +236,25 @@ public sealed class LiveLogViewerViewModelTests
             cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
             return completion.Task;
         }
+    }
+
+    private static MutableTestCoreStringLocalizer CreateLocalizer()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "LiveLog_StatusNotStarted", "未启动");
+        localizer.Set("zh-Hans", "LiveLog_StatusStreaming", "正在实时查看");
+        localizer.Set("zh-Hans", "LiveLog_StatusStopped", "已停止");
+        localizer.Set("zh-Hans", "LiveLog_StatusPaused", "已暂停");
+        localizer.Set("zh-Hans", "LiveLog_StatusReadFailed", "读取失败，请稍后重试");
+        localizer.Set("zh-Hans", "LiveLog_StatusNoLogFile", "未找到可用日志文件");
+        localizer.Set("zh-Hans", "LiveLog_StatusSwitchedToLatest", "已切换到最新日志文件");
+        localizer.Set("en-US", "LiveLog_StatusNotStarted", "Not started");
+        localizer.Set("en-US", "LiveLog_StatusStreaming", "Streaming live logs");
+        localizer.Set("en-US", "LiveLog_StatusStopped", "Stopped");
+        localizer.Set("en-US", "LiveLog_StatusPaused", "Paused");
+        localizer.Set("en-US", "LiveLog_StatusReadFailed", "Failed to read, try again later");
+        localizer.Set("en-US", "LiveLog_StatusNoLogFile", "No available log file");
+        localizer.Set("en-US", "LiveLog_StatusSwitchedToLatest", "Switched to the latest log file");
+        return localizer;
     }
 }

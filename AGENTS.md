@@ -82,6 +82,7 @@
    - 平台能力与原生 affordance：本地资源访问、系统 picker、剪贴板、标题栏、窗口控制、指针光标、受限平台配置和能力声明必须由统一平台能力事实源驱动；共享 UI 和业务层不得直接引用平台原生类型或绕过能力边界；验证覆盖支持平台、受限平台和共享层无原生类型泄漏。
    - Shell 与布局事实源：应用标题栏、安全区、页面级面板、右侧 pane、底部面板和主内容尺寸必须由布局 ViewModel / Store 与原生布局控件共同投影；禁止 Storyboard/Timer/code-behind 状态机、手写宽度动画、隐藏 pane hack 或把系统 inset 误当应用 chrome；验证覆盖布局策略、互斥清理、目标 viewport 和目标平台 GUI smoke。
    - Motion 与本地化事实源：应用动画偏好、语言标签、资源目录、平台 override 和打包白名单必须来自单一事实源；不得覆盖原生控件 motion 资源、改写系统全局设置、硬编码语言别名或暴露实现术语；验证覆盖资源目录、持久化 canonical tag、motion scope 文案和禁止覆盖原生 motion key。
+   - 运行时语言重载：当 Uno / WinUI 应用允许用户在运行时切换语言时，平台 `PrimaryLanguageOverride`、UI 线程 `.NET` culture 和 ViewModel 本地化投影必须由同一语言服务按顺序更新；已加载的 `x:Uid` 页面按框架原生要求重新导航或重载，持久 singleton 只从 authoritative 状态重新投影文本；禁止在纯 `net*` 程序集中用目标平台编译常量假装应用 override、遍历视觉树逐控件改字、延迟刷新或用旧字符串反推语义状态；验证覆盖当前页面与导航栈重载、singleton 缓存文本、BCP-47 持久化、Desktop/WASM 构建以及目标平台真实安装包 GUI smoke。
    - 输入设备语义：键盘、手柄、遥控器、RawGameController、虚拟输入和诊断注入必须收敛到一条 authoritative 输入语义链；设备服务只采集事实和处理明确 opt-in 缺口，不在 shell 层平行驱动原生控件焦点、激活、选中或值编辑；验证覆盖真实设备、synthetic 差异、一次物理输入只产生一次用户可见行为，以及 selector/value control 不误改值。
    - 可编辑行与语义 ID：配置项、导航项、远端目录、profile、可编辑行和跨层 semantic id 必须由单一 resolver/catalog/row ViewModel owner 构造、解析和承载命令身份；禁止多处复制前缀、未知远端 id 回退本地路径、父 ViewModel 反复注入 stale command 或静默改写用户配置；验证覆盖本地/远端/未知/冲突 id 和新增、删除、再新增交互。
    - 真实构建验证：GUI smoke、安装包验证、发布前回归、WASM 导航和跨平台验证必须使用本次构建实际产出的安装物、二进制、发布包或静态产物；禁止旧安装、旁路产物、开发服务器缓存、隐藏测试入口或来源不明的运行实例替代；验证报告必须记录产物路径、版本/提交来源和启动实例来源。

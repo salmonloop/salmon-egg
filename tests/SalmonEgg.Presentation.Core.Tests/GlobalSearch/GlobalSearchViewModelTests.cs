@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
@@ -98,6 +99,34 @@ public sealed class GlobalSearchViewModelTests
         Assert.Equal(GlobalSearchViewState.Loading, viewModel.ViewState);
         Assert.True(viewModel.IsSearching);
         Assert.Contains(viewModel.SuggestionEntries, entry => entry.Kind == SearchSuggestionEntryKind.Status);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_RerunsActiveSearchProjection()
+    {
+        var preferences = CreatePreferencesWithProject();
+        var presenter = new ConversationCatalogPresenter();
+        var pipeline = new ControlledSearchPipeline();
+        var languageService = new Mock<IAppLanguageService>();
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+        using var viewModel = new GlobalSearchViewModel(
+            navigationViewModel,
+            preferences,
+            Mock.Of<INavigationCoordinator>(),
+            presenter,
+            new ProjectAffinityResolver(),
+            pipeline,
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>(),
+            languageService.Object);
+
+        viewModel.Query = "abc";
+        await WaitForConditionAsync(() => pipeline.CallCount == 1);
+
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        await WaitForConditionAsync(() => pipeline.CallCount == 2);
+        Assert.Equal("abc", viewModel.Query);
     }
 
     [Fact]
@@ -425,11 +454,16 @@ public sealed class GlobalSearchViewModelTests
 
     private sealed class ControlledSearchPipeline : IGlobalSearchPipeline
     {
+        private int _callCount;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
         public Task<GlobalSearchSnapshot> SearchAsync(
             string query,
             GlobalSearchSourceSnapshot source,
             CancellationToken cancellationToken)
         {
+            _ = Interlocked.Increment(ref _callCount);
             return Task.FromResult(new GlobalSearchSnapshot(ImmutableArray<GlobalSearchGroupSnapshot>.Empty));
         }
     }

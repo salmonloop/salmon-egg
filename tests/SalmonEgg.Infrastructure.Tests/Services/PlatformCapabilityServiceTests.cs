@@ -82,7 +82,7 @@ public sealed class PlatformCapabilityServiceTests
 
         Assert.False(sut.SupportsLaunchOnStartup);
         Assert.False(sut.SupportsTray);
-        Assert.False(sut.SupportsLanguageOverride);
+        Assert.True(sut.SupportsLanguageOverride);
         Assert.False(sut.SupportsMiniWindow);
         Assert.False(sut.SupportsGamepadInput);
     }
@@ -99,7 +99,7 @@ public sealed class PlatformCapabilityServiceTests
 
         Assert.False(sut.SupportsLaunchOnStartup);
         Assert.False(sut.SupportsTray);
-        Assert.False(sut.SupportsLanguageOverride);
+        Assert.True(sut.SupportsLanguageOverride);
         Assert.False(sut.SupportsMiniWindow);
         Assert.False(sut.SupportsGamepadInput);
     }

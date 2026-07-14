@@ -185,7 +185,6 @@ public class AppPreferencesViewModelTests
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
-        uiRuntime.Verify(service => service.RefreshLocalizedText(), Times.Once);
         uiRuntime.Verify(service => service.ReloadShell(), Times.Once);
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.Language == "zh-Hans")),

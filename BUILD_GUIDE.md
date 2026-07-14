@@ -239,7 +239,7 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - 设置页顶部原生 `NavigationView` overflow 导航；
 - Start 页推荐卡片可见性：确认推荐标题和说明文本进入可见 DOM，且辅助文本不会解析为透明；
 - Diagnostics 页焦点边界：确认焦点不会落到隐藏、stale 或 body-only 状态；
-- 设置持久化：通过 UI 修改外观、数据与存储、快捷键、ACP 总开关和 MCP 服务器启用状态，刷新后从可见设置页确认状态仍存在；
+- 设置持久化：通过 UI 切换应用语言并修改外观、数据与存储、快捷键、ACP 和 MCP 服务器状态，验证 shell 重载后的 `x:Uid` 与 singleton ViewModel 文案，并在刷新后从可见设置页确认状态仍存在；
 - ACP / 平台能力边界：保存 ACP WebSocket profile，验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
 - Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键经平台 bridge 进入 Uno 原生焦点与控件激活路径；
 - WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。

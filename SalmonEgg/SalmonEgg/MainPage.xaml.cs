@@ -152,11 +152,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // NavVM.PropertyChanged registration removed as layout is now driven by LayoutVM SSOT
     }
 
-    public void RefreshLocalizedText()
-    {
-        NavVM.RefreshLocalizedText();
-    }
-
     private async void OnAutomationArchiveSelectedClick(object sender, RoutedEventArgs e)
     {
         if (!IsGuiAutomationMode)

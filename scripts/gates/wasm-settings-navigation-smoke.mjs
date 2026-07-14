@@ -32,7 +32,7 @@ try {
 
     await clickTopNavigationOverflowTargetUntilBodyText(
       page,
-      { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
+      { labels: ["诊断与日志", "Diagnostics & Logs", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
       /Diagnostics and logs|诊断与日志|Live logs|日志/,
       "diagnostics settings page");
 

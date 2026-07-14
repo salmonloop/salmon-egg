@@ -262,6 +262,46 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public void LanguageChanged_RebuildsCachedQuickSuggestions()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var languageService = new Mock<IAppLanguageService>();
+            var languagePrefix = "zh";
+            var localizer = new Mock<IStringLocalizer<CoreStrings>>();
+            localizer
+                .Setup(service => service[It.IsAny<string>()])
+                .Returns((string key) => new LocalizedString(key, $"{languagePrefix}:{key}"));
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                Mock.Of<IChatLaunchWorkflow>(),
+                localizer: localizer.Object,
+                languageService: languageService.Object);
+
+            Assert.Equal("zh:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+
+            languagePrefix = "en";
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            Assert.Equal(3, startViewModel.Suggestions.Count);
+            Assert.Equal("en:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void QuickSuggestion_AllowsRuntimeProjectionUpdates()
     {
         var suggestion = new QuickSuggestionViewModel(
@@ -3052,7 +3092,8 @@ public sealed class StartViewModelTests
         IChatLaunchWorkflow workflow,
         ILogger<StartViewModel>? logger = null,
         IConversationCatalogReadModel? conversationCatalog = null,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         return new StartViewModel(
             chatViewModel: chat.ViewModel,
@@ -3066,7 +3107,8 @@ public sealed class StartViewModelTests
             chatLaunchWorkflow: workflow,
             chatConnectionStore: chat.ConnectionStore,
             conversationCatalog: conversationCatalog,
-            localizer: localizer);
+            localizer: localizer,
+            languageService: languageService);
     }
 
     private static NewSessionDraftState CreateReadyDraft(string selectedModeId)

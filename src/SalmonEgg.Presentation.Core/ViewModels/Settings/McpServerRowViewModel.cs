@@ -46,6 +46,8 @@ public sealed partial class McpServerRowViewModel : ObservableObject
 
     internal bool HasExplicitEnabledSetting { get; private set; }
 
+    internal string? StatusMessageResourceKey { get; private set; }
+
     [ObservableProperty]
     private string _name = string.Empty;
 
@@ -213,17 +215,19 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         _ = _enabledChanged?.Invoke(this);
     }
 
-    public void SetStatusMessage(string statusMessage)
+    public void SetStatusMessage(string statusMessage, string? resourceKey = null)
     {
+        StatusMessageResourceKey = resourceKey;
         StatusMessage = statusMessage;
     }
 
-    public void MarkClean(string persistedName, string statusMessage)
+    public void MarkClean(string persistedName, string statusMessage, string? resourceKey = null)
     {
         _suppressEdited = true;
         try
         {
             PersistedName = persistedName;
+            StatusMessageResourceKey = resourceKey;
             StatusMessage = statusMessage;
         }
         finally
@@ -255,7 +259,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         }
 
         copy.SetEditedCallback(edited);
-        copy.SetStatusMessage(StatusMessage);
+        copy.SetStatusMessage(StatusMessage, StatusMessageResourceKey);
         return copy;
     }
 

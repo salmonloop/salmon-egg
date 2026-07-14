@@ -133,19 +133,75 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.False(viewModel.CanStopMonitoring);
     }
 
+    [Fact]
+    public void LanguageChanged_ReprojectsCachedUnsupportedStatus()
+    {
+        var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = CreateLocalizer();
+        languageService.SetupGet(s => s.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var viewModel = new GamepadDiagnosticsViewModel(
+            service,
+            CreateCapabilities(false),
+            new ImmediateUiDispatcher(),
+            localizer,
+            Mock.Of<ILogger<GamepadDiagnosticsViewModel>>(),
+            languageService.Object);
+
+        Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Gamepad input is not supported on this platform", viewModel.StatusText);
+    }
+
     private static GamepadDiagnosticsViewModel CreateViewModel(
         IGamepadDiagnosticsService service,
         bool supportsGamepadInput)
     {
-        var capabilities = new Mock<IPlatformCapabilityService>();
-        capabilities.SetupGet(s => s.SupportsGamepadInput).Returns(supportsGamepadInput);
-
         return new GamepadDiagnosticsViewModel(
             service,
-            capabilities.Object,
+            CreateCapabilities(supportsGamepadInput),
             new ImmediateUiDispatcher(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<GamepadDiagnosticsViewModel>>());
+    }
+
+    private static IPlatformCapabilityService CreateCapabilities(bool supportsGamepadInput)
+    {
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(s => s.SupportsGamepadInput).Returns(supportsGamepadInput);
+        return capabilities.Object;
+    }
+
+    private static MutableTestCoreStringLocalizer CreateLocalizer()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "GamepadDiagnostics_StatusNotStarted", "未启动");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_StatusMonitoring", "正在监测");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_StatusStopped", "已停止");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_StatusUnsupported", "当前平台不支持手柄输入");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_StatusFailed", "读取失败，请稍后重试");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_InputSourceNone", "无");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_ActiveInputsNone", "无");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_RawControllersNone", "未检测到 Raw 控制器");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_ConnectionWireless", "无线");
+        localizer.Set("zh-Hans", "GamepadDiagnostics_ConnectionWired", "有线");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusNotStarted", "Not started");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusMonitoring", "Monitoring");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusStopped", "Stopped");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusUnsupported", "Gamepad input is not supported on this platform");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusFailed", "Failed to read, try again later");
+        localizer.Set("en-US", "GamepadDiagnostics_InputSourceNone", "None");
+        localizer.Set("en-US", "GamepadDiagnostics_ActiveInputsNone", "None");
+        localizer.Set("en-US", "GamepadDiagnostics_RawControllersNone", "No Raw controllers detected");
+        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWireless", "Wireless");
+        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWired", "Wired");
+        return localizer;
     }
 
     private sealed class FakeGamepadDiagnosticsService : IGamepadDiagnosticsService

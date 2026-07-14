@@ -187,6 +187,12 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         OnPropertyChanged(nameof(TransportGlyph));
     }
 
+    internal void ReprojectLocalizedState()
+    {
+        OnPropertyChanged(nameof(StatusLabel));
+        OnPropertyChanged(nameof(Acp_ProfileReconnectText));
+    }
+
     // ── Commands ─────────────────────────────────────────────────────────────
 
     private async Task ApplyConnectionToggleRequestAsync(bool shouldConnect, CancellationToken cancellationToken)

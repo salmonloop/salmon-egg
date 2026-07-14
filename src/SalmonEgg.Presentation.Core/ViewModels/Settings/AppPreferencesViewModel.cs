@@ -365,7 +365,6 @@ public partial class AppPreferencesViewModel : ObservableObject
         try
         {
             await _languageService.ApplyLanguageOverrideAsync(normalized).ConfigureAwait(false);
-            _uiRuntime.RefreshLocalizedText();
             _uiRuntime.ReloadShell();
         }
         catch (Exception ex)

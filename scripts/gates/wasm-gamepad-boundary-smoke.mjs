@@ -200,7 +200,7 @@ async function openDiagnosticsGamepadSection(page) {
   await openApp(page, baseUrl);
   await navigateToSettingsSection(
     page,
-    { labels: ["诊断与日志", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
+    { labels: ["诊断与日志", "Diagnostics & Logs", "Diagnostics"], automationIds: ["SettingsNav.Diagnostics"] },
     diagnosticsPagePattern,
     "diagnostics settings page");
 
