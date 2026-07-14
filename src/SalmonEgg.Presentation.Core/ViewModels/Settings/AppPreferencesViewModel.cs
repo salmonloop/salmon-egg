@@ -145,7 +145,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 return;
             }
 
-            await LoadAsync(cancellationToken).ConfigureAwait(false);
+            await LoadAsync(cancellationToken, reloadShellOnLanguageChange: false).ConfigureAwait(false);
             _isInitialized = true;
         }
         finally
@@ -154,9 +154,27 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
     }
 
-    private async Task LoadAsync(CancellationToken cancellationToken)
+    public async Task ReloadFromStoreAsync(CancellationToken cancellationToken = default)
+    {
+        await _initializeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var wasInitialized = _isInitialized;
+            CancelPendingSave();
+            await LoadAsync(cancellationToken, reloadShellOnLanguageChange: wasInitialized).ConfigureAwait(false);
+            _isInitialized = true;
+        }
+        finally
+        {
+            _initializeGate.Release();
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken, bool reloadShellOnLanguageChange)
     {
         var markLoaded = true;
+        var previousLanguage = "System";
+        var nextLanguage = "System";
         try
         {
             _suppressSave = true;
@@ -177,14 +195,16 @@ public partial class AppPreferencesViewModel : ObservableObject
                 _logger.LogWarning(ex, "Failed to query launch-on-startup state");
             }
 
-            _uiDispatcher.Enqueue(() =>
+            await _uiDispatcher.EnqueueAsync(() =>
             {
+                previousLanguage = AppLanguageCatalog.NormalizeTag(Language);
+                nextLanguage = AppLanguageCatalog.NormalizeTag(settings.Language);
                 Theme = settings.Theme;
                 IsAnimationEnabled = settings.IsAnimationEnabled;
                 Backdrop = settings.Backdrop;
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
-                Language = AppLanguageCatalog.NormalizeTag(settings.Language);
+                Language = nextLanguage;
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
@@ -233,10 +253,15 @@ public partial class AppPreferencesViewModel : ObservableObject
                 {
                     KeyBindings.Add(new KeyBindingPairViewModel(kvp.Key, kvp.Value));
                 }
-            });
+            }).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
-            await _languageService.ApplyLanguageOverrideAsync(AppLanguageCatalog.NormalizeTag(settings.Language)).ConfigureAwait(false);
+            await _languageService.ApplyLanguageOverrideAsync(nextLanguage).ConfigureAwait(false);
+            if (reloadShellOnLanguageChange &&
+                !string.Equals(previousLanguage, nextLanguage, StringComparison.Ordinal))
+            {
+                _uiRuntime.ReloadShell();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -249,7 +274,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
         finally
         {
-            _uiDispatcher.Enqueue(() =>
+            await _uiDispatcher.EnqueueAsync(() =>
             {
                 if (markLoaded)
                 {
@@ -257,7 +282,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
 
                 _suppressSave = false;
-            });
+            }).ConfigureAwait(false);
         }
     }
 
@@ -447,8 +472,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             return;
         }
 
-        _saveCts?.Cancel();
-        _saveCts?.Dispose();
+        CancelPendingSave();
         _saveCts = new CancellationTokenSource();
         var token = _saveCts.Token;
 
@@ -474,6 +498,13 @@ public partial class AppPreferencesViewModel : ObservableObject
                 _logger.LogError(ex, "Failed to save app settings");
             }
         }, token);
+    }
+
+    private void CancelPendingSave()
+    {
+        _saveCts?.Cancel();
+        _saveCts?.Dispose();
+        _saveCts = null;
     }
 
     private AppSettings CreateSettingsSnapshot()

@@ -70,6 +70,16 @@ public sealed partial class McpSettingsViewModel : ObservableObject, IDisposable
 
     public bool IsEditorOpen => EditingServer is not null;
 
+    public Task ReloadFromStoreAsync(CancellationToken cancellationToken = default)
+    {
+        if (_uiDispatcher is not null && !_uiDispatcher.HasThreadAccess)
+        {
+            return _uiDispatcher.EnqueueAsync(() => LoadAsync(cancellationToken));
+        }
+
+        return LoadAsync(cancellationToken);
+    }
+
     [RelayCommand]
     private async Task LoadAsync(CancellationToken cancellationToken)
     {

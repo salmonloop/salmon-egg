@@ -209,6 +209,36 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task SyncNowAsync_WhenRemoteRestoresCloudConfiguration_PublishesRestoredConfiguration()
+    {
+        await SaveEnabledSettingsAsync(
+            "webdav",
+            new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/old.zip" });
+        var remoteAppYaml = string.Join(
+            Environment.NewLine,
+            "cloud_config_sync:",
+            "  enabled: true",
+            "  provider_id: webdav",
+            "  revision: 42",
+            "  include_secrets: true",
+            "  provider_options:",
+            "    webdav:",
+            "      file_url: https://dav.example.test/restored.zip");
+        var provider = new FakeProvider("webdav")
+        {
+            Session = { Remote = new CloudConfigRemoteFile(CreateRemotePackage(remoteAppYaml), "remote-etag", DateTimeOffset.UtcNow) }
+        };
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(CloudTransferOutcome.Restored, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Equal("webdav", coordinator.Current.Configuration.ProviderId);
+        Assert.Equal(42, coordinator.Current.Configuration.Revision);
+        Assert.Equal("https://dav.example.test/restored.zip", coordinator.Current.Configuration.Options["file_url"]);
+    }
+
+    [Fact]
     public async Task SyncNowAsync_WhenUploadPreconditionFails_AppliesRemotePackage()
     {
         await SaveEnabledSettingsAsync();
@@ -535,6 +565,19 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
 
         Assert.Equal(1, persistence.LoadCount);
         Assert.Equal(1, persistence.FlushCount);
+    }
+
+    [Fact]
+    public async Task RestorePackageAsync_PublishesSingleRestoredChangeAfterFlush()
+    {
+        var events = new List<ConfigChangedEventArgs>();
+        _configChangeSignal.Changed += (_, args) => events.Add(args);
+
+        await _packageService.RestorePackageAsync(CreateRemotePackage("theme: Dark"), TestContext.Current.CancellationToken);
+
+        var change = Assert.Single(events);
+        Assert.Equal(ConfigChangeKind.Restored, change.Kind);
+        Assert.Equal(_appData.ConfigRootPath, change.Path);
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
@@ -168,6 +169,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 {
                     UiMotionController.Current.IsAnimationEnabled = preferences.IsAnimationEnabled;
                 }
+
+                _ = ServiceProvider.GetService<ConfigProjectionReloadCoordinator>();
+                BootLog("OnLaunched: config projection reload coordinator initialized");
             }
         }
         catch

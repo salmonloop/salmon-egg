@@ -502,10 +502,18 @@ public sealed class CloudConfigSyncCoordinator : ICloudConfigSyncCoordinator, ID
             null,
             null,
             cancellationToken).ConfigureAwait(false);
+        var publishedConfiguration = configuration;
+        if (transfer.Phase == CloudTransferPhase.Succeeded &&
+            transfer.LastSuccess?.Outcome is CloudTransferOutcome.Restored or CloudTransferOutcome.ConflictRemoteApplied)
+        {
+            var restoredSettings = await _appSettings.LoadAsync().ConfigureAwait(false);
+            publishedConfiguration = CreateConfiguration(restoredSettings.CloudConfigSync);
+        }
+
         PublishIfLatest(intentVersion, Current with
         {
             Initialization = CloudSyncInitializationState.Ready,
-            Configuration = configuration,
+            Configuration = publishedConfiguration,
             Readiness = transfer.Phase == CloudTransferPhase.Succeeded
                 ? CloudProviderReadiness.Ready
                 : ToReadiness(transfer.Failure!),

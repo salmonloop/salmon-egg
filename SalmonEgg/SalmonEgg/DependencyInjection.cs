@@ -320,6 +320,7 @@ public static class DependencyInjection
                 : new UnsupportedPlatformShellService());
 #endif
         services.AddSingleton<IStorageLocationService, SalmonEgg.Infrastructure.Services.StorageLocationService>();
+        services.AddSingleton<ConfigProjectionReloadCoordinator>();
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
         services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
         services.AddSingleton<ILogFileCatalog, SalmonEgg.Infrastructure.Services.LogFileCatalog>();

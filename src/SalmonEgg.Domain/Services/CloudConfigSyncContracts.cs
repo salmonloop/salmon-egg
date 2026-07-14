@@ -265,7 +265,8 @@ public interface ICloudConfigSyncCoordinator
 public enum ConfigChangeKind
 {
     Written,
-    Deleted
+    Deleted,
+    Restored
 }
 
 public sealed record ConfigChangedEventArgs(string Path, ConfigChangeKind Kind);

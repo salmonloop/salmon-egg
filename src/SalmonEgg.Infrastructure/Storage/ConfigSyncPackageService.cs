@@ -99,54 +99,58 @@ public sealed class ConfigSyncPackageService
 
         await _persistence.LoadAsync(cancellationToken).ConfigureAwait(false);
         var backupPath = BackupCurrentConfig();
-        using var suppression = _configChangeSignal.Suppress();
-        using var stream = new MemoryStream(package, writable: false);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-
-        ValidateArchive(archive);
-
-        if (Directory.Exists(_appData.ConfigRootPath))
+        using (var suppression = _configChangeSignal.Suppress())
         {
-            Directory.Delete(_appData.ConfigRootPath, recursive: true);
-        }
+            using var stream = new MemoryStream(package, writable: false);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
 
-        foreach (var entry in archive.Entries)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
+            ValidateArchive(archive);
+
+            if (Directory.Exists(_appData.ConfigRootPath))
             {
-                continue;
+                Directory.Delete(_appData.ConfigRootPath, recursive: true);
             }
 
-            var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
-            if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
+            foreach (var entry in archive.Entries)
             {
-                continue;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
+                if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var destination = ResolveConfigPath(relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                using var input = entry.Open();
+                using var output = File.Create(destination);
+                await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
             }
 
-            var destination = ResolveConfigPath(relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            using var input = entry.Open();
-            using var output = File.Create(destination);
-            await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
-        }
-
-        var secretsEntry = archive.GetEntry(SecretsEntryName);
-        if (secretsEntry is not null)
-        {
-            using var input = secretsEntry.Open();
-            var snapshot = await JsonSerializer.DeserializeAsync(
-                    input,
-                    ConfigSyncJsonContext.Default.ConfigurationSecretSnapshot,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (snapshot is not null)
+            var secretsEntry = archive.GetEntry(SecretsEntryName);
+            if (secretsEntry is not null)
             {
-                await _secrets.ImportAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                using var input = secretsEntry.Open();
+                var snapshot = await JsonSerializer.DeserializeAsync(
+                        input,
+                        ConfigSyncJsonContext.Default.ConfigurationSecretSnapshot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (snapshot is not null)
+                {
+                    await _secrets.ImportAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                }
             }
+
+            await _persistence.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await _persistence.FlushAsync(cancellationToken).ConfigureAwait(false);
+        _configChangeSignal.NotifyChanged(_appData.ConfigRootPath, ConfigChangeKind.Restored);
         return backupPath;
     }
 
