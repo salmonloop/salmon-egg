@@ -14,9 +14,6 @@ public sealed class PlatformRuntimeCapabilityProbe : IPlatformRuntimeCapabilityP
     {
         get
         {
-#if __WASM__ || __ANDROID__ || __IOS__
-            return false;
-#else
             if (IsRestrictedRuntime())
             {
                 return false;
@@ -25,7 +22,6 @@ public sealed class PlatformRuntimeCapabilityProbe : IPlatformRuntimeCapabilityP
             return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 || RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
                 || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-#endif
         }
     }
 
@@ -130,15 +126,9 @@ public sealed class PlatformRuntimeCapabilityProbe : IPlatformRuntimeCapabilityP
     }
 
     private static bool IsRestrictedRuntime()
-    {
-#if NET5_0_OR_GREATER
-        return OperatingSystem.IsBrowser()
+        => OperatingSystem.IsBrowser()
             || OperatingSystem.IsAndroid()
             || OperatingSystem.IsIOS();
-#else
-        return false;
-#endif
-    }
 
     private bool CanLoadAnyNativeLibrary(params string[] libraryNames)
     {

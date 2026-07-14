@@ -38,42 +38,9 @@ public sealed class PlatformShellService : IPlatformShellService
         return LaunchShellTargetAsync(uri.AbsoluteUri, _runtimeProbe);
     }
 
-    public Task<bool> CopyToClipboardAsync(string text)
-    {
-#if WINDOWS || WINDOWS_UWP
-        try
-        {
-            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetText(text ?? string.Empty);
-            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-            return Task.FromResult(true);
-        }
-        catch
-        {
-        }
-#endif
-        return Task.FromResult(false);
-    }
+    public Task<bool> CopyToClipboardAsync(string text) => Task.FromResult(false);
 
-    public async Task<string?> ReadClipboardTextAsync()
-    {
-#if WINDOWS || WINDOWS_UWP
-        try
-        {
-            var content = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-            if (!content.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
-            {
-                return null;
-            }
-
-            return await content.GetTextAsync().AsTask().ConfigureAwait(false);
-        }
-        catch
-        {
-        }
-#endif
-        return null;
-    }
+    public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);
 
     private Task<bool> OpenWithShellAsync(string path)
     {

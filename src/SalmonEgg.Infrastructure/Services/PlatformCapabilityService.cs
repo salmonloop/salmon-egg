@@ -49,15 +49,5 @@ public sealed class PlatformCapabilityService : IPlatformCapabilityService
 
     private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);
 
-    private static bool IsBrowserRuntime
-    {
-        get
-        {
-#if NET5_0_OR_GREATER
-            return OperatingSystem.IsBrowser();
-#else
-            return false;
-#endif
-        }
-    }
+    private static bool IsBrowserRuntime => OperatingSystem.IsBrowser();
 }

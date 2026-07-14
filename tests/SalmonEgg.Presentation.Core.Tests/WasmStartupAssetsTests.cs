@@ -55,6 +55,27 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
+    public void RuntimeLanguageService_UsesUnoPlatformOverrideAtApplicationBoundary()
+    {
+        var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var languageService = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Services\UnoAppLanguageService.cs");
+        var stringLocalizer = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Services\UnoCoreStringLocalizer.cs");
+        var cultureService = LoadFile(@"src\SalmonEgg.Infrastructure\Services\AppCultureService.cs");
+        var project = LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj");
+
+        Assert.Contains("AddSingleton<IAppLanguageService, UnoAppLanguageService>()", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<IStringLocalizer<CoreStrings>, UnoCoreStringLocalizer>()", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride", languageService, StringComparison.Ordinal);
+        Assert.Contains("Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride", languageService, StringComparison.Ordinal);
+        Assert.Contains("_uiDispatcher.EnqueueAsync", languageService, StringComparison.Ordinal);
+        Assert.Contains("ResourceLoader.GetForViewIndependentUse(\"CoreStrings\")", stringLocalizer, StringComparison.Ordinal);
+        Assert.Contains("PrepareCoreStringPriResources", project, StringComparison.Ordinal);
+        Assert.Contains(@"Link=""Strings\en-US\CoreStrings.resw""", project, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeInformation.IsOSPlatform", cultureService, StringComparison.Ordinal);
+        Assert.DoesNotContain("#if WINDOWS", cultureService, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Project_IncludesWasmFileSystemPersistenceInterop()
     {
         var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
@@ -102,6 +123,9 @@ public sealed class WasmStartupAssetsTests
         var paths = LoadFile(@"src\SalmonEgg.Infrastructure\Storage\SalmonEggPaths.cs");
         Assert.Contains("OperatingSystem.IsBrowser()", paths, StringComparison.Ordinal);
         Assert.DoesNotContain("#elif __WASM__", paths, StringComparison.Ordinal);
+        Assert.DoesNotContain("__ANDROID__", paths, StringComparison.Ordinal);
+        Assert.DoesNotContain("__IOS__", paths, StringComparison.Ordinal);
+        Assert.DoesNotContain("Android.App.Application", paths, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -165,13 +189,35 @@ public sealed class WasmStartupAssetsTests
         var desktopReference = Assert.Single(desktopInfrastructureReferences);
         Assert.Equal("'$(SalmonEggSupportsDesktopProcessHost)' != 'false'", (string?)desktopReference.Attribute("Condition"));
         Assert.Contains("OperatingSystem.IsBrowser()", runtimeProbe, StringComparison.Ordinal);
+        Assert.Contains("OperatingSystem.IsAndroid()", runtimeProbe, StringComparison.Ordinal);
+        Assert.Contains("OperatingSystem.IsIOS()", runtimeProbe, StringComparison.Ordinal);
+        Assert.DoesNotContain("__WASM__", runtimeProbe, StringComparison.Ordinal);
+        Assert.DoesNotContain("__ANDROID__", runtimeProbe, StringComparison.Ordinal);
+        Assert.DoesNotContain("__IOS__", runtimeProbe, StringComparison.Ordinal);
+        Assert.DoesNotContain("#if NET5_0_OR_GREATER", runtimeProbe, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsLaunchOnStartup => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsTray => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
-        Assert.Contains("public bool SupportsLanguageOverride => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("public bool SupportsLanguageOverride => true;", capabilityService, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsMiniWindow => IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
         Assert.Contains("public bool SupportsGamepadInput => IsBrowserRuntime || IsWindowsDesktopProcessHost;", capabilityService, StringComparison.Ordinal);
-        Assert.Contains("return OperatingSystem.IsBrowser();", capabilityService, StringComparison.Ordinal);
+        Assert.Contains("private static bool IsBrowserRuntime => OperatingSystem.IsBrowser();", capabilityService, StringComparison.Ordinal);
+        Assert.DoesNotContain("#if NET5_0_OR_GREATER", capabilityService, StringComparison.Ordinal);
         Assert.Contains("private bool IsWindowsDesktopProcessHost => _runtimeProbe.IsDesktopProcessHost && _isOSPlatform(OSPlatform.Windows);", capabilityService, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LaunchOnStartup_UsesPlatformBoundaryImplementationForWindows()
+    {
+        var dependencyInjection = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
+        var unsupportedService = LoadFile(@"src\SalmonEgg.Infrastructure\Services\UnsupportedAppStartupService.cs");
+        var windowsService = LoadFile(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsAppStartupService.cs");
+
+        Assert.Contains("services.AddSingleton<IAppStartupService, WindowsAppStartupService>();", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IAppStartupService, UnsupportedAppStartupService>();", dependencyInjection, StringComparison.Ordinal);
+        Assert.Contains("StartupTask.GetAsync", windowsService, StringComparison.Ordinal);
+        Assert.Contains("#if WINDOWS", windowsService, StringComparison.Ordinal);
+        Assert.DoesNotContain("Windows.ApplicationModel", unsupportedService, StringComparison.Ordinal);
+        Assert.DoesNotContain("#if WINDOWS", unsupportedService, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -387,6 +433,10 @@ public sealed class WasmStartupAssetsTests
         Assert.True(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\acp-test-server.mjs")));
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-file-system-availability-smoke.mjs")));
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-ui.mjs")));
+        var settingsPersistenceSmoke = LoadFile(@"scripts\gates\wasm-settings-persistence-smoke.mjs");
+        Assert.Contains("language: en-US", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("Your AI co-pilot for ACP sessions", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.DoesNotContain("Language override is not supported on this platform", settingsPersistenceSmoke, StringComparison.Ordinal);
 
         foreach (var script in Directory.EnumerateFiles(RepoPath(@"scripts\gates"), "wasm-*.mjs", SearchOption.TopDirectoryOnly))
         {
