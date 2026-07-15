@@ -16,6 +16,7 @@ using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -37,6 +38,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private readonly INavigationProjectPreferences _projectPreferences;
     private readonly IUiInteractionService _ui;
     private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly IAddProjectCoordinator _addProjectCoordinator;
     private readonly IPlatformShellService _shell;
     private readonly ILogger<MainNavigationViewModel> _logger;
     private readonly INavigationPaneState _navigationState;
@@ -69,7 +71,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public DiscoverSessionsNavItemViewModel DiscoverSessionsItem { get; }
     public SettingsNavItemViewModel SettingsItem { get; }
     public SessionsLabelNavItemViewModel SessionsLabelItem { get; }
-    public AddProjectNavItemViewModel AddProjectItem { get; }
 
     private NavigationViewProjection _projection = new(
         ControlSelectedItem: null,
@@ -107,7 +108,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             CurrentSelection);
     }
 
-    public IAsyncRelayCommand AddProjectCommand { get; }
+    // Two explicit source intents behind the single "添加项目" entry. Both flow through the
+    // unified AddProjectCoordinator so dedup, identity and persistence stay in one place.
+    public IAsyncRelayCommand AddLocalProjectCommand { get; }
+
+    public IAsyncRelayCommand SelectRemoteProjectCommand { get; }
 
     public MainNavigationViewModel(
         IConversationCatalog conversationCatalog,
@@ -125,7 +130,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
         IPlatformShellService? shell = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IAddProjectCoordinator? addProjectCoordinator = null)
         : this(
             conversationCatalog,
             projectPreferences,
@@ -145,7 +151,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             uiDispatcher,
             localizer,
             shell,
-            languageService)
+            languageService,
+            addProjectCoordinator)
     {
     }
 
@@ -165,7 +172,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         IUiDispatcher uiDispatcher,
         IStringLocalizer<CoreStrings> localizer,
         IPlatformShellService? shell = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IAddProjectCoordinator? addProjectCoordinator = null)
     {
         _chatSessionCatalogActions = conversationCatalog as IChatSessionCatalog ?? new ChatViewModelSessionCatalogAdapter(conversationCatalog);
         _projectPreferences = projectPreferences ?? throw new ArgumentNullException(nameof(projectPreferences));
@@ -183,20 +191,26 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _languageService = languageService;
-        AddProjectCommand = new AsyncRelayCommand(AddProjectAsync, () => CanAddProject);
+        // The coordinator is the single owner of add/dedup/persist. Fall back to a locally
+        // constructed instance over the same authoritative preferences when one is not injected
+        // (keeps the many existing test construction sites working without a second state owner).
+        _addProjectCoordinator = addProjectCoordinator
+            ?? new AddProjectCoordinator(
+                _projectPreferences,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AddProjectCoordinator>.Instance);
+        AddLocalProjectCommand = new AsyncRelayCommand(AddLocalProjectAsync, () => CanAddProject);
+        SelectRemoteProjectCommand = new AsyncRelayCommand(SelectRemoteProjectAsync);
 
         StartItem = new StartNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Start", "Start"));
         DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_DiscoverSessions", "Discover sessions"));
         SettingsItem = new SettingsNavItemViewModel(Localize("Nav_Settings", "Settings"), _navigationState, _uiDispatcher);
         SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Sessions", "Sessions"));
-        AddProjectItem = new AddProjectNavItemViewModel(AddProjectCommand, _navigationState, _uiDispatcher);
 
         FooterItems.Add(DiscoverSessionsItem);
         FooterItems.Add(SettingsItem);
 
         Items.Add(StartItem);
         Items.Add(SessionsLabelItem);
-        Items.Add(AddProjectItem);
 
         // Show a lightweight placeholder until conversations are restored.
         var placeholderProject = CreateUnclassifiedProject();
@@ -211,6 +225,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _projectsChangedHandler = (_, _) => RebuildTree();
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged += _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged += _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.NavigationRemoteDirectoryIds).CollectionChanged += _projectsChangedHandler;
 
         _relativeTimeTimer = new Timer(
             _ => _uiDispatcher.Enqueue(RefreshRelativeTimes),
@@ -279,6 +294,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         _shellRuntimeState.PropertyChanged -= OnShellRuntimeStatePropertyChanged;
         ((INotifyCollectionChanged)_projectPreferences.Projects).CollectionChanged -= _projectsChangedHandler;
         ((INotifyCollectionChanged)_projectPreferences.AgentRemoteDirectories).CollectionChanged -= _projectsChangedHandler;
+        ((INotifyCollectionChanged)_projectPreferences.NavigationRemoteDirectoryIds).CollectionChanged -= _projectsChangedHandler;
         _relativeTimeTimer.Dispose();
 
         var itemsToDispose = Items.Concat(FooterItems).ToArray();
@@ -495,7 +511,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private async Task AddProjectAsync()
+    private async Task AddLocalProjectAsync()
     {
         if (!CanAddProject)
         {
@@ -505,35 +521,89 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         var pickedPath = await _ui.PickFolderAsync().ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(pickedPath))
         {
+            // User cancelled the native picker: no project state changes.
             return;
         }
 
-        var normalized = NavTimeFormatter.NormalizePathForPrefixMatch(pickedPath).TrimEnd(System.IO.Path.DirectorySeparatorChar);
-        if (string.IsNullOrWhiteSpace(normalized))
+        var outcome = _addProjectCoordinator.AddProject(
+            new ProjectSourceSelection.LocalFolder(pickedPath));
+        await ApplyAddProjectOutcomeAsync(outcome).ConfigureAwait(true);
+    }
+
+    private async Task SelectRemoteProjectAsync()
+    {
+        // Always allow opening the selector, even with no configured remote directories:
+        // the dialog surfaces an empty state that routes the user to settings (plan §2.5).
+        using var selectionViewModel = new RemoteProjectSelectionViewModel(_projectPreferences, _uiDispatcher);
+        var result = await _ui.ShowRemoteProjectSelectionAsync(selectionViewModel).ConfigureAwait(true);
+
+        switch (result)
         {
-            return;
+            case RemoteProjectSelectionResult.Confirmed confirmed:
+                var outcome = _addProjectCoordinator.AddProject(
+                    new ProjectSourceSelection.RemoteDirectory(confirmed.DirectoryId));
+                await ApplyAddProjectOutcomeAsync(outcome).ConfigureAwait(true);
+                break;
+
+            case RemoteProjectSelectionResult.ManageRequested:
+                await NavigateToRemoteProjectSettingsAsync().ConfigureAwait(true);
+                break;
+
+            case RemoteProjectSelectionResult.Cancelled:
+            default:
+                // No selection: leave all project state untouched.
+                break;
         }
+    }
 
-        if (_projectPreferences.Projects.Any(p => string.Equals(NavTimeFormatter.NormalizePathForPrefixMatch(p.RootPath).TrimEnd(System.IO.Path.DirectorySeparatorChar), normalized, StringComparison.OrdinalIgnoreCase)))
+    private async Task ApplyAddProjectOutcomeAsync(AddProjectOutcome outcome)
+    {
+        switch (outcome.Status)
         {
-            await _ui.ShowInfoAsync("该项目路径已存在。").ConfigureAwait(true);
-            return;
+            case AddProjectStatus.Added:
+                // The authoritative preferences collections changed; the tree rebuild is driven
+                // by their CollectionChanged subscriptions. Rebuild explicitly as well so the new
+                // node is materialized before activation on synchronous dispatchers.
+                RebuildTree();
+                if (!string.IsNullOrWhiteSpace(outcome.ProjectId))
+                {
+                    await PrepareStartForProjectAsync(outcome.ProjectId!).ConfigureAwait(true);
+                }
+
+                break;
+
+            case AddProjectStatus.AlreadyExists:
+                // Do not insert a duplicate; activate the existing project instead (plan §3.4).
+                if (!string.IsNullOrWhiteSpace(outcome.ProjectId))
+                {
+                    await PrepareStartForProjectAsync(outcome.ProjectId!).ConfigureAwait(true);
+                }
+
+                break;
+
+            case AddProjectStatus.RejectedUnknownRemote:
+                await _ui.ShowInfoAsync(Localize("AddProject_RemoteProjectMissing", "该远程项目已不存在。"))
+                    .ConfigureAwait(true);
+                break;
+
+            case AddProjectStatus.Invalid:
+            default:
+                break;
         }
+    }
 
-        var name = System.IO.Path.GetFileName(normalized.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-        if (string.IsNullOrWhiteSpace(name))
+    private async Task NavigateToRemoteProjectSettingsAsync()
+    {
+        try
         {
-            name = normalized;
+            await _navigationCoordinator
+                .ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey)
+                .ConfigureAwait(true);
         }
-
-        _projectPreferences.AddProject(new ProjectDefinition
+        catch (Exception ex)
         {
-            ProjectId = Guid.NewGuid().ToString("N"),
-            Name = name,
-            RootPath = normalized
-        });
-
-        RebuildTree();
+            _logger.LogWarning(ex, "Navigating to remote project settings failed");
+        }
     }
 
     public void RebuildTree()
@@ -574,13 +644,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         try
         {
             // Ensure we have the base items
-            if (Items.Count < 3)
+            if (Items.Count < 2)
             {
                 foreach (var item in Items) DisposeItem(item);
                 Items.Clear();
                 Items.Add(StartItem);
                 Items.Add(SessionsLabelItem);
-                Items.Add(AddProjectItem);
             }
 
             // Build the new indexes in local scope first, then swap atomically.
@@ -611,8 +680,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
 #endif
 
-            // Index of where project items start (after Start, SessionsLabel, AddProject)
-            int itemIndex = 3;
+            // Index of where project items start (after Start, SessionsLabel)
+            int itemIndex = 2;
 
             foreach (var (projectDef, isSystem) in projects)
             {
@@ -868,6 +937,38 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                         && !string.IsNullOrWhiteSpace(p.RootPath))
             .Select(p => (p, false)));
 
+        // Remote directories the user added to navigation become project nodes too. Identity is
+        // the stable semantic id built by ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId;
+        // DisplayName and RootPath are projected read-only from the authoritative
+        // AgentRemoteDirectories (falling back to the path when the display name is blank).
+        // Membership order defines nav order.
+        foreach (var directoryId in _projectPreferences.NavigationRemoteDirectoryIds)
+        {
+            var normalizedId = directoryId?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedId))
+            {
+                continue;
+            }
+
+            var directory = _projectPreferences.AgentRemoteDirectories.FirstOrDefault(candidate =>
+                candidate is not null
+                && string.Equals(candidate.DirectoryId, normalizedId, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(candidate.RemotePath));
+            if (directory is null)
+            {
+                // Membership without a matching authoritative directory is stale; skip it rather
+                // than resolve it as anything else. AppPreferencesViewModel prunes such ids.
+                continue;
+            }
+
+            projects.Add((new ProjectDefinition
+            {
+                ProjectId = ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId(directory.DirectoryId),
+                Name = string.IsNullOrWhiteSpace(directory.DisplayName) ? directory.RemotePath : directory.DisplayName,
+                RootPath = directory.RemotePath
+            }, false));
+        }
+
         return projects;
     }
 
@@ -992,7 +1093,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         // Visual selection state is now handled by NavigationView's native projection behavior
         // We only need to maintain the logical state for our internal logic
         SessionsLabelItem.IsLogicallySelected = false;
-        AddProjectItem.IsLogicallySelected = false;
 
         foreach (var project in _projectVms.Values)
         {
@@ -1135,7 +1235,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             OverrideProjectId: item.ProjectAffinityOverrideProjectId,
             Projects: _projectPreferences.Projects,
             RemoteDirectories: _projectPreferences.AgentRemoteDirectories,
-            UnclassifiedProjectId: UnclassifiedProjectId));
+            UnclassifiedProjectId: UnclassifiedProjectId,
+            NavigationRemoteDirectoryIds: _projectPreferences.NavigationRemoteDirectoryIds));
 #if DEBUG
         _logger.LogDebug(
             "Project affinity resolved. ConversationId={ConversationId} Cwd={Cwd} RemoteSessionId={RemoteSessionId} BoundProfileId={BoundProfileId} OverrideProjectId={OverrideProjectId} EffectiveProjectId={EffectiveProjectId} Source={Source}",

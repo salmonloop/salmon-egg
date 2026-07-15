@@ -385,6 +385,52 @@ public sealed class ProjectAffinityResolverTests
         Assert.Equal(ProjectAffinitySource.Unclassified, result.Source);
     }
 
+    [Fact]
+    public void Resolve_RemoteDirectoryMember_GroupsSessionUnderRemoteDirectoryNode()
+    {
+        var resolver = new ProjectAffinityResolver();
+        var directory = new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" };
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/remote/repo",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[] { directory },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified,
+            NavigationRemoteDirectoryIds: new[] { "dir-1" }));
+
+        Assert.Equal(ProjectAffinitySource.RemoteDirectory, result.Source);
+        Assert.Equal(
+            ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId("dir-1"),
+            result.EffectiveProjectId);
+        Assert.False(result.NeedsUserAttention);
+        Assert.Equal("Repo", result.RemoteDirectoryDisplayName);
+    }
+
+    [Fact]
+    public void Resolve_RemoteDirectoryNonMember_KeepsHistoricalUnclassifiedGrouping()
+    {
+        var resolver = new ProjectAffinityResolver();
+        var directory = new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Repo", RemotePath = "/remote/repo" };
+
+        var result = resolver.Resolve(new ProjectAffinityRequest(
+            RemoteCwd: "/remote/repo",
+            BoundProfileId: "profile-1",
+            RemoteSessionId: "remote-1",
+            OverrideProjectId: null,
+            Projects: Array.Empty<ProjectDefinition>(),
+            RemoteDirectories: new[] { directory },
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified,
+            NavigationRemoteDirectoryIds: Array.Empty<string>()));
+
+        Assert.Equal(ProjectAffinitySource.RemoteDirectory, result.Source);
+        Assert.Equal(NavigationProjectIds.Unclassified, result.EffectiveProjectId);
+        Assert.False(result.NeedsUserAttention);
+        Assert.Equal("Repo", result.RemoteDirectoryDisplayName);
+    }
+
     private static ProjectAffinityRequest CreateRequest(
         string? remoteCwd,
         string? boundProfileId = null,

@@ -349,7 +349,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         OverrideProjectId: null,
                         Projects: projects,
                         RemoteDirectories: remoteDirectories,
-                        UnclassifiedProjectId: NavigationProjectIds.Unclassified));
+                        UnclassifiedProjectId: NavigationProjectIds.Unclassified,
+                        NavigationRemoteDirectoryIds: _projectPreferences.NavigationRemoteDirectoryIds));
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
                         string.IsNullOrWhiteSpace(session.Title) ? Localize("Discover_UntitledSession", "未命名会话") : session.Title,

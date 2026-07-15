@@ -59,6 +59,7 @@ public sealed class AppSettingsService : IAppSettingsService
                 KeyBindings = model.KeyBindings ?? new(),
                 Projects = model.Projects ?? new(),
                 AgentRemoteDirectories = CloneAgentRemoteDirectories(model.AgentRemoteDirectories),
+                NavigationRemoteDirectoryIds = CloneStringList(model.NavigationRemoteDirectoryIds),
                 LastSelectedProjectId = string.IsNullOrWhiteSpace(model.LastSelectedProjectId) ? null : model.LastSelectedProjectId,
                 AcpEnableConnectionEviction = model.AcpEnableConnectionEviction,
                 AcpConnectionIdleTtlMinutes = model.AcpConnectionIdleTtlMinutes,
@@ -110,6 +111,7 @@ public sealed class AppSettingsService : IAppSettingsService
             KeyBindings = settings.KeyBindings ?? new(),
             Projects = settings.Projects ?? new(),
             AgentRemoteDirectories = CloneAgentRemoteDirectories(settings.AgentRemoteDirectories),
+            NavigationRemoteDirectoryIds = CloneStringList(settings.NavigationRemoteDirectoryIds),
             LastSelectedProjectId = settings.LastSelectedProjectId ?? string.Empty,
             AcpEnableConnectionEviction = settings.AcpEnableConnectionEviction,
             AcpConnectionIdleTtlMinutes = settings.AcpConnectionIdleTtlMinutes,
@@ -173,6 +175,26 @@ public sealed class AppSettingsService : IAppSettingsService
                 DisplayName = directory.DisplayName?.Trim() ?? string.Empty,
                 RemotePath = directory.RemotePath?.Trim() ?? string.Empty
             });
+        }
+
+        return clone;
+    }
+
+    private static List<string> CloneStringList(IEnumerable<string?>? values)
+    {
+        var clone = new List<string>();
+        if (values is null)
+        {
+            return clone;
+        }
+
+        foreach (var value in values)
+        {
+            var trimmed = value?.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                clone.Add(trimmed);
+            }
         }
 
         return clone;

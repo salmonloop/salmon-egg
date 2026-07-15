@@ -8,7 +8,6 @@ public static class NavItemTag
     public static string DiscoverSessions => "DiscoverSessions";
     public static string Settings => "Settings";
     public static string SessionsLabel => "SessionsLabel";
-    public static string AddProject => "AddProject";
 
     private const string SessionPrefix = "Session:";
     private const string ProjectPrefix = "Project:";

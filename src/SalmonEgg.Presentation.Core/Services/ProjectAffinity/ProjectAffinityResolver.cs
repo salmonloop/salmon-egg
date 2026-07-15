@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Services;
@@ -61,7 +62,8 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
             overrideProjectId,
             request.RemoteCwd,
             unclassifiedProjectId,
-            remoteDirectories);
+            remoteDirectories,
+            request.NavigationRemoteDirectoryIds);
         if (remoteDirectoryResolution != null)
         {
             return remoteDirectoryResolution;
@@ -120,7 +122,8 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         string? overrideProjectId,
         string? remoteCwd,
         string unclassifiedProjectId,
-        IReadOnlyList<AgentRemoteDirectory> remoteDirectories)
+        IReadOnlyList<AgentRemoteDirectory> remoteDirectories,
+        IReadOnlyCollection<string>? navigationRemoteDirectoryIds)
     {
         if (string.IsNullOrWhiteSpace(normalizedRemoteCwd))
         {
@@ -159,6 +162,27 @@ public sealed class ProjectAffinityResolver : IProjectAffinityResolver
         var displayName = string.IsNullOrWhiteSpace(matchedDirectory.DisplayName)
             ? matchedDirectory.RemotePath
             : matchedDirectory.DisplayName;
+
+        // When the matched directory was added to navigation, group its sessions under the
+        // dedicated remote-directory node (stable semantic id). Otherwise keep the historical
+        // behavior of surfacing the session under 未归类 with a display-name annotation.
+        var directoryId = matchedDirectory.DirectoryId?.Trim();
+        var isNavigationMember = !string.IsNullOrWhiteSpace(directoryId)
+            && navigationRemoteDirectoryIds != null
+            && navigationRemoteDirectoryIds.Contains(directoryId!, StringComparer.Ordinal);
+        if (isNavigationMember)
+        {
+            return CreateResolution(
+                EffectiveProjectId: ProjectSelectionCwdResolver.BuildRemoteDirectoryProjectId(directoryId!),
+                Source: ProjectAffinitySource.RemoteDirectory,
+                MatchedProjectId: null,
+                OverrideProjectId: overrideProjectId,
+                RemoteCwd: remoteCwd,
+                LocalResolvedPath: null,
+                NeedsUserAttention: false,
+                Reason: ReasonRemoteDirectory,
+                RemoteDirectoryDisplayName: displayName);
+        }
 
         return CreateResolution(
             EffectiveProjectId: unclassifiedProjectId,

@@ -801,4 +801,5 @@
   <data name="DataStorage_CloudSyncForgetOneDriveMessage" xml:space="preserve"><value>这会关闭同步，并从此设备移除 Salmon Egg 保存的所有 OneDrive 登录账户和同步记录。不会删除 OneDrive 中的数据或当前应用配置。</value></data>
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>移除本机设置</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>已保存的云同步配置无效。请编辑连接并检查必填项。</value></data>
+  <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>该远程项目已不存在。</value></data>
 </root>

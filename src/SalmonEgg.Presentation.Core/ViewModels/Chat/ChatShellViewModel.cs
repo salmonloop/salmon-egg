@@ -173,7 +173,8 @@ public sealed partial class ChatShellViewModel : ObservableObject
             OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
             Projects: _preferences.Projects,
             RemoteDirectories: _preferences.AgentRemoteDirectories,
-            UnclassifiedProjectId: NavigationProjectIds.Unclassified)).EffectiveProjectId;
+            UnclassifiedProjectId: NavigationProjectIds.Unclassified,
+            NavigationRemoteDirectoryIds: _preferences.NavigationRemoteDirectoryIds)).EffectiveProjectId;
     }
 
     private static string CreateMiniWindowCompactDisplayName(string displayName)

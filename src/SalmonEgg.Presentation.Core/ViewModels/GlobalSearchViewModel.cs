@@ -260,7 +260,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 break;
 
             case "project":
-                _ = _navViewModel.AddProjectCommand.ExecuteAsync(null);
+                _ = _navViewModel.AddLocalProjectCommand.ExecuteAsync(null);
                 break;
 
             case "theme":
@@ -301,7 +301,8 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
             OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
             Projects: _preferences.Projects,
             RemoteDirectories: _preferences.AgentRemoteDirectories,
-            UnclassifiedProjectId: MainNavigationViewModel.UnclassifiedProjectId)).EffectiveProjectId;
+            UnclassifiedProjectId: MainNavigationViewModel.UnclassifiedProjectId,
+            NavigationRemoteDirectoryIds: _preferences.NavigationRemoteDirectoryIds)).EffectiveProjectId;
     }
 
     [RelayCommand]

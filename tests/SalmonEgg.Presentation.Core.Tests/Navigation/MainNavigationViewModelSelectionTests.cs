@@ -675,7 +675,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public void AddProjectCommand_WhenFolderPickerUnsupported_IsDisabled()
+    public void AddLocalProjectCommand_WhenFolderPickerUnsupported_IsDisabled()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -698,8 +698,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 uiOverride: ui.Object);
 
             Assert.False(navVm.CanAddProject);
-            Assert.False(navVm.AddProjectCommand.CanExecute(null));
-            Assert.False(navVm.AddProjectItem.IsEnabled);
+            Assert.False(navVm.AddLocalProjectCommand.CanExecute(null));
         }
         finally
         {
@@ -708,7 +707,7 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
-    public async Task AddProjectCommand_WhenFolderPickerSupported_AddsPickedProject()
+    public async Task AddLocalProjectCommand_WhenFolderPickerSupported_AddsPickedProject()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -734,7 +733,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 out _,
                 uiOverride: ui.Object);
 
-            await navVm.AddProjectCommand.ExecuteAsync(null);
+            await navVm.AddLocalProjectCommand.ExecuteAsync(null);
 
             Assert.Contains(preferences.Projects, project =>
                 string.Equals(

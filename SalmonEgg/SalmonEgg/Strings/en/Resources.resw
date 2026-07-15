@@ -390,6 +390,30 @@
   <data name="NavAddProjectLabel.Text" xml:space="preserve">
     <value>Add project</value>
   </data>
+  <data name="NavAddProjectLocalItem.Text" xml:space="preserve">
+    <value>Select local folder…</value>
+  </data>
+  <data name="NavAddProjectRemoteItem.Text" xml:space="preserve">
+    <value>Select remote project…</value>
+  </data>
+  <data name="RemoteProjectSelectionEmptyTitle.Text" xml:space="preserve">
+    <value>No remote projects</value>
+  </data>
+  <data name="RemoteProjectSelectionEmptyDescription.Text" xml:space="preserve">
+    <value>Configure a remote path in settings, then add it here.</value>
+  </data>
+  <data name="RemoteProjectSelectionDialogTitle" xml:space="preserve">
+    <value>Select remote project</value>
+  </data>
+  <data name="RemoteProjectSelectionAddButton" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="RemoteProjectSelectionManageButton" xml:space="preserve">
+    <value>Manage remote projects…</value>
+  </data>
+  <data name="RemoteProjectSelectionGoToSettingsButton" xml:space="preserve">
+    <value>Go to settings</value>
+  </data>
   <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
     <value>Close</value>
   </data>

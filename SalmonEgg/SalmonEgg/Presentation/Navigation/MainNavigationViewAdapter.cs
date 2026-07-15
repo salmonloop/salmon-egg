@@ -49,12 +49,6 @@ public sealed class MainNavigationViewAdapter
 
     private Task<bool>? HandleActivatableTagAsync(NavigationViewItem navItem, string tag)
     {
-        if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
-        {
-            _ = _viewModel.AddProjectItem.AddProjectCommand.ExecuteAsync(null);
-            return Task.FromResult(true);
-        }
-
         if (NavItemTag.TryParseMore(tag, out var moreProjectId))
         {
             _ = _viewModel.ShowAllSessionsForProjectAsync(moreProjectId);

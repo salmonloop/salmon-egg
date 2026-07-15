@@ -435,6 +435,10 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<INavigationProjectPreferences>(sp =>
             new NavigationProjectPreferencesAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
+        services.AddSingleton<IAddProjectCoordinator>(sp =>
+            new AddProjectCoordinator(
+                sp.GetRequiredService<INavigationProjectPreferences>(),
+                sp.GetRequiredService<ILogger<AddProjectCoordinator>>()));
         services.AddSingleton<INavigationProjectSelectionStore>(sp =>
             new NavigationProjectSelectionStoreAdapter(sp.GetRequiredService<AppPreferencesViewModel>()));
         // ACP chat service factory — adapts ChatServiceFactory to the IAcpChatServiceFactory seam
@@ -562,7 +566,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IUiDispatcher>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<IPlatformShellService>(),
-                sp.GetRequiredService<IAppLanguageService>()));
+                sp.GetRequiredService<IAppLanguageService>(),
+                sp.GetRequiredService<IAddProjectCoordinator>()));
         services.AddSingleton<INavigationCoordinator>(sp =>
             new NavigationCoordinator(
                 sp.GetRequiredService<IShellSelectionMutationSink>(),

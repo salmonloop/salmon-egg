@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Views.Navigation;
 using Windows.ApplicationModel.Resources;
@@ -149,6 +150,26 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             try { onPickSession(dialog.PickedSessionId!); } catch { }
         }
+    }
+
+    public async Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(RemoteProjectSelectionViewModel viewModel)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+
+        var xamlRoot = GetXamlRoot();
+        if (xamlRoot == null)
+        {
+            return RemoteProjectSelectionResult.Cancel;
+        }
+
+        var dialog = new RemoteProjectSelectionDialog(viewModel)
+        {
+            XamlRoot = xamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        dialog.ApplyResult(result);
+        return dialog.Result;
     }
 
     private static XamlRoot? GetXamlRoot()

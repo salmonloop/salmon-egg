@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Services;
@@ -24,6 +25,9 @@ public interface IUiInteractionService
     Task<string?> PickFolderAsync();
 
     bool CanPickFolder { get; }
+
+    Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(
+        RemoteProjectSelectionViewModel viewModel);
 
     Task ShowSessionsListDialogAsync(
         string title,

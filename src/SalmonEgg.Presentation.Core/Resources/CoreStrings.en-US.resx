@@ -795,4 +795,5 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncForgetOneDriveMessage" xml:space="preserve"><value>This turns off sync and removes all OneDrive accounts and sync history saved by Salmon Egg on this device. Data in OneDrive and the current app configuration are not deleted.</value></data>
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>Remove local setup</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>The saved cloud sync configuration is invalid. Edit the connection and check the required fields.</value></data>
+  <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>This remote project no longer exists.</value></data>
 </root>

@@ -43,6 +43,10 @@ internal sealed class AppSettingsYamlV1
 
     public List<AgentRemoteDirectory> AgentRemoteDirectories { get; set; } = new();
 
+    // Semantic ids of the remote directories the user added to the navigation project list.
+    // Reference-only: the authoritative remote-directory config remains AgentRemoteDirectories.
+    public List<string> NavigationRemoteDirectoryIds { get; set; } = new();
+
     public string LastSelectedProjectId { get; set; } = string.Empty;
 
     // ACP connection governance

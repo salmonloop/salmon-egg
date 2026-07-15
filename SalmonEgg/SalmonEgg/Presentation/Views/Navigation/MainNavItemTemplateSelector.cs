@@ -10,7 +10,6 @@ public sealed class MainNavItemTemplateSelector : DataTemplateSelector
     public DataTemplate? DiscoverSessionsTemplate { get; set; }
     public DataTemplate? SettingsTemplate { get; set; }
     public DataTemplate? LabelTemplate { get; set; }
-    public DataTemplate? AddProjectTemplate { get; set; }
     public DataTemplate? ProjectTemplate { get; set; }
     public DataTemplate? SessionTemplate { get; set; }
     public DataTemplate? MoreTemplate { get; set; }
@@ -23,7 +22,6 @@ public sealed class MainNavItemTemplateSelector : DataTemplateSelector
             DiscoverSessionsNavItemViewModel => DiscoverSessionsTemplate!,
             SettingsNavItemViewModel => SettingsTemplate!,
             SessionsLabelNavItemViewModel => LabelTemplate!,
-            AddProjectNavItemViewModel => AddProjectTemplate!,
             ProjectNavItemViewModel => ProjectTemplate!,
             SessionNavItemViewModel => SessionTemplate!,
             MoreSessionsNavItemViewModel => MoreTemplate!,

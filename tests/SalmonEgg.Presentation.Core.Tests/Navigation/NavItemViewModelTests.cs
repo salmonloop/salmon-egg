@@ -42,16 +42,6 @@ public sealed class NavItemViewModelTests
         Assert.Equal("Sessions", label.Title);
     }
 
-    [Fact]
-    public void AddProject_ExposesCommand()
-    {
-        var navState = new FakeNavigationPaneState();
-        var command = new AsyncRelayCommand(() => Task.CompletedTask);
-        var item = new AddProjectNavItemViewModel(command, navState, new ImmediateUiDispatcher());
-
-        Assert.Same(command, item.AddProjectCommand);
-    }
-
     private sealed class DummyNavItem : MainNavItemViewModel
     {
         public DummyNavItem(INavigationPaneState navState, IUiDispatcher uiDispatcher) : base(navState, uiDispatcher) { }

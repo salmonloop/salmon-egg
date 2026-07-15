@@ -91,6 +91,9 @@ public sealed class SessionNavItemViewModelTests
 
         public Task<string?> PickFolderAsync() => Task.FromResult<string?>(null);
 
+        public Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(RemoteProjectSelectionViewModel viewModel)
+            => Task.FromResult(RemoteProjectSelectionResult.Cancel);
+
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)
             => Task.CompletedTask;
     }

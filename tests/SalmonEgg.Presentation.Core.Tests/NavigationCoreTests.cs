@@ -641,7 +641,7 @@ public sealed class NavigationCoreTests
         Assert.True(promptFallbackIndex > unsupportedCheckIndex, "Manual path input must not run before capability gating.");
         Assert.Contains("return null;", uiService.Substring(unsupportedCheckIndex, promptFallbackIndex - unsupportedCheckIndex), StringComparison.Ordinal);
         Assert.Contains("public bool CanAddProject => _ui.CanPickFolder;", navigationViewModel, StringComparison.Ordinal);
-        Assert.Contains("new AsyncRelayCommand(AddProjectAsync, () => CanAddProject)", navigationViewModel, StringComparison.Ordinal);
+        Assert.Contains("new AsyncRelayCommand(AddLocalProjectAsync, () => CanAddProject)", navigationViewModel, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<IFolderPickerService, UnavailableFolderPickerService>();", dependencyInjection, StringComparison.Ordinal);
     }
 
@@ -1108,13 +1108,16 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainNavigationXaml_AddProjectUsesStaticAddIcon()
+    public void MainNavigationXaml_AddProjectUsesDropDownButtonWithSourceMenu()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
+        // The unified add-project entry is a DropDownButton in the pane footer whose flyout
+        // offers the local-folder and remote-project sources, each bound to its own command.
         Assert.Contains("MainNavigationAutomationIds.AddProject()", xaml, StringComparison.Ordinal);
-        Assert.Contains("<SymbolIcon Symbol=\"Add\" />", xaml, StringComparison.Ordinal);
-        Assert.Contains("NavItemTag.AddProject", xaml, StringComparison.Ordinal);
+        Assert.Contains("<DropDownButton", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind NavVM.AddLocalProjectCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind NavVM.SelectRemoteProjectCommand}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

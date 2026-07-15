@@ -43,6 +43,13 @@ public sealed class AppSettings
 
     public List<AgentRemoteDirectory> AgentRemoteDirectories { get; set; } = new();
 
+    /// <summary>
+    /// Stable <see cref="AgentRemoteDirectory.DirectoryId"/> values that the user has added to the
+    /// navigation project list. This stores references only; the authoritative remote path
+    /// configuration remains <see cref="AgentRemoteDirectories"/>.
+    /// </summary>
+    public List<string> NavigationRemoteDirectoryIds { get; set; } = new();
+
     public string? LastSelectedProjectId { get; set; }
 
     // ACP connection governance

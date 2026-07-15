@@ -15,4 +15,8 @@ public sealed record ProjectAffinityRequest(
     string? OverrideProjectId,
     IReadOnlyList<ProjectDefinition> Projects,
     IReadOnlyList<AgentRemoteDirectory> RemoteDirectories,
-    string UnclassifiedProjectId);
+    string UnclassifiedProjectId,
+    // Remote directory ids the user added to the navigation project list. A matched remote
+    // directory only becomes its own project node when its id is a member; non-member matches
+    // keep their existing Unclassified affinity so previously-configured sessions do not move.
+    IReadOnlyCollection<string>? NavigationRemoteDirectoryIds = null);

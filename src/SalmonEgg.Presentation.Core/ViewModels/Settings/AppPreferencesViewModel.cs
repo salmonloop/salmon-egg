@@ -66,6 +66,11 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     public ObservableCollection<AgentRemoteDirectory> AgentRemoteDirectories { get; } = new();
 
+    // Reference-only membership: which configured remote directories the user added to the
+    // navigation project list. Stores stable DirectoryId values only; AgentRemoteDirectories
+    // remains the single source of truth for display name and remote path.
+    public ObservableCollection<string> NavigationRemoteDirectoryIds { get; } = new();
+
     [ObservableProperty]
     private string? _lastSelectedProjectId;
 
@@ -139,6 +144,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
+        NavigationRemoteDirectoryIds.CollectionChanged += OnNavigationRemoteDirectoryIdsChanged;
         SelectedLanguageOption = ResolveLanguageOption(Language);
         SelectedThemeOption = ResolveSettingsOption(ThemeOptions, Theme, "System");
         SelectedBackdropOption = ResolveSettingsOption(BackdropOptions, Backdrop, "System");
@@ -260,6 +266,14 @@ public partial class AppPreferencesViewModel : ObservableObject
                 foreach (var directory in NormalizeAgentRemoteDirectories(settings.AgentRemoteDirectories))
                 {
                     AgentRemoteDirectories.Add(directory);
+                }
+
+                NavigationRemoteDirectoryIds.Clear();
+                foreach (var membershipId in NormalizeNavigationRemoteDirectoryIds(
+                             settings.NavigationRemoteDirectoryIds,
+                             AgentRemoteDirectories))
+                {
+                    NavigationRemoteDirectoryIds.Add(membershipId);
                 }
 
                 KeyBindings.Clear();
@@ -410,7 +424,39 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     private void OnAgentRemoteDirectoriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // A removed remote directory must not leave a dangling navigation membership id behind.
+        // Membership is reference-only (see NavigationRemoteDirectoryIds); prune ids whose
+        // authoritative directory no longer exists so stale nav nodes cannot be resolved.
+        PruneOrphanedNavigationRemoteDirectoryIds();
         ScheduleSave();
+    }
+
+    private void OnNavigationRemoteDirectoryIdsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ScheduleSave();
+    }
+
+    private void PruneOrphanedNavigationRemoteDirectoryIds()
+    {
+        if (NavigationRemoteDirectoryIds.Count == 0)
+        {
+            return;
+        }
+
+        var knownDirectoryIds = new HashSet<string>(
+            AgentRemoteDirectories
+                .Select(directory => directory.DirectoryId?.Trim())
+                .Where(id => !string.IsNullOrWhiteSpace(id))!,
+            StringComparer.Ordinal);
+
+        for (var i = NavigationRemoteDirectoryIds.Count - 1; i >= 0; i--)
+        {
+            var membershipId = NavigationRemoteDirectoryIds[i]?.Trim();
+            if (string.IsNullOrWhiteSpace(membershipId) || !knownDirectoryIds.Contains(membershipId))
+            {
+                NavigationRemoteDirectoryIds.RemoveAt(i);
+            }
+        }
     }
 
     private void OnKeyBindingsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -594,6 +640,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                 ? "StrictReplay"
                 : AcpHydrationCompletionMode.Trim(),
             AgentRemoteDirectories = NormalizeAgentRemoteDirectories(AgentRemoteDirectories),
+            NavigationRemoteDirectoryIds = NormalizeNavigationRemoteDirectoryIds(
+                NavigationRemoteDirectoryIds,
+                AgentRemoteDirectories),
             LastSelectedProjectId = LastSelectedProjectId,
             Projects = Projects
                 .Where(p => !string.IsNullOrWhiteSpace(p.ProjectId)
@@ -679,6 +728,55 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
 
         return clone;
+    }
+
+    private static List<string> NormalizeNavigationRemoteDirectoryIds(
+        IEnumerable<string>? ids,
+        IEnumerable<AgentRemoteDirectory>? directories)
+    {
+        var normalized = new List<string>();
+        if (ids is null)
+        {
+            return normalized;
+        }
+
+        // Only keep membership entries whose directory still exists in the authoritative
+        // AgentRemoteDirectories collection. The list stores IDs only — never paths — so
+        // renaming a remote directory or changing its path never desynchronizes membership.
+        var knownIds = new HashSet<string>(StringComparer.Ordinal);
+        if (directories is not null)
+        {
+            foreach (var directory in directories)
+            {
+                if (directory is null)
+                {
+                    continue;
+                }
+
+                var directoryId = directory.DirectoryId?.Trim();
+                if (!string.IsNullOrWhiteSpace(directoryId))
+                {
+                    knownIds.Add(directoryId);
+                }
+            }
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in ids)
+        {
+            var trimmed = id?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed) || !knownIds.Contains(trimmed))
+            {
+                continue;
+            }
+
+            if (seen.Add(trimmed))
+            {
+                normalized.Add(trimmed);
+            }
+        }
+
+        return normalized;
     }
 
     private static List<AgentRemoteDirectory> NormalizeAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)

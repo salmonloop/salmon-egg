@@ -1,0 +1,62 @@
+<ContentDialog
+    x:Class="SalmonEgg.Presentation.Views.Navigation.RemoteProjectSelectionDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
+    mc:Ignorable="d"
+    AutomationProperties.AutomationId="RemoteProjectSelectionDialog"
+    DefaultButton="Primary">
+
+    <Grid MaxWidth="560"
+          MaxHeight="560"
+          HorizontalAlignment="Stretch">
+        <!-- Populated state: a single-selection list projected from the authoritative remote directories. -->
+        <ListView x:Name="RemoteProjectList"
+                  AutomationProperties.AutomationId="RemoteProjectSelectionDialog.List"
+                  ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                  SelectionMode="Single"
+                  SelectionChanged="OnSelectionChanged"
+                  Visibility="{x:Bind ViewModel.HasProjects, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="nav:RemoteProjectOptionViewModel">
+                    <Grid Padding="12,8"
+                          AutomationProperties.Name="{x:Bind AutomationName}">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{x:Bind DisplayName}"
+                                       FontSize="14"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1" />
+                            <TextBlock Text="{x:Bind RemotePath}"
+                                       FontSize="12"
+                                       Opacity="0.7"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="1" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Empty state: no configured remote directories. The primary path is to open settings. -->
+        <StackPanel AutomationProperties.AutomationId="RemoteProjectSelectionDialog.EmptyState"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8"
+                    Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <FontIcon Glyph="&#xE968;"
+                      FontSize="32"
+                      HorizontalAlignment="Center"
+                      Opacity="0.6" />
+            <TextBlock x:Uid="RemoteProjectSelectionEmptyTitle"
+                       HorizontalAlignment="Center"
+                       FontSize="16" />
+            <TextBlock x:Uid="RemoteProjectSelectionEmptyDescription"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       Opacity="0.7"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</ContentDialog>

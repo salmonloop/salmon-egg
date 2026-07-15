@@ -843,6 +843,30 @@
   <data name="NavAddProjectLabel.Text" xml:space="preserve">
     <value>添加项目</value>
   </data>
+  <data name="NavAddProjectLocalItem.Text" xml:space="preserve">
+    <value>选择本地文件夹…</value>
+  </data>
+  <data name="NavAddProjectRemoteItem.Text" xml:space="preserve">
+    <value>选择远程项目…</value>
+  </data>
+  <data name="RemoteProjectSelectionEmptyTitle.Text" xml:space="preserve">
+    <value>暂无远程项目</value>
+  </data>
+  <data name="RemoteProjectSelectionEmptyDescription.Text" xml:space="preserve">
+    <value>请先在设置中配置远程路径，然后在此处添加。</value>
+  </data>
+  <data name="RemoteProjectSelectionDialogTitle" xml:space="preserve">
+    <value>选择远程项目</value>
+  </data>
+  <data name="RemoteProjectSelectionAddButton" xml:space="preserve">
+    <value>添加</value>
+  </data>
+  <data name="RemoteProjectSelectionManageButton" xml:space="preserve">
+    <value>管理远程项目…</value>
+  </data>
+  <data name="RemoteProjectSelectionGoToSettingsButton" xml:space="preserve">
+    <value>前往设置</value>
+  </data>
   <data name="SessionsDialog.CloseButtonText" xml:space="preserve">
     <value>关闭</value>
   </data>
