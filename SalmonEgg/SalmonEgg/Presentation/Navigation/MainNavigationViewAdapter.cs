@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
@@ -49,6 +50,15 @@ public sealed class MainNavigationViewAdapter
 
     private Task<bool>? HandleActivatableTagAsync(NavigationViewItem navItem, string tag)
     {
+        if (string.Equals(tag, NavItemTag.AddProject, StringComparison.Ordinal))
+        {
+            // The entry itself is not a destination: invoking it opens the source chooser
+            // (local folder / remote directory) as the item's attached flyout. The two intents
+            // are the flyout's menu items; the adapter only surfaces the native menu.
+            FlyoutBase.ShowAttachedFlyout(navItem);
+            return Task.FromResult(true);
+        }
+
         if (NavItemTag.TryParseMore(tag, out var moreProjectId))
         {
             _ = _viewModel.ShowAllSessionsForProjectAsync(moreProjectId);

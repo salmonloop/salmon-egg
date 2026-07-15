@@ -1108,16 +1108,18 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainNavigationXaml_AddProjectUsesDropDownButtonWithSourceMenu()
+    public void MainNavigationXaml_AddProjectUsesStaticAddIconWithSourceMenu()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml");
 
-        // The unified add-project entry is a DropDownButton in the pane footer whose flyout
-        // offers the local-folder and remote-project sources, each bound to its own command.
+        // The unified add-project entry is a top NavigationViewItem with a static Add icon.
+        // Invoking it opens the item's attached MenuFlyout offering the local-folder and
+        // remote-project sources, each bound to its own command on the item view model.
         Assert.Contains("MainNavigationAutomationIds.AddProject()", xaml, StringComparison.Ordinal);
-        Assert.Contains("<DropDownButton", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind NavVM.AddLocalProjectCommand}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind NavVM.SelectRemoteProjectCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("<SymbolIcon Symbol=\"Add\" />", xaml, StringComparison.Ordinal);
+        Assert.Contains("NavItemTag.AddProject", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind AddLocalProjectCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind SelectRemoteProjectCommand}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

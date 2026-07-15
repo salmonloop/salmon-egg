@@ -1472,7 +1472,13 @@ public sealed class XamlComplianceTests
         Assert.Contains("QuerySubmitted=\"OnSearchQuerySubmitted\"", xaml);
         Assert.Contains("ItemsSource=\"{x:Bind SearchVM.SuggestionEntries, Mode=OneWay}\"", xaml);
         Assert.Contains("<AutoSuggestBox.ItemTemplate>", xaml);
-        Assert.DoesNotContain("FlyoutBase.AttachedFlyout", xaml, StringComparison.Ordinal);
+
+        // FlyoutBase.AttachedFlyout is legitimately used elsewhere (the add-project entry's
+        // source-chooser menu), so that one negative assertion is scoped to the search box.
+        // The remaining markers are search-only hacks with no legitimate use anywhere in the
+        // page, so they stay whole-file scans to also catch any sibling-element placement.
+        var searchBox = ExtractSection(xaml, "<AutoSuggestBox x:Name=\"TopSearchBox\"", "</AutoSuggestBox>");
+        Assert.DoesNotContain("FlyoutBase.AttachedFlyout", searchBox, StringComparison.Ordinal);
         Assert.DoesNotContain("SearchSuggestionsPresenter", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("FocusMonitor.IsFocused", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsSuggestionListOpen=", xaml, StringComparison.Ordinal);

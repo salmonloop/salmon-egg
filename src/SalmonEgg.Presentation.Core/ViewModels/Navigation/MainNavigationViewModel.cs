@@ -71,6 +71,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     public DiscoverSessionsNavItemViewModel DiscoverSessionsItem { get; }
     public SettingsNavItemViewModel SettingsItem { get; }
     public SessionsLabelNavItemViewModel SessionsLabelItem { get; }
+    public AddProjectNavItemViewModel AddProjectItem { get; }
 
     private NavigationViewProjection _projection = new(
         ControlSelectedItem: null,
@@ -205,12 +206,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         DiscoverSessionsItem = new DiscoverSessionsNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_DiscoverSessions", "Discover sessions"));
         SettingsItem = new SettingsNavItemViewModel(Localize("Nav_Settings", "Settings"), _navigationState, _uiDispatcher);
         SessionsLabelItem = new SessionsLabelNavItemViewModel(_navigationState, _uiDispatcher, Localize("Nav_Sessions", "Sessions"));
+        AddProjectItem = new AddProjectNavItemViewModel(AddLocalProjectCommand, SelectRemoteProjectCommand, _navigationState, _uiDispatcher);
 
         FooterItems.Add(DiscoverSessionsItem);
         FooterItems.Add(SettingsItem);
 
         Items.Add(StartItem);
         Items.Add(SessionsLabelItem);
+        Items.Add(AddProjectItem);
 
         // Show a lightweight placeholder until conversations are restored.
         var placeholderProject = CreateUnclassifiedProject();
@@ -650,6 +653,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 Items.Clear();
                 Items.Add(StartItem);
                 Items.Add(SessionsLabelItem);
+                Items.Add(AddProjectItem);
             }
 
             // Build the new indexes in local scope first, then swap atomically.
@@ -1093,6 +1097,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         // Visual selection state is now handled by NavigationView's native projection behavior
         // We only need to maintain the logical state for our internal logic
         SessionsLabelItem.IsLogicallySelected = false;
+        AddProjectItem.IsLogicallySelected = false;
 
         foreach (var project in _projectVms.Values)
         {

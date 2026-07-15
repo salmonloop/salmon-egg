@@ -85,3 +85,27 @@ public sealed partial class SessionsLabelNavItemViewModel : MainNavItemViewModel
         Title = title;
     }
 }
+
+/// <summary>
+/// Action VM rendered as a standard <c>NavigationViewItem</c> with a static
+/// Add icon.  In compact mode only the icon is visible (same pattern as Start).
+/// Invoking the item opens an attached menu offering the local-folder and remote
+/// source intents; both funnel through the unified add-project coordinator.
+/// </summary>
+public sealed partial class AddProjectNavItemViewModel : MainNavItemViewModel
+{
+    public IAsyncRelayCommand AddLocalProjectCommand { get; }
+
+    public IAsyncRelayCommand SelectRemoteProjectCommand { get; }
+
+    public AddProjectNavItemViewModel(
+        IAsyncRelayCommand addLocalProjectCommand,
+        IAsyncRelayCommand selectRemoteProjectCommand,
+        INavigationPaneState navigationState,
+        IUiDispatcher uiDispatcher)
+        : base(navigationState, uiDispatcher)
+    {
+        AddLocalProjectCommand = addLocalProjectCommand ?? throw new ArgumentNullException(nameof(addLocalProjectCommand));
+        SelectRemoteProjectCommand = selectRemoteProjectCommand ?? throw new ArgumentNullException(nameof(selectRemoteProjectCommand));
+    }
+}

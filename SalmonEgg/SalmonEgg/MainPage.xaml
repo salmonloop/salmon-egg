@@ -100,6 +100,40 @@
                                       AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsLabel()}" />
         </DataTemplate>
 
+        <DataTemplate x:Key="AddProjectTemplate" x:DataType="nav:AddProjectNavItemViewModel">
+            <NavigationViewItem SelectsOnInvoked="False"
+                                AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.AddProject()}"
+                                Tag="{x:Bind navModels:NavItemTag.AddProject}">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Add" />
+                </NavigationViewItem.Icon>
+                <NavigationViewItem.Content>
+                    <TextBlock x:Uid="NavAddProjectLabel"
+                               TextTrimming="CharacterEllipsis"
+                               MaxLines="1"
+                               VerticalAlignment="Center" />
+                </NavigationViewItem.Content>
+                <primitives:FlyoutBase.AttachedFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem x:Uid="NavAddProjectLocalItem"
+                                        AutomationProperties.AutomationId="MainNav.AddProject.Local"
+                                        Command="{x:Bind AddLocalProjectCommand}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE838;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Uid="NavAddProjectRemoteItem"
+                                        AutomationProperties.AutomationId="MainNav.AddProject.Remote"
+                                        Command="{x:Bind SelectRemoteProjectCommand}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE968;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </primitives:FlyoutBase.AttachedFlyout>
+            </NavigationViewItem>
+        </DataTemplate>
+
         <DataTemplate x:Key="ProjectNavTemplate" x:DataType="nav:ProjectNavItemViewModel">
             <NavigationViewItem MenuItemsSource="{x:Bind Children, Mode=OneWay}"
                                 IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
@@ -201,6 +235,7 @@
                                               DiscoverSessionsTemplate="{StaticResource DiscoverSessionsNavTemplate}"
                                               SettingsTemplate="{StaticResource SettingsNavTemplate}"
                                               LabelTemplate="{StaticResource SessionsLabelTemplate}"
+                                              AddProjectTemplate="{StaticResource AddProjectTemplate}"
                                               ProjectTemplate="{StaticResource ProjectNavTemplate}"
                                               SessionTemplate="{StaticResource SessionNavTemplate}"
                                               MoreTemplate="{StaticResource MoreNavTemplate}" />
@@ -459,39 +494,6 @@
                             DisplayModeChanged="OnMainNavPanePresentationChanged"
                             PaneOpened="OnMainNavPanePresentationChanged"
                             PaneClosed="OnMainNavPanePresentationChanged">
-                <NavigationView.PaneFooter>
-                    <DropDownButton x:Name="AddProjectDropDownButton"
-                                    AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.AddProject()}"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
-                                    Margin="4,4,4,8"
-                                    IsEnabled="{x:Bind NavVM.CanAddProject, Mode=OneWay}">
-                        <DropDownButton.Content>
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <FontIcon Glyph="&#xE710;" FontSize="16" />
-                                <TextBlock x:Uid="NavAddProjectLabel" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </DropDownButton.Content>
-                        <DropDownButton.Flyout>
-                            <MenuFlyout Placement="Top">
-                                <MenuFlyoutItem x:Uid="NavAddProjectLocalItem"
-                                                AutomationProperties.AutomationId="MainNav.AddProject.Local"
-                                                Command="{x:Bind NavVM.AddLocalProjectCommand}">
-                                    <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE838;" />
-                                    </MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
-                                <MenuFlyoutItem x:Uid="NavAddProjectRemoteItem"
-                                                AutomationProperties.AutomationId="MainNav.AddProject.Remote"
-                                                Command="{x:Bind NavVM.SelectRemoteProjectCommand}">
-                                    <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE968;" />
-                                    </MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                </NavigationView.PaneFooter>
                 <NavigationView.Content>
                     <SplitView x:Name="RightPanelSplitView"
                                Background="Transparent"
