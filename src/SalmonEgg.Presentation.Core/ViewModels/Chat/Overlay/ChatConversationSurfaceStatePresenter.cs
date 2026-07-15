@@ -62,7 +62,8 @@ internal static class ChatConversationSurfaceStatePresenter
             shouldShowProjectedHydrationOverlay,
             isSessionSwitchOverlayVisible,
             isSessionSwitchPreviewVisible,
-            isShellActivationIntentVisible);
+            isShellActivationIntentVisible,
+            isSessionSwitchOverlayBlockingVisibleTranscript);
         var overlayStatusText = ResolveOverlayStatusText(overlayLoadingStage, input.HydrationLoadedMessageCount);
         var shouldShowBlockingLoadingMask =
             (activationOverlayVisible
@@ -114,8 +115,14 @@ internal static class ChatConversationSurfaceStatePresenter
         bool projectedHydrationOverlayVisible,
         bool sessionSwitchOverlayVisible,
         bool sessionSwitchPreviewVisible,
-        bool shellActivationIntentVisible)
+        bool shellActivationIntentVisible,
+        bool isSessionSwitchOverlayBlockingVisibleTranscript)
     {
+        if (shellActivationIntentVisible || isSessionSwitchOverlayBlockingVisibleTranscript)
+        {
+            return ChatViewModel.LoadingOverlayStage.PreparingSession;
+        }
+
         if (isConnecting && connectionLifecycleOverlayVisible)
         {
             return ChatViewModel.LoadingOverlayStage.Connecting;
@@ -131,7 +138,7 @@ internal static class ChatConversationSurfaceStatePresenter
             return ChatViewModel.LoadingOverlayStage.HydratingHistory;
         }
 
-        if (sessionSwitchOverlayVisible || sessionSwitchPreviewVisible || shellActivationIntentVisible)
+        if (sessionSwitchOverlayVisible || sessionSwitchPreviewVisible)
         {
             return ChatViewModel.LoadingOverlayStage.PreparingSession;
         }
