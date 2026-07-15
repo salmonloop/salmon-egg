@@ -370,6 +370,40 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RebuildTree_KeepsAddProjectPinnedBeforeProjects()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(chatCatalog, sessionManager.Object, preferences, navState, out _);
+
+            navVm.RebuildTree();
+            navVm.RebuildTree();
+
+            Assert.True(navVm.Items.Count >= 4);
+            Assert.Same(navVm.StartItem, navVm.Items[0]);
+            Assert.Same(navVm.SessionsLabelItem, navVm.Items[1]);
+            Assert.Same(navVm.AddProjectItem, navVm.Items[2]);
+            Assert.IsType<ProjectNavItemViewModel>(navVm.Items[3]);
+            Assert.DoesNotContain(navVm.FooterItems, item => ReferenceEquals(item, navVm.AddProjectItem));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task RebuildTree_UpdatesStableNativeMenuSourceCollectionsInPlace()
     {
         var originalContext = SynchronizationContext.Current;

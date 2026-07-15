@@ -31,6 +31,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 {
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
     private const int VisibleSessionsPerProjectLimit = 20;
+    private const int PinnedMenuItemCount = 3;
 
     public event EventHandler? TreeRebuilt;
 
@@ -646,15 +647,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         try
         {
-            // Ensure we have the base items
-            if (Items.Count < 2)
-            {
-                foreach (var item in Items) DisposeItem(item);
-                Items.Clear();
-                Items.Add(StartItem);
-                Items.Add(SessionsLabelItem);
-                Items.Add(AddProjectItem);
-            }
+            var itemIndex = EnsurePinnedMenuItems();
 
             // Build the new indexes in local scope first, then swap atomically.
             // Clearing _sessionIndex/_projectIndex upfront would create a window
@@ -683,9 +676,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                     _conversationCatalogPresenter.Snapshot.Count);
             }
 #endif
-
-            // Index of where project items start (after Start, SessionsLabel)
-            int itemIndex = 2;
 
             foreach (var (projectDef, isSystem) in projects)
             {
@@ -782,6 +772,36 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
         }
+    }
+
+    private int EnsurePinnedMenuItems()
+    {
+        EnsurePinnedMenuItemAt(0, StartItem);
+        EnsurePinnedMenuItemAt(1, SessionsLabelItem);
+        EnsurePinnedMenuItemAt(2, AddProjectItem);
+        return PinnedMenuItemCount;
+    }
+
+    private void EnsurePinnedMenuItemAt(int index, MainNavItemViewModel item)
+    {
+        var currentIndex = Items.IndexOf(item);
+        if (currentIndex == index)
+        {
+            return;
+        }
+
+        if (currentIndex >= 0)
+        {
+            Items.RemoveAt(currentIndex);
+        }
+
+        if (index >= Items.Count)
+        {
+            Items.Add(item);
+            return;
+        }
+
+        Items.Insert(index, item);
     }
 
     private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogDisplayItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
