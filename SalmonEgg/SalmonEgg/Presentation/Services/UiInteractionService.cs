@@ -115,6 +115,13 @@ public sealed class UiInteractionService : IUiInteractionService
         try
         {
             var pickedFolder = await _folderPicker.PickFolderAsync().ConfigureAwait(true);
+            if (pickedFolder is null)
+            {
+                // Native folder pickers return null when the user cancels; cancellation is not a
+                // picker failure and must not cascade into a manual path prompt.
+                return null;
+            }
+
             if (!string.IsNullOrWhiteSpace(pickedFolder))
             {
                 return pickedFolder;
@@ -123,13 +130,14 @@ public sealed class UiInteractionService : IUiInteractionService
         catch
         {
             // Supported native picker failures keep the user on the same explicit path input flow.
+            return await PromptTextAsync(
+                title: ResolveResourceString("UiInteractionPickFolderTitle", "添加项目"),
+                primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
+                closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
+                initialText: "").ConfigureAwait(true);
         }
 
-        return await PromptTextAsync(
-            title: ResolveResourceString("UiInteractionPickFolderTitle", "添加项目"),
-            primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
-            closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
-            initialText: "").ConfigureAwait(true);
+        return null;
     }
 
     public async Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)

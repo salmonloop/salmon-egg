@@ -124,6 +124,22 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void RemoteProjectSelectionDialog_UsesFluentTextResources()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\RemoteProjectSelectionDialog.xaml");
+
+        Assert.Contains("<ContentDialog.Resources>", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectionMode=\"Single\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{ThemeResource BodyStrongTextBlockStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{ThemeResource CaptionTextBlockStyle}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("FontSize=\"14\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("FontSize=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("FontSize=\"16\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainPage_ProjectItemsRemainNonSelectableGroups()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));

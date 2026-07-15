@@ -646,6 +646,22 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void FolderPickerCancellation_DoesNotFallbackToManualPathInput()
+    {
+        var uiService = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Services\UiInteractionService.cs");
+        var pickerCallIndex = uiService.IndexOf("var pickedFolder = await _folderPicker.PickFolderAsync()", StringComparison.Ordinal);
+        var cancelledCheckIndex = uiService.IndexOf("if (pickedFolder is null)", StringComparison.Ordinal);
+        var catchIndex = uiService.IndexOf("catch", cancelledCheckIndex, StringComparison.Ordinal);
+        var promptFallbackIndex = uiService.IndexOf("return await PromptTextAsync(", StringComparison.Ordinal);
+
+        Assert.True(pickerCallIndex >= 0, "PickFolderAsync must use the native picker first.");
+        Assert.True(cancelledCheckIndex > pickerCallIndex, "Native picker cancellation must be handled immediately after the picker returns.");
+        Assert.True(catchIndex > cancelledCheckIndex, "The picker failure fallback must stay separate from user cancellation.");
+        Assert.DoesNotContain("PromptTextAsync", uiService.Substring(cancelledCheckIndex, catchIndex - cancelledCheckIndex), StringComparison.Ordinal);
+        Assert.True(promptFallbackIndex > catchIndex, "Manual path fallback should only run from the picker failure path.");
+    }
+
+    [Fact]
     public void MainNavigationViewAdapter_ItemInvoked_OwnsDestinationActivationPath()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");

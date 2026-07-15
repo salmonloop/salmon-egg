@@ -9,8 +9,17 @@
     AutomationProperties.AutomationId="RemoteProjectSelectionDialog"
     DefaultButton="Primary">
 
-    <Grid MaxWidth="560"
-          MaxHeight="560"
+    <ContentDialog.Resources>
+        <x:Double x:Key="RemoteProjectSelectionDialogMaxWidth">560</x:Double>
+        <x:Double x:Key="RemoteProjectSelectionDialogMaxHeight">560</x:Double>
+        <x:Double x:Key="RemoteProjectSelectionIconSize">32</x:Double>
+        <x:Double x:Key="RemoteProjectSelectionTextSpacing">2</x:Double>
+        <x:Double x:Key="RemoteProjectSelectionEmptySpacing">8</x:Double>
+        <Thickness x:Key="RemoteProjectSelectionItemPadding">12,10</Thickness>
+    </ContentDialog.Resources>
+
+    <Grid MaxWidth="{StaticResource RemoteProjectSelectionDialogMaxWidth}"
+          MaxHeight="{StaticResource RemoteProjectSelectionDialogMaxHeight}"
           HorizontalAlignment="Stretch">
         <!-- Populated state: a single-selection list projected from the authoritative remote directories. -->
         <ListView x:Name="RemoteProjectList"
@@ -19,18 +28,23 @@
                   SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged"
                   Visibility="{x:Bind ViewModel.HasProjects, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="nav:RemoteProjectOptionViewModel">
-                    <Grid Padding="12,8"
+                    <Grid Padding="{StaticResource RemoteProjectSelectionItemPadding}"
                           AutomationProperties.Name="{x:Bind AutomationName}">
-                        <StackPanel Spacing="2">
+                        <StackPanel Spacing="{StaticResource RemoteProjectSelectionTextSpacing}">
                             <TextBlock Text="{x:Bind DisplayName}"
-                                       FontSize="14"
+                                       Style="{ThemeResource BodyStrongTextBlockStyle}"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="1" />
                             <TextBlock Text="{x:Bind RemotePath}"
-                                       FontSize="12"
-                                       Opacity="0.7"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"
                                        MaxLines="1" />
                         </StackPanel>
@@ -43,19 +57,21 @@
         <StackPanel AutomationProperties.AutomationId="RemoteProjectSelectionDialog.EmptyState"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Spacing="8"
+                    Spacing="{StaticResource RemoteProjectSelectionEmptySpacing}"
                     Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <FontIcon Glyph="&#xE968;"
-                      FontSize="32"
+                      FontSize="{StaticResource RemoteProjectSelectionIconSize}"
+                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                       HorizontalAlignment="Center"
-                      Opacity="0.6" />
+                      IsHitTestVisible="False" />
             <TextBlock x:Uid="RemoteProjectSelectionEmptyTitle"
                        HorizontalAlignment="Center"
-                       FontSize="16" />
+                       Style="{ThemeResource BodyStrongTextBlockStyle}" />
             <TextBlock x:Uid="RemoteProjectSelectionEmptyDescription"
                        HorizontalAlignment="Center"
                        TextAlignment="Center"
-                       Opacity="0.7"
+                       Style="{ThemeResource BodyTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                        TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
