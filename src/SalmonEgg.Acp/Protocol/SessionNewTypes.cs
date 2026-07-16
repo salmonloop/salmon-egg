@@ -10,7 +10,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/New 方法的请求参数。
     /// 用于创建新的会话。
     /// </summary>
-    public class SessionNewParams
+    public class SessionNewParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话的工作目录（必填）。
@@ -58,7 +58,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/New 方法的响应。
     /// Agent 对创建会话请求的响应。
     /// </summary>
-    public class SessionNewResponse
+    public class SessionNewResponse : AcpProtocolObject
     {
         /// <summary>
         /// 新创建的会话 ID。
@@ -106,7 +106,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 会话模式状态（用于 Session/New 响应）。
     /// https://agentclientprotocol.com/protocol/session-modes
     /// </summary>
-    public class SessionModesState
+    public class SessionModesState : AcpProtocolObject
     {
         /// <summary>
         /// 当前模式 ID。
@@ -121,7 +121,7 @@ namespace SalmonEgg.Acp.Protocol
         public List<SessionMode> AvailableModes { get; set; } = new();
     }
 
-    public class SessionMode
+    public class SessionMode : AcpProtocolObject
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -176,6 +176,7 @@ namespace SalmonEgg.Acp.Protocol
             }
 
             writer.WriteEndArray();
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -232,6 +233,9 @@ namespace SalmonEgg.Acp.Protocol
 
                         state.AvailableModes = ReadModesArray(ref reader);
                         hasAvailableModes = true;
+                        break;
+                    case "_meta":
+                        state.Meta = ReadMetaObject(ref reader);
                         break;
                     default:
                         reader.Skip();
@@ -326,6 +330,9 @@ namespace SalmonEgg.Acp.Protocol
 
                         mode.Description = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();
                         break;
+                    case "_meta":
+                        mode.Meta = ReadMetaObject(ref reader);
+                        break;
                     default:
                         reader.Skip();
                         break;
@@ -350,8 +357,12 @@ namespace SalmonEgg.Acp.Protocol
                 writer.WriteNull("description");
             }
 
+            AcpMetaJson.Write(writer, mode.Meta);
             writer.WriteEndObject();
         }
+
+        private static Dictionary<string, object?>? ReadMetaObject(ref Utf8JsonReader reader)
+            => AcpMetaJson.ReadValue(ref reader);
 
         private static bool ShouldWriteNull(JsonSerializerOptions options)
         {

@@ -125,12 +125,6 @@ namespace SalmonEgg.Application.Services.Chat
                                 MarkConfigOptionsAuthoritative(e.SessionId);
                             }
                             break;
-                        case ConfigUpdateUpdate configUpdate:
-                            if (configUpdate.ConfigOptions is not null)
-                            {
-                                MarkConfigOptionsAuthoritative(e.SessionId);
-                            }
-                            break;
                     }
                 }
             }
@@ -198,13 +192,9 @@ namespace SalmonEgg.Application.Services.Chat
                     break;
                 case CurrentModeUpdate modeChange:
                     entry.ModeId = modeChange.ModeId;
-                    entry.Title = modeChange.Title;
                     break;
                 case SessionInfoUpdate sessionInfoUpdate:
                     entry.Title = sessionInfoUpdate.Title;
-                    break;
-                case ConfigUpdateUpdate configUpdate:
-                    entry.ConfigOptions = configUpdate.ConfigOptions;
                     break;
                 case ConfigOptionUpdate configOptionUpdate:
                     entry.ConfigOptions = configOptionUpdate.ConfigOptions;
@@ -223,7 +213,6 @@ namespace SalmonEgg.Application.Services.Chat
                 ToolCallStatusUpdate => "tool_call_update",
                 PlanUpdate => "plan",
                 CurrentModeUpdate => "current_mode_update",
-                ConfigUpdateUpdate => "config_options_update",
                 AvailableCommandsUpdate => "available_commands_update",
                 ConfigOptionUpdate => "config_option_update",
                 SessionInfoUpdate => "session_info_update",
@@ -740,17 +729,15 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
-        public async Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public async Task CancelSessionAsync(SessionCancelParams @params)
         {
             try
             {
-                var response = await _acpClient.CancelSessionAsync(@params);
+                await _acpClient.CancelSessionAsync(@params).ConfigureAwait(false);
                 _sessionManager.UpdateSession(@params.SessionId, s =>
                 {
                     s.State = SessionState.Cancelled;
                 });
-
-                return response;
             }
             catch (Exception ex)
             {

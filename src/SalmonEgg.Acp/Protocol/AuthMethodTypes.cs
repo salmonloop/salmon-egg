@@ -1,14 +1,12 @@
-using System.Collections.Generic;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
     /// Authentication method advertised by the agent during initialization.
-    /// Shape is intentionally flexible (agents may add metadata via extension fields).
+    /// Custom authentication metadata is carried through the ACP <c>_meta</c> field.
     /// </summary>
-    public sealed class AuthMethodDefinition
+    public sealed class AuthMethodDefinition : AcpProtocolObject
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;
@@ -19,11 +17,5 @@ namespace SalmonEgg.Acp.Protocol
         [JsonPropertyName("description")]
         public string? Description { get; set; }
 
-        [JsonPropertyName("type")]
-        public string? Type { get; set; }
-
-        // Preserve unknown extension fields to avoid losing agent-specific auth metadata.
-        [JsonExtensionData]
-        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 }

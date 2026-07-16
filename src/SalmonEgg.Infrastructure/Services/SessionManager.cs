@@ -98,9 +98,8 @@ namespace SalmonEgg.Infrastructure.Services
         /// 取消会话。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
-        /// <param name="reason">取消原因</param>
         /// <returns>是否成功取消</returns>
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
@@ -120,11 +119,6 @@ namespace SalmonEgg.Infrastructure.Services
                     session.State = SessionState.Cancelled;
                     session.UpdateActivity();
 
-                    // 可以在这里记录取消原因
-                    if (!string.IsNullOrWhiteSpace(reason))
-                    {
-                        // 将取消原因添加到历史中（如果需要）
-                    }
                 }
                 return Task.FromResult(true);
             }

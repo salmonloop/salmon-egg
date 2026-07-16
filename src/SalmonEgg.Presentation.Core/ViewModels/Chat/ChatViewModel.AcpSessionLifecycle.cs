@@ -1157,7 +1157,10 @@ public partial class ChatViewModel
                     {
                         Title = request.RemoteSessionTitle,
                         HasTitle = true,
-                        Cwd = request.RemoteSessionCwd
+                        Cwd = request.RemoteSessionCwd,
+                        AdditionalDirectories = request.RemoteSessionAdditionalDirectories is null
+                            ? null
+                            : new List<string>(request.RemoteSessionAdditionalDirectories)
                     },
                     allowRegisterWhenMissing: true,
                     cancellationToken: cancellationToken)
@@ -2224,13 +2227,8 @@ public partial class ChatViewModel
         var nextAvailableCommands = delta.AvailableCommands != null
             ? delta.AvailableCommands.Select(ToConversationAvailableCommandSnapshot).ToImmutableList()
             : null;
-        var nextSessionInfo = ToConversationSessionInfoSnapshot(delta.SessionInfo);
-        if (nextSessionInfo is not null)
-        {
-            nextSessionInfo = NormalizeSessionInfoSnapshotForEstablishedConversationContext(
-                conversationId,
-                nextSessionInfo);
-        }
+        var nextSessionInfo = await ResolveProjectedSessionInfoAsync(conversationId, delta.SessionInfo)
+            .ConfigureAwait(true);
         var nextUsage = ToConversationUsageSnapshot(delta.Usage);
         var hasSelectedModeId = !string.IsNullOrWhiteSpace(delta.SelectedModeId)
             || delta.AvailableModes is { Count: 0 };
@@ -2266,6 +2264,72 @@ public partial class ChatViewModel
         {
             await PersistProjectedSessionInfoSnapshotAsync(conversationId).ConfigureAwait(true);
         }
+    }
+
+    private async Task<ConversationSessionInfoSnapshot?> ResolveProjectedSessionInfoAsync(
+        string conversationId,
+        AcpSessionInfoSnapshot? sessionInfo)
+    {
+        var projected = ToConversationSessionInfoSnapshot(sessionInfo);
+        if (projected is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(projected.Cwd)
+            && projected.AdditionalDirectories is not null)
+        {
+            return projected;
+        }
+
+        var storeState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(true);
+        var established = storeState.ResolveSessionStateSlice(conversationId)?.SessionInfo
+            ?? TryGetConversationSnapshot(conversationId)?.SessionInfo;
+        var establishedCwd = !string.IsNullOrWhiteSpace(projected.Cwd)
+            ? projected.Cwd
+            : !string.IsNullOrWhiteSpace(established?.Cwd)
+                ? established.Cwd
+                : ResolveEstablishedSessionManagerCwd(storeState, conversationId);
+        var establishedDirectories = projected.AdditionalDirectories
+            ?? established?.AdditionalDirectories;
+        if (string.Equals(projected.Cwd, establishedCwd, StringComparison.Ordinal)
+            && ReferenceEquals(projected.AdditionalDirectories, establishedDirectories))
+        {
+            return projected;
+        }
+
+        return new ConversationSessionInfoSnapshot
+        {
+            Title = projected.Title,
+            HasTitle = projected.HasTitle,
+            Cwd = string.IsNullOrWhiteSpace(establishedCwd) ? null : establishedCwd.Trim(),
+            AdditionalDirectories = establishedDirectories is null
+                ? null
+                : new List<string>(establishedDirectories),
+            UpdatedAtUtc = projected.UpdatedAtUtc,
+            HasUpdatedAt = projected.HasUpdatedAt,
+            Meta = projected.Meta is null
+                ? null
+                : new Dictionary<string, object?>(projected.Meta, StringComparer.Ordinal)
+        };
+    }
+
+    private string? ResolveEstablishedSessionManagerCwd(ChatState storeState, string conversationId)
+    {
+        var localCwd = _sessionManager.GetSession(conversationId)?.Cwd;
+        if (!string.IsNullOrWhiteSpace(localCwd))
+        {
+            return localCwd.Trim();
+        }
+
+        var remoteSessionId = storeState.ResolveBinding(conversationId)?.RemoteSessionId;
+        if (string.IsNullOrWhiteSpace(remoteSessionId))
+        {
+            return null;
+        }
+
+        var remoteCwd = _sessionManager.GetSession(remoteSessionId)?.Cwd;
+        return string.IsNullOrWhiteSpace(remoteCwd) ? null : remoteCwd.Trim();
     }
 
     private static ConversationModeOptionSnapshot ToConversationModeOptionSnapshot(AcpModeOption option)
@@ -2305,15 +2369,17 @@ public partial class ChatViewModel
             return null;
         }
 
-        var normalizedDescription = string.IsNullOrWhiteSpace(sessionInfo.Description) ? null : sessionInfo.Description;
         var normalizedCwd = string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd;
+        var normalizedAdditionalDirectories = sessionInfo.AdditionalDirectories is null
+            ? null
+            : new List<string>(sessionInfo.AdditionalDirectories);
         var normalizedUpdatedAt = string.IsNullOrWhiteSpace(sessionInfo.UpdatedAt) ? null : sessionInfo.UpdatedAt;
         var normalizedMeta = sessionInfo.Meta is { Count: > 0 }
             ? new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
             : null;
         if (!sessionInfo.HasTitle
-            && normalizedDescription is null
             && normalizedCwd is null
+            && normalizedAdditionalDirectories is null
             && !sessionInfo.HasUpdatedAt
             && normalizedMeta is null)
         {
@@ -2324,8 +2390,8 @@ public partial class ChatViewModel
         {
             Title = sessionInfo.Title,
             HasTitle = sessionInfo.HasTitle,
-            Description = normalizedDescription,
             Cwd = normalizedCwd,
+            AdditionalDirectories = normalizedAdditionalDirectories,
             UpdatedAtUtc = AcpSessionTimestampPolicy.ParseUpdatedAtUtc(normalizedUpdatedAt),
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = normalizedMeta

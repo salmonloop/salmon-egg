@@ -2130,7 +2130,7 @@ public sealed class NavigationCoordinatorTests
         public Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params) => throw new NotSupportedException();
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params) => throw new NotSupportedException();
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params) => throw new NotSupportedException();
+        public Task CancelSessionAsync(SessionCancelParams @params) => throw new NotSupportedException();
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null) => throw new NotSupportedException();
         public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null) => throw new NotSupportedException();

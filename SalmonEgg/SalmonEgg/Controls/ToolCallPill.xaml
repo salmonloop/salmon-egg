@@ -111,7 +111,7 @@
             <Expander.Resources>
                 <ResourceDictionary>
                     <ResourceDictionary.ThemeDictionaries>
-                        <ResourceDictionary x:Key="Default">
+                        <ResourceDictionary x:Key="Light">
                             <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
                             <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
                             <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
@@ -149,6 +149,13 @@
                             <StaticResource x:Key="ExpanderHeaderBorderPointerOverBrush" ResourceKey="SystemColorHighlightColorBrush" />
                             <StaticResource x:Key="ExpanderHeaderBorderPressedBrush" ResourceKey="SystemColorHighlightColorBrush" />
                             <Thickness x:Key="ExpanderHeaderBorderThickness">2</Thickness>
+                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
                             <StaticResource x:Key="ExpanderContentBackground" ResourceKey="SystemColorWindowColorBrush" />
                             <StaticResource x:Key="ExpanderContentBorderBrush" ResourceKey="SystemColorWindowTextColorBrush" />
                         </ResourceDictionary>

@@ -953,7 +953,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                           "id": "mode",
                           "name": "Mode",
                           "category": "mode",
-                          "type": "string",
+                          "type": "select",
                           "currentValue": "plan",
                           "options": [
                             {
@@ -1482,7 +1482,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 t => t.MessageReceived += null,
                 new MessageReceivedEventArgs(parser.SerializeMessage(request)));
 
-            await client.CancelSessionAsync(new SessionCancelParams("session-1", "User cancelled"), TestContext.Current.CancellationToken);
+            await client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
 
             var permissionResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 301);
             Assert.False(permissionResponse.IsError);
@@ -1507,7 +1507,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .Callback<string, CancellationToken>((message, _) => sentPayload = message)
                 .ReturnsAsync(true);
 
-            await client.CancelSessionAsync(new SessionCancelParams("session-42", "User cancelled"), TestContext.Current.CancellationToken);
+            await client.CancelSessionAsync(new SessionCancelParams("session-42"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(sentPayload);
             var parsed = parser.ParseMessage(sentPayload!);
@@ -1518,6 +1518,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal(
                 "session-42",
                 notification.Params.Value.GetProperty("sessionId").GetString());
+            Assert.Single(notification.Params.Value.EnumerateObject());
+            Assert.False(notification.Params.Value.TryGetProperty("reason", out _));
         }
 
         [Fact]
@@ -2086,7 +2088,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal("session-1", published!.SessionId);
             Assert.Equal(3, published.Options.Count);
             Assert.Equal("allow-once", published.Options[0].OptionId);
-            Assert.Equal("Run this command once", published.Options[0].Description);
+            Assert.Null(typeof(PermissionOption).GetProperty("Description"));
             Assert.Equal("allow-always", published.Options[1].OptionId);
             Assert.Equal("reject-once", published.Options[2].OptionId);
         }

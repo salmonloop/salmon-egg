@@ -114,8 +114,7 @@ public partial class ChatViewModel
             var profile = ResolveNewSessionDraftProfile(profileId);
             var cwdResolution = AcpSessionNewCwdResolver.Resolve(
                 cwd,
-                profile,
-                _preferences.AgentRemoteDirectories);
+                profile);
 
             if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
             {

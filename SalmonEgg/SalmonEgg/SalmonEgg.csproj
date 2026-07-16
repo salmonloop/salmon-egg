@@ -211,7 +211,6 @@
     <SalmonEggAllTargetFrameworks Condition="'$(SalmonEggMobileTargetFrameworks)' != ''">$(SalmonEggTargetFrameworks);$(SalmonEggMobileTargetFrameworks)</SalmonEggAllTargetFrameworks>
 
     <TargetFrameworks>$(SalmonEggAllTargetFrameworks)</TargetFrameworks>
-    <AfterUnoSdkTargets>$(MSBuildProjectDirectory)\..\Uno.After.targets</AfterUnoSdkTargets>
 
     <OutputType>Exe</OutputType>
     <UnoSingleProject>true</UnoSingleProject>

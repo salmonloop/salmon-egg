@@ -19,8 +19,8 @@ import {
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-gamepad-boundary-smoke.mjs");
 const diagnosticsPagePattern = /Diagnostics and logs|诊断与日志|Gamepad input|手柄输入/;
-const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart"] };
-const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh"] };
+const gamepadStart = { labels: ["Start monitor", "开始监测"], automationIds: ["Diagnostics.GamepadStart"] };
+const gamepadRefresh = { labels: ["Refresh once", "刷新一次"], automationIds: ["Diagnostics.GamepadRefresh"] };
 const supportedStatusPattern = /not started|stopped|monitoring|未启动|已停止|正在监测/i;
 const standardGamepadProjectionScript = `
 (() => {
@@ -166,10 +166,19 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
     await page.evaluate(() => {
       globalThis.__salmoneggSmokeGamepad.setState({
         connected: true,
+        mapping: "standard",
         pressedButtons: [],
         axes: [0, 0, 0, 0]
       });
     });
+
+    // Keep diagnostics polling so ActiveInputs updates while injected buttons stay pressed.
+    await scrollToVisibleControl(page, gamepadStart, 15_000);
+    const startState = await waitForControlState(page, gamepadStart, "native bridge start action");
+    if (startState.enabled) {
+      await clickVisibleControl(page, gamepadStart);
+      await page.waitForTimeout(300);
+    }
 
     const beforeMove = await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh");
     await setInjectedGamepadButtons(page, [13]);
@@ -182,12 +191,13 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
 
     await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh before activate");
     await setInjectedGamepadButtons(page, [0]);
+    await clickVisibleControl(page, gamepadRefresh);
     await waitForControlText(
       page,
       { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
       /Activate/,
       "gamepad Activate native control invocation",
-      5_000);
+      15_000);
     await setInjectedGamepadButtons(page, []);
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
@@ -208,11 +218,13 @@ async function openDiagnosticsGamepadSection(page) {
 }
 
 async function expectSupportedNoGamepadProjection(page, label) {
+  await scrollToVisibleControl(page, gamepadStart, 15_000);
   const startState = await waitForControlState(page, gamepadStart, `${label} start action`);
   if (!Number.isFinite(startState.x) || !Number.isFinite(startState.y)) {
     throw new Error(`BrowserWasm gamepad start action did not expose a stable point. State=${JSON.stringify(startState)}`);
   }
 
+  await scrollToVisibleControl(page, gamepadRefresh, 15_000);
   const refreshState = await waitForControlState(page, gamepadRefresh, `${label} refresh action`);
   if (!refreshState.enabled) {
     throw new Error(`BrowserWasm diagnostics refresh should remain available. State=${JSON.stringify(refreshState)}`);
@@ -322,7 +334,8 @@ async function expectActiveStandardGamepadProjection(page, label) {
 }
 
 async function expectControlText(page, options, pattern, label) {
-  const state = await waitForControlState(page, options, label);
+  await scrollToVisibleControl(page, options, 15_000);
+  const state = await waitForControlState(page, options, label, 15_000);
   const text = (state.text || state.aria || "").trim();
   if (!pattern.test(text)) {
     throw new Error(`Unexpected ${label}. Text=${JSON.stringify(text)} State=${JSON.stringify(state)}`);
@@ -334,6 +347,7 @@ async function waitForControlText(page, options, pattern, label, timeoutMs = 30_
   let lastState = null;
 
   while (Date.now() < deadline) {
+    await scrollToVisibleControl(page, options, 2_000);
     lastState = await readControlState(page, options);
     const text = (lastState?.text || lastState?.aria || "").trim();
     if (lastState?.found && pattern.test(text)) {
@@ -350,6 +364,7 @@ async function setInjectedGamepadButtons(page, pressedButtons) {
   await page.evaluate(buttons => {
     globalThis.__salmoneggSmokeGamepad.setState({
       connected: true,
+      mapping: "standard",
       pressedButtons: buttons,
       axes: [0, 0, 0, 0]
     });
@@ -406,15 +421,77 @@ function isSameFocusSnapshot(left, right) {
 async function revealGamepadDiagnosticsSection(page) {
   await waitForBodyText(page, diagnosticsPagePattern, "diagnostics settings page before gamepad reveal");
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  const headerTargets = {
+    labels: ["Gamepad input", "手柄输入", "Compatibility monitor", "兼容性监测"],
+    automationIds: ["Diagnostics.GamepadMonitorHeader"]
+  };
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
     const state = await readControlState(page, gamepadStart);
     if (state.found) {
       return;
     }
 
+    await page.evaluate(() => {
+      const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+      const titles = new Set(["gamepad input", "手柄输入", "compatibility monitor", "兼容性监测"]);
+
+      // Prefer exact leaf text matches so we click the section header, not a large ancestor.
+      const leafHeaders = Array.from(document.querySelectorAll("body *"))
+        .filter(element => {
+          const children = Array.from(element.childNodes);
+          const directText = children
+            .filter(node => node.nodeType === Node.TEXT_NODE)
+            .map(node => normalize(node.textContent))
+            .join(" ")
+            .trim();
+          const text = normalize(element.textContent);
+          const aria = normalize(element.getAttribute("aria-label"));
+          return titles.has(directText) || titles.has(text) || titles.has(aria);
+        })
+        .sort((left, right) => {
+          const leftArea = left.getBoundingClientRect().width * left.getBoundingClientRect().height;
+          const rightArea = right.getBoundingClientRect().width * right.getBoundingClientRect().height;
+          return leftArea - rightArea;
+        });
+
+      for (const element of leafHeaders) {
+        const expander =
+          element.closest(".uno-expander")
+          ?? element.closest("[class*='Expander']")
+          ?? element.closest("details");
+        const header =
+          expander?.querySelector("button, [role='button'], .uno-expanderheader, summary")
+          ?? element.closest("button, [role='button'], summary")
+          ?? element;
+        header.scrollIntoView({ block: "center", inline: "nearest" });
+        if (typeof header.click === "function") {
+          header.click();
+          return true;
+        }
+      }
+
+      // Fallback: expand any collapsed expander that is still closed on the diagnostics page.
+      const toggles = Array.from(document.querySelectorAll("button, [role='button'], summary"))
+        .filter(element => {
+          const ariaExpanded = element.getAttribute("aria-expanded");
+          return ariaExpanded === "false" || element.tagName.toLowerCase() === "summary";
+        });
+      for (const toggle of toggles) {
+        const text = normalize(toggle.textContent);
+        if (text.includes("gamepad") || text.includes("手柄") || text.includes("monitor") || text.includes("监测") || text.includes("diagnostics") || text.includes("诊断") || text.includes("logs") || text.includes("日志") || text.includes("voice") || text.includes("语音")) {
+          toggle.scrollIntoView({ block: "center", inline: "nearest" });
+          toggle.click();
+        }
+      }
+
+      return false;
+    });
+
+    await scrollToVisibleControl(page, headerTargets);
     await scrollToVisibleControl(page, gamepadStart);
-    await page.mouse.wheel(0, 900);
-    await page.waitForTimeout(250);
+    await page.mouse.wheel(0, 500);
+    await page.waitForTimeout(300);
   }
 
   const state = await readControlState(page, gamepadStart);

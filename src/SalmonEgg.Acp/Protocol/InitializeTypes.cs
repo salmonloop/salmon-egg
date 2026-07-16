@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Initialize 方法的请求参数。
     /// 用于客户端向 Agent 发起初始化请求。
     /// </summary>
-    public class InitializeParams
+    public class InitializeParams : AcpProtocolObject
     {
         /// <summary>
         /// 协议版本号。必须是整数。
@@ -32,9 +32,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 扩展字段（_meta），用于协议可扩展性。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 InitializeParams 实例。
         /// </summary>
@@ -58,7 +55,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 客户端信息类。
     /// 包含客户端的名称、标题和版本信息。
     /// </summary>
-    public class ClientInfo
+    public class ClientInfo : AcpProtocolObject
     {
         /// <summary>
         /// 客户端的名称（标识符）。
@@ -103,7 +100,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 客户端能力声明类。
     /// 声明客户端支持的功能。
     /// </summary>
-    public class ClientCapabilities
+    public class ClientCapabilities : AcpProtocolObject
     {
         /// <summary>
         /// 文件系统能力。
@@ -126,9 +123,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 扩展字段（_meta），用于声明自定义客户端能力。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 ClientCapabilities 实例。
         /// </summary>
@@ -203,28 +197,30 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 客户端会话能力。
     /// </summary>
-    public class ClientSessionCapabilities
+    public class ClientSessionCapabilities : AcpProtocolObject
     {
         [JsonPropertyName("configOptions")]
         public SessionConfigOptionsCapabilities? ConfigOptions { get; set; }
 
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// 客户端会话配置选项能力。
     /// </summary>
-    public class SessionConfigOptionsCapabilities
+    public class SessionConfigOptionsCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
+        [JsonPropertyName("boolean")]
+        public BooleanConfigOptionCapabilities? Boolean { get; set; }
+    }
+
+    public class BooleanConfigOptionCapabilities : AcpProtocolObject
+    {
     }
 
     /// <summary>
     /// 文件系统能力类。
     /// </summary>
-    public class FsCapability
+    public class FsCapability : AcpProtocolObject
     {
         /// <summary>
         /// 是否支持读取文本文件。
@@ -261,7 +257,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Initialize 方法的响应。
     /// Agent 对初始化请求的响应。
     /// </summary>
-    public class InitializeResponse
+    public class InitializeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 协议版本号。必须是整数。
@@ -290,9 +286,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 扩展字段（_meta），用于协议可扩展性。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 InitializeResponse 实例。
         /// </summary>
@@ -318,7 +311,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Agent 信息类。
     /// 包含 Agent 的名称、标题和版本信息。
     /// </summary>
-    public class AgentInfo
+    public class AgentInfo : AcpProtocolObject
     {
         /// <summary>
         /// Agent 的名称（标识符）。
@@ -363,7 +356,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Agent 能力声明类。
     /// 声明 Agent 支持的功能。
     /// </summary>
-    public class AgentCapabilities
+    public class AgentCapabilities : AcpProtocolObject
     {
         /// <summary>
         /// 提示相关能力。
@@ -488,28 +481,24 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Agent 认证能力。
     /// </summary>
-    public class AgentAuthCapabilities
+    public class AgentAuthCapabilities : AcpProtocolObject
     {
         [JsonPropertyName("logout")]
         public LogoutCapabilities? Logout { get; set; }
 
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// Logout 方法能力。
     /// </summary>
-    public class LogoutCapabilities
+    public class LogoutCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// 提示相关能力类。
     /// </summary>
-    public class PromptCapabilities
+    public class PromptCapabilities : AcpProtocolObject
     {
         /// <summary>
         /// 是否支持图片内容。
@@ -553,7 +542,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// MCP 相关能力类。
     /// </summary>
-    public class McpCapabilities
+    public class McpCapabilities : AcpProtocolObject
     {
         /// <summary>
         /// 是否支持 HTTP 传输。
@@ -570,9 +559,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// ACP 保留的扩展元数据。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 McpCapabilities 实例。
         /// </summary>
@@ -600,7 +586,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话相关能力类。
     /// </summary>
-    public class SessionCapabilities
+    public class SessionCapabilities : AcpProtocolObject
     {
         /// <summary>
         /// 是否支持会话列表功能。
@@ -632,9 +618,6 @@ namespace SalmonEgg.Acp.Protocol
         [JsonPropertyName("additionalDirectories")]
         public SessionAdditionalDirectoriesCapabilities? AdditionalDirectories { get; set; }
 
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionCapabilities 实例。
         /// </summary>
@@ -646,11 +629,8 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话列表能力类。
     /// </summary>
-    public class SessionListCapabilities
+    public class SessionListCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionListCapabilities 实例。
         /// </summary>
@@ -662,11 +642,8 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话恢复能力类。
     /// </summary>
-    public class SessionResumeCapabilities
+    public class SessionResumeCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionResumeCapabilities 实例。
         /// </summary>
@@ -678,11 +655,8 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话关闭能力类。
     /// </summary>
-    public class SessionCloseCapabilities
+    public class SessionCloseCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionCloseCapabilities 实例。
         /// </summary>
@@ -694,18 +668,14 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话删除能力类。
     /// </summary>
-    public class SessionDeleteCapabilities
+    public class SessionDeleteCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// additionalDirectories 能力类。
     /// </summary>
-    public class SessionAdditionalDirectoriesCapabilities
+    public class SessionAdditionalDirectoriesCapabilities : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 }

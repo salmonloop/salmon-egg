@@ -299,6 +299,53 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AppResources_DoNotReplaceNativeButtonTemplates()
+    {
+        var appXaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+        var agentProfileEditor = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
+
+        Assert.DoesNotContain("SubtleButtonStyle", appXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<ControlTemplate TargetType=\"Button\"", appXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Style=\"{StaticResource SubtleButtonStyle}\"", agentProfileEditor, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AppThemeDictionaries_UseExplicitThemesAndStaticLightDarkResources()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+        var lightDictionary = ExtractSection(
+            xaml,
+            "<ResourceDictionary x:Key=\"Light\">",
+            "</ResourceDictionary>");
+        var darkDictionary = ExtractSection(
+            xaml,
+            "<ResourceDictionary x:Key=\"Dark\">",
+            "</ResourceDictionary>");
+        var highContrastDictionary = ExtractSection(
+            xaml,
+            "<ResourceDictionary x:Key=\"HighContrast\">",
+            "</ResourceDictionary>");
+
+        Assert.Contains("x:Key=\"Light\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"Dark\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"HighContrast\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("{ThemeResource", lightDictionary, StringComparison.Ordinal);
+        Assert.DoesNotContain("{ThemeResource", darkDictionary, StringComparison.Ordinal);
+        Assert.Contains("SystemColorWindowColorBrush", highContrastDictionary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToolCallPillThemeDictionaries_UseExplicitNativeThemes()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml");
+
+        Assert.Contains("x:Key=\"Light\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"Dark\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"HighContrast\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Key=\"Default\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UiResources_HaveSameKeysForCanonicalLanguages()
     {
         string[] resourceFiles =

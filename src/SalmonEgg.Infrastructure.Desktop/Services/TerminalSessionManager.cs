@@ -122,11 +122,11 @@ namespace SalmonEgg.Infrastructure.Services
             private readonly StringBuilder _output = new();
             private readonly TaskCompletionSource<TerminalWaitForExitResponse> _exitCompletion =
                 new(TaskCreationOptions.RunContinuationsAsynchronously);
-            private readonly int? _outputByteLimit;
+            private readonly ulong? _outputByteLimit;
             private bool _truncated;
             private bool _disposed;
 
-            private TerminalSession(Process process, int? outputByteLimit)
+            private TerminalSession(Process process, ulong? outputByteLimit)
             {
                 _process = process;
                 _outputByteLimit = outputByteLimit;
@@ -289,7 +289,8 @@ namespace SalmonEgg.Infrastructure.Services
                     return;
                 }
 
-                while (_output.Length > 0 && Encoding.UTF8.GetByteCount(_output.ToString()) > _outputByteLimit.Value)
+                while (_output.Length > 0
+                       && (ulong)Encoding.UTF8.GetByteCount(_output.ToString()) > _outputByteLimit.Value)
                 {
                     _output.Remove(0, 1);
                     _truncated = true;
@@ -332,11 +333,11 @@ namespace SalmonEgg.Infrastructure.Services
                 };
             }
 
-            private int? SafeGetExitCode()
+            private uint? SafeGetExitCode()
             {
                 try
                 {
-                    return _process.ExitCode;
+                    return unchecked((uint)_process.ExitCode);
                 }
                 catch
                 {

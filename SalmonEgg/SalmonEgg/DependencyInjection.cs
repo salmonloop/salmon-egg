@@ -342,11 +342,13 @@ public static class DependencyInjection
             new AuthoritativeRemoteSessionRouter(sp.GetRequiredService<IChatStore>()));
         services.AddSingleton<IState<ChatConnectionState>>(sp => State.Value(sp, () => ChatConnectionState.Empty));
         services.AddSingleton<IChatConnectionStore, ChatConnectionStore>();
+        services.AddSingleton<IAcpRemoteSessionRecoveryContextResolver, AcpRemoteSessionRecoveryContextResolver>();
         services.AddSingleton<IAcpConnectionCoordinator>(sp =>
             new AcpConnectionCoordinator(
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<AcpConnectionCoordinator>>(),
-                sp.GetRequiredService<IAcpMcpServerResolver>()));
+                sp.GetRequiredService<IAcpMcpServerResolver>(),
+                sp.GetRequiredService<IAcpRemoteSessionRecoveryContextResolver>()));
         services.AddSingleton(sp =>
             AcpConnectionEvictionOptionsLoader.LoadEnvironmentDefaults(
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger("AcpConnectionEvictionOptionsLoader")));
@@ -460,18 +462,6 @@ public static class DependencyInjection
                 sp.GetRequiredService<IAcpConnectionPoolManager>(),
                 sp.GetRequiredService<IAcpConnectionDependencySnapshotProvider>());
         });
-        services.AddSingleton<IErrorRecoveryService>(sp =>
-        {
-            var pathValidator = sp.GetRequiredService<IPathValidator>();
-            var errorLogger = sp.GetRequiredService<IErrorLogger>();
-            return new ErrorRecoveryService(
-                () => sp.GetRequiredService<ChatViewModel>().CurrentChatService,
-                pathValidator,
-                errorLogger,
-                cancellationToken => sp.GetRequiredService<ChatViewModel>()
-                    .ResolveCurrentMcpServersAsync(cancellationToken));
-        });
-
         services.AddSingleton(sp =>
         {
             var lazyNav = new Lazy<INavigationCoordinator>(() => sp.GetRequiredService<INavigationCoordinator>());

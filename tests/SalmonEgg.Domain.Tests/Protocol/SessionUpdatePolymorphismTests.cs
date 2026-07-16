@@ -15,7 +15,7 @@ public sealed class SessionUpdatePolymorphismTests
           "update": {
             "sessionUpdate": "current_mode_update",
             "currentModeId": "mode_123",
-            "title": "Claude Code"
+            "title": "non-standard title"
           }
         }
         """;
@@ -28,11 +28,13 @@ public sealed class SessionUpdatePolymorphismTests
 
         var update = (CurrentModeUpdate)parsed.Update!;
         Assert.Equal("mode_123", update.ModeId);
-        Assert.Equal("Claude Code", update.Title);
+        Assert.Null(typeof(CurrentModeUpdate).GetProperty("Title"));
+        var serialized = JsonSerializer.Serialize(parsed, CreateJsonOptions());
+        Assert.DoesNotContain("title", serialized, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Deserialize_ConfigOptionsUpdate_Works()
+    public void Deserialize_NonStandardConfigOptionsUpdate_FallsBackWithoutReplayingPayload()
     {
         var json = """
         {
@@ -47,7 +49,10 @@ public sealed class SessionUpdatePolymorphismTests
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
         Assert.NotNull(parsed);
-        Assert.IsType<ConfigUpdateUpdate>(parsed!.Update);
+        Assert.IsType<SessionUpdate>(parsed!.Update);
+        var serialized = JsonSerializer.Serialize(parsed, CreateJsonOptions());
+        Assert.DoesNotContain("config_options_update", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("configOptions", serialized, StringComparison.Ordinal);
     }
 
     [Fact]

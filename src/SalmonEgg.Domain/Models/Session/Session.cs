@@ -205,7 +205,7 @@ namespace SalmonEgg.Domain.Models.Session
         public string? ModeId { get; set; }
 
         /// <summary>
-        /// 配置选项（用于 config_options_update 类型的更新）。
+        /// 配置选项（用于 config_option_update 类型的更新）。
         /// </summary>
         [JsonPropertyName("configOptions")]
         public object? ConfigOptions { get; set; }
@@ -288,19 +288,5 @@ namespace SalmonEgg.Domain.Models.Session
             };
         }
 
-        /// <summary>
-        /// 创建新的配置更新类型更新条目。
-        /// </summary>
-        /// <param name="configOptions">配置选项</param>
-        /// <returns>会话更新条目</returns>
-        public static SessionUpdateEntry CreateConfigUpdate(object configOptions)
-        {
-            return new SessionUpdateEntry
-            {
-                SessionUpdateType = "config_options_update",
-                ConfigOptions = configOptions,
-                Timestamp = DateTime.UtcNow
-            };
-        }
     }
 }

@@ -490,8 +490,7 @@ public sealed class ChatServiceSessionTests
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("s1", new CurrentModeUpdate
             {
-                ModeId = "code",
-                Title = "Code mode"
+                ModeId = "code"
             }));
 
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
@@ -762,8 +761,8 @@ public sealed class ChatServiceSessionTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new SessionSetConfigOptionResponse());
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SessionCancelResponse());
+        public Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(new AuthenticateResponse());

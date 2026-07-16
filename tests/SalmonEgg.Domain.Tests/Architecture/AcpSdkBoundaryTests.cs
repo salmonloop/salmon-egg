@@ -68,6 +68,22 @@ public sealed class AcpSdkBoundaryTests
         Assert.Contains(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj", domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")));
     }
 
+    [Fact]
+    public void Domain_DoesNotOwnPlatformOrFileSystemProbing()
+    {
+        var domainSources = Directory
+            .EnumerateFiles(RepoPath(@"src\SalmonEgg.Domain"), "*.cs", SearchOption.AllDirectories)
+            .Select(File.ReadAllText)
+            .ToArray();
+
+        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Utilities\PathResolver.cs")));
+        Assert.DoesNotContain(domainSources, source => source.Contains("RuntimeInformation", StringComparison.Ordinal));
+        Assert.DoesNotContain(domainSources, source => source.Contains("OSPlatform.", StringComparison.Ordinal));
+        Assert.DoesNotContain(domainSources, source => source.Contains("Environment.CurrentDirectory", StringComparison.Ordinal));
+        Assert.DoesNotContain(domainSources, source => source.Contains("File.Exists(", StringComparison.Ordinal));
+        Assert.DoesNotContain(domainSources, source => source.Contains("Directory.Exists(", StringComparison.Ordinal));
+    }
+
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
 

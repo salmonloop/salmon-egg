@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol;
 
-public class SessionListParams
+public class SessionListParams : AcpProtocolObject
 {
     [JsonPropertyName("cwd")]
     public string? Cwd { get; set; }
@@ -11,14 +11,9 @@ public class SessionListParams
     [JsonPropertyName("cursor")]
     public string? Cursor { get; set; }
 
-    [JsonPropertyName("_meta")]
-    public Dictionary<string, object?>? Meta { get; set; }
-
-    [JsonExtensionData]
-    public Dictionary<string, object?>? ExtraParams { get; set; }
 }
 
-public class SessionListResponse
+public class SessionListResponse : AcpProtocolObject
 {
     [JsonPropertyName("sessions")]
     public List<AgentSessionInfo> Sessions { get; set; } = new();
@@ -26,14 +21,9 @@ public class SessionListResponse
     [JsonPropertyName("nextCursor")]
     public string? NextCursor { get; set; }
 
-    [JsonPropertyName("_meta")]
-    public Dictionary<string, object?>? Meta { get; set; }
-
-    [JsonExtensionData]
-    public Dictionary<string, object?>? ExtraData { get; set; }
 }
 
-public class AgentSessionInfo
+public class AgentSessionInfo : AcpProtocolObject
 {
     [JsonPropertyName("sessionId")]
     public string SessionId { get; set; } = string.Empty;
@@ -44,15 +34,10 @@ public class AgentSessionInfo
     [JsonPropertyName("title")]
     public string? Title { get; set; }
 
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
     [JsonPropertyName("updatedAt")]
     public string? UpdatedAt { get; set; }
 
     [JsonPropertyName("additionalDirectories")]
     public List<string>? AdditionalDirectories { get; set; }
 
-    [JsonPropertyName("_meta")]
-    public Dictionary<string, object?>? Meta { get; set; }
 }

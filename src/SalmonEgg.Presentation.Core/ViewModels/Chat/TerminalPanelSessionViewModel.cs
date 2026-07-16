@@ -24,7 +24,7 @@ public sealed partial class TerminalPanelSessionViewModel : ObservableObject
     private bool _isTruncated;
 
     [ObservableProperty]
-    private int? _exitCode;
+    private uint? _exitCode;
 
     [ObservableProperty]
     private bool _isReleased;

@@ -56,15 +56,14 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-needs-mapping",
                                 Title = "Needs Mapping",
-                                Description = "No local project root match",
                                 UpdatedAt = "2026-03-28T10:00:00+08:00",
-                                Cwd = "/remote/worktree/service-a"
+                                Cwd = "/remote/worktree/service-a",
+                                AdditionalDirectories = ["/remote/shared/first", "/remote/shared/second"]
                             },
                             new AgentSessionInfo
                             {
                                 SessionId = "remote-unclassified",
                                 Title = "Unclassified",
-                                Description = "No cwd from remote metadata",
                                 UpdatedAt = "2026-03-28T10:05:00+08:00",
                                 Cwd = string.Empty
                             }
@@ -87,6 +86,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.Equal(ProjectAffinitySource.NeedsMapping, needsMappingRow.AffinitySource);
             Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
             Assert.True(needsMappingRow.NeedsUserAttention);
+            Assert.Equal(["/remote/shared/first", "/remote/shared/second"], needsMappingRow.AdditionalDirectories);
             Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
 
             var unclassifiedRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-unclassified");
@@ -159,7 +159,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 Cwd = @"C:\repo\remote"
                             }
                         }
@@ -281,7 +280,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -298,9 +296,18 @@ public sealed class DiscoverSessionsViewModelTests
                 connectionFacade,
                 navigationCoordinator);
 
-            await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+            var sessionItem = CreateSessionItem(
+                [@"C:\shared\first", @"D:\shared\second"]);
+            Assert.Equal(
+                [@"C:\shared\first", @"D:\shared\second"],
+                sessionItem.AdditionalDirectories);
+
+            await viewModel.LoadSessionCommand.ExecuteAsync(sessionItem);
 
             Assert.Equal(("remote-session-1", @"C:\repo\remote", "profile-1", "Remote Session"), navigationCoordinator.LastDiscoverOpenRequest);
+            Assert.Equal(
+                [@"C:\shared\first", @"D:\shared\second"],
+                navigationCoordinator.LastDiscoverAdditionalDirectories);
             Assert.Null(viewModel.ErrorMessage);
         }
         finally
@@ -411,7 +418,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -460,7 +466,6 @@ public sealed class DiscoverSessionsViewModelTests
                             {
                                 SessionId = "remote-session-1",
                                 Title = "Remote Session",
-                                Description = "Imported from ACP",
                                 UpdatedAt = "2026-03-27T12:00:00+08:00",
                                 Cwd = @"C:\repo\remote"
                             }
@@ -587,7 +592,6 @@ public sealed class DiscoverSessionsViewModelTests
                         {
                             SessionId = "remote-session-1",
                             Title = "Remote Session",
-                            Description = "Imported from ACP",
                             UpdatedAt = "2026-03-27T12:00:00+08:00",
                             Cwd = @"C:\repo\remote"
                         }
@@ -1120,14 +1124,16 @@ public sealed class DiscoverSessionsViewModelTests
             StdioCommand = "agent.exe"
         };
 
-    private static DiscoverSessionItemViewModel CreateSessionItem()
+    private static DiscoverSessionItemViewModel CreateSessionItem(
+        IReadOnlyList<string>? additionalDirectories = null)
         => new(
             "remote-session-1",
             "Remote Session",
             "Imported from ACP",
             new DateTime(2026, 3, 27, 12, 0, 0, DateTimeKind.Local),
             new AsyncRelayCommand<DiscoverSessionItemViewModel?>(_ => Task.CompletedTask),
-            @"C:\repo\remote");
+            @"C:\repo\remote",
+            additionalDirectories: additionalDirectories);
 
     private static void SetSelectedProfileWithoutNotification(
         AcpProfilesViewModel profilesViewModel,
@@ -1340,6 +1346,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         public DiscoverRemoteSessionOpenResult DiscoverOpenResult { get; set; } = new(true, "local-session", null);
         public (string RemoteSessionId, string? RemoteSessionCwd, string? ProfileId, string? RemoteSessionTitle)? LastDiscoverOpenRequest { get; private set; }
+        public IReadOnlyList<string>? LastDiscoverAdditionalDirectories { get; private set; }
         public Func<Task<DiscoverRemoteSessionOpenResult>>? DiscoverOpenAsync { get; set; }
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
@@ -1362,6 +1369,7 @@ public sealed class DiscoverSessionsViewModelTests
                 request.RemoteSessionCwd,
                 request.ProfileId,
                 request.RemoteSessionTitle);
+            LastDiscoverAdditionalDirectories = request.RemoteSessionAdditionalDirectories;
             return DiscoverOpenAsync is null
                 ? Task.FromResult(DiscoverOpenResult)
                 : DiscoverOpenAsync();
@@ -1554,7 +1562,7 @@ public sealed class DiscoverSessionsViewModelTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

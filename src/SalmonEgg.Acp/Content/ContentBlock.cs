@@ -2,28 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.Content
 {
     /// <summary>
     /// 内容块的基类。
     /// 用于表示会话中的各种类型的内容（文本、图片、音频、资源等）。
-    /// ContentBlock uses a dedicated converter so unknown ACP content can round-trip losslessly.
+    /// ContentBlock uses a dedicated converter so protocol fields retain their wire shape.
     /// </summary>
     [JsonConverter(typeof(ContentBlockJsonConverter))]
-    public class ContentBlock
+    public class ContentBlock : AcpProtocolObject
     {
         /// <summary>
         /// Optional ACP annotations that guide how the content should be used or displayed.
         /// </summary>
         [JsonPropertyName("annotations")]
         public Annotations? Annotations { get; set; }
-
-        /// <summary>
-        /// Preserves unknown payload members when the content discriminator is not recognized.
-        /// </summary>
-        [JsonExtensionData]
-        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 
         [JsonIgnore]
         internal string? UnknownTypeDiscriminator { get; set; }
@@ -39,7 +34,7 @@ namespace SalmonEgg.Acp.Content
     /// <summary>
     /// Optional ACP annotations attached to a content block.
     /// </summary>
-    public sealed class Annotations
+    public sealed class Annotations : AcpProtocolObject
     {
         /// <summary>
         /// Intended audience for the content.
@@ -51,7 +46,7 @@ namespace SalmonEgg.Acp.Content
         /// Relative priority from 0.0 to 1.0.
         /// </summary>
         [JsonPropertyName("priority")]
-        public decimal? Priority { get; set; }
+        public double? Priority { get; set; }
 
         /// <summary>
         /// ISO 8601 timestamp for the last modification time.
@@ -120,9 +115,9 @@ namespace SalmonEgg.Acp.Content
             var block = new TextContentBlock
             {
                 Text = ReadString(root, "text")!,
-                Annotations = ReadAnnotations(root)
+                Annotations = ReadAnnotations(root),
+                Meta = AcpMetaJson.Read(root)
             };
-            block.ExtensionData = ReadExtensionData(root, "text");
             return block;
         }
 
@@ -133,9 +128,9 @@ namespace SalmonEgg.Acp.Content
                 Data = ReadString(root, "data")!,
                 MimeType = ReadString(root, "mimeType")!,
                 Uri = ReadString(root, "uri"),
-                Annotations = ReadAnnotations(root)
+                Annotations = ReadAnnotations(root),
+                Meta = AcpMetaJson.Read(root)
             };
-            block.ExtensionData = ReadExtensionData(root, "data", "mimeType", "uri");
             return block;
         }
 
@@ -145,9 +140,9 @@ namespace SalmonEgg.Acp.Content
             {
                 Data = ReadString(root, "data")!,
                 MimeType = ReadString(root, "mimeType")!,
-                Annotations = ReadAnnotations(root)
+                Annotations = ReadAnnotations(root),
+                Meta = AcpMetaJson.Read(root)
             };
-            block.ExtensionData = ReadExtensionData(root, "data", "mimeType");
             return block;
         }
 
@@ -161,9 +156,9 @@ namespace SalmonEgg.Acp.Content
                 Title = ReadString(root, "title"),
                 Description = ReadString(root, "description"),
                 Size = ReadInt64(root, "size"),
-                Annotations = ReadAnnotations(root)
+                Annotations = ReadAnnotations(root),
+                Meta = AcpMetaJson.Read(root)
             };
-            block.ExtensionData = ReadExtensionData(root, "uri", "name", "mimeType", "title", "description", "size");
             return block;
         }
 
@@ -174,9 +169,9 @@ namespace SalmonEgg.Acp.Content
                 Resource = root.TryGetProperty("resource", out var resourceElement)
                     ? ReadEmbeddedResource(resourceElement)
                     : null!,
-                Annotations = ReadAnnotations(root)
+                Annotations = ReadAnnotations(root),
+                Meta = AcpMetaJson.Read(root)
             };
-            block.ExtensionData = ReadExtensionData(root, "resource");
             return block;
         }
 
@@ -186,7 +181,7 @@ namespace SalmonEgg.Acp.Content
             {
                 UnknownTypeDiscriminator = discriminator,
                 Annotations = ReadAnnotations(root),
-                ExtensionData = ReadExtensionData(root)
+                Meta = AcpMetaJson.Read(root)
             };
         }
 
@@ -202,7 +197,8 @@ namespace SalmonEgg.Acp.Content
                 Uri = ReadString(element, "uri")!,
                 MimeType = ReadString(element, "mimeType")!,
                 Text = ReadString(element, "text"),
-                Blob = ReadString(element, "blob")
+                Blob = ReadString(element, "blob"),
+                Meta = AcpMetaJson.Read(element)
             };
         }
 
@@ -222,8 +218,9 @@ namespace SalmonEgg.Acp.Content
             var annotations = new Annotations
             {
                 Audience = ReadStringList(annotationsElement, "audience"),
-                Priority = ReadDecimal(annotationsElement, "priority"),
-                LastModified = ReadString(annotationsElement, "lastModified")
+                Priority = ReadDouble(annotationsElement, "priority"),
+                LastModified = ReadString(annotationsElement, "lastModified"),
+                Meta = AcpMetaJson.Read(annotationsElement)
             };
 
             return annotations;
@@ -258,11 +255,11 @@ namespace SalmonEgg.Acp.Content
                 : null;
         }
 
-        private static decimal? ReadDecimal(JsonElement root, string propertyName)
+        private static double? ReadDouble(JsonElement root, string propertyName)
         {
             return root.TryGetProperty(propertyName, out var property)
                 && property.ValueKind == JsonValueKind.Number
-                && property.TryGetDecimal(out var value)
+                && property.TryGetDouble(out var value)
                     ? value
                     : null;
         }
@@ -276,50 +273,13 @@ namespace SalmonEgg.Acp.Content
                     : null;
         }
 
-        private static Dictionary<string, JsonElement>? ReadExtensionData(JsonElement root, params string[] knownPropertyNames)
-        {
-            Dictionary<string, JsonElement>? extensionData = null;
-
-            foreach (var property in root.EnumerateObject())
-            {
-                if (IsKnownProperty(property.Name, knownPropertyNames))
-                {
-                    continue;
-                }
-
-                extensionData ??= new Dictionary<string, JsonElement>();
-                extensionData[property.Name] = property.Value.Clone();
-            }
-
-            return extensionData;
-        }
-
-        private static bool IsKnownProperty(string propertyName, string[] knownPropertyNames)
-        {
-            if (string.Equals(propertyName, "type", StringComparison.Ordinal)
-                || string.Equals(propertyName, "annotations", StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            for (var i = 0; i < knownPropertyNames.Length; i++)
-            {
-                if (string.Equals(propertyName, knownPropertyNames[i], StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private static void WriteText(Utf8JsonWriter writer, TextContentBlock value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
             writer.WriteString("type", value.Type);
             WriteAnnotations(writer, value.Annotations, options);
             writer.WriteString("text", value.Text);
-            WriteExtensionData(writer, value.ExtensionData, "text");
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -331,7 +291,7 @@ namespace SalmonEgg.Acp.Content
             writer.WriteString("data", value.Data);
             WriteNullableString(writer, "uri", value.Uri, options);
             writer.WriteString("mimeType", value.MimeType);
-            WriteExtensionData(writer, value.ExtensionData, "data", "mimeType", "uri");
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -342,7 +302,7 @@ namespace SalmonEgg.Acp.Content
             WriteAnnotations(writer, value.Annotations, options);
             writer.WriteString("data", value.Data);
             writer.WriteString("mimeType", value.MimeType);
-            WriteExtensionData(writer, value.ExtensionData, "data", "mimeType");
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -357,7 +317,7 @@ namespace SalmonEgg.Acp.Content
             WriteNullableString(writer, "title", value.Title, options);
             WriteNullableString(writer, "description", value.Description, options);
             WriteNullableNumber(writer, "size", value.Size, options);
-            WriteExtensionData(writer, value.ExtensionData, "uri", "name", "mimeType", "title", "description", "size");
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -368,7 +328,7 @@ namespace SalmonEgg.Acp.Content
             WriteAnnotations(writer, value.Annotations, options);
             writer.WritePropertyName("resource");
             WriteEmbeddedResource(writer, value.Resource, options);
-            WriteExtensionData(writer, value.ExtensionData, "resource");
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -379,6 +339,7 @@ namespace SalmonEgg.Acp.Content
             writer.WriteString("mimeType", value.MimeType);
             WriteNullableString(writer, "text", value.Text, options);
             WriteNullableString(writer, "blob", value.Blob, options);
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -423,6 +384,7 @@ namespace SalmonEgg.Acp.Content
             }
 
             WriteNullableString(writer, "lastModified", value.LastModified, options);
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
         }
 
@@ -473,27 +435,8 @@ namespace SalmonEgg.Acp.Content
                 writer.WriteNull("annotations");
             }
 
-            WriteExtensionData(writer, value.ExtensionData);
+            AcpMetaJson.Write(writer, value.Meta);
             writer.WriteEndObject();
-        }
-
-        private static void WriteExtensionData(Utf8JsonWriter writer, Dictionary<string, JsonElement>? extensionData, params string[] knownPropertyNames)
-        {
-            if (extensionData == null)
-            {
-                return;
-            }
-
-            foreach (var property in extensionData)
-            {
-                if (IsKnownProperty(property.Key, knownPropertyNames))
-                {
-                    continue;
-                }
-
-                writer.WritePropertyName(property.Key);
-                property.Value.WriteTo(writer);
-            }
         }
 
         private static bool ShouldWriteNull(JsonSerializerOptions options)

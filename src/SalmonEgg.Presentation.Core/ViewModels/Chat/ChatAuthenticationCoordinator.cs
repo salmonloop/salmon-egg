@@ -131,12 +131,7 @@ public sealed class ChatAuthenticationCoordinator
         => ex is AcpException acp && acp.ErrorCode == JsonRpcErrorCode.AuthenticationRequired;
 
     private AuthMethodDefinition? GetPrimaryAuthMethod()
-        => _advertisedAuthMethods?.FirstOrDefault(IsAgentHandledAuthMethod);
-
-    private static bool IsAgentHandledAuthMethod(AuthMethodDefinition method)
-        => !string.IsNullOrWhiteSpace(method.Id)
-            && (string.IsNullOrWhiteSpace(method.Type)
-                || string.Equals(method.Type, "agent", StringComparison.Ordinal));
+        => _advertisedAuthMethods?.FirstOrDefault(static method => !string.IsNullOrWhiteSpace(method.Id));
 
     private static string? ResolveDisplayedAgentName(AgentInfo? agentInfo)
     {

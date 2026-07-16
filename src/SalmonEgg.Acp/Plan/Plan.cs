@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.Plan
 {
@@ -9,7 +10,7 @@ namespace SalmonEgg.Acp.Plan
     /// 计划类。
     /// 表示 Agent 的行动计划，包含一系列计划条目。
     /// </summary>
-    public class Plan
+    public class Plan : AcpProtocolObject
     {
         private List<PlanEntry> _entries = new List<PlanEntry>();
 
@@ -23,9 +24,6 @@ namespace SalmonEgg.Acp.Plan
             get => _entries;
             set => _entries = ValidateEntries(value);
         }
-
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的计划实例。
@@ -106,12 +104,9 @@ namespace SalmonEgg.Acp.Plan
     /// 计划条目类。
     /// 表示计划中的一个具体任务或步骤。
     /// </summary>
-    public class PlanEntry
+    public class PlanEntry : AcpProtocolObject
     {
         private string _content = string.Empty;
-
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 条目的内容描述。

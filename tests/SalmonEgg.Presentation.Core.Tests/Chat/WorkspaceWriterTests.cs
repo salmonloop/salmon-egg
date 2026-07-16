@@ -364,7 +364,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 1,
                 64,
-                new ConversationUsageCostSnapshot(0.1m, "USD"))));
+                new ConversationUsageCostSnapshot(0.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -377,7 +377,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 9,
                 256,
-                new ConversationUsageCostSnapshot(2.5m, "USD")),
+                new ConversationUsageCostSnapshot(2.5, "USD")),
             RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
                 "session-1",
                 new ConversationRuntimeSlice(
@@ -399,8 +399,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("New title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\new", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
-        Assert.Equal(256, snapshot.Usage.Size);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
+        Assert.Equal(256UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public sealed class WorkspaceWriterTests
                     new ConversationUsageSnapshot(
                         9,
                         256,
-                        new ConversationUsageCostSnapshot(2.5m, "USD")))),
+                        new ConversationUsageCostSnapshot(2.5, "USD")))),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -529,7 +529,7 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
         Assert.Equal("store", snapshot.SessionInfo.Meta!["source"]);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
     [Fact]
@@ -606,7 +606,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 1,
                 64,
-                new ConversationUsageCostSnapshot(0.1m, "USD"))));
+                new ConversationUsageCostSnapshot(0.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-1",
@@ -618,7 +618,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 7,
                 128,
-                new ConversationUsageCostSnapshot(0.9m, "USD")),
+                new ConversationUsageCostSnapshot(0.9, "USD")),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -628,8 +628,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Fresh title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\two", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(7, snapshot.Usage!.Used);
-        Assert.Equal(128, snapshot.Usage.Size);
+        Assert.Equal(7UL, snapshot.Usage!.Used);
+        Assert.Equal(128UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -749,7 +749,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 5,
                 128,
-                new ConversationUsageCostSnapshot(1.1m, "USD"))));
+                new ConversationUsageCostSnapshot(1.1, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-active",
@@ -774,8 +774,8 @@ public sealed class WorkspaceWriterTests
         Assert.Equal("Persisted title", snapshot.SessionInfo!.Title);
         Assert.Equal(@"C:\repo\one", snapshot.SessionInfo.Cwd);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(5, snapshot.Usage!.Used);
-        Assert.Equal(128, snapshot.Usage.Size);
+        Assert.Equal(5UL, snapshot.Usage!.Used);
+        Assert.Equal(128UL, snapshot.Usage.Size);
     }
 
     [Fact]
@@ -832,7 +832,7 @@ public sealed class WorkspaceWriterTests
                     new ConversationUsageSnapshot(
                         9,
                         256,
-                        new ConversationUsageCostSnapshot(2.5m, "USD")))),
+                        new ConversationUsageCostSnapshot(2.5, "USD")))),
             Generation: 1), scheduleSave: false);
         await writer.FlushAsync(TestContext.Current.CancellationToken);
 
@@ -847,7 +847,7 @@ public sealed class WorkspaceWriterTests
         var command = Assert.Single(snapshot.AvailableCommands ?? Array.Empty<ConversationAvailableCommandSnapshot>());
         Assert.Equal("plan", command.Name);
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
     [Fact]
@@ -908,7 +908,7 @@ public sealed class WorkspaceWriterTests
             Usage: new ConversationUsageSnapshot(
                 9,
                 256,
-                new ConversationUsageCostSnapshot(2.5m, "USD"))));
+                new ConversationUsageCostSnapshot(2.5, "USD"))));
 
         writer.Enqueue(new ChatState(
             HydratedConversationId: "session-active",
@@ -936,7 +936,7 @@ public sealed class WorkspaceWriterTests
         Assert.NotNull(snapshot.SessionInfo);
         Assert.Equal("Background title", snapshot.SessionInfo!.Title);
         Assert.NotNull(snapshot.Usage);
-        Assert.Equal(9, snapshot.Usage!.Used);
+        Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(
@@ -997,7 +997,7 @@ public sealed class WorkspaceWriterTests
 
         public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true) => false;
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(false);
 
         public System.Collections.Generic.IEnumerable<Session> GetAllSessions()

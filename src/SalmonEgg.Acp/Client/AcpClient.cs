@@ -595,11 +595,21 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 取消会话。
         /// </summary>
-        public async Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
+        public async Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            if (@params == null)
+            {
+                throw new ArgumentNullException(nameof(@params));
+            }
 
-            // ACP defines session/cancel as a notification (no response expected).
+            if (string.IsNullOrWhiteSpace(@params.SessionId))
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.InvalidParams,
+                    "session/cancel requires 'sessionId'.");
+            }
+
             var notification = new JsonRpcNotification(
                 "session/cancel",
                 ToElement(@params, AcpJsonContext.Default.SessionCancelParams));
@@ -609,11 +619,7 @@ namespace SalmonEgg.Acp.Client
                 cancellationToken).ConfigureAwait(false);
 
             await CancelPendingInboundRequestsForSessionAsync(@params.SessionId).ConfigureAwait(false);
-
-            // 更新会话状态
-            await _sessionStore.CancelSessionAsync(@params.SessionId, @params.Reason).ConfigureAwait(false);
-
-            return new SessionCancelResponse(success: true);
+            await _sessionStore.CancelSessionAsync(@params.SessionId).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1186,14 +1192,13 @@ namespace SalmonEgg.Acp.Client
                         return;
                     }
 
-                    var description = option.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String
-                        ? d.GetString()
-                        : null;
                     optionsList.Add(new PermissionOption(
                         id.GetString() ?? string.Empty,
                         n.GetString() ?? string.Empty,
-                        k.GetString() ?? string.Empty,
-                        description));
+                        k.GetString() ?? string.Empty)
+                    {
+                        Meta = AcpMetaJson.Read(option)
+                    });
                 }
 
                 var permissionResponseFunc = new Func<string, string?, Task>((outcome, optionId) =>

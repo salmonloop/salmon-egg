@@ -436,14 +436,14 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             Assert.Equal("file:///home/user/document.pdf", deserialized!.Uri);
             Assert.Equal("document.pdf", deserialized.Name);
             Assert.True(doc.RootElement.TryGetProperty("annotations", out var annotations));
-            Assert.Equal(0.2m, annotations.GetProperty("priority").GetDecimal());
+            Assert.Equal(0.2d, annotations.GetProperty("priority").GetDouble());
         }
 
         /// <summary>
-        /// 属性 8：未知内容类型应在启用回退时保留负载。
+        /// 属性 8：未知内容类型仅保留 ACP 定义的公共字段。
         /// </summary>
         [Fact]
-        public void ContentBlock_UnknownType_RoundTrip_PreservesExtensionPayload()
+        public void ContentBlock_UnknownType_RoundTrip_PreservesProtocolFieldsWithoutReplayingUnknownRootFields()
         {
             // Arrange
             var json = """
@@ -452,6 +452,13 @@ namespace SalmonEgg.Domain.Tests.Models.Content
               "payload": {
                 "kind": "custom",
                 "value": 42
+              },
+              "annotations": {
+                "audience": ["assistant"],
+                "priority": 0.75
+              },
+              "_meta": {
+                "vendor": "example"
               }
             }
             """;
@@ -465,8 +472,12 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             Assert.NotNull(block);
             Assert.IsAssignableFrom<ContentBlock>(block);
             Assert.Equal("experimental_content", doc.RootElement.GetProperty("type").GetString());
-            Assert.Equal("custom", doc.RootElement.GetProperty("payload").GetProperty("kind").GetString());
-            Assert.Equal(42, doc.RootElement.GetProperty("payload").GetProperty("value").GetInt32());
+            Assert.False(doc.RootElement.TryGetProperty("payload", out _));
+            Assert.Equal(
+                "assistant",
+                doc.RootElement.GetProperty("annotations").GetProperty("audience")[0].GetString());
+            Assert.Equal(0.75d, doc.RootElement.GetProperty("annotations").GetProperty("priority").GetDouble());
+            Assert.Equal("example", doc.RootElement.GetProperty("_meta").GetProperty("vendor").GetString());
         }
 
         /// <summary>
@@ -536,7 +547,7 @@ namespace SalmonEgg.Domain.Tests.Models.Content
             return new Annotations
             {
                 Audience = new List<string> { audience1, audience2 },
-                Priority = prioritySeed % 101 / 100m,
+                Priority = prioritySeed % 101 / 100d,
                 LastModified = lastModified
             };
         }

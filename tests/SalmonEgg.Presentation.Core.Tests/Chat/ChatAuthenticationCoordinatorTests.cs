@@ -29,7 +29,7 @@ public sealed class ChatAuthenticationCoordinatorTests
 
 
     [Fact]
-    public async Task TryAuthenticateAsync_WhenUnknownAndAgentMethodsAdvertised_UsesAgentMethod()
+    public async Task TryAuthenticateAsync_WhenFirstAdvertisedMethodHasNoId_UsesFirstValidMethod()
     {
         var sut = new ChatAuthenticationCoordinator();
         sut.CacheAuthMethods(new InitializeResponse
@@ -41,10 +41,9 @@ public sealed class ChatAuthenticationCoordinatorTests
             [
                 new AuthMethodDefinition
                 {
-                    Id = "api-key",
-                    Name = "API Key",
-                    Description = "Use an API key",
-                    Type = "client"
+                    Id = string.Empty,
+                    Name = "Malformed method",
+                    Description = "Missing required id"
                 },
                 new AuthMethodDefinition
                 {
@@ -72,9 +71,6 @@ public sealed class ChatAuthenticationCoordinatorTests
         service.Verify(x => x.AuthenticateAsync(
             It.Is<AuthenticateParams>(p => p.MethodId == "chat-gpt"),
             It.IsAny<CancellationToken>()), Times.Once);
-        service.Verify(x => x.AuthenticateAsync(
-            It.Is<AuthenticateParams>(p => p.MethodId == "api-key"),
-            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

@@ -46,6 +46,7 @@ public sealed class ConversationStoreTests : IDisposable
                     {
                         Title = null,
                         HasTitle = true,
+                        AdditionalDirectories = [@"C:\shared\one", @"D:\shared\two"],
                         UpdatedAtUtc = null,
                         HasUpdatedAt = true
                     }
@@ -60,6 +61,7 @@ public sealed class ConversationStoreTests : IDisposable
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(conversation.SessionInfo);
         Assert.Null(sessionInfo.Title);
         Assert.True(sessionInfo.HasTitle);
+        Assert.Equal([@"C:\shared\one", @"D:\shared\two"], sessionInfo.AdditionalDirectories);
         Assert.Null(sessionInfo.UpdatedAtUtc);
         Assert.True(sessionInfo.HasUpdatedAt);
     }

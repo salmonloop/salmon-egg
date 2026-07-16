@@ -35,7 +35,6 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
                 SelectedModeId: string.IsNullOrWhiteSpace(modeUpdate.ModeId) ? null : modeUpdate.ModeId),
             AvailableCommandsUpdate availableCommandsUpdate => new AcpSessionUpdateDelta(
                 AvailableCommands: MapAvailableCommands(availableCommandsUpdate.AvailableCommands)),
-            ConfigUpdateUpdate configUpdate => BuildConfigDelta(configUpdate.ConfigOptions),
             ConfigOptionUpdate optionUpdate => BuildConfigDelta(optionUpdate.ConfigOptions),
             SessionInfoUpdate sessionInfoUpdate => new AcpSessionUpdateDelta(
                 SessionInfo: MapSessionInfo(sessionInfoUpdate)),
@@ -158,10 +157,10 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
         => new(
             Title: update.Title,
             HasTitle: update.HasTitle,
-            Description: null,
             // ACP session_info_update does not redefine cwd; cwd is established during
             // session/new or session/load and must remain immutable for the session.
             Cwd: null,
+            AdditionalDirectories: null,
             UpdatedAt: update.UpdatedAt,
             HasUpdatedAt: update.HasUpdatedAt,
             Meta: update.Meta is null
@@ -179,12 +178,19 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
 
     private static AcpConfigOptionSnapshot MapConfigOption(ConfigOption option)
     {
-        var projectedOptions = option.Options?
+        var projectedOptions = option.Options
             .Select(static item => new AcpConfigOptionChoice(
                 item.Value ?? string.Empty,
                 string.IsNullOrWhiteSpace(item.Name) ? item.Value ?? string.Empty : item.Name,
                 item.Description))
-            .ToArray() ?? Array.Empty<AcpConfigOptionChoice>();
+            .Concat(option.OptionGroups.SelectMany(static group => group.Options.Select(item =>
+                new AcpConfigOptionChoice(
+                    item.Value ?? string.Empty,
+                    string.IsNullOrWhiteSpace(group.Name)
+                        ? string.IsNullOrWhiteSpace(item.Name) ? item.Value ?? string.Empty : item.Name
+                        : $"{group.Name} · {(string.IsNullOrWhiteSpace(item.Name) ? item.Value ?? string.Empty : item.Name)}",
+                    item.Description))))
+            .ToArray();
 
         return new AcpConfigOptionSnapshot(
             option.Id ?? string.Empty,
@@ -229,17 +235,17 @@ public sealed partial record AcpConfigOptionSnapshot(
 public sealed record AcpSessionInfoSnapshot(
     string? Title,
     bool HasTitle,
-    string? Description,
     string? Cwd,
+    IReadOnlyList<string>? AdditionalDirectories,
     string? UpdatedAt,
     bool HasUpdatedAt,
     IReadOnlyDictionary<string, object?>? Meta);
 
 public sealed record AcpUsageSnapshot(
-    int? Used,
-    int? Size,
+    ulong Used,
+    ulong Size,
     AcpUsageCostSnapshot? Cost);
 
 public sealed record AcpUsageCostSnapshot(
-    decimal? Amount,
-    string? Currency);
+    double Amount,
+    string Currency);

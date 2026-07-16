@@ -815,7 +815,7 @@ public sealed class ChatConversationWorkspaceTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-1");
 
         await workspace.SaveAsync(TestContext.Current.CancellationToken);
@@ -899,7 +899,7 @@ public sealed class ChatConversationWorkspaceTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
         workspace.UpdateRemoteBinding("session-1", remoteSessionId: null, boundProfileId: "profile-1");
 
         await workspace.SaveAsync(TestContext.Current.CancellationToken);
@@ -981,7 +981,7 @@ public sealed class ChatConversationWorkspaceTests
                         Usage = new ConversationUsageSnapshot(
                             3,
                             99,
-                            new ConversationUsageCostSnapshot(1.25m, "USD")),
+                            new ConversationUsageCostSnapshot(1.25, "USD")),
                         ShowPlanPanel = true,
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -1448,8 +1448,8 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Original title",
                 HasTitle = true,
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
+                AdditionalDirectories = [@"C:\shared\one"],
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -1462,7 +1462,6 @@ public sealed class ChatConversationWorkspaceTests
             "session-1",
             new ConversationSessionInfoSnapshot
             {
-                Description = "Updated description",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -1475,8 +1474,8 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Original title", sessionInfo.Title);
-        Assert.Equal("Updated description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal([@"C:\shared\one"], sessionInfo.AdditionalDirectories);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
         Assert.Equal("after", sessionInfo.Meta["shared"]);
@@ -1484,7 +1483,44 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_EmptyTitle_ReplacesRemoteTitleAndPreservesOtherFields()
+    public async Task ApplySessionInfoSnapshotAsync_AuthoritativeEmptyAdditionalDirectories_ClearsExistingList()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\one",
+                AdditionalDirectories = [@"C:\shared\old"]
+            }));
+
+        await workspace.ApplySessionInfoSnapshotAsync(
+            "session-1",
+            new ConversationSessionInfoSnapshot
+            {
+                Cwd = @"C:\repo\one",
+                AdditionalDirectories = []
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(
+            workspace.GetConversationSnapshot("session-1")!.SessionInfo);
+        Assert.NotNull(sessionInfo.AdditionalDirectories);
+        Assert.Empty(sessionInfo.AdditionalDirectories);
+    }
+
+    [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_EmptyTitle_ReplacesRemoteTitleAndPreservesCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1503,7 +1539,6 @@ public sealed class ChatConversationWorkspaceTests
             {
                 Title = "Original title",
                 HasTitle = true,
-                Description = "Original description",
                 Cwd = @"C:\repo\one"
             }));
 
@@ -1512,7 +1547,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
@@ -1521,7 +1555,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal(string.Empty, sessionInfo.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -1632,7 +1665,6 @@ public sealed class ChatConversationWorkspaceTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = "Original title",
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -1647,7 +1679,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = " ",
-                Description = "\t",
                 Cwd = " ",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
                 Meta = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -1661,7 +1692,6 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal(" ", sessionInfo.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
         Assert.Equal("value", sessionInfo.Meta!["existing"]);
@@ -1688,7 +1718,6 @@ public sealed class ChatConversationWorkspaceTests
             SessionInfo: new ConversationSessionInfoSnapshot
             {
                 Title = "Original title",
-                Description = "Original description",
                 Cwd = @"C:\repo\one",
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
             }));
@@ -1698,7 +1727,6 @@ public sealed class ChatConversationWorkspaceTests
             new ConversationSessionInfoSnapshot
             {
                 Title = string.Empty,
-                Description = "   ",
                 Cwd = "\t",
                 UpdatedAtUtc = new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
@@ -1706,7 +1734,6 @@ public sealed class ChatConversationWorkspaceTests
         var sessionInfo = workspace.GetConversationSnapshot("session-1")!.SessionInfo;
         Assert.NotNull(sessionInfo);
         Assert.Equal(string.Empty, sessionInfo!.Title);
-        Assert.Equal("Original description", sessionInfo.Description);
         Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
         Assert.Equal(new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc), sessionInfo.UpdatedAtUtc);
     }
@@ -1828,7 +1855,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_RemoteMetadataRefreshDoesNotOverrideEstablishedSessionCwd()
+    public async Task ApplySessionInfoSnapshotAsync_RemoteCwdReplacesStaleLocalCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1863,14 +1890,14 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Refreshed title", sessionInfo.Title);
-        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", sessionInfo.Cwd);
         Assert.Equal(
-            @"C:\repo\one",
+            @"C:\Users\shang\AppData\Local\SalmonEgg",
             sessionManager.GetSession("session-1")!.Cwd);
     }
 
     [Fact]
-    public async Task ApplySessionInfoSnapshotAsync_WhenWorkspaceSnapshotCarriesEstablishedCwd_PreservesThatCwd()
+    public async Task ApplySessionInfoSnapshotAsync_WhenWorkspaceCarriesStaleCwd_UsesRemoteCwd()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -1904,7 +1931,7 @@ public sealed class ChatConversationWorkspaceTests
         Assert.NotNull(snapshot);
         var sessionInfo = Assert.IsType<ConversationSessionInfoSnapshot>(snapshot!.SessionInfo);
         Assert.Equal("Refreshed title", sessionInfo.Title);
-        Assert.Equal(@"C:\repo\one", sessionInfo.Cwd);
+        Assert.Equal(@"C:\Users\shang\AppData\Local\SalmonEgg", sessionInfo.Cwd);
     }
 
     [Fact]
@@ -2128,7 +2155,7 @@ public sealed class ChatConversationWorkspaceTests
                 Usage: new ConversationUsageSnapshot(
                     3,
                     99,
-                    new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                    new ConversationUsageCostSnapshot(1.25, "USD"))));
 
             await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
@@ -2141,10 +2168,10 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("Planning command", savedCommand.Description);
         Assert.Equal("target", savedCommand.InputHint);
         Assert.NotNull(savedConversation.Usage);
-        Assert.Equal(3, savedConversation.Usage!.Used);
-        Assert.Equal(99, savedConversation.Usage.Size);
+        Assert.Equal(3UL, savedConversation.Usage!.Used);
+        Assert.Equal(99UL, savedConversation.Usage.Size);
         Assert.NotNull(savedConversation.Usage.Cost);
-        Assert.Equal(1.25m, savedConversation.Usage.Cost!.Amount);
+        Assert.Equal(1.25, savedConversation.Usage.Cost!.Amount);
         Assert.Equal("USD", savedConversation.Usage.Cost.Currency);
 
         store.LoadResult = saved;
@@ -2158,10 +2185,10 @@ public sealed class ChatConversationWorkspaceTests
         Assert.Equal("Planning command", restoredCommand.Description);
         Assert.Equal("target", restoredCommand.InputHint);
         Assert.NotNull(restored.Usage);
-        Assert.Equal(3, restored.Usage!.Used);
-        Assert.Equal(99, restored.Usage.Size);
+        Assert.Equal(3UL, restored.Usage!.Used);
+        Assert.Equal(99UL, restored.Usage.Size);
         Assert.NotNull(restored.Usage.Cost);
-        Assert.Equal(1.25m, restored.Usage.Cost!.Amount);
+        Assert.Equal(1.25, restored.Usage.Cost!.Amount);
         Assert.Equal("USD", restored.Usage.Cost.Currency);
     }
 
@@ -2879,7 +2906,7 @@ public sealed class ChatConversationWorkspaceTests
             return true;
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
         public IEnumerable<Session> GetAllSessions()

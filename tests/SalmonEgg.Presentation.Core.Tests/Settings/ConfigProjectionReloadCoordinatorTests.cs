@@ -19,6 +19,45 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class ConfigProjectionReloadCoordinatorTests
 {
     [Fact]
+    public void IsPathWithinRoot_RootAndDescendant_ReturnTrue()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "salmon-config");
+
+        var rootResult = ConfigProjectionReloadCoordinator.IsPathWithinRoot(root, root);
+        var descendantResult = ConfigProjectionReloadCoordinator.IsPathWithinRoot(
+            root,
+            System.IO.Path.Combine(root, "servers", "agent.yaml"));
+
+        Assert.True(rootResult);
+        Assert.True(descendantResult);
+    }
+
+    [Fact]
+    public void IsPathWithinRoot_ParentOrSamePrefixSibling_ReturnsFalse()
+    {
+        var parent = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "salmon-root");
+        var root = System.IO.Path.Combine(parent, "config");
+
+        var parentResult = ConfigProjectionReloadCoordinator.IsPathWithinRoot(root, parent);
+        var siblingResult = ConfigProjectionReloadCoordinator.IsPathWithinRoot(
+            root,
+            System.IO.Path.Combine(parent, "configuration", "agent.yaml"));
+
+        Assert.False(parentResult);
+        Assert.False(siblingResult);
+    }
+
+    [Fact]
+    public void IsPathWithinRoot_InvalidPath_ReturnsFalse()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "salmon-config");
+
+        var result = ConfigProjectionReloadCoordinator.IsPathWithinRoot(root, "\0");
+
+        Assert.False(result);
+    }
+
+    [Fact]
     public async Task RestoredConfig_ReloadsProjectionOwnersInSsotOrder()
     {
         var configRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "salmon-config", Guid.NewGuid().ToString("N"));

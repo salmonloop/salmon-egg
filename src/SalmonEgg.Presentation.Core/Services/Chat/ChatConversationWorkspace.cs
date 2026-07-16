@@ -667,27 +667,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 }
 
                 var metadataChanged = false;
-                var mergedSessionInfo = ConversationSessionInfoSnapshots.Merge(binding.SessionInfo, sessionInfo);
-                var establishedCwd = ResolveEstablishedConversationCwd(binding)?.Trim();
-
-                if (!string.IsNullOrWhiteSpace(establishedCwd)
-                    && !string.Equals(mergedSessionInfo.Cwd?.Trim(), establishedCwd, StringComparison.Ordinal))
-                {
-                    // ACP session/list and session_info_update are metadata channels and must not
-                    // overwrite the cwd established by session/new or session/load.
-                    mergedSessionInfo = new ConversationSessionInfoSnapshot
-                    {
-                        Title = mergedSessionInfo.Title,
-                        HasTitle = mergedSessionInfo.HasTitle,
-                        Description = mergedSessionInfo.Description,
-                        Cwd = establishedCwd,
-                        UpdatedAtUtc = mergedSessionInfo.UpdatedAtUtc,
-                        HasUpdatedAt = mergedSessionInfo.HasUpdatedAt,
-                        Meta = mergedSessionInfo.Meta is null
-                            ? null
-                            : new Dictionary<string, object?>(mergedSessionInfo.Meta, StringComparer.Ordinal)
-                    };
-                }
+                var knownSessionInfo = EnsureSessionInfoCarriesEstablishedCwd(
+                    binding.SessionInfo,
+                    ResolveEstablishedConversationCwd(binding));
+                var mergedSessionInfo = ConversationSessionInfoSnapshots.Merge(knownSessionInfo, sessionInfo);
 
                 if (!SessionInfoEquals(binding.SessionInfo, mergedSessionInfo))
                 {
@@ -1248,8 +1231,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         if (!string.Equals(left.Title, right.Title, StringComparison.Ordinal)
             || left.HasTitle != right.HasTitle
-            || !string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             || !string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            || !AdditionalDirectorySequencesEqual(left.AdditionalDirectories, right.AdditionalDirectories)
             || left.UpdatedAtUtc != right.UpdatedAtUtc
             || left.HasUpdatedAt != right.HasUpdatedAt)
         {
@@ -1276,6 +1259,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         return true;
+    }
+
+    private static bool AdditionalDirectorySequencesEqual(
+        IReadOnlyList<string>? left,
+        IReadOnlyList<string>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
     private async Task PostToContextAsync(Action action, CancellationToken cancellationToken)
@@ -1320,8 +1315,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         {
             Title = sessionInfo.Title,
             HasTitle = sessionInfo.HasTitle,
-            Description = sessionInfo.Description,
             Cwd = normalizedCwd,
+            AdditionalDirectories = sessionInfo.AdditionalDirectories is null
+                ? null
+                : new List<string>(sessionInfo.AdditionalDirectories),
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
             Meta = sessionInfo.Meta is null

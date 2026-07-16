@@ -151,7 +151,7 @@ namespace SalmonEgg.Application.Services.Chat
         /// <summary>
         /// 取消会话
         /// </summary>
-        Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params);
+        Task CancelSessionAsync(SessionCancelParams @params);
 
         /// <summary>
         /// 执行认证（当 Agent 在 initialize 响应中返回 authMethods 时）。

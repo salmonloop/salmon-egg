@@ -354,14 +354,15 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
                         string.IsNullOrWhiteSpace(session.Title) ? Localize("Discover_UntitledSession", "未命名会话") : session.Title,
-                        string.IsNullOrWhiteSpace(session.Description) ? Localize("Discover_NoDescription", "暂无描述") : session.Description,
+                        Localize("Discover_NoDescription", "暂无描述"),
                         AcpSessionTimestampPolicy.ParseUpdatedAtUtc(session.UpdatedAt),
                         LoadSessionCommand,
                         session.Cwd,
                         ResolveAffinityBadgeText(affinityResolution, projects),
                         ResolveAffinityStatusText(affinityResolution),
                         affinityResolution.Source,
-                        affinityResolution.NeedsUserAttention));
+                        affinityResolution.NeedsUserAttention,
+                        session.AdditionalDirectories?.ToArray() ?? Array.Empty<string>()));
                 }
             }
 
@@ -437,7 +438,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                             session.Id,
                             session.SessionCwd,
                             selectedProfile.Id,
-                            session.Title)))
+                            session.Title,
+                            session.AdditionalDirectories)))
                 .ConfigureAwait(false);
             if (!openResult.Succeeded)
             {
@@ -747,6 +749,8 @@ public sealed class DiscoverSessionItemViewModel
 
     public string? SessionCwd { get; }
 
+    public IReadOnlyList<string> AdditionalDirectories { get; }
+
     public string ProjectAffinityBadgeText { get; }
 
     public string AffinityStatusText { get; }
@@ -777,7 +781,8 @@ public sealed class DiscoverSessionItemViewModel
         string? projectAffinityBadgeText = null,
         string? affinityStatusText = null,
         ProjectAffinitySource affinitySource = ProjectAffinitySource.Unclassified,
-        bool needsUserAttention = false)
+        bool needsUserAttention = false,
+        IReadOnlyList<string>? additionalDirectories = null)
     {
         Id = id;
         Title = title;
@@ -785,6 +790,7 @@ public sealed class DiscoverSessionItemViewModel
         LastModified = lastModified;
         LoadSessionCommand = loadSessionCommand ?? throw new ArgumentNullException(nameof(loadSessionCommand));
         SessionCwd = sessionCwd;
+        AdditionalDirectories = additionalDirectories?.ToArray() ?? Array.Empty<string>();
         ProjectAffinityBadgeText = string.IsNullOrWhiteSpace(projectAffinityBadgeText)
             ? "Unclassified"
             : projectAffinityBadgeText;

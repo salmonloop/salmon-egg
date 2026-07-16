@@ -193,8 +193,7 @@ public partial class ChatViewModel
         var profile = ResolveNewSessionDraftProfile(SelectedProfileId);
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             GetActiveSessionCwdOrDefault(),
-            profile,
-            _preferences.AgentRemoteDirectories);
+            profile);
 
         if (!cwdResolution.IsSuccess || string.IsNullOrWhiteSpace(cwdResolution.Cwd))
         {
@@ -204,7 +203,8 @@ public partial class ChatViewModel
                 ResolveNewSessionDraftProfile(SelectedProfileId)?.Transport,
                 GetActiveSessionCwdOrDefault(),
                 cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
-            throw new InvalidOperationException(AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+            throw new InvalidOperationException(
+                cwdResolution.ErrorMessage ?? AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
         }
 
         return new(
@@ -1219,7 +1219,7 @@ public partial class ChatViewModel
             {
                 var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(false);
                 await CancelPendingPermissionRequestAsync(activeBinding?.RemoteSessionId).ConfigureAwait(false);
-                await _acpConnectionCommands.CancelPromptAsync(this, "User cancelled").ConfigureAwait(false);
+                await _acpConnectionCommands.CancelPromptAsync(this).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -1475,11 +1475,7 @@ public partial class ChatViewModel
                 return;
             }
 
-            var cancelParams = new SessionCancelParams
-            {
-                SessionId = activeBinding.RemoteSessionId!,
-                Reason = "User cancelled"
-            };
+            var cancelParams = new SessionCancelParams(activeBinding.RemoteSessionId!);
 
             if (_chatService != null)
             {

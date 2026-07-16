@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Prompt 方法的请求参数。
     /// 用于向会话发送提示并请求 Agent 响应。
     /// </summary>
-    public class SessionPromptParams
+    public class SessionPromptParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -26,9 +26,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 协议扩展字段（_meta）。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionPromptParams 实例。
         /// </summary>
@@ -53,7 +50,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Prompt 方法的响应。
     /// Agent 对提示请求的响应，仅包含停止原因。
     /// </summary>
-    public class SessionPromptResponse
+    public class SessionPromptResponse : AcpProtocolObject
     {
         /// <summary>
         /// 停止原因。
@@ -65,9 +62,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 协议扩展字段（_meta）。
         /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 创建新的 SessionPromptResponse 实例。
         /// </summary>

@@ -249,7 +249,7 @@ public sealed class ConversationActivationCoordinatorTests
                     new ConversationUsageSnapshot(
                         5,
                         128,
-                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+                        new ConversationUsageCostSnapshot(1.5, "USD"))))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -281,7 +281,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.Value.SessionInfo);
         Assert.Equal("store title", sessionState.Value.SessionInfo!.Title);
         Assert.NotNull(sessionState.Value.Usage);
-        Assert.Equal(5, sessionState.Value.Usage!.Used);
+        Assert.Equal(5UL, sessionState.Value.Usage!.Used);
     }
 
     [Fact]
@@ -361,7 +361,7 @@ public sealed class ConversationActivationCoordinatorTests
             {
                 Title = "workspace title"
             },
-            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25m, "USD"))),
+            Usage: new ConversationUsageSnapshot(3, 42, new ConversationUsageCostSnapshot(1.25, "USD"))),
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
         workspace.UpdateRemoteBinding("session-1", "remote-1", "profile-a");
 
@@ -400,7 +400,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.SessionInfo);
         Assert.Equal("workspace title", sessionState.SessionInfo!.Title);
         Assert.NotNull(sessionState.Usage);
-        Assert.Equal(3, sessionState.Usage!.Used);
+        Assert.Equal(3UL, sessionState.Usage!.Used);
     }
 
     [Fact]
@@ -457,7 +457,7 @@ public sealed class ConversationActivationCoordinatorTests
                     new ConversationUsageSnapshot(
                         5,
                         128,
-                        new ConversationUsageCostSnapshot(1.5m, "USD"))))
+                        new ConversationUsageCostSnapshot(1.5, "USD"))))
         });
         var chatStore = CreateChatStore(state);
         var connectionStore = CreateConnectionStore();
@@ -485,7 +485,7 @@ public sealed class ConversationActivationCoordinatorTests
         Assert.NotNull(sessionState.SessionInfo);
         Assert.Equal("store title", sessionState.SessionInfo!.Title);
         Assert.NotNull(sessionState.Usage);
-        Assert.Equal(5, sessionState.Usage!.Used);
+        Assert.Equal(5UL, sessionState.Usage!.Used);
     }
 
     [Fact]
@@ -600,7 +600,7 @@ public sealed class ConversationActivationCoordinatorTests
             Usage: new ConversationUsageSnapshot(
                 3,
                 99,
-                new ConversationUsageCostSnapshot(1.25m, "USD"))));
+                new ConversationUsageCostSnapshot(1.25, "USD"))));
 
         var state = State.Value(new object(), () => ChatState.Empty);
         var chatStore = CreateChatStore(state);
@@ -1282,7 +1282,7 @@ public sealed class ConversationActivationCoordinatorTests
             return true;
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
     }
 

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -7,17 +6,13 @@ namespace SalmonEgg.Acp.Protocol
     /// Authenticate 方法的请求参数。
     /// 用于向 Agent 发起认证请求。
     /// </summary>
-    public class AuthenticateParams
+    public class AuthenticateParams : AcpProtocolObject
     {
         /// <summary>
         /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id).
         /// </summary>
         [JsonPropertyName("methodId")]
         public string MethodId { get; set; } = string.Empty;
-
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 创建新的 AuthenticateParams 实例。
@@ -39,32 +34,22 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Authenticate 方法的响应。
     /// </summary>
-    public class AuthenticateResponse
+    public class AuthenticateResponse : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// Logout 方法的请求参数。
     /// </summary>
-    public class LogoutParams
+    public class LogoutParams : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
     }
 
     /// <summary>
     /// Logout 方法的响应。
     /// </summary>
-    public class LogoutResponse
+    public class LogoutResponse : AcpProtocolObject
     {
-        [JsonPropertyName("_meta")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         public static readonly LogoutResponse Completed = new LogoutResponse();
     }
 

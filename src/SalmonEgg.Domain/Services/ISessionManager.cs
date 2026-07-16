@@ -39,9 +39,8 @@ namespace SalmonEgg.Domain.Services
         /// 取消会话。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
-        /// <param name="reason">取消原因</param>
         /// <returns>是否成功取消</returns>
-        Task<bool> CancelSessionAsync(string sessionId, string? reason = null);
+        Task<bool> CancelSessionAsync(string sessionId);
 
         /// <summary>
         /// 获取所有会话。

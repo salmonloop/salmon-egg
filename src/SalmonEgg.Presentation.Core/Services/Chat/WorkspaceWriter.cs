@@ -684,11 +684,23 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 
         return string.Equals(left.Title, right.Title, StringComparison.Ordinal)
             && left.HasTitle == right.HasTitle
-            && string.Equals(left.Description, right.Description, StringComparison.Ordinal)
             && string.Equals(left.Cwd, right.Cwd, StringComparison.Ordinal)
+            && AdditionalDirectorySequencesEqual(left.AdditionalDirectories, right.AdditionalDirectories)
             && left.UpdatedAtUtc == right.UpdatedAtUtc
             && left.HasUpdatedAt == right.HasUpdatedAt
             && MetadataEquals(left.Meta, right.Meta);
+    }
+
+    private static bool AdditionalDirectorySequencesEqual(
+        IReadOnlyList<string>? left,
+        IReadOnlyList<string>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
     private static bool UsageEquals(ConversationUsageSnapshot? left, ConversationUsageSnapshot? right)

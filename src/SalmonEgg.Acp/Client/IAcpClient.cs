@@ -164,13 +164,9 @@ namespace SalmonEgg.Acp.Client
         Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 取消会话。
-        /// 发送 session/cancel 请求。
+        /// Sends the ACP <c>session/cancel</c> notification.
         /// </summary>
-        /// <param name="params">取消会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>取消会话响应</returns>
-        Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default);
+        Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 执行认证。

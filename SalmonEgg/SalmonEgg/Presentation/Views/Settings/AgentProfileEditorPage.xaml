@@ -136,7 +136,6 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button x:Uid="AgentProfileEditorCancelButton"
-                                Style="{StaticResource SubtleButtonStyle}"
                                 Click="OnCancelClick"/>
                         <Button x:Uid="AgentProfileEditorSaveButton"
                                 Style="{StaticResource AccentButtonStyle}"

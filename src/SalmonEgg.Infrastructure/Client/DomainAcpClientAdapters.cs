@@ -92,8 +92,8 @@ internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
             session.Mode.CurrentModeId = modeId;
         });
 
-    public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
-        => _inner.CancelSessionAsync(sessionId, reason);
+    public Task<bool> CancelSessionAsync(string sessionId)
+        => _inner.CancelSessionAsync(sessionId);
 }
 
 internal sealed class DomainAcpClientLogger : IAcpClientLogger

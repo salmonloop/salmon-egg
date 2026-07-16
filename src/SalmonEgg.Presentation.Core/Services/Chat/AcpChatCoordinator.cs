@@ -468,10 +468,9 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
     public async Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default)
     {
-        await _sessionCommandOrchestrator.CancelPromptAsync(sink, reason, cancellationToken).ConfigureAwait(false);
+        await _sessionCommandOrchestrator.CancelPromptAsync(sink, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DisconnectAsync(

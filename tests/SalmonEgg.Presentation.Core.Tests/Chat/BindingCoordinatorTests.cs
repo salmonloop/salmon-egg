@@ -675,7 +675,7 @@ public sealed class BindingCoordinatorTests
             return true;
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
     }
 }

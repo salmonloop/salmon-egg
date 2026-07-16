@@ -13,7 +13,7 @@ namespace SalmonEgg.Acp.Client
 
         bool UpdateCurrentMode(string sessionId, string modeId);
 
-        Task<bool> CancelSessionAsync(string sessionId, string? reason = null);
+        Task<bool> CancelSessionAsync(string sessionId);
     }
 
     public sealed class InMemoryAcpClientSessionStore : IAcpClientSessionStore
@@ -56,7 +56,7 @@ namespace SalmonEgg.Acp.Client
             return _sessions.ContainsKey(sessionId);
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(ContainsSession(sessionId));
     }
 }

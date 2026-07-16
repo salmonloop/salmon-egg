@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.Tool
 {
@@ -17,13 +16,8 @@ namespace SalmonEgg.Acp.Tool
     [JsonDerivedType(typeof(ContentToolCallContent), "content")]
     [JsonDerivedType(typeof(DiffToolCallContent), "diff")]
     [JsonDerivedType(typeof(TerminalToolCallContent), "terminal")]
-    public abstract class ToolCallContent
+    public abstract class ToolCallContent : AcpProtocolObject
     {
-        /// <summary>
-        /// Extension data for future protocol extensions.
-        /// </summary>
-        [JsonExtensionData]
-        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 
     /// <summary>

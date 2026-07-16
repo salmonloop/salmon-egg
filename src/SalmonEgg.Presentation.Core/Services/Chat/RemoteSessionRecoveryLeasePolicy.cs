@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
@@ -13,13 +14,48 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// <param name="ConnectionInstanceId">The authoritative connection instance that owns the transport.</param>
 /// <param name="RemoteSessionId">The ACP remote session identifier.</param>
 /// <param name="Cwd">The working directory used for the recovery request.</param>
+/// <param name="AdditionalDirectories">The ordered additional directories used for the recovery request.</param>
 public readonly record struct RemoteSessionRecoveryLeaseKey(
     AcpSessionRecoveryMode RecoveryMode,
     string ConversationId,
     string? ProfileId,
     string? ConnectionInstanceId,
     string RemoteSessionId,
-    string Cwd);
+    string Cwd,
+    RemoteSessionRecoveryDirectorySet AdditionalDirectories);
+
+/// <summary>
+/// Immutable value identity for an ordered ACP additional-directory list.
+/// </summary>
+public readonly struct RemoteSessionRecoveryDirectorySet : IEquatable<RemoteSessionRecoveryDirectorySet>
+{
+    private readonly ImmutableArray<string> _directories;
+
+    public RemoteSessionRecoveryDirectorySet(IEnumerable<string>? directories)
+    {
+        _directories = directories?.ToImmutableArray() ?? ImmutableArray<string>.Empty;
+    }
+
+    public bool Equals(RemoteSessionRecoveryDirectorySet other)
+        => Directories.SequenceEqual(other.Directories, StringComparer.Ordinal);
+
+    public override bool Equals(object? obj)
+        => obj is RemoteSessionRecoveryDirectorySet other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var directory in Directories)
+        {
+            hash.Add(directory, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    private ImmutableArray<string> Directories
+        => _directories.IsDefault ? ImmutableArray<string>.Empty : _directories;
+}
 
 /// <summary>
 /// Describes whether a requested remote session recovery should reuse or start a lease.
@@ -120,7 +156,8 @@ public static class RemoteSessionRecoveryLeasePolicy
             && Same(candidate.ProfileId, requested.ProfileId)
             && Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId)
             && Same(candidate.RemoteSessionId, requested.RemoteSessionId)
-            && Same(candidate.Cwd, requested.Cwd);
+            && Same(candidate.Cwd, requested.Cwd)
+            && candidate.AdditionalDirectories.Equals(requested.AdditionalDirectories);
 
     /// <summary>
     /// Determines whether an active lease must be canceled before starting the requested lease.
@@ -140,7 +177,8 @@ public static class RemoteSessionRecoveryLeasePolicy
         return candidate.RecoveryMode != requested.RecoveryMode
             || !Same(candidate.ConversationId, requested.ConversationId)
             || !Same(candidate.ConnectionInstanceId, requested.ConnectionInstanceId)
-            || !Same(candidate.Cwd, requested.Cwd);
+            || !Same(candidate.Cwd, requested.Cwd)
+            || !candidate.AdditionalDirectories.Equals(requested.AdditionalDirectories);
     }
 
     private static bool Same(string? left, string? right)

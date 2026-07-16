@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Acp.Content
 {
@@ -6,7 +7,7 @@ namespace SalmonEgg.Acp.Content
     /// 嵌入的资源对象。
     /// 用于 ResourceContentBlock 中包含的实际资源数据。
     /// </summary>
-    public class EmbeddedResource
+    public class EmbeddedResource : AcpProtocolObject
     {
         /// <summary>
         /// 资源的 URI 标识符。

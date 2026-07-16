@@ -753,7 +753,9 @@ public partial class ChatViewModelTests
             acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
                 store,
                 NullLogger<AcpConnectionCoordinator>.Instance,
-                new StaticMcpResolver([])),
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)),
             shellNavigationRuntimeState: runtimeState);
         await using (fixture)
         {

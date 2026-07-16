@@ -628,7 +628,7 @@ public sealed class AcpChatServiceAdapterTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

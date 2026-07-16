@@ -126,7 +126,7 @@ public sealed class DelayedLoadChatService : IChatService
     public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
         => _inner.SetSessionConfigOptionAsync(@params);
 
-    public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+    public Task CancelSessionAsync(SessionCancelParams @params)
         => _inner.CancelSessionAsync(@params);
 
     public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

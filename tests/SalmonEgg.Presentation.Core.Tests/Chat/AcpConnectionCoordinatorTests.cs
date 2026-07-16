@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
@@ -42,7 +43,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             store,
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.SetConnectingAsync("profile-remote", TestContext.Current.CancellationToken);
 
@@ -105,7 +108,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -142,7 +147,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -176,7 +183,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -208,7 +217,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -247,7 +258,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
         current.Url = "mutated.example.com/mcp";
@@ -259,6 +272,219 @@ public sealed class AcpConnectionCoordinatorTests
         Assert.Equal("api.example.com/mcp", captured.Url);
         Assert.Equal("profile", captured.Meta!["source"]);
         Assert.Equal("Bearer token", Assert.Single(captured.Headers!).Value);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenSessionListMatches_LoadUsesAuthoritativeOrderedRecoveryContext()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = CreateRecoveryCapabilities(loadSession: true, supportsList: true, supportsAdditionalDirectories: true),
+            OnListSessionsAsync = (@params, _) => Task.FromResult(
+                string.IsNullOrWhiteSpace(@params?.Cursor)
+                    ? new SessionListResponse
+                    {
+                        Sessions =
+                        [
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-other",
+                                Cwd = "/remote/other"
+                            }
+                        ],
+                        NextCursor = "page-2"
+                    }
+                    : new SessionListResponse
+                    {
+                        Sessions =
+                        [
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-1",
+                                Cwd = "/remote/authoritative",
+                                AdditionalDirectories = ["/remote/zeta", "/remote/alpha"],
+                                Title = "Authoritative"
+                            }
+                        ]
+                    })
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            SessionCwd = "/persisted/stale",
+            SessionAdditionalDirectories = ["/persisted/stale"]
+        };
+        var coordinator = CreateCoordinator(sink.CurrentMcpServers);
+
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(inner.LastLoadParams);
+        Assert.Equal("/remote/authoritative", inner.LastLoadParams!.Cwd);
+        Assert.Equal(["/remote/zeta", "/remote/alpha"], inner.LastLoadParams.AdditionalDirectories);
+        Assert.Collection(
+            inner.ListSessionCalls,
+            first => Assert.Null(first?.Cursor),
+            second => Assert.Equal("page-2", second?.Cursor));
+        Assert.Equal("Authoritative", sink.AppliedRemoteSessionInfo?.Title);
+        Assert.Equal("/remote/authoritative", sink.SessionCwd);
+        Assert.Equal(["/remote/zeta", "/remote/alpha"], sink.SessionAdditionalDirectories);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenSessionListReportsNoAdditionalDirectories_ClearsStaleFallback()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = CreateRecoveryCapabilities(loadSession: true, supportsList: true, supportsAdditionalDirectories: true),
+            OnListSessionsAsync = (_, _) => Task.FromResult(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = "/remote/authoritative",
+                        AdditionalDirectories = null
+                    }
+                ]
+            })
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            SessionCwd = "/persisted/stale",
+            SessionAdditionalDirectories = ["/persisted/stale"]
+        };
+        var coordinator = CreateCoordinator(sink.CurrentMcpServers);
+
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(inner.LastLoadParams);
+        Assert.Null(inner.LastLoadParams!.AdditionalDirectories);
+        Assert.NotNull(sink.SessionAdditionalDirectories);
+        Assert.Empty(sink.SessionAdditionalDirectories!);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ResyncAsync_WhenSessionListCannotProvideMatch_LoadUsesPersistedRecoveryContext(
+        bool listThrows)
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = CreateRecoveryCapabilities(loadSession: true, supportsList: true, supportsAdditionalDirectories: true),
+            OnListSessionsAsync = (_, _) => listThrows
+                ? Task.FromException<SessionListResponse>(new InvalidOperationException("list failed"))
+                : Task.FromResult(new SessionListResponse
+                {
+                    Sessions =
+                    [
+                        new AgentSessionInfo
+                        {
+                            SessionId = "remote-other",
+                            Cwd = "/remote/other"
+                        }
+                    ]
+                })
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            SessionCwd = "/persisted/repo",
+            SessionAdditionalDirectories = ["/persisted/first", "/persisted/second"]
+        };
+        var coordinator = CreateCoordinator(sink.CurrentMcpServers);
+
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(inner.LastLoadParams);
+        Assert.Equal("/persisted/repo", inner.LastLoadParams!.Cwd);
+        Assert.Equal(["/persisted/first", "/persisted/second"], inner.LastLoadParams.AdditionalDirectories);
+        Assert.Null(sink.AppliedRemoteSessionInfo);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenAdditionalDirectoriesCapabilityIsMissing_DoesNotSendAuthoritativeDirectories()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = CreateRecoveryCapabilities(loadSession: true, supportsList: true, supportsAdditionalDirectories: false),
+            OnListSessionsAsync = (_, _) => Task.FromResult(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = "/remote/authoritative",
+                        AdditionalDirectories = ["/remote/shared"]
+                    }
+                ]
+            })
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            SessionCwd = "/persisted/stale"
+        };
+        var coordinator = CreateCoordinator(sink.CurrentMcpServers);
+
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(inner.LastLoadParams);
+        Assert.Equal("/remote/authoritative", inner.LastLoadParams!.Cwd);
+        Assert.Null(inner.LastLoadParams.AdditionalDirectories);
+        Assert.Equal(["/remote/shared"], sink.SessionAdditionalDirectories);
+    }
+
+    [Fact]
+    public async Task ResyncAsync_WhenSessionListMatches_ResumeUsesAuthoritativeRecoveryContext()
+    {
+        var inner = new FakeChatService
+        {
+            AgentCapabilities = CreateRecoveryCapabilities(loadSession: false, supportsList: true, supportsAdditionalDirectories: true),
+            OnListSessionsAsync = (_, _) => Task.FromResult(new SessionListResponse
+            {
+                Sessions =
+                [
+                    new AgentSessionInfo
+                    {
+                        SessionId = "remote-1",
+                        Cwd = "/remote/resume",
+                        AdditionalDirectories = ["/remote/second", "/remote/first"]
+                    }
+                ]
+            })
+        };
+        var sink = new FakeSink
+        {
+            CurrentChatService = inner,
+            CurrentSessionId = "conv-1",
+            CurrentRemoteSessionId = "remote-1",
+            IsSessionActive = true,
+            SessionCwd = "/persisted/stale"
+        };
+        var coordinator = CreateCoordinator(sink.CurrentMcpServers);
+
+        await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(inner.LastResumeParams);
+        Assert.Equal("/remote/resume", inner.LastResumeParams!.Cwd);
+        Assert.Equal(["/remote/second", "/remote/first"], inner.LastResumeParams.AdditionalDirectories);
+        Assert.Null(inner.LastLoadParams);
     }
 
     [Fact]
@@ -290,7 +516,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -332,7 +560,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -367,7 +597,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -399,7 +631,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -450,7 +684,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -477,7 +713,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -512,7 +750,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -544,7 +784,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => coordinator.ResyncAsync(sink, cts.Token));
 
@@ -572,7 +814,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             Mock.Of<IChatConnectionStore>(),
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver(sink.CurrentMcpServers));
+            new StaticMcpResolver(sink.CurrentMcpServers),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
 
@@ -597,7 +841,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             store,
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.SetConnectionInstanceIdAsync("conn-new", TestContext.Current.CancellationToken);
 
@@ -625,7 +871,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             store,
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.SetDisconnectedAsync("network down", TestContext.Current.CancellationToken);
 
@@ -653,7 +901,9 @@ public sealed class AcpConnectionCoordinatorTests
         var coordinator = new AcpConnectionCoordinator(
             store,
             Mock.Of<ILogger<AcpConnectionCoordinator>>(),
-            new StaticMcpResolver([]));
+            new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResetAsync(TestContext.Current.CancellationToken);
 
@@ -663,6 +913,29 @@ public sealed class AcpConnectionCoordinatorTests
         Assert.Null(updated.ForegroundTransportProfileId);
         Assert.Equal(6, updated.Generation);
     }
+
+    private static AcpConnectionCoordinator CreateCoordinator(IReadOnlyList<McpServer> mcpServers)
+        => new(
+            Mock.Of<IChatConnectionStore>(),
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver(mcpServers),
+            new AcpRemoteSessionRecoveryContextResolver(
+                NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
+
+    private static AgentCapabilities CreateRecoveryCapabilities(
+        bool loadSession,
+        bool supportsList,
+        bool supportsAdditionalDirectories)
+        => new(
+            loadSession: loadSession,
+            sessionCapabilities: new SessionCapabilities
+            {
+                Resume = loadSession ? null : new SessionResumeCapabilities(),
+                List = supportsList ? new SessionListCapabilities() : null,
+                AdditionalDirectories = supportsAdditionalDirectories
+                    ? new SessionAdditionalDirectoriesCapabilities()
+                    : null
+            });
 
     private sealed class FakeSink : IAcpChatCoordinatorSink
     {
@@ -703,6 +976,10 @@ public sealed class AcpConnectionCoordinatorTests
         public string? SelectedProfileId { get; set; }
 
         public string? SessionCwd { get; set; } = "C:/work/session";
+
+        public IReadOnlyList<string>? SessionAdditionalDirectories { get; set; }
+
+        public AgentSessionInfo? AppliedRemoteSessionInfo { get; private set; }
 
         public string? GetActiveSessionCwdOrDefault() => SessionCwd;
 
@@ -883,6 +1160,33 @@ public sealed class AcpConnectionCoordinatorTests
             => string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
                 ? SessionCwd
                 : null;
+
+        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(
+                string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal)
+                    ? new AcpRemoteSessionRecoveryFallback(SessionCwd, SessionAdditionalDirectories)
+                    : default);
+        }
+
+        public Task ApplyConversationRemoteSessionInfoAsync(
+            string conversationId,
+            AgentSessionInfo sessionInfo,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+            {
+                AppliedRemoteSessionInfo = sessionInfo;
+                SessionCwd = sessionInfo.Cwd;
+                SessionAdditionalDirectories = sessionInfo.AdditionalDirectories?.ToArray() ?? Array.Empty<string>();
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class RecordingConnectionStore : IChatConnectionStore
@@ -937,6 +1241,10 @@ public sealed class AcpConnectionCoordinatorTests
         public Func<SessionLoadParams, CancellationToken, Task<SessionLoadResponse>>? OnLoadSessionAsync { get; set; }
 
         public Func<SessionResumeParams, CancellationToken, Task<SessionResumeResponse>>? OnResumeSessionAsync { get; set; }
+
+        public Func<SessionListParams?, CancellationToken, Task<SessionListResponse>>? OnListSessionsAsync { get; set; }
+
+        public List<SessionListParams?> ListSessionCalls { get; } = new();
 
         public SessionLoadParams? LastLoadParams { get; private set; }
 
@@ -1010,8 +1318,14 @@ public sealed class AcpConnectionCoordinatorTests
         public Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
             => Task.FromResult(SessionCloseResponse.Completed);
 
-        public Task<SessionListResponse> ListSessionsAsync(SessionListParams? @params = null, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SessionListResponse());
+        public Task<SessionListResponse> ListSessionsAsync(
+            SessionListParams? @params = null,
+            CancellationToken cancellationToken = default)
+        {
+            ListSessionCalls.Add(@params);
+            return OnListSessionsAsync?.Invoke(@params, cancellationToken)
+                ?? Task.FromResult(new SessionListResponse());
+        }
 
         public Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
@@ -1022,7 +1336,7 @@ public sealed class AcpConnectionCoordinatorTests
         public Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params)
             => throw new NotSupportedException();
 
-        public Task<SessionCancelResponse> CancelSessionAsync(SessionCancelParams @params)
+        public Task CancelSessionAsync(SessionCancelParams @params)
             => throw new NotSupportedException();
 
         public Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)

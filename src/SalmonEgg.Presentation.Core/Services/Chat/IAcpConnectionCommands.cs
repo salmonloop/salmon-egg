@@ -84,7 +84,6 @@ public interface IAcpConnectionCommands
 
     Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default);
 
     Task DisconnectAsync(

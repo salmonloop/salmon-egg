@@ -548,7 +548,7 @@ public sealed class ChatLaunchWorkflowTests
             return true;
         }
 
-        public Task<bool> CancelSessionAsync(string sessionId, string? reason = null)
+        public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
         public IEnumerable<Session> GetAllSessions()

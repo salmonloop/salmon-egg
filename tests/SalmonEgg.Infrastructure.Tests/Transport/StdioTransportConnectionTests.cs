@@ -11,6 +11,53 @@ namespace SalmonEgg.Infrastructure.Tests.Transport;
 public sealed class StdioTransportConnectionTests
 {
     [Fact]
+    public void ResolveCommand_WindowsBareCommand_UsesPathExtAndPathDirectory()
+    {
+        var commandDirectory = Path.Combine(Path.GetTempPath(), "stdio-command-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(commandDirectory);
+        var commandPath = Path.Combine(commandDirectory, "npm.cmd");
+        File.WriteAllText(commandPath, "@echo off");
+
+        var resolvedCommand = StdioCommandResolver.Resolve(
+            "npm",
+            isWindows: true,
+            currentDirectory: Path.GetTempPath(),
+            pathEnvironment: commandDirectory,
+            pathExtensions: ".com;.exe;.cmd");
+
+        Assert.Equal(commandPath, resolvedCommand);
+    }
+
+    [Fact]
+    public void ResolveCommand_NonWindowsBareCommand_DoesNotProbeWindowsExtensions()
+    {
+        var resolvedCommand = StdioCommandResolver.Resolve(
+            "npm",
+            isWindows: false,
+            currentDirectory: Path.GetTempPath(),
+            pathEnvironment: Path.GetTempPath(),
+            pathExtensions: ".CMD");
+
+        Assert.Equal("npm", resolvedCommand);
+    }
+
+    [Theory]
+    [InlineData("tools/agent")]
+    [InlineData(@"tools\agent")]
+    [InlineData("agent.exe")]
+    public void ResolveCommand_CommandAlreadySpecifiesPathOrExtension_ReturnsUnchanged(string command)
+    {
+        var resolvedCommand = StdioCommandResolver.Resolve(
+            command,
+            isWindows: true,
+            currentDirectory: Path.GetTempPath(),
+            pathEnvironment: Path.GetTempPath(),
+            pathExtensions: ".EXE;.CMD");
+
+        Assert.Equal(command, resolvedCommand);
+    }
+
+    [Fact]
     public void ResolveWorkingDirectory_WhenResolvedCommandIsAbsolute_UsesCommandDirectory()
     {
         var commandDirectory = Path.Combine(Path.GetTempPath(), "stdio-transport-tests", Guid.NewGuid().ToString("N"));
@@ -87,6 +134,17 @@ public sealed class StdioTransportConnectionTests
                 @"path\with\slashes"
             ],
             startInfo.ArgumentList);
+    }
+
+    [Fact]
+    public void CreateProcessStartInfo_CommandScript_UsesCommandInterpreter()
+    {
+        using var transport = new StdioTransport("agent.cmd", ["--flag"]);
+
+        var startInfo = transport.CreateProcessStartInfo();
+
+        Assert.Equal("cmd.exe", startInfo.FileName);
+        Assert.Equal(["/c", "agent.cmd", "--flag"], startInfo.ArgumentList);
     }
 
     private static (string Command, string[] Args) CreateImmediateFailureCommand(string stderrMessage)

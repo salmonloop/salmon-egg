@@ -12,7 +12,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Update 通知的参数。
     /// 用于 Agent 向客户端发送会话更新。
     /// </summary>
-    public class SessionUpdateParams
+    public class SessionUpdateParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -61,19 +61,18 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(ToolCallStatusUpdate), "tool_call_update")]
     [JsonDerivedType(typeof(PlanUpdate), "plan")]
     [JsonDerivedType(typeof(CurrentModeUpdate), "current_mode_update")]
-    [JsonDerivedType(typeof(ConfigUpdateUpdate), "config_options_update")]
     [JsonDerivedType(typeof(AvailableCommandsUpdate), "available_commands_update")]
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     [JsonDerivedType(typeof(SessionInfoUpdate), "session_info_update")]
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
-    public class SessionUpdate
+    public class SessionUpdate : AcpProtocolObject
+    {
+    }
+
+    public abstract class ContentChunkUpdate : SessionUpdate
     {
         [JsonPropertyName("messageId")]
         public string? MessageId { get; set; }
-
-        // Keep unknown fields so we can safely ignore newer protocol updates without crashing.
-        [JsonExtensionData]
-        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 
     /// <summary>
@@ -83,29 +82,29 @@ namespace SalmonEgg.Acp.Protocol
     public class UsageUpdate : SessionUpdate
     {
         [JsonPropertyName("used")]
-        public int? Used { get; set; }
+        public ulong Used { get; set; }
 
         [JsonPropertyName("size")]
-        public int? Size { get; set; }
+        public ulong Size { get; set; }
 
         [JsonPropertyName("cost")]
         public UsageCost? Cost { get; set; }
     }
 
-    public class UsageCost
+    public class UsageCost : AcpProtocolObject
     {
         [JsonPropertyName("amount")]
-        public decimal? Amount { get; set; }
+        public double Amount { get; set; }
 
         [JsonPropertyName("currency")]
-        public string? Currency { get; set; }
+        public string Currency { get; set; } = string.Empty;
     }
 
     /// <summary>
     /// Agent 消息片段更新。
     /// 用于流式传输 Agent 的文本响应。
     /// </summary>
-    public class AgentMessageUpdate : SessionUpdate
+    public class AgentMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
         public ContentBlock? Content { get; set; }
@@ -130,7 +129,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 用户消息片段更新（用于 session/load 回放或多端同步）。
     /// </summary>
-    public class UserMessageUpdate : SessionUpdate
+    public class UserMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
         public ContentBlock? Content { get; set; }
@@ -148,7 +147,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Agent 思考片段更新（通常不直接展示给用户，但必须可解析/可跳过）。
     /// </summary>
-    public class AgentThoughtUpdate : SessionUpdate
+    public class AgentThoughtUpdate : ContentChunkUpdate
     {
         /// <summary>
         /// 消息内容块。
@@ -258,9 +257,6 @@ namespace SalmonEgg.Acp.Protocol
     {
         private List<PlanEntry> _entries = new();
 
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
-
         /// <summary>
         /// 计划条目列表（用于 plan 类型的更新）。
         /// </summary>
@@ -316,46 +312,13 @@ namespace SalmonEgg.Acp.Protocol
         [JsonPropertyName("currentModeId")]
         public string ModeId { get; set; } = string.Empty;
 
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
-
         public CurrentModeUpdate()
         {
         }
 
-        public CurrentModeUpdate(string modeId, string? title = null)
+        public CurrentModeUpdate(string modeId)
         {
             ModeId = modeId;
-            Title = title;
-        }
-    }
-
-    /// <summary>
-    /// 配置更新。
-    /// 用于通知客户端会话配置选项的变化。
-    /// </summary>
-    public class ConfigUpdateUpdate : SessionUpdate
-    {
-        /// <summary>
-        /// 配置选项列表（完整状态）。
-        /// </summary>
-        [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
-
-        /// <summary>
-        /// 创建新的 ConfigUpdateUpdate 实例。
-        /// </summary>
-        public ConfigUpdateUpdate()
-        {
-        }
-
-        /// <summary>
-        /// 创建新的 ConfigUpdateUpdate 实例。
-        /// </summary>
-        /// <param name="configOptions">配置选项</param>
-        public ConfigUpdateUpdate(List<ConfigOption>? configOptions = null)
-        {
-            ConfigOptions = configOptions;
         }
     }
 
@@ -433,12 +396,6 @@ namespace SalmonEgg.Acp.Protocol
     {
         private string? _title;
         private string? _updatedAt;
-
-        /// <summary>
-        /// 协议扩展字段（_meta）。
-        /// </summary>
-        [JsonPropertyName("_meta")]
-        public Dictionary<string, object?>? Meta { get; set; }
 
         /// <summary>
         /// 会话标题（可选）。

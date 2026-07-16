@@ -1502,7 +1502,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         public Task<AcpPromptDispatchResult> DispatchPromptToRemoteSessionAsync(string remoteSessionId, string promptText, string? promptMessageId, IAcpChatCoordinatorSink sink, Func<System.Threading.CancellationToken, Task<bool>> authenticateAsync, System.Threading.CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
-        public Task CancelPromptAsync(IAcpChatCoordinatorSink sink, string? reason = null, System.Threading.CancellationToken cancellationToken = default)
+        public Task CancelPromptAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
 
         public Task DisconnectAsync(IAcpChatCoordinatorSink sink, System.Threading.CancellationToken cancellationToken = default)

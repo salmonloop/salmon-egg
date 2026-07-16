@@ -178,8 +178,8 @@ public class MessageParserTests
 
         Assert.NotNull(updateParams);
         var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
-        Assert.Equal(53000, usage.Used);
-        Assert.Equal(200000, usage.Size);
+        Assert.Equal(53000UL, usage.Used);
+        Assert.Equal(200000UL, usage.Size);
         Assert.Null(usage.Cost);
     }
 
@@ -205,10 +205,10 @@ public class MessageParserTests
 
         Assert.NotNull(updateParams);
         var usage = Assert.IsType<UsageUpdate>(updateParams!.Update);
-        Assert.Equal(717, usage.Used);
-        Assert.Equal(200000, usage.Size);
+        Assert.Equal(717UL, usage.Used);
+        Assert.Equal(200000UL, usage.Size);
         Assert.NotNull(usage.Cost);
-        Assert.Equal(0.16861m, usage.Cost!.Amount);
+        Assert.Equal(0.16861, usage.Cost!.Amount);
         Assert.Equal("USD", usage.Cost.Currency);
     }
 
@@ -306,7 +306,7 @@ public class MessageParserTests
         Assert.NotNull(updateParams);
         var mode = Assert.IsType<CurrentModeUpdate>(updateParams!.Update);
         Assert.Equal("code", mode.ModeId);
-        Assert.Null(mode.Title);
+        Assert.Null(typeof(CurrentModeUpdate).GetProperty("Title"));
     }
 
     [Fact]
@@ -511,7 +511,9 @@ public class MessageParserTests
         Assert.Single(response!.Sessions);
 
         var session = response.Sessions[0];
-        Assert.Equal("Session summary", session.Description);
+        Assert.Null(typeof(AgentSessionInfo).GetProperty("Description"));
+        using var roundTrip = JsonDocument.Parse(JsonSerializer.Serialize(response, AcpJsonContext.Default.SessionListResponse));
+        Assert.False(roundTrip.RootElement.GetProperty("sessions")[0].TryGetProperty("description", out _));
 
         var meta = session.Meta;
         Assert.NotNull(meta);

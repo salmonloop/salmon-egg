@@ -52,7 +52,6 @@ public interface IAcpSessionCommandOrchestrator
 
     Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -138,8 +137,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
     {
         var cwdResolution = AcpSessionNewCwdResolver.Resolve(
             sink.GetActiveSessionCwdOrDefault()?.Trim(),
-            sink.ResolveProfile(sink.SelectedProfileId),
-            sink.GetAgentRemoteDirectories());
+            sink.ResolveProfile(sink.SelectedProfileId));
         var cwd = cwdResolution.Cwd?.Trim();
         if (string.IsNullOrWhiteSpace(cwd))
         {
@@ -308,7 +306,6 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
     public async Task CancelPromptAsync(
         IAcpChatCoordinatorSink sink,
-        string? reason = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -322,7 +319,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
         cancellationToken.ThrowIfCancellationRequested();
         await chatService.CancelSessionAsync(
-            new SessionCancelParams(currentBinding.RemoteSessionId!, reason)).ConfigureAwait(false);
+            new SessionCancelParams(currentBinding.RemoteSessionId!)).ConfigureAwait(false);
     }
 
     private static async Task UpdateBindingForConversationAsync(

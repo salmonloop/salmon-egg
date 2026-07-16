@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Serilog;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.JsonRpc;
-using SalmonEgg.Domain.Utilities;
 
 namespace SalmonEgg.Infrastructure.Transport
 {
@@ -65,7 +64,7 @@ namespace SalmonEgg.Infrastructure.Transport
             string[] trimmedArgs = args?.Select(a => a.Trim()).ToArray() ?? Array.Empty<string>();
 
             // 解析命令并处理 .cmd/.bat 脚本
-            string resolvedCommand = PathResolver.ResolveCommand(trimmedCommand);
+            string resolvedCommand = StdioCommandResolver.Resolve(trimmedCommand);
 
             // 如果是 .cmd 或 .bat 文件，需要通过 cmd.exe 执行
             if (resolvedCommand.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) ||

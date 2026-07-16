@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
@@ -37,15 +38,19 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator, IAcpCo
     private readonly IChatConnectionStore _store;
     private readonly ILogger<AcpConnectionCoordinator> _logger;
     private readonly IAcpMcpServerResolver _mcpServerResolver;
+    private readonly IAcpRemoteSessionRecoveryContextResolver _recoveryContextResolver;
 
     public AcpConnectionCoordinator(
         IChatConnectionStore store,
         ILogger<AcpConnectionCoordinator> logger,
-        IAcpMcpServerResolver mcpServerResolver)
+        IAcpMcpServerResolver mcpServerResolver,
+        IAcpRemoteSessionRecoveryContextResolver recoveryContextResolver)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
+        _recoveryContextResolver = recoveryContextResolver
+            ?? throw new ArgumentNullException(nameof(recoveryContextResolver));
     }
 
     public async Task SetConnectingAsync(string? profileId, CancellationToken cancellationToken = default)
@@ -120,128 +125,237 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator, IAcpCo
         ArgumentNullException.ThrowIfNull(sink);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var maybeRequest = await TryCreateResyncRequestAsync(sink, cancellationToken).ConfigureAwait(false);
+        if (maybeRequest is not { } request)
+        {
+            return;
+        }
+
+        var adapter = request.ChatService as IAcpSessionUpdateBufferController;
+        long? hydrationAttemptId = null;
+        try
+        {
+            await sink.SetConversationHydratingAsync(request.ConversationId, true, cancellationToken)
+                .ConfigureAwait(false);
+            var recoveryContext = await ResolveResyncRecoveryContextAsync(sink, request, cancellationToken)
+                .ConfigureAwait(false);
+            if (recoveryContext is null)
+            {
+                return;
+            }
+
+            var recoveryProjection = await ExecuteResyncRecoveryAsync(
+                    sink,
+                    request,
+                    recoveryContext.Value,
+                    adapter,
+                    attemptId => hydrationAttemptId = attemptId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (recoveryProjection is not { } projection)
+            {
+                return;
+            }
+
+            await FinalizeResyncAsync(
+                    sink,
+                    request,
+                    projection,
+                    adapter,
+                    hydrationAttemptId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                .ConfigureAwait(false);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionCanceled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                .ConfigureAwait(false);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionFailed");
+            _logger.LogWarning(ex, "ACP resync failed. SessionId={SessionId}", request.SessionId);
+        }
+    }
+
+    private async Task<ResyncRequest?> TryCreateResyncRequestAsync(
+        IAcpChatCoordinatorSink sink,
+        CancellationToken cancellationToken)
+    {
         var binding = await sink.GetCurrentRemoteBindingAsync(cancellationToken).ConfigureAwait(false);
         var conversationId = binding?.ConversationId;
         var sessionId = binding?.RemoteSessionId;
         if (string.IsNullOrWhiteSpace(conversationId) || string.IsNullOrWhiteSpace(sessionId))
         {
             _logger.LogDebug("Skipping ACP resync because no remote session binding is available.");
-            return;
+            return null;
         }
 
-        if (sink.CurrentChatService is null)
+        var chatService = sink.CurrentChatService;
+        if (chatService is null)
         {
             _logger.LogDebug("Skipping ACP resync because chat service is unavailable.");
-            return;
+            return null;
         }
 
-        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForResync(sink.CurrentChatService.AgentCapabilities);
+        var recoveryMode = AcpSessionRecoveryPolicy.ResolveForResync(chatService.AgentCapabilities);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
             _logger.LogDebug("Skipping ACP resync because agent does not advertise session recovery capability.");
-            return;
+            return null;
         }
 
-        var adapter = sink.CurrentChatService as IAcpSessionUpdateBufferController;
-        long? hydrationAttemptId = null;
+        return new ResyncRequest(conversationId, sessionId, chatService, recoveryMode);
+    }
+
+    private async Task<AcpRemoteSessionRecoveryContext?> ResolveResyncRecoveryContextAsync(
+        IAcpChatCoordinatorSink sink,
+        ResyncRequest request,
+        CancellationToken cancellationToken)
+    {
+        var fallback = await sink
+            .GetSessionRecoveryFallbackAsync(request.ConversationId, cancellationToken)
+            .ConfigureAwait(false);
+        var resolution = await _recoveryContextResolver
+            .ResolveAsync(request.ChatService, request.SessionId, fallback, cancellationToken)
+            .ConfigureAwait(false);
+
+        var currentBinding = await sink
+            .GetConversationRemoteBindingAsync(request.ConversationId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!ReferenceEquals(sink.CurrentChatService, request.ChatService)
+            || !string.Equals(currentBinding?.RemoteSessionId, request.SessionId, StringComparison.Ordinal))
+        {
+            _logger.LogDebug(
+                "Discarding ACP resync because the remote binding or chat service changed. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                request.ConversationId,
+                request.SessionId);
+            await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (resolution.Context is not { } recoveryContext)
+        {
+            _logger.LogWarning(
+                "Skipping ACP resync because session working directory is missing. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                request.ConversationId,
+                request.SessionId);
+            await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                .ConfigureAwait(false);
+            return null;
+        }
+
+        if (resolution.AuthoritativeSessionInfo is { } sessionInfo)
+        {
+            await sink
+                .ApplyConversationRemoteSessionInfoAsync(request.ConversationId, sessionInfo, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return recoveryContext;
+    }
+
+    private async Task<AcpSessionRecoveryProjection?> ExecuteResyncRecoveryAsync(
+        IAcpChatCoordinatorSink sink,
+        ResyncRequest request,
+        AcpRemoteSessionRecoveryContext recoveryContext,
+        IAcpSessionUpdateBufferController? adapter,
+        Action<long?> captureHydrationAttemptId,
+        CancellationToken cancellationToken)
+    {
         var mcpServers = await _mcpServerResolver
             .ResolveCurrentMcpServersAsync(sink, cancellationToken)
             .ConfigureAwait(false);
-
-        try
+        if (request.RecoveryMode == AcpSessionRecoveryMode.Load)
         {
-            await sink.SetConversationHydratingAsync(conversationId!, true, cancellationToken).ConfigureAwait(false);
-            var sessionCwd = sink.GetSessionCwdOrDefault(conversationId!);
-            if (string.IsNullOrWhiteSpace(sessionCwd))
+            var hydrationAttemptId = adapter?.BeginHydrationBufferingScope(request.SessionId);
+            captureHydrationAttemptId(hydrationAttemptId);
+            await sink.ResetConversationForResyncAsync(request.ConversationId, cancellationToken)
+                .ConfigureAwait(false);
+            var loadTask = request.ChatService.LoadSessionAsync(
+                AcpRemoteSessionRecoveryRequestFactory.CreateLoadParams(
+                    request.SessionId,
+                    recoveryContext,
+                    mcpServers),
+                cancellationToken);
+            var projection = AcpSessionRecoveryProjection.FromLoad(
+                await loadTask.WaitAsync(cancellationToken).ConfigureAwait(false));
+            if (adapter != null && hydrationAttemptId.HasValue
+                && !adapter.TryMarkHydrated(hydrationAttemptId.Value))
             {
                 _logger.LogWarning(
-                    "Skipping ACP resync because session working directory is missing. conversationId={ConversationId} remoteSessionId={RemoteSessionId}",
-                    conversationId,
-                    sessionId);
-                await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
+                    "Discarding ACP resync completion because buffering attempt is stale. SessionId={SessionId}",
+                    request.SessionId);
+                await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                    .ConfigureAwait(false);
+                return null;
+            }
+
+            return projection;
+        }
+
+        var resumeTask = request.ChatService.ResumeSessionAsync(
+            AcpRemoteSessionRecoveryRequestFactory.CreateResumeParams(
+                request.SessionId,
+                recoveryContext,
+                mcpServers),
+            cancellationToken);
+        return AcpSessionRecoveryProjection.FromResume(
+            await resumeTask.WaitAsync(cancellationToken).ConfigureAwait(false));
+    }
+
+    private async Task FinalizeResyncAsync(
+        IAcpChatCoordinatorSink sink,
+        ResyncRequest request,
+        AcpSessionRecoveryProjection recoveryProjection,
+        IAcpSessionUpdateBufferController? adapter,
+        long? hydrationAttemptId,
+        CancellationToken cancellationToken)
+    {
+        await sink.ApplyConversationSessionLoadResponseAsync(
+            request.ConversationId,
+            recoveryProjection.SessionLoadResponse,
+            cancellationToken).ConfigureAwait(false);
+
+        if (request.RecoveryMode == AcpSessionRecoveryMode.Load
+            && adapter != null
+            && hydrationAttemptId.HasValue)
+        {
+            await adapter
+                .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
+                .ConfigureAwait(false);
+            if (!adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
+            {
+                _logger.LogWarning(
+                    "Discarding ACP resync finalization because buffering attempt became stale after drain. SessionId={SessionId}",
+                    request.SessionId);
+                await sink.SetConversationHydratingAsync(request.ConversationId, false, CancellationToken.None)
+                    .ConfigureAwait(false);
                 return;
             }
-
-            AcpSessionRecoveryProjection recoveryProjection;
-            if (recoveryMode == AcpSessionRecoveryMode.Load)
-            {
-                hydrationAttemptId = adapter?.BeginHydrationBufferingScope(sessionId);
-                await sink.ResetConversationForResyncAsync(conversationId!, cancellationToken).ConfigureAwait(false);
-                var loadTask = sink.CurrentChatService.LoadSessionAsync(
-                    new SessionLoadParams(
-                        sessionId,
-                        sessionCwd!,
-                        McpServerJsonConverter.CloneServers(mcpServers)),
-                    cancellationToken);
-                recoveryProjection = AcpSessionRecoveryProjection.FromLoad(
-                    await loadTask.WaitAsync(cancellationToken).ConfigureAwait(false));
-                if (adapter != null && hydrationAttemptId.HasValue)
-                {
-                    if (!adapter.TryMarkHydrated(hydrationAttemptId.Value))
-                    {
-                        _logger.LogWarning(
-                            "Discarding ACP resync completion because buffering attempt is stale. sessionId={SessionId}",
-                            sessionId);
-                        await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
-                        return;
-                    }
-                }
-            }
-            else
-            {
-                var resumeTask = sink.CurrentChatService.ResumeSessionAsync(
-                    new SessionResumeParams(
-                        sessionId,
-                        sessionCwd!,
-                        McpServerJsonConverter.CloneServers(mcpServers)),
-                    cancellationToken);
-                recoveryProjection = AcpSessionRecoveryProjection.FromResume(
-                    await resumeTask.WaitAsync(cancellationToken).ConfigureAwait(false));
-            }
-
-            await sink.ApplyConversationSessionLoadResponseAsync(
-                conversationId!,
-                recoveryProjection.SessionLoadResponse,
-                cancellationToken).ConfigureAwait(false);
-
-            if (recoveryMode == AcpSessionRecoveryMode.Load
-                && adapter != null
-                && hydrationAttemptId.HasValue)
-            {
-
-                await adapter
-                    .WaitForBufferedUpdatesDrainedAsync(hydrationAttemptId.Value, cancellationToken)
-                    .ConfigureAwait(false);
-                if (!adapter.TryMarkHydrated(hydrationAttemptId.Value, reason: "PostDrainVerification"))
-                {
-                    _logger.LogWarning(
-                        "Discarding ACP resync finalization because buffering attempt became stale after drain. sessionId={SessionId}",
-                        sessionId);
-                    await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
-                    return;
-                }
-            }
-
-            await sink.MarkConversationRemoteHydratedAsync(conversationId!, cancellationToken).ConfigureAwait(false);
-            await sink.SetConversationHydratingAsync(conversationId!, false, cancellationToken).ConfigureAwait(false);
-
-            _logger.LogInformation("ACP resync completed. sessionId={SessionId} recoveryMode={RecoveryMode}", sessionId, recoveryMode);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
-            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionCanceled");
 
-            throw;
-        }
-        catch (Exception ex)
-        {
-            await sink.SetConversationHydratingAsync(conversationId!, false, CancellationToken.None).ConfigureAwait(false);
-            ReleaseBufferedUpdatesAfterInterruptedHydration(adapter, hydrationAttemptId, "LoadSessionFailed");
-
-            _logger.LogWarning(ex, "ACP resync failed. sessionId={SessionId}", sessionId);
-        }
+        await sink.MarkConversationRemoteHydratedAsync(request.ConversationId, cancellationToken)
+            .ConfigureAwait(false);
+        await sink.SetConversationHydratingAsync(request.ConversationId, false, cancellationToken)
+            .ConfigureAwait(false);
+        _logger.LogInformation(
+            "ACP resync completed. SessionId={SessionId} RecoveryMode={RecoveryMode}",
+            request.SessionId,
+            request.RecoveryMode);
     }
+
+    private readonly record struct ResyncRequest(
+        string ConversationId,
+        string SessionId,
+        IChatService ChatService,
+        AcpSessionRecoveryMode RecoveryMode);
+
 
     private Task UpdateForegroundProfileAsync(string? profileId)
         => _store.Dispatch(new SetForegroundTransportProfileAction(profileId)).AsTask();

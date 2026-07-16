@@ -51,7 +51,24 @@ public sealed class SessionUpdateTypesTests
     {
         var update = new ConfigOptionUpdate
         {
-            ConfigOptions = [new ConfigOption { Id = "mode", Name = "Mode", Type = "select" }]
+            ConfigOptions =
+            [
+                new ConfigOption
+                {
+                    Id = "mode",
+                    Name = "Mode",
+                    Type = "select",
+                    CurrentValue = "plan",
+                    Options =
+                    [
+                        new ConfigOptionValue
+                        {
+                            Value = "plan",
+                            Name = "Plan"
+                        }
+                    ]
+                }
+            ]
         };
 
         var json = JsonSerializer.Serialize(update);

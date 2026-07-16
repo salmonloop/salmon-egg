@@ -147,6 +147,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IConversationMutationPipeline _conversationMutationPipeline;
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IAcpMcpServerResolver _mcpServerResolver;
+    private readonly IAcpRemoteSessionRecoveryContextResolver _remoteSessionRecoveryContextResolver;
     private readonly IConversationAttentionStore? _conversationAttentionStore;
     private readonly SerialAsyncWorkQueue _sessionUpdateWorkQueue;
     private readonly SerialAsyncWorkQueue _previewSnapshotWorkQueue;
@@ -1339,6 +1340,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IConversationPreviewStore previewStore,
         ILogger<ChatViewModel> logger,
         IAcpMcpServerResolver mcpServerResolver,
+        IAcpRemoteSessionRecoveryContextResolver? remoteSessionRecoveryContextResolver = null,
         IConversationAttentionStore? conversationAttentionStore = null,
         IAcpConnectionCommands? acpConnectionCommands = null,
         IConversationActivationCoordinator? conversationActivationCoordinator = null,
@@ -1394,6 +1396,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _outgoingUserMessageProjector = new OutgoingUserMessageProjector();
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
+        _remoteSessionRecoveryContextResolver = remoteSessionRecoveryContextResolver
+            ?? new AcpRemoteSessionRecoveryContextResolver(
+                NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance);
         _conversationAttentionStore = conversationAttentionStore;
         _authoritativeConnectionResolver = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry);
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();
@@ -3316,6 +3321,27 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public string? GetActiveSessionCwdOrDefault() => _owner.GetActiveSessionCwdOrDefault();
 
         public string? GetSessionCwdOrDefault(string conversationId) => _owner.GetSessionCwdOrDefault(conversationId);
+
+        public ValueTask<AcpRemoteSessionRecoveryFallback> GetSessionRecoveryFallbackAsync(
+            string conversationId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CanMutate()
+                ? _owner.GetSessionRecoveryFallbackAsync(conversationId, cancellationToken)
+                : ValueTask.FromResult(default(AcpRemoteSessionRecoveryFallback));
+        }
+
+        public Task ApplyConversationRemoteSessionInfoAsync(
+            string conversationId,
+            AgentSessionInfo sessionInfo,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return CanMutate()
+                ? _owner.ApplyConversationRemoteSessionInfoAsync(conversationId, sessionInfo, cancellationToken)
+                : Task.CompletedTask;
+        }
 
         public Task SetIsHydratingAsync(bool isHydrating, CancellationToken cancellationToken = default)
         {

@@ -13,7 +13,7 @@ public class AvailableCommandsUpdate : SessionUpdate
     public List<AvailableCommand> AvailableCommands { get; set; } = new();
 }
 
-public class AvailableCommand
+public class AvailableCommand : AcpProtocolObject
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
@@ -25,9 +25,8 @@ public class AvailableCommand
     public AvailableCommandInput? Input { get; set; }
 }
 
-public class AvailableCommandInput
+public class AvailableCommandInput : AcpProtocolObject
 {
     [JsonPropertyName("hint")]
     public string Hint { get; set; } = string.Empty;
 }
-

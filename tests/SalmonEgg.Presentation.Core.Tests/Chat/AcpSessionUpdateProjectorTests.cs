@@ -463,7 +463,6 @@ public class AcpSessionUpdateProjectorTests
         Assert.NotNull(delta.SessionInfo);
         Assert.Equal("Remote session", delta.SessionInfo.Title);
         Assert.True(delta.SessionInfo.HasTitle);
-        Assert.Null(delta.SessionInfo.Description);
         Assert.Null(delta.SessionInfo.Cwd);
         Assert.Equal(updatedAt, delta.SessionInfo.UpdatedAt);
         Assert.True(delta.SessionInfo.HasUpdatedAt);
@@ -534,7 +533,7 @@ public class AcpSessionUpdateProjectorTests
                 Size = 128,
                 Cost = new UsageCost
                 {
-                    Amount = 1.25m,
+                    Amount = 1.25,
                     Currency = "USD"
                 }
             });
@@ -544,10 +543,10 @@ public class AcpSessionUpdateProjectorTests
 
         // Assert
         Assert.NotNull(delta.Usage);
-        Assert.Equal(64, delta.Usage.Used);
-        Assert.Equal(128, delta.Usage.Size);
+        Assert.Equal(64UL, delta.Usage.Used);
+        Assert.Equal(128UL, delta.Usage.Size);
         Assert.NotNull(delta.Usage.Cost);
-        Assert.Equal(1.25m, delta.Usage.Cost.Amount);
+        Assert.Equal(1.25, delta.Usage.Cost.Amount);
         Assert.Equal("USD", delta.Usage.Cost.Currency);
     }
 
@@ -570,8 +569,8 @@ public class AcpSessionUpdateProjectorTests
 
         // Assert
         Assert.NotNull(delta.Usage);
-        Assert.Equal(64, delta.Usage.Used);
-        Assert.Equal(128, delta.Usage.Size);
+        Assert.Equal(64UL, delta.Usage.Used);
+        Assert.Equal(128UL, delta.Usage.Size);
         Assert.Null(delta.Usage.Cost);
     }
 
@@ -713,7 +712,6 @@ public class AcpSessionUpdateProjectorTests
         Assert.NotNull(delta.SessionInfo);
         Assert.Equal("Debug authentication timeout", delta.SessionInfo!.Title);
         Assert.True(delta.SessionInfo.HasTitle);
-        Assert.Null(delta.SessionInfo.Description);
         Assert.Null(delta.SessionInfo.Cwd);
         Assert.Null(delta.SessionInfo.UpdatedAt);
         Assert.Equal("api-server", delta.SessionInfo.Meta!["projectName"]);
@@ -733,8 +731,8 @@ public class AcpSessionUpdateProjectorTests
             }));
 
         Assert.NotNull(delta.Usage);
-        Assert.Equal(53000, delta.Usage!.Used);
-        Assert.Equal(200000, delta.Usage.Size);
+        Assert.Equal(53000UL, delta.Usage!.Used);
+        Assert.Equal(200000UL, delta.Usage.Size);
         Assert.Null(delta.Usage.Cost);
     }
 }

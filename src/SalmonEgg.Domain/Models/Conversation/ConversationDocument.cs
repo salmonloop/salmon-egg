@@ -112,9 +112,9 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool HasTitle { get; set; }
 
-        public string? Description { get; set; }
-
         public string? Cwd { get; set; }
+
+        public List<string>? AdditionalDirectories { get; set; }
 
         public DateTime? UpdatedAtUtc
         {
@@ -157,16 +157,16 @@ namespace SalmonEgg.Domain.Models.Conversation
         {
         }
 
-        public ConversationUsageSnapshot(int? used, int? size, ConversationUsageCostSnapshot? cost)
+        public ConversationUsageSnapshot(ulong used, ulong size, ConversationUsageCostSnapshot? cost)
         {
             Used = used;
             Size = size;
             Cost = cost;
         }
 
-        public int? Used { get; set; }
+        public ulong Used { get; set; }
 
-        public int? Size { get; set; }
+        public ulong Size { get; set; }
 
         public ConversationUsageCostSnapshot? Cost { get; set; }
     }
@@ -177,15 +177,15 @@ namespace SalmonEgg.Domain.Models.Conversation
         {
         }
 
-        public ConversationUsageCostSnapshot(decimal? amount, string? currency)
+        public ConversationUsageCostSnapshot(double amount, string currency)
         {
             Amount = amount;
             Currency = currency;
         }
 
-        public decimal? Amount { get; set; }
+        public double Amount { get; set; }
 
-        public string? Currency { get; set; }
+        public string Currency { get; set; } = string.Empty;
     }
 
     public sealed class ConversationMessageSnapshot

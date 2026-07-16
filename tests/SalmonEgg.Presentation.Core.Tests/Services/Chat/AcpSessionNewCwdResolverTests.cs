@@ -17,8 +17,7 @@ public sealed class AcpSessionNewCwdResolverTests
 
         var result = AcpSessionNewCwdResolver.Resolve(
             requestedCwd: null,
-            profile: profile,
-            remoteDirectories: null);
+            profile: profile);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), result.Cwd);
@@ -34,8 +33,7 @@ public sealed class AcpSessionNewCwdResolverTests
 
         var result = AcpSessionNewCwdResolver.Resolve(
             requestedCwd: "  ",
-            profile: profile,
-            remoteDirectories: null);
+            profile: profile);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(AcpSessionNewCwdResolver.MissingRemoteCwdMessage, result.ErrorMessage);
@@ -43,35 +41,44 @@ public sealed class AcpSessionNewCwdResolverTests
     }
 
     [Fact]
-    public void Resolve_RemoteWithConfiguredRemoteDirectory_ReturnsRemotePath()
+    public void Resolve_RemoteWithAbsoluteCwd_TrustsRemotePath()
     {
         var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.WebSocket };
-        var directories = new[]
-        {
-            new AgentRemoteDirectory { DirectoryId = "dir-1", DisplayName = "Workspace", RemotePath = "/home/user/project" }
-        };
 
         var result = AcpSessionNewCwdResolver.Resolve(
-            requestedCwd: " /home/user/project ",
-            profile: profile,
-            remoteDirectories: directories);
+            requestedCwd: " /srv/agent/worktree ",
+            profile: profile);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal("/home/user/project", result.Cwd);
+        Assert.Equal("/srv/agent/worktree", result.Cwd);
+        Assert.Null(result.ErrorMessage);
     }
 
     [Fact]
-    public void Resolve_RemoteWithUnconfiguredCwd_ReturnsRequestedPath()
+    public void Resolve_RemoteWithWindowsAbsoluteCwd_TrustsRemotePath()
+    {
+        var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.HttpSse };
+
+        var result = AcpSessionNewCwdResolver.Resolve(
+            requestedCwd: @"C:\agent\worktree",
+            profile: profile);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(@"C:\agent\worktree", result.Cwd);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public void Resolve_RemoteWithRelativeCwd_ReturnsProtocolFailure()
     {
         var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.WebSocket };
 
         var result = AcpSessionNewCwdResolver.Resolve(
-            requestedCwd: @"C:\repos\local",
-            profile: profile,
-            remoteDirectories: Array.Empty<AgentRemoteDirectory>());
+            requestedCwd: "agent/worktree",
+            profile: profile);
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(@"C:\repos\local", result.Cwd);
-        Assert.Null(result.ErrorMessage);
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.Cwd);
+        Assert.Equal(AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, result.ErrorMessage);
     }
 }
