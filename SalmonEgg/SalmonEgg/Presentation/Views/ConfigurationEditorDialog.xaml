@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:SalmonEgg.Presentation.Converters"
     xmlns:vm="using:SalmonEgg.Presentation.ViewModels"
+    xmlns:views="using:SalmonEgg.Presentation.Views"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
@@ -12,6 +13,8 @@
     SecondaryButtonClick="OnCancelClick">
 
     <ContentDialog.Resources>
+        <Style TargetType="views:ConfigurationEditorDialog"
+               BasedOn="{StaticResource DefaultContentDialogStyle}" />
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </ContentDialog.Resources>
 

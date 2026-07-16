@@ -6,11 +6,17 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
     xmlns:navUi="using:SalmonEgg.Presentation.Navigation"
+    xmlns:navViews="using:SalmonEgg.Presentation.Views.Navigation"
     mc:Ignorable="d"
     x:Uid="SessionsDialog"
     AutomationProperties.AutomationId="SessionsDialog"
     Title="{x:Bind DialogTitle, Mode=OneWay}"
     DefaultButton="Close">
+
+    <ContentDialog.Resources>
+        <Style TargetType="navViews:SessionsListDialog"
+               BasedOn="{StaticResource DefaultContentDialogStyle}" />
+    </ContentDialog.Resources>
 
     <Grid RowDefinitions="Auto,*"
           MaxWidth="560"

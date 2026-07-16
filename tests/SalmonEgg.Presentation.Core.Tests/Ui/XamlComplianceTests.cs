@@ -139,6 +139,18 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("Opacity=", xaml, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\RemoteProjectSelectionDialog.xaml", "navViews:RemoteProjectSelectionDialog")]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml", "navViews:SessionsListDialog")]
+    [InlineData(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml", "views:ConfigurationEditorDialog")]
+    public void CustomContentDialogs_BasedOnDefaultContentDialogStyle(string relativePath, string targetType)
+    {
+        var document = XDocument.Parse(LoadXaml(relativePath));
+        var style = FindImplicitStyleByTargetType(document, targetType);
+
+        Assert.Equal("{StaticResource DefaultContentDialogStyle}", GetAttributeByLocalName(style, "BasedOn"));
+    }
+
     [Fact]
     public void MainPage_ProjectItemsRemainNonSelectableGroups()
     {

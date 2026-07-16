@@ -5,11 +5,14 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:nav="using:SalmonEgg.Presentation.ViewModels.Navigation"
+    xmlns:navViews="using:SalmonEgg.Presentation.Views.Navigation"
     mc:Ignorable="d"
     AutomationProperties.AutomationId="RemoteProjectSelectionDialog"
     DefaultButton="Primary">
 
     <ContentDialog.Resources>
+        <Style TargetType="navViews:RemoteProjectSelectionDialog"
+               BasedOn="{StaticResource DefaultContentDialogStyle}" />
         <x:Double x:Key="RemoteProjectSelectionDialogMaxWidth">560</x:Double>
         <x:Double x:Key="RemoteProjectSelectionDialogMaxHeight">560</x:Double>
         <x:Double x:Key="RemoteProjectSelectionIconSize">32</x:Double>
