@@ -614,6 +614,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public bool ShouldShowConversationInputSurface
         => ResolveConversationSurfaceProjection().ShouldShowConversationInputSurface;
 
+    public bool ShouldLoadConversationInputSurface
+        => ResolveConversationSurfaceProjection().ShouldLoadConversationInputSurface;
+
     public bool ShouldShowBlockingLoadingMask
         => ResolveConversationSurfaceProjection().ShouldShowBlockingLoadingMask;
 

@@ -11,6 +11,7 @@ internal readonly record struct ChatConversationSurfaceProjection(
     bool ShouldShowTranscriptSurface,
     bool ShouldLoadTranscriptSurface,
     bool ShouldShowConversationInputSurface,
+    bool ShouldLoadConversationInputSurface,
     bool ShouldShowBlockingLoadingMask,
     bool ShouldShowLoadingOverlayStatusPill,
     bool ShouldShowLoadingOverlayPresenter,

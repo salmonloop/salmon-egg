@@ -1403,6 +1403,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"ActiveConversationRoot\"", xaml);
         Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadActiveConversationRoot, Mode=OneWay}\"", xaml);
         Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadTranscriptSurface, Mode=OneWay}\"", xaml);
+        Assert.Contains("x:Load=\"{x:Bind ViewModel.ShouldLoadConversationInputSurface, Mode=OneWay}\"", xaml);
         Assert.Contains("Unloaded=\"OnMessagesListUnloaded\"", xaml);
         Assert.Contains("private void OnMessagesListUnloaded", codeBehind);
         Assert.DoesNotContain("PointerPressed=\"OnMessagesListPointerPressed\"", xaml, StringComparison.Ordinal);

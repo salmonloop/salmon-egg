@@ -6,6 +6,7 @@ internal sealed class ChatConversationSurfaceProjectionCoordinator
 {
     private bool _hasLoadedActiveConversationRoot;
     private bool _hasLoadedTranscriptSurface;
+    private bool _hasLoadedConversationInputSurface;
 
     public ChatConversationSurfaceProjection Project(ChatConversationSurfaceStateInput input)
     {
@@ -13,6 +14,7 @@ internal sealed class ChatConversationSurfaceProjectionCoordinator
 
         _hasLoadedActiveConversationRoot |= state.ShouldShowActiveConversationRoot;
         _hasLoadedTranscriptSurface |= state.ShouldShowTranscriptSurface;
+        _hasLoadedConversationInputSurface |= state.ShouldShowConversationInputSurface;
 
         return new ChatConversationSurfaceProjection(
             state.IsActivationOverlayVisible,
@@ -23,6 +25,7 @@ internal sealed class ChatConversationSurfaceProjectionCoordinator
             state.ShouldShowTranscriptSurface,
             _hasLoadedTranscriptSurface,
             state.ShouldShowConversationInputSurface,
+            _hasLoadedConversationInputSurface,
             state.ShouldShowBlockingLoadingMask,
             state.ShouldShowLoadingOverlayStatusPill,
             state.ShouldShowLoadingOverlayPresenter,
