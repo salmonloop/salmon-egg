@@ -17,6 +17,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using SalmonEgg.Presentation.Core.Diagnostics;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces.Storage;
@@ -352,6 +353,7 @@ public partial class ChatViewModel
             projection.HydratedConversationId,
             projection.Transcript,
             forceRefresh: true);
+        WriteTranscriptProjectionBootFact(projection.HydratedConversationId, projection.Transcript.Count);
     }
 
     private void ApplyPromptAndProfileProjection(ChatUiProjection projection, bool sessionChanged)
@@ -436,6 +438,20 @@ public partial class ChatViewModel
             projection.HydratedConversationId,
             projection.Transcript,
             forceRefresh: false);
+        WriteTranscriptProjectionBootFact(projection.HydratedConversationId, projection.Transcript.Count);
+    }
+
+    private void WriteTranscriptProjectionBootFact(string? conversationId, int transcriptCount)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || transcriptCount <= 0)
+        {
+            return;
+        }
+
+        // DEBUG-only Skia Desktop smoke fact: seed restore and live projection both land
+        // here after the authoritative transcript is applied to MessageHistory.
+        DebugBootLog.Write(
+            $"ChatTranscript: projected conversation={conversationId} count={transcriptCount} history={MessageHistory.Count}");
     }
 
     private void PublishProjectionRestoreReady(ChatUiProjection projection)

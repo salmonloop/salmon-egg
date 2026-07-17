@@ -22,6 +22,11 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("SALMONEGG_APPDATA_ROOT=\"${APPDATA_ROOT}\"", script, StringComparison.Ordinal);
         Assert.Contains("READY_MARKER=\"MainPage: initial shell content activated\"", script, StringComparison.Ordinal);
         Assert.Contains("X11_PROBE=\"${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py\"", script, StringComparison.Ordinal);
+        Assert.Contains("seed_mixed_transcript_appdata", script, StringComparison.Ordinal);
+        Assert.Contains("SkiaDesktopGuiSeedWriter", script, StringComparison.Ordinal);
+        Assert.Contains("TRANSCRIPT_SEED_CONVERSATION_ID=\"skia-mixed-session-01\"", script, StringComparison.Ordinal);
+        Assert.Contains("ChatTranscript: projected conversation=", script, StringComparison.Ordinal);
+        Assert.Contains("Skia Desktop GUI smoke did not project seeded mixed transcript", script, StringComparison.Ordinal);
         Assert.Contains("--min-distinct-pixels", x11Probe, StringComparison.Ordinal);
         Assert.Contains("--require-focus-input", script, StringComparison.Ordinal);
         Assert.Contains("libXtst.so.6", x11Probe, StringComparison.Ordinal);
@@ -33,6 +38,8 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("Xvfb", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tests/SalmonEgg.GuiTests.Windows", script, StringComparison.Ordinal);
         Assert.DoesNotContain("dotnet test", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("AT-SPI", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("AutomationId", script, StringComparison.Ordinal);
     }
 
     [Fact]

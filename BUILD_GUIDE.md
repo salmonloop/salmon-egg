@@ -180,7 +180,12 @@ dotnet test --solution SalmonEgg.sln \
 `tests/SalmonEgg.Presentation.Core.Tests/testconfig.json` 是 Presentation.Core 测试在 MTP 下的并行度事实源；不要再通过 `RunConfiguration.DisableParallelization` 或 VSTest runsettings 参数补偿。
 
 #### Skia Desktop GUI smoke gate
-Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证 XAML 主窗口已经完成 shell 初始内容激活，不把测试探针带入 Release：
+Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证：
+
+1. XAML 主窗口已经完成 shell 初始内容激活；
+2. 通过 portable AppData seed（`SalmonEgg.TestSupport.SkiaDesktopGuiSeedWriter`）恢复的混排 transcript（markdown + tool_call + mode_change + image）已被权威 projection 写入 `MessageHistory`。
+
+种子只写真实生产文件（`conversations/conversations.v1.json` + `config/app.yaml`），不引入 AT-SPI 或 UI test hook；探针不进入 Release：
 
 ```bash
 scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
@@ -192,7 +197,7 @@ Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 A
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
-- Skia Desktop GUI readiness：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
+- Skia Desktop GUI readiness + seeded transcript projection：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness，并投影混排 transcript；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：

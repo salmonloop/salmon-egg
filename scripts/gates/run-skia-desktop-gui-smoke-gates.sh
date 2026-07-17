@@ -11,7 +11,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd -P)"
 PROJECT="${REPO_ROOT}/SalmonEgg/SalmonEgg/SalmonEgg.csproj"
 APP_PATH="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/SalmonEgg"
 X11_PROBE="${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py"
+SEED_WRITER_PROJECT="${REPO_ROOT}/tests/SalmonEgg.TestSupport/SalmonEgg.TestSupport.csproj"
 READY_MARKER="MainPage: initial shell content activated"
+TRANSCRIPT_SEED_CONVERSATION_ID="skia-mixed-session-01"
+TRANSCRIPT_SEED_MARKER="SKIA_MD_MARKER_7f3a"
 
 DOTNET_BIN="${DOTNET_BIN:-$(command -v dotnet || true)}"
 GIT_BIN="${GIT_BIN:-$(command -v git || true)}"
@@ -98,6 +101,49 @@ start_xvfb() {
   return 1
 }
 
+seed_mixed_transcript_appdata() {
+  # Portable production AppData seed (conversations.v1.json + app.yaml). No UI hooks.
+  # Seed ownership lives in SalmonEgg.TestSupport; the gate only invokes it.
+  local seed_dir
+  seed_dir="$(mktemp -d -t salmonegg-skia-seed-writer.XXXXXX)"
+  cat >"${seed_dir}/Seed.csproj" <<EOF
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="${SEED_WRITER_PROJECT}" />
+  </ItemGroup>
+</Project>
+EOF
+  cat >"${seed_dir}/Program.cs" <<'EOF'
+using SalmonEgg.TestSupport;
+var root = args.Length > 0 ? args[0] : throw new ArgumentException("appdata root required");
+_ = SkiaDesktopGuiSeedWriter.WriteMixedTranscriptSeed(root);
+EOF
+
+  if ! "${DOTNET_BIN}" run --project "${seed_dir}/Seed.csproj" -c "${CONFIGURATION}" -- "${APPDATA_ROOT}" >/dev/null; then
+    rm -rf "${seed_dir}"
+    echo "Skia Desktop GUI smoke failed to write mixed-transcript AppData seed." >&2
+    exit 1
+  fi
+
+  rm -rf "${seed_dir}"
+
+  if [ ! -f "${APPDATA_ROOT}/conversations/conversations.v1.json" ]; then
+    echo "Skia Desktop GUI smoke seed did not write conversations.v1.json under ${APPDATA_ROOT}." >&2
+    exit 1
+  fi
+
+  if ! grep -Fq "${TRANSCRIPT_SEED_MARKER}" "${APPDATA_ROOT}/conversations/conversations.v1.json"; then
+    echo "Skia Desktop GUI smoke seed is missing markdown marker '${TRANSCRIPT_SEED_MARKER}'." >&2
+    exit 1
+  fi
+}
+
 case "${OS_NAME}" in
   Linux)
     XVFB_BIN="${XVFB_BIN:-$(command -v Xvfb || true)}"
@@ -134,6 +180,9 @@ if [ ! -x "${APP_PATH}" ]; then
   exit 1
 fi
 
+echo "[gate] Seed mixed transcript AppData"
+seed_mixed_transcript_appdata
+
 echo "[gate] Launch Skia Desktop GUI smoke"
 echo "[gate] Runtime source commit=${COMMIT}"
 echo "[gate] App artifact=${APP_PATH}"
@@ -161,7 +210,9 @@ if [ "${OS_NAME}" = "Linux" ]; then
   fi
 fi
 
-deadline=$((SECONDS + 35))
+deadline=$((SECONDS + 45))
+shell_ready=0
+transcript_ready=0
 while [ "${SECONDS}" -lt "${deadline}" ]; do
   if ! kill -0 "${APP_PID}" 2>/dev/null; then
     cat "${STDOUT_LOG}" >&2
@@ -172,19 +223,39 @@ while [ "${SECONDS}" -lt "${deadline}" ]; do
     exit 1
   fi
 
-  if [ -f "${BOOT_LOG}" ] && grep -Fq "${READY_MARKER}" "${BOOT_LOG}"; then
+  if [ -f "${BOOT_LOG}" ]; then
+    if [ "${shell_ready}" -eq 0 ] && grep -Fq "${READY_MARKER}" "${BOOT_LOG}"; then
+      shell_ready=1
+    fi
+
+    if [ "${transcript_ready}" -eq 0 ] \
+      && grep -Eq "ChatTranscript: projected conversation=${TRANSCRIPT_SEED_CONVERSATION_ID} count=[1-9][0-9]* history=[1-9][0-9]*" "${BOOT_LOG}"; then
+      transcript_ready=1
+    fi
+  fi
+
+  if [ "${shell_ready}" -eq 1 ] && [ "${transcript_ready}" -eq 1 ]; then
     break
   fi
 
   sleep 0.2
 done
 
-if [ ! -f "${BOOT_LOG}" ] || ! grep -Fq "${READY_MARKER}" "${BOOT_LOG}"; then
+if [ "${shell_ready}" -ne 1 ]; then
   cat "${STDOUT_LOG}" >&2
   if [ -f "${BOOT_LOG}" ]; then
     cat "${BOOT_LOG}" >&2
   fi
   echo "Skia Desktop GUI smoke did not reach shell readiness marker '${READY_MARKER}'." >&2
+  exit 1
+fi
+
+if [ "${transcript_ready}" -ne 1 ]; then
+  cat "${STDOUT_LOG}" >&2
+  if [ -f "${BOOT_LOG}" ]; then
+    cat "${BOOT_LOG}" >&2
+  fi
+  echo "Skia Desktop GUI smoke did not project seeded mixed transcript '${TRANSCRIPT_SEED_CONVERSATION_ID}'." >&2
   exit 1
 fi
 

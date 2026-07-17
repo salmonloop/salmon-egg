@@ -1935,11 +1935,19 @@ public partial class ChatViewModel
                 snapshot.ContentType = "image";
                 snapshot.ImageData = image.Data ?? string.Empty;
                 snapshot.ImageMimeType = image.MimeType ?? string.Empty;
+                // Directional templates only render DisplayBodyText until dedicated media
+                // templates ship; project a visible plain fallback so Skia rows are never blank.
+                snapshot.TextContent = string.IsNullOrWhiteSpace(image.MimeType)
+                    ? "[image]"
+                    : $"[image: {image.MimeType}]";
                 break;
             case AudioContentBlock audio:
                 snapshot.ContentType = "audio";
                 snapshot.AudioData = audio.Data ?? string.Empty;
                 snapshot.AudioMimeType = audio.MimeType ?? string.Empty;
+                snapshot.TextContent = string.IsNullOrWhiteSpace(audio.MimeType)
+                    ? "[audio]"
+                    : $"[audio: {audio.MimeType}]";
                 break;
             case ResourceContentBlock resourceContent:
                 snapshot.ContentType = "resource";

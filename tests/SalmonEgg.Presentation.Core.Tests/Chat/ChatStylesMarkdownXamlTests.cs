@@ -80,7 +80,7 @@ public sealed class ChatStylesMarkdownXamlTests
     {
         var xaml = LoadChatStylesXaml();
 
-        Assert.Contains("Text=\"{x:Bind TextContent, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MarkdownPresentation.ShouldRenderMarkdown", xaml, StringComparison.Ordinal);
         Assert.Contains("MarkdownPresentation.ShouldRenderPlainText", xaml, StringComparison.Ordinal);
         Assert.Contains("IsTextSelectionEnabled=\"{x:Bind MarkdownPresentation.AllowsNativeSelection, Mode=OneWay}\"", xaml, StringComparison.Ordinal);

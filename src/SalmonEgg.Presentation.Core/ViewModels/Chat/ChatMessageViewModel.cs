@@ -275,6 +275,47 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public bool HasTitle => !string.IsNullOrEmpty(Title);
         public bool HasTextContent => !string.IsNullOrEmpty(TextContent);
+
+        /// <summary>
+        /// Visible body text for directional message templates. Prefer protocol text; when
+        /// a content type only carries a title (mode_change/plan_entry), surface that title.
+        /// Image/audio without dedicated templates project a plain mime fallback so ListView
+        /// rows never materialize as blank bubbles under Skia/WinUI (including old persisted
+        /// snapshots that never wrote TextContent).
+        /// </summary>
+        public string DisplayBodyText
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(TextContent))
+                {
+                    return TextContent;
+                }
+
+                if (!string.IsNullOrEmpty(Title))
+                {
+                    return Title;
+                }
+
+                if (string.Equals(ContentType, "image", StringComparison.Ordinal))
+                {
+                    return string.IsNullOrWhiteSpace(ImageMimeType)
+                        ? "[image]"
+                        : $"[image: {ImageMimeType}]";
+                }
+
+                if (string.Equals(ContentType, "audio", StringComparison.Ordinal))
+                {
+                    return string.IsNullOrWhiteSpace(AudioMimeType)
+                        ? "[audio]"
+                        : $"[audio: {AudioMimeType}]";
+                }
+
+                return string.Empty;
+            }
+        }
+
+        public bool HasDisplayBody => !string.IsNullOrEmpty(DisplayBodyText);
         public bool HasTimestamp => Timestamp.HasValue;
         public ChatMarkdownPresentationState MarkdownPresentation
         {
@@ -412,11 +453,18 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 _applyingSnapshot = false;
                 OnPropertyChanged(nameof(HasTextContent));
+                NotifyDisplayBodyChanged();
                 CopyTextCommand.NotifyCanExecuteChanged();
                 RefreshMarkdownPresentation();
                 RefreshToolCallDetails();
                 UpdateToolCallState();
             }
+        }
+
+        private void NotifyDisplayBodyChanged()
+        {
+            OnPropertyChanged(nameof(DisplayBodyText));
+            OnPropertyChanged(nameof(HasDisplayBody));
         }
 
         partial void OnIsOutgoingChanged(bool value)
@@ -436,6 +484,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 return;
             }
 
+            NotifyDisplayBodyChanged();
             RefreshMarkdownPresentation();
         }
 
@@ -447,8 +496,39 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             }
 
             OnPropertyChanged(nameof(HasTextContent));
+            NotifyDisplayBodyChanged();
             CopyTextCommand.NotifyCanExecuteChanged();
             RefreshMarkdownPresentation();
+        }
+
+        partial void OnTitleChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
+        }
+
+        partial void OnImageMimeTypeChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
+        }
+
+        partial void OnAudioMimeTypeChanged(string value)
+        {
+            if (_applyingSnapshot)
+            {
+                return;
+            }
+
+            NotifyDisplayBodyChanged();
         }
 
         partial void OnIsMarkdownFallbackStickyChanged(bool value)

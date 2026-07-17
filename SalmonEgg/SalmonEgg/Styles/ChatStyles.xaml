@@ -27,7 +27,7 @@
                     <MenuFlyout>
                         <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
                                         Command="{x:Bind CopyTextCommand}"
-                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}" />
+                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>
@@ -40,10 +40,10 @@
                                Margin="0,0,0,8"/>
 
                     <Grid x:Name="IncomingTextContentHost"
-                          Visibility="{x:Bind HasTextContent, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                          Visibility="{x:Bind HasDisplayBody, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock x:Name="IncomingPlainTextBlock"
                                    x:Load="{x:Bind MarkdownPresentation.ShouldRenderPlainText, Mode=OneWay}"
-                                   Text="{x:Bind TextContent, Mode=OneWay}"
+                                   Text="{x:Bind DisplayBodyText, Mode=OneWay}"
                                    TextWrapping="Wrap"
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    LineHeight="22"
@@ -52,7 +52,7 @@
 
                         <controls:MarkdownTextPresenter x:Name="IncomingMarkdownPresenter"
                                                         x:Load="{x:Bind MarkdownPresentation.ShouldRenderMarkdown, Mode=OneWay}"
-                                                        Text="{x:Bind TextContent, Mode=OneWay}"
+                                                        Text="{x:Bind DisplayBodyText, Mode=OneWay}"
                                                         ShouldRenderMarkdown="{x:Bind MarkdownPresentation.ShouldRenderMarkdown, Mode=OneWay}"
                                                         RenderFailureSink="{x:Bind}"
                                                         Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -106,7 +106,7 @@
                     <MenuFlyout>
                         <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
                                         Command="{x:Bind CopyTextCommand}"
-                                        CommandParameter="{x:Bind TextContent, Mode=OneWay}" />
+                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel x:Name="OutgoingMessageContentRoot">
@@ -119,8 +119,8 @@
                                Margin="0,0,0,4"/>
 
                     <TextBlock x:Name="OutgoingPlainTextBlock"
-                               x:Load="{x:Bind HasTextContent, Mode=OneWay}"
-                               Text="{x:Bind TextContent, Mode=OneWay}"
+                               x:Load="{x:Bind HasDisplayBody, Mode=OneWay}"
+                               Text="{x:Bind DisplayBodyText, Mode=OneWay}"
                                TextWrapping="Wrap"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                IsTextSelectionEnabled="True"/>

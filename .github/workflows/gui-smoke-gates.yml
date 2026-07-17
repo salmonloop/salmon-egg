@@ -2,6 +2,10 @@ name: GUI Smoke Gates
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: gui-smoke-gates-${{ github.workflow }}-${{ github.ref }}
@@ -15,10 +19,39 @@ env:
   SALMONEGG_ONEDRIVE_SCOPES: ${{ secrets.SALMONEGG_ONEDRIVE_SCOPES || vars.SALMONEGG_ONEDRIVE_SCOPES }}
 
 jobs:
+  skia-desktop-gui-smoke:
+    name: Skia Desktop GUI Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install Skia Desktop GUI smoke runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb \
+            libfreetype6 \
+            fontconfig \
+            libfontconfig1 \
+            libgtk-3-0 \
+            libx11-6 \
+            libxtst6
+
+      - name: Run Skia Desktop GUI smoke
+        run: ./scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
+
   deterministic-gui-smokes:
     name: Deterministic GUI Smoke Gates
     runs-on: [self-hosted, windows]
     timeout-minutes: 45
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
