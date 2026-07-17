@@ -99,4 +99,51 @@ public sealed class ChatConversationSurfaceProjectionCoordinatorTests
         Assert.False(hidden.ShouldShowTranscriptSurface);
         Assert.True(hidden.ShouldLoadTranscriptSurface);
     }
+
+    [Fact]
+    public void Project_WhenConversationInputSurfaceWasShown_KeepsLoadStateWhenLaterHidden()
+    {
+        var coordinator = new ChatConversationSurfaceProjectionCoordinator();
+
+        var visible = coordinator.Project(new ChatConversationSurfaceStateInput(
+            IsSessionActive: true,
+            CurrentSessionId: "conv-1",
+            MessageHistoryCount: 0,
+            VisibleTranscriptConversationId: null,
+            IsChatShellVisibleForRemoteUi: true,
+            IsConnecting: false,
+            IsInitializing: false,
+            IsHydrating: false,
+            IsLayoutLoading: false,
+            IsSessionSwitching: false,
+            SessionSwitchOverlayConversationId: null,
+            SessionSwitchPreviewConversationId: null,
+            ConnectionLifecycleOverlayConversationId: null,
+            HistoryOverlayConversationId: null,
+            PendingShellActivationConversationId: null,
+            HydrationLoadedMessageCount: 0));
+
+        var hidden = coordinator.Project(new ChatConversationSurfaceStateInput(
+            IsSessionActive: true,
+            CurrentSessionId: "conv-1",
+            MessageHistoryCount: 0,
+            VisibleTranscriptConversationId: null,
+            IsChatShellVisibleForRemoteUi: true,
+            IsConnecting: false,
+            IsInitializing: false,
+            IsHydrating: false,
+            IsLayoutLoading: false,
+            IsSessionSwitching: true,
+            SessionSwitchOverlayConversationId: "conv-2",
+            SessionSwitchPreviewConversationId: null,
+            ConnectionLifecycleOverlayConversationId: null,
+            HistoryOverlayConversationId: null,
+            PendingShellActivationConversationId: null,
+            HydrationLoadedMessageCount: 0));
+
+        Assert.True(visible.ShouldShowConversationInputSurface);
+        Assert.True(visible.ShouldLoadConversationInputSurface);
+        Assert.False(hidden.ShouldShowConversationInputSurface);
+        Assert.True(hidden.ShouldLoadConversationInputSurface);
+    }
 }

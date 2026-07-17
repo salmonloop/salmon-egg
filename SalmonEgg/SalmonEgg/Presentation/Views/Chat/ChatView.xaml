@@ -394,6 +394,7 @@
                 <!-- 输入区域 -->
                 <controls:ResponsiveContentHost Grid.Row="5"
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
+                                                x:Load="{x:Bind ViewModel.ShouldLoadConversationInputSurface, Mode=OneWay}"
                                                 Visibility="{x:Bind ViewModel.ShouldShowConversationInputSurface, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
                         <controls:ChatInputArea x:Name="ConversationInputArea"
