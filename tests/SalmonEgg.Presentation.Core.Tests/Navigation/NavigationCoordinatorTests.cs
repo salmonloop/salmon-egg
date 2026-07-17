@@ -1342,8 +1342,9 @@ public sealed class NavigationCoordinatorTests
                 new Session("session-2", @"C:\repo\two") { DisplayName = "Imported Session" });
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 "session-2",
@@ -1366,7 +1367,12 @@ public sealed class NavigationCoordinatorTests
             chat.ViewModel.ReplaceChatService(chatService.Object);
 
             var selectionStore = new ShellSelectionStateStore();
-            var coordinator = CreateCoordinator(selectionStore, (IConversationSessionSwitcher)chat.ViewModel, preferences, shellNavigation.Object);
+            var coordinator = CreateCoordinator(
+                selectionStore,
+                (IConversationSessionSwitcher)chat.ViewModel,
+                preferences,
+                shellNavigation.Object,
+                runtimeState);
             using var navVm = CreateNavigationViewModel(chat, sessionManager.Object, preferences, navState, selectionStore, coordinator);
 
             navVm.RebuildTree();
@@ -1378,7 +1384,8 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal("session-2", selection.SessionId);
 
             await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
-            Assert.False(string.IsNullOrWhiteSpace(chat.ViewModel.ErrorMessage));
+            Assert.True(chat.ViewModel.HasSessionActivationFailure);
+            Assert.False(string.IsNullOrWhiteSpace(chat.ViewModel.SessionActivationFailureMessage));
             selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
         }

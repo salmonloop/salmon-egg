@@ -116,9 +116,13 @@ public sealed class ChatViewXamlTests
         var xaml = LoadChatViewXaml();
 
         Assert.Contains("AutomationProperties.AutomationId=\"ChatView.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Visibility=\"{x:Bind ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ChatView.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.HasError", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -127,8 +131,13 @@ public sealed class ChatViewXamlTests
         var xaml = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
 
         Assert.Contains("AutomationProperties.AutomationId=\"MiniChat.SessionActivationFailureCallout\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasError, Mode=OneWay", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.ErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"MiniChat.ConversationOperationFailureCallout\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.HasError", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ViewModel.ErrorMessage", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

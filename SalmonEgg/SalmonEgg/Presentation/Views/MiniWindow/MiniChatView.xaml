@@ -148,31 +148,34 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3"
-                AutomationProperties.AutomationId="MiniChat.SessionActivationFailureCallout"
-                Visibility="{x:Bind ViewModel.HasError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                Margin="12,0,12,12"
-                Padding="12"
-                CornerRadius="6"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
-                BorderThickness="1">
-            <Grid ColumnDefinitions="Auto,*"
-                  ColumnSpacing="10">
-                <FontIcon Grid.Column="0"
-                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                          Glyph="&#xEA39;"
-                          FontSize="12"
-                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                          VerticalAlignment="Top"
-                          Margin="0,2,0,0" />
-                <TextBlock Grid.Column="1"
-                           Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+        <StackPanel Grid.Row="3">
+            <Border AutomationProperties.AutomationId="MiniChat.SessionActivationFailureCallout"
+                    Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                    Margin="12,0,12,12"
+                    Padding="12"
+                    CornerRadius="6"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                    BorderThickness="1">
+                <TextBlock Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
                            TextWrapping="WrapWholeWords"
                            FontSize="11"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Grid>
-        </Border>
+            </Border>
+            <Border AutomationProperties.AutomationId="MiniChat.ConversationOperationFailureCallout"
+                    Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                    Margin="12,0,12,12"
+                    Padding="12"
+                    CornerRadius="6"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                    BorderThickness="1">
+                <TextBlock Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
+                           TextWrapping="WrapWholeWords"
+                           FontSize="11"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Border>
+        </StackPanel>
 
         <!-- Unified Input Area -->
         <Border x:Name="InputBorder"

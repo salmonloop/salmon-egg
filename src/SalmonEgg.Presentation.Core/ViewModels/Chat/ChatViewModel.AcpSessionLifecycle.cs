@@ -684,13 +684,14 @@ public partial class ChatViewModel
     }
 
     private async Task<bool> CompleteConversationRemoteActivationAsync(
-        string sessionId,
-        long activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken,
         ConversationRuntimeSlice? warmRuntimeSnapshot = null,
         bool allowWarmReuseShortCircuit = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var sessionId = failureContext.ConversationId;
+        var activationVersion = failureContext.ActivationVersion!.Value;
 
         var state = await _chatStore.GetCurrentStateAsync();
         var binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -709,15 +710,9 @@ public partial class ChatViewModel
                         reason: "MissingRemoteSessionId",
                         cancellationToken)
                     .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        sessionId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "MissingRemoteSessionId")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        sessionId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "MissingRemoteSessionId",
                         "Failed to load session: no remote session binding is available for the profile-bound conversation.")
                     .ConfigureAwait(false);
                 return false;
@@ -734,9 +729,8 @@ public partial class ChatViewModel
             if (localActivationStillCurrent)
             {
                 await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        sessionId,
-                        activationVersion,
+                await PublishConversationActivationPhaseAsync(
+                        failureContext,
                         SessionActivationPhase.Hydrated,
                         reason: "LocalConversationReady")
                     .ConfigureAwait(false);
@@ -763,9 +757,8 @@ public partial class ChatViewModel
             if (warmActivationStillCurrent)
             {
                 await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        sessionId,
-                        activationVersion,
+                await PublishConversationActivationPhaseAsync(
+                        failureContext,
                         SessionActivationPhase.Hydrated,
                         reason: ConversationRuntimeReasons.WarmReuse)
                     .ConfigureAwait(false);
@@ -835,7 +828,7 @@ public partial class ChatViewModel
 
         var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
                 sessionId,
-                activationVersion,
+                failureContext,
                 cancellationToken)
             .ConfigureAwait(false);
         if (!remoteConnectionReady)
@@ -859,9 +852,8 @@ public partial class ChatViewModel
                 reason: "RemoteConnectionReady",
                 cancellationToken)
             .ConfigureAwait(false);
-        await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                sessionId,
-                activationVersion,
+        await PublishConversationActivationPhaseAsync(
+                failureContext,
                 SessionActivationPhase.RemoteConnectionReady,
                 reason: "RemoteConnectionReady")
             .ConfigureAwait(false);
@@ -869,7 +861,7 @@ public partial class ChatViewModel
         cancellationToken.ThrowIfCancellationRequested();
         var hydrated = await EnsureActiveConversationRemoteHydratedAsync(
                 sessionId,
-                activationVersion,
+                failureContext,
                 cancellationToken,
                 allowWarmReuseShortCircuit)
             .ConfigureAwait(false);
@@ -877,9 +869,8 @@ public partial class ChatViewModel
         if (hydrated && activationStillCurrent)
         {
             await ClearConversationUnreadAttentionAsync(sessionId).ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    sessionId,
-                    activationVersion,
+            await PublishConversationActivationPhaseAsync(
+                    failureContext,
                     SessionActivationPhase.Hydrated,
                     reason: "Hydrated")
                 .ConfigureAwait(false);
@@ -895,8 +886,12 @@ public partial class ChatViewModel
         return succeeded;
     }
 
-    private async Task HandleConversationActivationExceptionAsync(string sessionId, long? activationVersion, Exception ex)
+    private async Task HandleConversationActivationExceptionAsync(
+        ConversationFailurePublicationContext failureContext,
+        Exception ex)
     {
+        var sessionId = failureContext.ConversationId;
+        var activationVersion = failureContext.ActivationVersion;
         Logger.LogError(ex, "Switching session failed (SessionId={SessionId})", sessionId);
 
         if (!_conversationActivationOutcomePublisher.CanPublish(activationVersion))
@@ -908,15 +903,9 @@ public partial class ChatViewModel
             return;
         }
 
-        await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                sessionId,
-                activationVersion,
-                SessionActivationPhase.Faulted,
-                ex.GetType().Name)
-            .ConfigureAwait(false);
-        await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                sessionId,
-                activationVersion,
+        await PublishConversationFailureAsync(
+                failureContext,
+                ex.GetType().Name,
                 $"Failed to switch session: {ex.Message}")
             .ConfigureAwait(false);
         await PostToUiAsync(() => IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId)).ConfigureAwait(false);
@@ -1250,6 +1239,10 @@ public partial class ChatViewModel
         CancellationToken cancellationToken = default)
     {
         var sessionId = request.ConversationId;
+        var failureContext = CaptureFailurePublicationContext(
+            sessionId,
+            context.ActivationVersion,
+            operationOwner: sessionId);
         var activationStartState = await _chatStore.GetCurrentStateAsync();
         var hasCompetingNonWarmActivation =
             HasCompetingInFlightConversationActivation(activationStartState, sessionId);
@@ -1407,6 +1400,7 @@ public partial class ChatViewModel
             _ = ContinueConversationActivationAsync(
                 request,
                 context,
+                failureContext,
                 backgroundToken,
                 warmRuntimeSnapshot,
                 allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation);
@@ -1414,8 +1408,7 @@ public partial class ChatViewModel
         }
 
         var remoteActivationSucceeded = await CompleteConversationRemoteActivationAsync(
-                sessionId,
-                context.ActivationVersion,
+                failureContext,
                 backgroundToken,
                 warmRuntimeSnapshot,
                 allowWarmReuseShortCircuit: !hasCompetingNonWarmActivation)
@@ -1428,6 +1421,7 @@ public partial class ChatViewModel
     private async Task ContinueConversationActivationAsync(
         ConversationActivationOrchestratorRequest request,
         ConversationActivationContext context,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken backgroundToken,
         ConversationRuntimeSlice? warmRuntimeSnapshot,
         bool allowWarmReuseShortCircuit = true)
@@ -1437,8 +1431,7 @@ public partial class ChatViewModel
         try
         {
             var remoteActivationSucceeded = await CompleteConversationRemoteActivationAsync(
-                    request.ConversationId,
-                    context.ActivationVersion,
+                    failureContext,
                     backgroundToken,
                     warmRuntimeSnapshot,
                     allowWarmReuseShortCircuit)
@@ -1454,8 +1447,7 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             await HandleConversationActivationExceptionAsync(
-                    request.ConversationId,
-                    context.ActivationVersion,
+                    failureContext,
                     ex)
                 .ConfigureAwait(false);
             result = ConversationActivationOrchestratorResult.Failed();
@@ -1850,9 +1842,10 @@ public partial class ChatViewModel
 
     private void OnErrorOccurred(object? sender, string error)
     {
+        var conversationOwner = CurrentSessionId;
         _uiDispatcher.Enqueue(() =>
         {
-            SetError(error);
+            PublishConversationOperationFailure(conversationOwner, error);
             Logger.LogError(error);
         });
         QueueActiveRemoteConnectionRecovery(error);

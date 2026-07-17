@@ -73,19 +73,24 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
             var sessionParams = await CreateSessionNewParamsAsync(CancellationToken.None).ConfigureAwait(false);
             var response = await CreateRemoteSessionAsync(sessionParams, CancellationToken.None).ConfigureAwait(false);
             var localConversationId = await CreateAndActivateLocalConversationAsync(sessionParams.Cwd).ConfigureAwait(false);
+            operationOwner = localConversationId;
             await BindLocalConversationToRemoteSessionAsync(localConversationId, response.SessionId).ConfigureAwait(false);
             await ApplyCreatedSessionProjectionAsync(localConversationId, response).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to create session");
-            SetError($"Failed to create session: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    $"Failed to create session: {ex.Message}")
+                .ConfigureAwait(false);
         }
     }
 
@@ -301,7 +306,7 @@ public partial class ChatViewModel
 
     private async Task BeginPromptSendAsync(PromptSendContext context)
     {
-        ClearError();
+        QueueClearConversationOperationFailure(context.ConversationId);
         _sendPromptCts?.Cancel();
         _sendPromptCts = new CancellationTokenSource();
         await _chatStore.Dispatch(new BeginTurnAction(
@@ -1331,10 +1336,11 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1361,7 +1367,10 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch mode");
-            SetError($"Failed to switch mode: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    $"Failed to switch mode: {ex.Message}")
+                .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -1415,10 +1424,11 @@ public partial class ChatViewModel
             return;
         }
 
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1434,7 +1444,10 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to switch model");
-            SetError($"Failed to switch model: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    $"Failed to switch model: {ex.Message}")
+                .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
         finally
@@ -1464,10 +1477,11 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task CancelSessionAsync()
     {
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
 
             var activeBinding = await ResolveActiveConversationBindingAsync().ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(activeBinding?.RemoteSessionId))
@@ -1487,7 +1501,10 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to cancel session");
-            SetError($"Failed to cancel session: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    $"Failed to cancel session: {ex.Message}")
+                .ConfigureAwait(true);
         }
         finally
         {
@@ -1513,10 +1530,11 @@ public partial class ChatViewModel
     [RelayCommand]
     private async Task DisconnectAsync()
     {
+        var operationOwner = CurrentSessionId;
         try
         {
             IsBusy = true;
-            ClearError();
+            QueueClearConversationOperationFailure(operationOwner);
             await _acpConnectionCommands.DisconnectAsync(this);
             await _chatStore.Dispatch(new ResetConversationRuntimeStatesAction()).ConfigureAwait(false);
             _panelStateCoordinator.ClearAskUserRequests();
@@ -1525,7 +1543,10 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to disconnect");
-            SetError($"Failed to disconnect: {ex.Message}");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    $"Failed to disconnect: {ex.Message}")
+                .ConfigureAwait(true);
         }
         finally
         {

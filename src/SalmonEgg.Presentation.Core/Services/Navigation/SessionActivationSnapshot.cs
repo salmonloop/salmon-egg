@@ -7,7 +7,8 @@ public sealed record SessionActivationSnapshot(
     string? ProjectId,
     long Version,
     SessionActivationPhase Phase,
-    string? Reason = null)
+    string? Reason = null,
+    string? FailureMessage = null)
 {
     public bool Matches(string sessionId)
         => !string.IsNullOrWhiteSpace(sessionId)

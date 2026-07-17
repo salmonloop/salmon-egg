@@ -236,24 +236,36 @@ public partial class ChatViewModel
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var operationOwner = CurrentSessionId;
+        var failureContext = CaptureFailurePublicationContext(
+            operationOwner ?? string.Empty,
+            activationVersion: null,
+            operationOwner);
+
         var state = await _chatStore.GetCurrentStateAsync();
         var conversationId = ResolveActiveConversationId(state);
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            SetError("Failed to load session: no active conversation is selected.");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "Failed to load session: no active conversation is selected.")
+                .ConfigureAwait(false);
             return false;
         }
 
         var binding = await ResolveConversationBindingAsync(conversationId!, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
-            SetError("Failed to load session: no remote session binding is available for the active conversation.");
+            await PublishConversationOperationFailureAsync(
+                    operationOwner,
+                    "Failed to load session: no remote session binding is available for the active conversation.")
+                .ConfigureAwait(false);
             return false;
         }
 
         var remoteConnectionReady = await EnsureActiveConversationRemoteConnectionReadyAsync(
                 conversationId!,
-                activationVersion: null,
+                failureContext with { ConversationId = conversationId! },
                 cancellationToken)
             .ConfigureAwait(false);
         if (!remoteConnectionReady)
@@ -264,7 +276,7 @@ public partial class ChatViewModel
         return await HydrateConversationAsync(
                 conversationId!,
                 binding!,
-                activationVersion: null,
+                failureContext with { ConversationId = conversationId! },
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -272,10 +284,11 @@ public partial class ChatViewModel
     private async Task<bool> HydrateConversationAsync(
         string conversationId,
         ConversationBindingSlice binding,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
 
         var authoritativeConnection = await ResolveAuthoritativeForegroundConnectionAsync(
                 binding.ProfileId,
@@ -289,15 +302,9 @@ public partial class ChatViewModel
                     reason: "ChatServiceNotReady",
                     cancellationToken)
                 .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "ChatServiceNotReady")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "ChatServiceNotReady",
                     "Failed to load session: ACP chat service is not connected and initialized.")
                 .ConfigureAwait(false);
             return false;
@@ -307,15 +314,9 @@ public partial class ChatViewModel
         var recoveryMode = AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities);
         if (recoveryMode == AcpSessionRecoveryMode.None)
         {
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "RecoveryCapabilityMissing")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "RecoveryCapabilityMissing",
                     "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
                 .ConfigureAwait(false);
             return false;
@@ -323,7 +324,11 @@ public partial class ChatViewModel
 
         if (string.IsNullOrWhiteSpace(binding.RemoteSessionId))
         {
-            SetError("Failed to load session: no remote session binding is available for the active conversation.");
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "MissingRemoteSessionId",
+                    "Failed to load session: no remote session binding is available for the active conversation.")
+                .ConfigureAwait(false);
             return false;
         }
 
@@ -665,15 +670,9 @@ public partial class ChatViewModel
                         reason: "RemoteSessionNotFound",
                         cancellationToken: CancellationToken.None)
                     .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: ex.Message)
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        ex.Message,
                         $"Failed to load session: {ex.Message}")
                     .ConfigureAwait(false);
                 return false;
@@ -695,15 +694,9 @@ public partial class ChatViewModel
                 conversationId,
                 binding.RemoteSessionId,
                 hydrationStopwatch.ElapsedMilliseconds);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: ex.Message)
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    ex.Message,
                     $"Failed to load session: {ex.Message}")
                 .ConfigureAwait(false);
             return false;
@@ -1412,10 +1405,11 @@ public partial class ChatViewModel
 
     private async Task<bool> EnsureActiveConversationRemoteConnectionReadyAsync(
         string conversationId,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
         if (_disposed || string.IsNullOrWhiteSpace(conversationId))
         {
             return false;
@@ -1466,15 +1460,9 @@ public partial class ChatViewModel
                 if (!string.IsNullOrWhiteSpace(finalConnectionState.Error))
                 {
                     await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-                    await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                            conversationId,
-                            activationVersion,
-                            SessionActivationPhase.Faulted,
-                            reason: finalConnectionState.Error)
-                        .ConfigureAwait(false);
-                    await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                            conversationId,
-                            activationVersion,
+                    await PublishConversationFailureAsync(
+                            failureContext,
+                            finalConnectionState.Error,
                             $"Failed to load session: {finalConnectionState.Error}")
                         .ConfigureAwait(false);
                     return false;
@@ -1483,15 +1471,9 @@ public partial class ChatViewModel
 
             if (string.IsNullOrWhiteSpace(binding.ProfileId))
             {
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "MissingBoundProfile")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "MissingBoundProfile",
                         "Failed to load session: no ACP profile is bound to the remote conversation.")
                     .ConfigureAwait(false);
                 return false;
@@ -1504,15 +1486,9 @@ public partial class ChatViewModel
                     "Skipping remote conversation connection because the bound profile could not be resolved. ConversationId={ConversationId} ProfileId={ProfileId}",
                     conversationId,
                     binding.ProfileId);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "ProfileNotResolved")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "ProfileNotResolved",
                         "Failed to load session: the bound ACP profile could not be resolved.")
                     .ConfigureAwait(false);
                 return false;
@@ -1531,15 +1507,9 @@ public partial class ChatViewModel
             if (!readyAfterConnect)
             {
                 await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                        conversationId,
-                        activationVersion,
-                        SessionActivationPhase.Faulted,
-                        reason: "RemoteConnectionNotReady")
-                    .ConfigureAwait(false);
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion,
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "RemoteConnectionNotReady",
                         "Failed to load session: ACP profile connection did not become ready.")
                     .ConfigureAwait(false);
             }
@@ -1704,7 +1674,11 @@ public partial class ChatViewModel
 
                     await EnsureActiveConversationRemoteHydratedAsync(
                             snapshot.ConversationId,
-                            activationVersion: null,
+                            new ConversationFailurePublicationContext(
+                                snapshot.ConversationId,
+                                ActivationVersion: null,
+                                OperationOwner: snapshot.ConversationId,
+                                ExpectedShellSnapshotVersion: null),
                             cancellationToken,
                             allowWarmReuseShortCircuit: false)
                         .ConfigureAwait(false);
@@ -1732,14 +1706,10 @@ public partial class ChatViewModel
                 ex,
                 "Failed to recover active remote WebSocket conversation after transport error. ConversationId={ConversationId}",
                 conversationId);
-            if (string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
-            {
-                await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                        conversationId,
-                        activationVersion: null,
-                        $"Failed to reconnect session: {ex.Message}")
-                    .ConfigureAwait(false);
-            }
+            await PublishConversationOperationFailureAsync(
+                    conversationId,
+                    $"Failed to reconnect session: {ex.Message}")
+                .ConfigureAwait(false);
         }
     }
 
@@ -1800,11 +1770,12 @@ public partial class ChatViewModel
 
     private async Task<bool> EnsureActiveConversationRemoteHydratedAsync(
         string conversationId,
-        long? activationVersion,
+        ConversationFailurePublicationContext failureContext,
         CancellationToken cancellationToken,
         bool allowWarmReuseShortCircuit = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var activationVersion = failureContext.ActivationVersion;
         if (_disposed || string.IsNullOrWhiteSpace(conversationId))
         {
             return false;
@@ -1829,15 +1800,9 @@ public partial class ChatViewModel
                     reason: "ChatServiceNotReady",
                     cancellationToken)
                 .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "ChatServiceNotReady")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "ChatServiceNotReady",
                     message)
                 .ConfigureAwait(false);
             return false;
@@ -1846,15 +1811,9 @@ public partial class ChatViewModel
         var chatService = resolvedConnection.ChatService;
         if (AcpSessionRecoveryPolicy.ResolveForHydration(chatService.AgentCapabilities) == AcpSessionRecoveryMode.None)
         {
-            await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                    conversationId,
-                    activationVersion,
-                    SessionActivationPhase.Faulted,
-                    reason: "RecoveryCapabilityMissing")
-                .ConfigureAwait(false);
-            await _conversationActivationOutcomePublisher.TrySetActivationErrorAsync(
-                    conversationId,
-                    activationVersion,
+            await PublishConversationFailureAsync(
+                    failureContext,
+                    "RecoveryCapabilityMissing",
                     "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
                 .ConfigureAwait(false);
             return false;
@@ -1894,13 +1853,12 @@ public partial class ChatViewModel
                 denialReason);
         }
 
-        await _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
-                conversationId,
-                activationVersion,
+        await PublishConversationActivationPhaseAsync(
+                failureContext,
                 SessionActivationPhase.RemoteHydrationPending,
                 reason: "RemoteHydrationPending")
             .ConfigureAwait(false);
-        return await HydrateConversationAsync(conversationId, binding!, activationVersion, cancellationToken).ConfigureAwait(false);
+        return await HydrateConversationAsync(conversationId, binding!, failureContext, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ConversationActivationHydrationMode> ResolveConversationActivationHydrationModeAsync(

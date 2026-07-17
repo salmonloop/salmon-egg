@@ -1464,10 +1464,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _conversationActivationOutcomePublisher = new ConversationActivationOutcomePublisher(
             _shellNavigationRuntimeState,
             _uiDispatcher,
-            Logger,
             () => IsChatShellVisibleForRemoteUi,
-            _conversationActivationOrchestrator.IsLatestActivationVersion,
-            SetError);
+            _conversationActivationOrchestrator.IsLatestActivationVersion);
         _localTerminalPanelCoordinator = localTerminalPanelCoordinator;
         ApplyProjectAffinityOverrideCommand = new RelayCommand(ApplyProjectAffinityOverride, () => CanApplyProjectAffinityOverride);
         ClearProjectAffinityOverrideCommand = new RelayCommand(ClearProjectAffinityOverride, () => CanClearProjectAffinityOverride);
@@ -1522,6 +1520,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     private void OnShellNavigationRuntimeStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(IShellNavigationRuntimeState.ActiveSessionActivation))
+        {
+            NotifySessionActivationFailureProjectionChanged();
+        }
+
         if (e.PropertyName == nameof(IShellNavigationRuntimeState.CurrentShellContent)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.PendingShellContent)
             || e.PropertyName == nameof(IShellNavigationRuntimeState.DesiredSessionId)
@@ -1918,6 +1921,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         RefreshCurrentSessionDisplayName();
         NotifyComposerProjectionChanged();
+        NotifySessionActivationFailureProjectionChanged();
+        NotifyConversationOperationFailureProjectionChanged();
 
         if (string.IsNullOrWhiteSpace(value))
         {

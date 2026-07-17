@@ -56,8 +56,144 @@ public partial class ChatViewModel
     private ProjectionRestoreReadyPublicationKey? _lastProjectionRestoreReadyKey;
     private long _currentRestoreProjectionEpoch = -1;
     private string? _currentRestoreProjectionConversationId;
+    private readonly ConversationOperationFailureState _conversationOperationFailureState = new();
 
     public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
+
+    public string? SessionActivationFailureMessage
+    {
+        get
+        {
+            var activation = _shellNavigationRuntimeState?.ActiveSessionActivation;
+            return activation is
+                {
+                    Phase: SessionActivationPhase.Faulted,
+                    FailureMessage: not null and not ""
+                }
+                && string.Equals(activation.SessionId, CurrentSessionId, StringComparison.Ordinal)
+                    ? activation.FailureMessage
+                    : null;
+        }
+    }
+
+    public bool HasSessionActivationFailure
+        => !string.IsNullOrWhiteSpace(SessionActivationFailureMessage);
+
+    public string? ConversationOperationFailureMessage
+    {
+        get
+        {
+            return _conversationOperationFailureState.ResolveVisibleMessage(CurrentSessionId);
+        }
+    }
+
+    public bool HasConversationOperationFailure
+        => !string.IsNullOrWhiteSpace(ConversationOperationFailureMessage);
+
+    private void NotifySessionActivationFailureProjectionChanged()
+    {
+        OnPropertyChanged(nameof(SessionActivationFailureMessage));
+        OnPropertyChanged(nameof(HasSessionActivationFailure));
+    }
+
+    private void PublishConversationOperationFailure(string? conversationId, string message)
+    {
+        if (!_conversationOperationFailureState.Publish(conversationId, message, CurrentSessionId))
+        {
+            return;
+        }
+
+        NotifyConversationOperationFailureProjectionChanged();
+    }
+
+    private Task PublishConversationOperationFailureAsync(string? conversationId, string message)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            PublishConversationOperationFailure(conversationId, message);
+            return Task.CompletedTask;
+        }
+
+        return _uiDispatcher.EnqueueAsync(() => PublishConversationOperationFailure(conversationId, message));
+    }
+
+    private ConversationFailurePublicationContext CaptureFailurePublicationContext(
+        string conversationId,
+        long? activationVersion,
+        string? operationOwner)
+    {
+        var activeActivation = _shellNavigationRuntimeState?.ActiveSessionActivation;
+        long? expectedShellSnapshotVersion = activationVersion.HasValue
+            && activeActivation is not null
+            && activeActivation.Matches(conversationId)
+                ? activeActivation.Version
+                : null;
+        return new ConversationFailurePublicationContext(
+            conversationId,
+            activationVersion,
+            operationOwner,
+            expectedShellSnapshotVersion);
+    }
+
+    private Task PublishConversationFailureAsync(
+        ConversationFailurePublicationContext context,
+        string reason,
+        string message)
+    {
+        if (context.ExpectedShellSnapshotVersion.HasValue)
+        {
+            return _conversationActivationOutcomePublisher.TryPublishFailureAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                reason,
+                message);
+        }
+
+        return PublishConversationOperationFailureAsync(context.OperationOwner, message);
+    }
+
+    private Task PublishConversationActivationPhaseAsync(
+        ConversationFailurePublicationContext context,
+        SessionActivationPhase phase,
+        string? reason = null)
+    {
+        return context.ExpectedShellSnapshotVersion.HasValue
+            ? _conversationActivationOutcomePublisher.TryPublishPhaseAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                phase,
+                reason)
+            : Task.CompletedTask;
+    }
+
+    private void ClearConversationOperationFailure(string? conversationId)
+    {
+        if (!_conversationOperationFailureState.Clear(conversationId))
+        {
+            return;
+        }
+
+        NotifyConversationOperationFailureProjectionChanged();
+    }
+
+    private void QueueClearConversationOperationFailure(string? conversationId)
+    {
+        if (_uiDispatcher.HasThreadAccess)
+        {
+            ClearConversationOperationFailure(conversationId);
+            return;
+        }
+
+        _uiDispatcher.Enqueue(() => ClearConversationOperationFailure(conversationId));
+    }
+
+    private void NotifyConversationOperationFailureProjectionChanged()
+    {
+        OnPropertyChanged(nameof(ConversationOperationFailureMessage));
+        OnPropertyChanged(nameof(HasConversationOperationFailure));
+    }
 
     private void SyncPlanEntries(IReadOnlyList<ConversationPlanEntrySnapshot> planEntries)
     {
@@ -575,3 +711,59 @@ internal readonly record struct ProjectionRestoreReadyPublicationKey(
     string ConversationId,
     long ProjectionEpoch,
     TranscriptProjectionRestoreToken RestoreToken);
+
+internal sealed record ConversationOperationFailure(string? ConversationId, string Message);
+
+internal readonly record struct ConversationFailurePublicationContext(
+    string ConversationId,
+    long? ActivationVersion,
+    string? OperationOwner,
+    long? ExpectedShellSnapshotVersion);
+
+internal sealed class ConversationOperationFailureState
+{
+    private ConversationOperationFailure? _failure;
+
+    public bool Publish(string? conversationId, string message, string? currentConversationId)
+    {
+        var incomingOwnerMatchesCurrent = OwnerMatches(conversationId, currentConversationId);
+        if (!incomingOwnerMatchesCurrent
+            && _failure is { } existingFailure
+            && OwnerMatches(existingFailure.ConversationId, currentConversationId))
+        {
+            return false;
+        }
+
+        _failure = new ConversationOperationFailure(conversationId, message);
+        return true;
+    }
+
+    public bool Clear(string? conversationId)
+    {
+        if (_failure is not { } failure
+            || !string.Equals(failure.ConversationId, conversationId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _failure = null;
+        return true;
+    }
+
+    public string? ResolveVisibleMessage(string? currentConversationId)
+    {
+        if (_failure is not { } failure)
+        {
+            return null;
+        }
+
+        return OwnerMatches(failure.ConversationId, currentConversationId)
+            ? failure.Message
+            : null;
+    }
+
+    private static bool OwnerMatches(string? ownerConversationId, string? currentConversationId)
+        => string.IsNullOrWhiteSpace(ownerConversationId)
+            ? string.IsNullOrWhiteSpace(currentConversationId)
+            : string.Equals(ownerConversationId, currentConversationId, StringComparison.Ordinal);
+}
