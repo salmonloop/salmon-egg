@@ -2350,7 +2350,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         return new ConversationMessageSnapshot
         {
             Id = vm.Id,
-            Timestamp = vm.Timestamp.ToUniversalTime(),
+            // The VM stores the time in local time (or none); persist the UTC instant, or null
+            // when the source carried no authoritative message time.
+            Timestamp = vm.Timestamp?.ToUniversalTime(),
             IsOutgoing = vm.IsOutgoing,
             ContentType = vm.ContentType ?? string.Empty,
             Title = vm.Title ?? string.Empty,
@@ -2445,7 +2447,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private static bool MatchesSnapshot(ChatMessageViewModel viewModel, ConversationMessageSnapshot snapshot)
     {
         return string.Equals(viewModel.Id, snapshot.Id, StringComparison.Ordinal)
-            && viewModel.Timestamp == snapshot.Timestamp.ToLocalTime()
+            && Nullable.Equals(viewModel.Timestamp, snapshot.Timestamp?.ToLocalTime())
             && viewModel.IsOutgoing == snapshot.IsOutgoing
             && string.Equals(viewModel.ContentType ?? string.Empty, snapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.Title ?? string.Empty, snapshot.Title ?? string.Empty, StringComparison.Ordinal)

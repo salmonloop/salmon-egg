@@ -11,4 +11,6 @@ public record ConversationPreviewSnapshot(
 public record PreviewEntry(
     string Sender,
     string Text,
-    DateTimeOffset Timestamp);
+    // Mirrors ConversationMessageSnapshot.Timestamp: null when the source message had no
+    // authoritative time (ACP replay/chunks). The cache never synthesizes a clock.
+    DateTimeOffset? Timestamp);

@@ -24,7 +24,8 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _projectionItemKey = string.Empty;
 
         [ObservableProperty]
-        private DateTime _timestamp;
+        [NotifyPropertyChangedFor(nameof(HasTimestamp))]
+        private DateTime? _timestamp;
 
         [ObservableProperty]
         private bool _isOutgoing;
@@ -135,7 +136,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         {
             CopyTextCommand = new AsyncRelayCommand<string?>(CopyTextAsync, CanCopyText);
             OpenMarkdownLinkCommand = new AsyncRelayCommand<string?>(OpenMarkdownLinkAsync, CanOpenMarkdownLink);
-            Timestamp = DateTime.Now;
             RefreshMarkdownPresentation();
         }
 
@@ -149,8 +149,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "text",
-                Timestamp = DateTime.Now
+                ContentType = "text"
             };
 
             if (content is TextContentBlock textContent)
@@ -167,8 +166,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "image",
-                Timestamp = DateTime.Now
+                ContentType = "image"
             };
 
             if (content is ImageContentBlock imageContent)
@@ -186,8 +184,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             {
                 Id = id,
                 IsOutgoing = isOutgoing,
-                ContentType = "audio",
-                Timestamp = DateTime.Now
+                ContentType = "audio"
             };
 
             if (content is AudioContentBlock audioContent)
@@ -214,8 +211,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ToolCallStatus = status,
                 ToolCallJson = toolCallJson,
                 ToolCallRawInputJson = rawInput,
-                ToolCallRawOutputJson = rawOutput,
-                Timestamp = DateTime.Now
+                ToolCallRawOutputJson = rawOutput
             };
 
             viewModel.RefreshToolCallDetails();
@@ -231,7 +227,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "plan_entry",
                 Title = entry.Content ?? string.Empty,
-                Timestamp = DateTime.Now,
                 PlanEntry = new PlanEntryViewModel
                 {
                     Content = entry.Content ?? string.Empty,
@@ -249,8 +244,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "mode_change",
                 ModeId = modeId,
-                Title = title ?? "Mode Changed",
-                Timestamp = DateTime.Now
+                Title = title ?? "Mode Changed"
             };
         }
 
@@ -262,7 +256,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "resource_content",
                 Title = "Resource Content",
-                Timestamp = DateTime.Now,
                 ResourceViewModel = ResourceViewModel.CreateFromContent(block)
             };
         }
@@ -275,7 +268,6 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 IsOutgoing = isOutgoing,
                 ContentType = "resource_link",
                 Title = block.Title ?? block.Name ?? "Resource Link",
-                Timestamp = DateTime.Now,
                 ResourceViewModel = ResourceViewModel.CreateFromLink(block)
             };
         }
@@ -283,6 +275,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public bool HasTitle => !string.IsNullOrEmpty(Title);
         public bool HasTextContent => !string.IsNullOrEmpty(TextContent);
+        public bool HasTimestamp => Timestamp.HasValue;
         public ChatMarkdownPresentationState MarkdownPresentation
         {
             get => _markdownPresentation;
@@ -371,7 +364,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                     ? string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString() : Id
                     : snapshot.Id;
                 ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, projectionIndex);
-                Timestamp = snapshot.Timestamp.ToLocalTime();
+                // The snapshot owns the authoritative time (UTC), or none. We localize it for
+                // display only when present; absent time stays null and the UI hides the clock.
+                Timestamp = snapshot.Timestamp?.ToLocalTime();
                 IsOutgoing = snapshot.IsOutgoing;
                 ContentType = snapshot.ContentType ?? string.Empty;
                 Title = snapshot.Title ?? string.Empty;

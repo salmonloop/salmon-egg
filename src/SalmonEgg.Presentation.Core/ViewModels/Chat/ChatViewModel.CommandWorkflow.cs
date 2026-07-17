@@ -295,7 +295,13 @@ public partial class ChatViewModel
         }
 
         var promptText = CurrentPrompt;
-        var userSnapshot = CreateContentSnapshot(new TextContentBlock { Text = promptText }, isOutgoing: true);
+        // A locally-emitted user prompt is the one case with an authoritative message time:
+        // this client owns the emit instant. Protocol-sourced messages (session/load replay,
+        // live agent/user chunks) have no per-message timestamp and stay null.
+        var userSnapshot = CreateContentSnapshot(
+            new TextContentBlock { Text = promptText },
+            isOutgoing: true,
+            timestamp: DateTime.UtcNow);
         return new PromptSendContext(
             CurrentSessionId,
             Guid.NewGuid().ToString(),

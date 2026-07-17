@@ -31,8 +31,9 @@
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>
-                    <!-- Header Metadata -->
+                    <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
+                               Visibility="{x:Bind HasTimestamp, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                FontSize="11"
                                Foreground="{ThemeResource TextFillColorDisabledBrush}"
                                HorizontalAlignment="Left"
@@ -109,8 +110,9 @@
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel x:Name="OutgoingMessageContentRoot">
-                    <!-- Header Metadata -->
+                    <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
+                               Visibility="{x:Bind HasTimestamp, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                HorizontalAlignment="Right"
@@ -132,8 +134,9 @@
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
                 <StackPanel>
-                    <!-- Header Metadata -->
+                    <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
+                               Visibility="{x:Bind HasTimestamp, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                FontSize="11"
                                Foreground="{ThemeResource TextFillColorDisabledBrush}"
                                HorizontalAlignment="Left"

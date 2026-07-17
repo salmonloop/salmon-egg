@@ -995,4 +995,89 @@ public class ChatReducerTests
 
         Assert.Equal(ChatTurnPhase.Completed, newState.ActiveTurn!.Phase);
     }
+
+    [Fact]
+    public void AppendTextDelta_FirstChunk_DoesNotInventMessageTimestamp()
+    {
+        // ACP agent_message_chunk carries no per-message timestamp. A first chunk must not
+        // be stamped with a wall clock; null means "no authoritative time".
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", "Hello", ProtocolMessageId: "msg-agent-1"));
+
+        var transcript = newState.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        var message = Assert.Single(transcript!);
+        Assert.Equal("Hello", message.TextContent);
+        Assert.Equal("msg-agent-1", message.ProtocolMessageId);
+        Assert.False(message.IsOutgoing);
+        Assert.Null(message.Timestamp);
+    }
+
+    [Fact]
+    public void AppendTextDelta_SubsequentChunk_PreservesExistingNullTimestamp()
+    {
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "m-1",
+                        ContentType = "text",
+                        TextContent = "Hello",
+                        ProtocolMessageId = "msg-agent-1",
+                        Timestamp = null
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false))
+        };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", " world", ProtocolMessageId: "msg-agent-1"));
+
+        var slice = newState.ResolveContentSlice("conv-1");
+        Assert.NotNull(slice);
+        var message = Assert.Single(slice!.Value.Transcript);
+        Assert.Equal("Hello world", message.TextContent);
+        Assert.Null(message.Timestamp);
+    }
+
+    [Fact]
+    public void AppendTextDelta_SubsequentChunk_DoesNotRefreshExistingTimestamp()
+    {
+        var originalTime = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var initialState = ChatState.Empty with
+        {
+            HydratedConversationId = "conv-1",
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "conv-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(new ConversationMessageSnapshot
+                    {
+                        Id = "m-1",
+                        ContentType = "text",
+                        TextContent = "Hello",
+                        ProtocolMessageId = "msg-agent-1",
+                        Timestamp = originalTime
+                    }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false))
+        };
+
+        var newState = ChatReducer.Reduce(
+            initialState,
+            new AppendTextDeltaAction("conv-1", " world", ProtocolMessageId: "msg-agent-1"));
+
+        var slice = newState.ResolveContentSlice("conv-1");
+        Assert.NotNull(slice);
+        var message = Assert.Single(slice!.Value.Transcript);
+        Assert.Equal("Hello world", message.TextContent);
+        Assert.Equal(originalTime, message.Timestamp);
+    }
 }

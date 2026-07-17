@@ -1895,6 +1895,12 @@ public partial class ChatViewModel
                 timestamp: existing.Timestamp,
                 protocolMessageId: resolvedProtocolMessageId);
 
+        // ACP session/load replays user_message_chunk with no per-message timestamp; the
+        // protocol carries only messageId/content. A first-seen replayed user message has
+        // no authoritative time, so CreateContentSnapshot leaves it null. When an existing
+        // snapshot is being merged (e.g. optimistic local emit reconciled with replay), its
+        // time — if any — is preserved above. No wall clock is ever synthesized here.
+
         await UpsertTranscriptSnapshotAsync(conversationId, snapshot).ConfigureAwait(true);
     }
 
@@ -1905,10 +1911,16 @@ public partial class ChatViewModel
         DateTime? timestamp = null,
         string? protocolMessageId = null)
     {
+        // The caller is the single source of truth for time:
+        //   - session/load replayed content has no authoritative timestamp (ACP carries none),
+        //     so callers pass null and we keep it null rather than inventing a wall clock.
+        //   - locally-owned events (e.g. an outgoing user prompt emitted by this client) pass
+        //     their own observed time.
+        // We never fall back to DateTime.UtcNow here; that would mask "no time" as "now".
         var snapshot = new ConversationMessageSnapshot
         {
             Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString() : id,
-            Timestamp = timestamp ?? DateTime.UtcNow,
+            Timestamp = timestamp,
             IsOutgoing = isOutgoing,
             ProtocolMessageId = protocolMessageId
         };
@@ -1948,10 +1960,13 @@ public partial class ChatViewModel
 
     private ConversationMessageSnapshot CreateToolCallSnapshot(ToolCallUpdate toolCall)
     {
+        // ACP tool_call updates carry no timestamp; the creation instant is not a protocol
+        // fact, so the snapshot starts with no message time. Subsequent tool_call_update
+        // merges preserve whatever time was already present rather than overwriting it.
         return new ConversationMessageSnapshot
         {
             Id = Guid.NewGuid().ToString(),
-            Timestamp = DateTime.UtcNow,
+            Timestamp = null,
             IsOutgoing = false,
             ContentType = "tool_call",
             Title = toolCall.Title ?? string.Empty,
@@ -1995,7 +2010,9 @@ public partial class ChatViewModel
             : new ConversationMessageSnapshot
             {
                 Id = existing.Id,
-                Timestamp = DateTime.UtcNow,
+                // Preserve the existing time; a status update is not a new message and ACP
+                // gives it no timestamp to write over what was already there.
+                Timestamp = existing.Timestamp,
                 IsOutgoing = existing.IsOutgoing,
                 ContentType = existing.ContentType,
                 Title = string.IsNullOrWhiteSpace(toolCallStatusUpdate.Title) ? existing.Title : toolCallStatusUpdate.Title,
@@ -2029,10 +2046,11 @@ public partial class ChatViewModel
 
     private ConversationMessageSnapshot CreateToolCallSnapshot(ToolCallStatusUpdate toolCallStatusUpdate)
     {
+        // A tool_call_update that arrives with no prior snapshot carries no timestamp.
         return new ConversationMessageSnapshot
         {
             Id = Guid.NewGuid().ToString(),
-            Timestamp = DateTime.UtcNow,
+            Timestamp = null,
             IsOutgoing = false,
             ContentType = "tool_call",
             Title = toolCallStatusUpdate.Title ?? string.Empty,
@@ -2164,12 +2182,16 @@ public partial class ChatViewModel
                 ? state.Transcript
                 : null)
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
-        var cutoff = activeTurn.StartedAtUtc == default ? DateTime.MinValue : activeTurn.StartedAtUtc;
+        // Scope to unprocessed tool calls of the active turn by STATE, not by wall clock.
+        // This method runs only against the current activeTurn (see PreemptivelyCancelTurnAsync
+        // guards), and session/load replay happens outside any active turn, so replayed tool
+        // calls are never touched here. Filtering on the authoritative status predicate — and
+        // refraining from overwriting the (possibly absent) timestamp — keeps message time from
+        // being invented or clobbered at cancellation time.
         var pendingToolCalls = transcript
             .Where(message =>
                 string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
                 && !string.IsNullOrWhiteSpace(message.ToolCallId)
-                && message.Timestamp >= cutoff
                 && message.ToolCallStatus is null
                     or SalmonEgg.Acp.Tool.ToolCallStatus.Pending
                     or SalmonEgg.Acp.Tool.ToolCallStatus.InProgress)
@@ -2180,7 +2202,7 @@ public partial class ChatViewModel
             await _chatStore.Dispatch(new UpsertTranscriptMessageAction(activeTurn.ConversationId, new ConversationMessageSnapshot
             {
                 Id = existing.Id,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = existing.Timestamp,
                 IsOutgoing = existing.IsOutgoing,
                 ContentType = existing.ContentType,
                 Title = existing.Title,

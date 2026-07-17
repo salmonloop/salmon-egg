@@ -7482,6 +7482,7 @@ public partial class ChatViewModelTests
         await AwaitWithSynchronizationContextAsync(syncContext, viewModel.ReplaceChatServiceAsync(CreateConnectedChatService().Object, TestContext.Current.CancellationToken));
 
         var turnStartedAt = new DateTime(2026, 3, 24, 3, 0, 0, DateTimeKind.Utc);
+        var observedToolTime = turnStartedAt.AddSeconds(5);
         await fixture.UpdateStateAsync(state => state with
         {
             HydratedConversationId = "conv-1",
@@ -7493,17 +7494,29 @@ public partial class ChatViewModelTests
                     ImmutableList.Create(
                         new ConversationMessageSnapshot
                         {
-                            Id = "tool-old",
-                            Timestamp = turnStartedAt.AddMinutes(-1),
+                            // Historical/replayed tool calls carry no authoritative message time.
+                            Id = "tool-replayed",
+                            Timestamp = null,
                             ContentType = "tool_call",
-                            ToolCallId = "tool-old",
-                            ToolCallStatus = ToolCallStatus.InProgress,
-                            Title = "old"
+                            ToolCallId = "tool-replayed",
+                            ToolCallStatus = ToolCallStatus.Completed,
+                            Title = "replayed"
                         },
                         new ConversationMessageSnapshot
                         {
+                            // Outstanding tool call with no message time (ACP carries none).
+                            Id = "tool-pending-null-time",
+                            Timestamp = null,
+                            ContentType = "tool_call",
+                            ToolCallId = "tool-pending-null-time",
+                            ToolCallStatus = ToolCallStatus.InProgress,
+                            Title = "pending-null-time"
+                        },
+                        new ConversationMessageSnapshot
+                        {
+                            // Outstanding tool call that happens to have a local observed time.
                             Id = "tool-current",
-                            Timestamp = turnStartedAt.AddSeconds(5),
+                            Timestamp = observedToolTime,
                             ContentType = "tool_call",
                             ToolCallId = "tool-current",
                             ToolCallStatus = ToolCallStatus.InProgress,
@@ -7533,7 +7546,10 @@ public partial class ChatViewModelTests
             var cancelledCurrent = transcript.Any(message =>
                 string.Equals(message.Id, "tool-current", StringComparison.Ordinal)
                 && message.ToolCallStatus == ToolCallStatus.Cancelled);
-            return state.ActiveTurn?.Phase == ChatTurnPhase.ToolRunning && cancelledCurrent;
+            var cancelledNullTime = transcript.Any(message =>
+                string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal)
+                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+            return state.ActiveTurn?.Phase == ChatTurnPhase.ToolRunning && cancelledCurrent && cancelledNullTime;
         }, timeoutMilliseconds: 12000);
 
         var finalState = await fixture.GetStateAsync();
@@ -7541,9 +7557,20 @@ public partial class ChatViewModelTests
             ?? finalState.Transcript
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         Assert.Equal(ChatTurnPhase.ToolRunning, finalState.ActiveTurn!.Phase);
-        Assert.Equal(ToolCallStatus.InProgress, finalTranscript.Single(message => string.Equals(message.Id, "tool-old", StringComparison.Ordinal)).ToolCallStatus);
+
+        // Already-terminal historical tool calls are not rewritten.
+        var replayed = finalTranscript.Single(message => string.Equals(message.Id, "tool-replayed", StringComparison.Ordinal));
+        Assert.Equal(ToolCallStatus.Completed, replayed.ToolCallStatus);
+        Assert.Null(replayed.Timestamp);
+
+        // Pending tool calls are cancelled by status, not wall-clock cutoffs; times are preserved.
+        var cancelledNullTime = finalTranscript.Single(message => string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal));
+        Assert.Equal(ToolCallStatus.Cancelled, cancelledNullTime.ToolCallStatus);
+        Assert.Null(cancelledNullTime.Timestamp);
+
         var cancelledCurrent = finalTranscript.Single(message => string.Equals(message.Id, "tool-current", StringComparison.Ordinal));
         Assert.Equal(ToolCallStatus.Cancelled, cancelledCurrent.ToolCallStatus);
+        Assert.Equal(observedToolTime, cancelledCurrent.Timestamp);
         var structuredContent = Assert.Single(cancelledCurrent.ToolCallContent!);
         var content = Assert.IsType<ContentToolCallContent>(structuredContent);
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
@@ -8092,6 +8119,65 @@ public partial class ChatViewModelTests
                 && string.Equals(transcript[0].TextContent, "Hello world", StringComparison.Ordinal)
                 && string.Equals(transcript[0].ProtocolMessageId, "agent-1", StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task SessionUpdateReceived_ProtocolSourcedMessages_DoNotInventMessageTimestamps()
+    {
+        // session/load replay and live session/update chunks are identical wire shapes and
+        // carry no per-message timestamp. The client must not stamp wall-clock "now" onto them.
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext);
+        var chatService = CreateConnectedChatService();
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+
+        var initialState = (await fixture.GetStateAsync()) with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        };
+        await fixture.UpdateStateAsync(_ => initialState);
+        syncContext.RunAll();
+
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new UserMessageUpdate(new TextContentBlock("historical user"))
+            {
+                MessageId = "msg-user-1"
+            }));
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new AgentMessageUpdate(new TextContentBlock("historical agent"))
+            {
+                MessageId = "msg-agent-1"
+            }));
+        chatService.Raise(
+            service => service.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("remote-1", new ToolCallUpdate(
+                toolCallId: "tool-1",
+                kind: ToolCallKind.Read,
+                status: ToolCallStatus.Completed,
+                title: "read")));
+
+        await WaitForConditionAsync(async () =>
+        {
+            syncContext.RunAll();
+            var transcript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+                ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+            return transcript.Count >= 3;
+        });
+
+        var finalTranscript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        Assert.Equal(3, finalTranscript.Count);
+        Assert.All(finalTranscript, message => Assert.Null(message.Timestamp));
+
+        // UI projection must also hide time rather than rendering a fabricated clock.
+        var projected = new ChatMessageViewModel();
+        projected.ApplySnapshot(finalTranscript[0], projectionIndex: 0);
+        Assert.Null(projected.Timestamp);
+        Assert.False(projected.HasTimestamp);
     }
 
     [Fact]

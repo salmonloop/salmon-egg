@@ -166,6 +166,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
                     message.ContentType,
                     message.Title,
                     message.TextContent)).ToList());
+
             var result = await _sessionExport.ExportAsync(request);
             await OpenExportResultOrNotifyAsync(result);
         }
@@ -219,11 +220,18 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     private Task NotifyLocalFileExportUnsupportedAsync() =>
         _ui.ShowInfoAsync(_localizer["Platform_LocalFileExportUnsupported"]);
 
-    private static DateTimeOffset ToExportTimestamp(DateTime timestamp)
+    private static DateTimeOffset? ToExportTimestamp(DateTime? timestamp)
     {
-        var utc = timestamp.Kind == DateTimeKind.Unspecified
-            ? DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
-            : timestamp.ToUniversalTime();
+        if (!timestamp.HasValue)
+        {
+            // The source message carried no authoritative time; the export must not invent one.
+            return null;
+        }
+
+        var value = timestamp.Value;
+        var utc = value.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+            : value.ToUniversalTime();
         return new DateTimeOffset(utc);
     }
 }

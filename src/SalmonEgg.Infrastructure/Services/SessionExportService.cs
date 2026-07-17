@@ -82,7 +82,11 @@ public sealed class SessionExportService : ISessionExportService
         foreach (var message in request.Messages)
         {
             var who = message.IsOutgoing ? "User" : "Agent";
-            sb.AppendLine($"## {who} · {message.Timestamp:O}");
+            // Only render a time segment when the source message carried an authoritative one;
+            // never synthesize "now" for messages that had none.
+            sb.AppendLine(message.Timestamp is { } ts
+                ? $"## {who} · {ts:O}"
+                : $"## {who}");
             if (!string.IsNullOrWhiteSpace(message.Title))
             {
                 sb.AppendLine();
@@ -121,7 +125,7 @@ internal sealed record SessionExportPayload(
 
 internal sealed partial record SessionExportPayloadMessage(
     string Id,
-    DateTimeOffset Timestamp,
+    DateTimeOffset? Timestamp,
     bool IsOutgoing,
     string? ContentType,
     string? Title,

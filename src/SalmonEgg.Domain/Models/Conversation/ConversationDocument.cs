@@ -192,7 +192,11 @@ namespace SalmonEgg.Domain.Models.Conversation
     {
         public string Id { get; set; } = string.Empty;
 
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        // null = no authoritative message time is available.
+        // ACP session/load replay and per-chunk updates carry no message timestamp;
+        // local user prompts carry an observed emit time. The absence of a value
+        // must never be masked with a wall clock — the UI hides time when null.
+        public DateTime? Timestamp { get; set; }
 
         public bool IsOutgoing { get; set; }
 

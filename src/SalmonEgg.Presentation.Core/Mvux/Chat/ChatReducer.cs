@@ -539,16 +539,21 @@ public static class ChatReducer
         if (existingIndex >= 0)
         {
             var existing = current[existingIndex];
+            // Appending more text to an already-streamed message mutates content only.
+            // The message time is whatever was already authoritative (likely null, since ACP
+            // agent_message_chunk carries no per-message timestamp); we do not refresh it.
             return current.SetItem(existingIndex, CloneMessage(
                 existing,
-                textContent: (existing.TextContent ?? string.Empty) + delta,
-                timestamp: DateTime.UtcNow));
+                textContent: (existing.TextContent ?? string.Empty) + delta));
         }
 
+        // A first chunk of an assistant message starts with no authoritative time. ACP gives
+        // session/update chunks no timestamp; replayed and live chunks are identical here, so
+        // the policy is uniform: no time is better than a synthesized "now".
         return current.Add(new ConversationMessageSnapshot
         {
             Id = Guid.NewGuid().ToString(),
-            Timestamp = DateTime.UtcNow,
+            Timestamp = null,
             IsOutgoing = false,
             ContentType = "text",
             TextContent = delta,

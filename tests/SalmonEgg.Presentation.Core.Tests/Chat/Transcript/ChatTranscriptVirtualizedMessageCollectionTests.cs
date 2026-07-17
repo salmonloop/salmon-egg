@@ -237,7 +237,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         {
             Id = snapshot.Id ?? string.Empty,
             ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, index),
-            Timestamp = snapshot.Timestamp.ToLocalTime(),
+            Timestamp = snapshot.Timestamp?.ToLocalTime(),
             IsOutgoing = snapshot.IsOutgoing,
             ContentType = snapshot.ContentType ?? string.Empty,
             Title = snapshot.Title ?? string.Empty,
@@ -258,7 +258,7 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
 
     private static bool MatchesSnapshot(ChatMessageViewModel viewModel, ConversationMessageSnapshot snapshot) =>
         string.Equals(viewModel.Id, snapshot.Id, StringComparison.Ordinal)
-        && viewModel.Timestamp == snapshot.Timestamp.ToLocalTime()
+        && Nullable.Equals(viewModel.Timestamp, snapshot.Timestamp?.ToLocalTime())
         && viewModel.IsOutgoing == snapshot.IsOutgoing
         && string.Equals(viewModel.ContentType ?? string.Empty, snapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
         && string.Equals(viewModel.Title ?? string.Empty, snapshot.Title ?? string.Empty, StringComparison.Ordinal)
