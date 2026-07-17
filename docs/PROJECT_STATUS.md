@@ -7,7 +7,7 @@
 - Product: Uno Platform / WinUI 3 ACP client for local and remote agent workflows.
 - Main app project: `SalmonEgg/SalmonEgg/SalmonEgg.csproj`.
 - Core layers: `src/SalmonEgg.Domain`, `src/SalmonEgg.Application`, `src/SalmonEgg.Infrastructure`, `src/SalmonEgg.Infrastructure.Desktop`, `src/SalmonEgg.Presentation.Core`.
-- Test layers: cross-platform unit/behavior tests under `tests/*Tests`; Windows-only GUI and hardware/bridge validation under `tests/SalmonEgg.GuiTests.Windows` and `tests/SalmonEgg.GamepadBridge.Windows`; Skia Desktop and BrowserWasm GUI gates under `scripts/gates/`.
+- Test layers: cross-platform unit/behavior tests under `tests/*Tests` plus shared helpers in `tests/SalmonEgg.TestSupport`; Windows-only GUI and hardware/bridge validation under `tests/SalmonEgg.GuiTests.Windows` and `tests/SalmonEgg.GamepadBridge.Windows`; Skia Desktop and BrowserWasm GUI gates under `scripts/gates/`.
 
 ## Authoritative References
 

@@ -74,6 +74,7 @@ SalmonEgg.sln
     ├── SalmonEgg.Infrastructure.Tests/
     ├── SalmonEgg.Presentation.Core.Tests/
     ├── SalmonEgg.GamepadBridge.Windows/    # 手柄输入诊断（Windows）
+    ├── SalmonEgg.TestSupport/              # 跨平台测试共享辅助
     └── SalmonEgg.GuiTests.Windows/         # GUI smoke（Windows FlaUI）
 ```
 

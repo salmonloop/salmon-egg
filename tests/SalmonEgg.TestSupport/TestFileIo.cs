@@ -1,8 +1,12 @@
 using System.Text;
 
-namespace SalmonEgg.GuiTests.Windows;
+namespace SalmonEgg.TestSupport;
 
-internal static class TestFileIo
+/// <summary>
+/// Cross-platform file write helper for deterministic fixtures that may race with exclusive locks.
+/// Shared by unit tests and platform GUI harnesses.
+/// </summary>
+public static class TestFileIo
 {
     public static void WriteAllTextWithRetry(
         string path,

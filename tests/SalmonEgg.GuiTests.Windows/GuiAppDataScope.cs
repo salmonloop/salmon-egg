@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.TestSupport;
 
 namespace SalmonEgg.GuiTests.Windows;
 

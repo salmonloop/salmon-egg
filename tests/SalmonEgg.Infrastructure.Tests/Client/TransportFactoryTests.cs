@@ -190,23 +190,43 @@ public sealed class TransportFactoryTests
     [Fact]
     public async Task CreateTransport_Stdio_WithQuotedScriptPath_CanConnect()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return;
-        }
-
         var factory = CreateFactory(supportsStdioTransport: true);
         var tempDir = Path.Combine(Path.GetTempPath(), $"salmonegg-stdio-test-{Guid.NewGuid():N}", "with space");
         Directory.CreateDirectory(tempDir);
-        var scriptPath = Path.Combine(tempDir, "slow agent.ps1");
-        await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2", TestContext.Current.CancellationToken);
+
+        string command;
+        string[] arguments;
+        string scriptPath;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            scriptPath = Path.Combine(tempDir, "slow agent.ps1");
+            await File.WriteAllTextAsync(scriptPath, "Start-Sleep -Seconds 2", TestContext.Current.CancellationToken);
+            command = "powershell.exe";
+            arguments = ["-NoLogo", "-NoProfile", "-File", scriptPath];
+        }
+        else
+        {
+            scriptPath = Path.Combine(tempDir, "slow agent.sh");
+            await File.WriteAllTextAsync(
+                scriptPath,
+                "#!/bin/sh\nsleep 2\n",
+                TestContext.Current.CancellationToken);
+            File.SetUnixFileMode(
+                scriptPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            command = "/bin/sh";
+            arguments = [scriptPath];
+        }
 
         try
         {
             var transport = factory.CreateTransport(
                 TransportType.Stdio,
-                command: "powershell.exe",
-                arguments: ["-NoLogo", "-NoProfile", "-File", scriptPath]);
+                command: command,
+                arguments: arguments);
 
             var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
             Assert.True(
@@ -218,7 +238,7 @@ public sealed class TransportFactoryTests
         {
             try
             {
-                Directory.Delete(Path.GetDirectoryName(scriptPath)!, recursive: true);
+                Directory.Delete(tempDir, recursive: true);
             }
             catch
             {

@@ -45,6 +45,20 @@ public sealed class WindowsVersioningContractTests
         Assert.Contains("__SALMONEGG_PACKAGE_VERSION__", applicationManifestTemplate, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void PackageManifest_DeclaresStableMsixIdentityAndApplicationId()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var packageManifestTemplate = File.ReadAllText(
+            Path.Combine(repositoryRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest"));
+
+        // Cross-platform contract: identity is package metadata, not a Windows runtime dependency.
+        Assert.Contains("Name=\"SalmonEgg.SalmonEgg\"", packageManifestTemplate, StringComparison.Ordinal);
+        Assert.Contains("Id=\"App\"", packageManifestTemplate, StringComparison.Ordinal);
+        Assert.Contains("Publisher=\"CN=0B694F0E-510C-433A-A6F7-1484D6A39E19\"", packageManifestTemplate, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

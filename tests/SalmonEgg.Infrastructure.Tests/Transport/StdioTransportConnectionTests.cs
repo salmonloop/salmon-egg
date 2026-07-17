@@ -147,6 +147,91 @@ public sealed class StdioTransportConnectionTests
         Assert.Equal(["/c", "agent.cmd", "--flag"], startInfo.ArgumentList);
     }
 
+
+    [Fact]
+    public void ResolveCommand_NonWindowsBareCommand_WithUnixPathEnvironment_ReturnsBareCommandUnchanged()
+    {
+        var commandDirectory = Path.Combine(Path.GetTempPath(), "stdio-command-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(commandDirectory);
+        var commandPath = Path.Combine(commandDirectory, "agent-bin");
+        File.WriteAllText(commandPath, "#!/bin/sh\n");
+
+        var resolvedCommand = StdioCommandResolver.Resolve(
+            "agent-bin",
+            isWindows: false,
+            currentDirectory: Path.GetTempPath(),
+            pathEnvironment: commandDirectory,
+            pathExtensions: null);
+
+        // Non-Windows resolution intentionally leaves bare commands to the OS PATH lookup.
+        Assert.Equal("agent-bin", resolvedCommand);
+    }
+
+    [Fact]
+    public void ResolveWorkingDirectory_WhenCommandIsAbsoluteUnixPath_UsesCommandDirectory()
+    {
+        var commandDirectory = Path.Combine(Path.GetTempPath(), "stdio-transport-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(commandDirectory);
+        var commandPath = Path.Combine(commandDirectory, "agent");
+        File.WriteAllText(commandPath, "#!/bin/sh\n");
+
+        var workingDirectory = StdioTransport.ResolveWorkingDirectory(
+            commandPath,
+            currentDirectory: Path.GetTempPath());
+
+        Assert.Equal(commandDirectory, workingDirectory);
+    }
+
+    [Fact]
+    public void ResolveWorkingDirectory_WhenCurrentDirectoryMissing_FallsBackToWritableDirectory()
+    {
+        var missingDirectory = Path.Combine(Path.GetTempPath(), "stdio-missing-cwd", Guid.NewGuid().ToString("N"), "does-not-exist");
+
+        var workingDirectory = StdioTransport.ResolveWorkingDirectory(
+            "agent-command",
+            currentDirectory: missingDirectory);
+
+        Assert.True(Directory.Exists(workingDirectory));
+        Assert.NotEqual(missingDirectory, workingDirectory);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_WithAbsoluteScriptPathContainingSpaces_CanConnectOnNonWindowsHosts()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"stdio-space-path-{Guid.NewGuid():N}", "with space");
+        Directory.CreateDirectory(tempDir);
+        var scriptPath = Path.Combine(tempDir, "slow agent.sh");
+        await File.WriteAllTextAsync(scriptPath, "#!/bin/sh\nsleep 2\n", TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(
+            scriptPath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        try
+        {
+            using var transport = new StdioTransport("/bin/sh", [scriptPath]);
+            var connected = await transport.ConnectAsync(TestContext.Current.CancellationToken);
+            Assert.True(connected);
+            await transport.DisconnectAsync();
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     private static (string Command, string[] Args) CreateImmediateFailureCommand(string stderrMessage)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
