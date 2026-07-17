@@ -183,7 +183,8 @@ public sealed class NavigationSmokeTests
             $"Expected a visible nav selection after search activation. winner={selectedAfterSearch ?? "<null>"}{Environment.NewLine}{DumpSelectionSnapshot(session, targetSessionId, projectId, startId)}{Environment.NewLine}{DumpProjectSnapshot(session, projectId)}{Environment.NewLine}{DumpAutomationSelectionState(session)}{Environment.NewLine}{appData.ReadBootLogTail()}");
         Assert.Equal(targetSessionId, selectedAfterSearch);
 
-        session.ActivateElement(session.FindByAutomationId(startId));
+        session.BringMainWindowToFront();
+        session.ClickElement(session.FindByAutomationId(startId));
         Assert.NotNull(session.FindByAutomationId("StartView.Title", TimeSpan.FromSeconds(10)));
         Assert.True(
             WaitForVisibleSelected(session, [targetSessionId, projectId, startId], TimeSpan.FromSeconds(6), out var selectedAfterStart),

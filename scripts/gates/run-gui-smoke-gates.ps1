@@ -62,6 +62,7 @@ if ($LASTEXITCODE -ne 0) {
 Invoke-DotNetTestWithRetry -Method "SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.RandomSwitchWithOneSecondCadence_FinalSelectionAlwaysDrivesRightPane"
 Invoke-DotNetTestWithRetry -Method "SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.SelectAcrossProfilesAndLocal_OneSecondCadence_FinalIntentAlwaysWins"
 Invoke-DotNetTestWithRetry -Method "SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.SelectRemoteSession_RepeatedClicksWithLocalDetour_DoesNotHangAndHydratesLatestSelection"
+Invoke-DotNetTestWithRetry -Method "SalmonEgg.GuiTests.Windows.ChatSkeletonSmokeTests.ProfileBoundMissingRemoteSessionFailure_WhenHealthyRemoteOwnsChat_DoesNotLeakIntoTranscript"
 Invoke-DotNetTestWithRetry -Method "SalmonEgg.GuiTests.Windows.NavigationSmokeTests.SearchOverflowSession_MaterializesNativeNavSelection_AndSubsequentNavigationWorks"
 
 Write-Host "[gate] GUI smoke gates passed"

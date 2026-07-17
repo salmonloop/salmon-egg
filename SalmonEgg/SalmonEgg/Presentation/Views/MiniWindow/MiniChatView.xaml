@@ -149,28 +149,28 @@
         </Border>
 
         <StackPanel Grid.Row="3">
-            <Border AutomationProperties.AutomationId="MiniChat.SessionActivationFailureCallout"
-                    Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+            <Border Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                     Margin="12,0,12,12"
                     Padding="12"
                     CornerRadius="6"
                     Background="{ThemeResource LayerFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                     BorderThickness="1">
-                <TextBlock Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
+                <TextBlock AutomationProperties.AutomationId="MiniChat.SessionActivationFailureCallout"
+                           Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
                            TextWrapping="WrapWholeWords"
                            FontSize="11"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </Border>
-            <Border AutomationProperties.AutomationId="MiniChat.ConversationOperationFailureCallout"
-                    Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+            <Border Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                     Margin="12,0,12,12"
                     Padding="12"
                     CornerRadius="6"
                     Background="{ThemeResource LayerFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                     BorderThickness="1">
-                <TextBlock Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
+                <TextBlock AutomationProperties.AutomationId="MiniChat.ConversationOperationFailureCallout"
+                           Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
                            TextWrapping="WrapWholeWords"
                            FontSize="11"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

@@ -228,28 +228,28 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
                     <controls:ResponsiveContentHost.Child>
                         <StackPanel>
-                            <Border AutomationProperties.AutomationId="ChatView.SessionActivationFailureCallout"
-                                    Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                            <Border Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Margin="24,0,24,12"
                                     Padding="12"
                                     CornerRadius="6"
                                     Background="{ThemeResource LayerFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                                     BorderThickness="1">
-                                <TextBlock Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
+                                <TextBlock AutomationProperties.AutomationId="ChatView.SessionActivationFailureCallout"
+                                           Text="{x:Bind ViewModel.SessionActivationFailureMessage, Mode=OneWay}"
                                            TextWrapping="WrapWholeWords"
                                            FontSize="12"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </Border>
-                            <Border AutomationProperties.AutomationId="ChatView.ConversationOperationFailureCallout"
-                                    Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                            <Border Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Margin="24,0,24,12"
                                     Padding="12"
                                     CornerRadius="6"
                                     Background="{ThemeResource LayerFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
                                     BorderThickness="1">
-                                <TextBlock Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
+                                <TextBlock AutomationProperties.AutomationId="ChatView.ConversationOperationFailureCallout"
+                                           Text="{x:Bind ViewModel.ConversationOperationFailureMessage, Mode=OneWay}"
                                            TextWrapping="WrapWholeWords"
                                            FontSize="12"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

@@ -463,13 +463,26 @@ internal sealed class GuiAppDataScope : IDisposable
             localMessageCount,
             remoteConversationCount);
 
+    public static GuiAppDataScope CreateDeterministicProfileBoundMissingRemoteSessionData(
+        int cachedMessageCount = 1,
+        int replayMessageCount = 24)
+        => CreateDeterministicMockAcpHarnessData(
+            new MockAcpHarnessScenario(),
+            cachedMessageCount,
+            replayMessageCount,
+            includeLocalConversation: false,
+            localMessageCount: 3,
+            remoteConversationCount: 1,
+            includeProfileBoundConversationWithoutRemoteSessionId: true);
+
     public static GuiAppDataScope CreateDeterministicMockAcpHarnessData(
         MockAcpHarnessScenario? scenario = null,
         int cachedMessageCount = 1,
         int replayMessageCount = 60,
         bool includeLocalConversation = false,
         int localMessageCount = 3,
-        int remoteConversationCount = 1)
+        int remoteConversationCount = 1,
+        bool includeProfileBoundConversationWithoutRemoteSessionId = false)
     {
         if (cachedMessageCount < 0)
         {
@@ -579,6 +592,7 @@ internal sealed class GuiAppDataScope : IDisposable
             includeLocalConversation,
             localMessageCount,
             remoteConversationCount,
+            includeProfileBoundConversationWithoutRemoteSessionId,
             scenarioToWrite,
             serverYaml);
         return scope;
@@ -1120,6 +1134,7 @@ internal sealed class GuiAppDataScope : IDisposable
             includeLocalConversation,
             localMessageCount,
             remoteConversationCount,
+            includeProfileBoundConversationWithoutRemoteSessionId: false,
             new MockAcpHarnessScenario(),
             BuildServerYaml(
                 profileId,
@@ -1135,6 +1150,7 @@ internal sealed class GuiAppDataScope : IDisposable
         bool includeLocalConversation,
         int localMessageCount,
         int remoteConversationCount,
+        bool includeProfileBoundConversationWithoutRemoteSessionId,
         MockAcpHarnessScenario scenario,
         string serverYaml)
     {
@@ -1174,7 +1190,8 @@ internal sealed class GuiAppDataScope : IDisposable
                 cachedMessageCount,
                 includeLocalConversation,
                 localMessageCount,
-                remoteConversationCount),
+                remoteConversationCount,
+                includeProfileBoundConversationWithoutRemoteSessionId),
             Encoding.UTF8);
         TestFileIo.WriteAllTextWithRetry(
             _serverYamlPath,
@@ -1710,7 +1727,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int cachedMessageCount,
         bool includeLocalConversation,
         int localMessageCount,
-        int remoteConversationCount)
+        int remoteConversationCount,
+        bool includeProfileBoundConversationWithoutRemoteSessionId)
     {
         var remoteTimestamp = new DateTimeOffset(2026, 03, 29, 12, 00, 00, TimeSpan.Zero);
         var cachedMessages = cachedMessageCount <= 0
@@ -1750,6 +1768,31 @@ internal sealed class GuiAppDataScope : IDisposable
                     })
                     .Cast<object>()
                     .ToArray()
+            });
+        }
+
+        if (includeProfileBoundConversationWithoutRemoteSessionId)
+        {
+            var missingBindingTimestamp = remoteTimestamp.AddSeconds(-1);
+            conversations.Add(new
+            {
+                conversationId = "gui-profile-bound-missing-session-01",
+                displayName = "GUI Missing Remote Binding 01",
+                createdAt = missingBindingTimestamp,
+                lastUpdatedAt = missingBindingTimestamp,
+                cwd = projectRootPath,
+                boundProfileId = profileId,
+                messages = new object[]
+                {
+                    new
+                    {
+                        id = "missing-binding-cached-1",
+                        timestamp = missingBindingTimestamp,
+                        contentType = "text",
+                        textContent = "GUI Missing Remote Binding cached transcript",
+                        isOutgoing = false
+                    }
+                }
             });
         }
 

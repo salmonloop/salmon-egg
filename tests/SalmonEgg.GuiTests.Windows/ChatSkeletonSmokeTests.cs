@@ -1020,16 +1020,18 @@ public sealed class ChatSkeletonSmokeTests
                 localMessageCount: 4);
             using var session = WindowsGuiAppSession.LaunchFresh();
 
-            var remoteItem = session.FindByAutomationId("MainNav.Session.gui-remote-conversation-01", TimeSpan.FromSeconds(15));
-            var localItem = session.FindByAutomationId("MainNav.Session.gui-local-conversation-01", TimeSpan.FromSeconds(15));
+            const string remoteId = "MainNav.Session.gui-remote-conversation-01";
+            const string localId = "MainNav.Session.gui-local-conversation-01";
+            session.FindByAutomationId(remoteId, TimeSpan.FromSeconds(15));
+            session.FindByAutomationId(localId, TimeSpan.FromSeconds(15));
 
-            session.ActivateElement(remoteItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-initial-remote");
 
             var sawInitialRemoteStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
             Assert.True(sawInitialRemoteStatus, "Initial remote selection did not expose ChatView.LoadingOverlayStatus.");
 
-            session.ActivateElement(remoteItem);
-            session.ActivateElement(localItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-second-remote");
+            ActivateNavItem(session, appData, localId, "repeated-remote-clicks-local-detour");
 
             var localHeader = WaitForSessionHeader(
                 session,
@@ -1038,8 +1040,8 @@ public sealed class ChatSkeletonSmokeTests
                 appData);
             Assert.Contains("GUI Local Session 01", localHeader.Name, StringComparison.Ordinal);
 
-            session.ActivateElement(remoteItem);
-            session.ActivateElement(remoteItem);
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-final-remote-1");
+            ActivateNavItem(session, appData, remoteId, "repeated-remote-clicks-final-remote-2");
 
             var sawFinalRemoteStatus = session.WaitUntilVisible("ChatView.LoadingOverlayStatus", TimeSpan.FromSeconds(10));
             Assert.True(sawFinalRemoteStatus, "Final remote reselection did not expose ChatView.LoadingOverlayStatus.");
@@ -1080,6 +1082,85 @@ public sealed class ChatSkeletonSmokeTests
         {
             Environment.SetEnvironmentVariable("SALMONEGG_GUI_SLOW_SESSION_LOAD_MS", previousSlowLoadDelay);
         }
+    }
+
+    [Fact]
+    public void ProfileBoundMissingRemoteSessionFailure_WhenHealthyRemoteOwnsChat_DoesNotLeakIntoTranscript()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicProfileBoundMissingRemoteSessionData(
+            cachedMessageCount: 1,
+            replayMessageCount: 24);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        session.ResizeMainWindow(width: 1200, height: 650);
+
+        const string brokenId = "MainNav.Session.gui-profile-bound-missing-session-01";
+        const string healthyId = "MainNav.Session.gui-remote-conversation-01";
+        session.FindByAutomationId(brokenId, TimeSpan.FromSeconds(15));
+        session.FindByAutomationId(healthyId, TimeSpan.FromSeconds(15));
+
+        ActivateNavItem(session, appData, brokenId, "missing-binding-owner-a");
+
+        var failureCallout = FindElementOrThrowWithScreenshot(
+            session,
+            appData,
+            "ChatView.SessionActivationFailureCallout",
+            TimeSpan.FromSeconds(15),
+            "missing-binding-owner-a-callout");
+        var failureText = TryGetElementDisplayText(failureCallout);
+        Assert.Contains(
+            "no remote session binding is available for the profile-bound conversation",
+            failureText,
+            StringComparison.OrdinalIgnoreCase);
+
+        ActivateNavItem(session, appData, healthyId, "healthy-remote-owner-b");
+
+        var healthyHeader = WaitForSessionHeader(
+            session,
+            expectedTitle: "GUI Remote Session 01",
+            scenario: "healthy-remote-owner-b-header",
+            appData);
+        Assert.Contains("GUI Remote Session 01", TryGetElementDisplayText(healthyHeader), StringComparison.Ordinal);
+
+        var calloutHidden = session.WaitUntilHidden(
+            "ChatView.SessionActivationFailureCallout",
+            TimeSpan.FromSeconds(10));
+        Assert.True(calloutHidden, "Conversation A's activation failure callout remained visible after conversation B owned the chat projection.");
+
+        var overlayHidden = session.WaitUntilHidden("ChatView.LoadingOverlay", TimeSpan.FromSeconds(40));
+        if (!overlayHidden)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "healthy-remote-owner-b-overlay-stuck",
+                "Healthy conversation B stayed behind the loading overlay after conversation A failed activation.");
+        }
+
+        var messagesList = session.FindByAutomationId("ChatView.MessagesList", TimeSpan.FromSeconds(10));
+        var latestHealthyReplay = session.TryFindVisibleText(
+            "GUI Remote Session 01 replay 024",
+            messagesList,
+            TimeSpan.FromSeconds(8));
+        if (latestHealthyReplay is null)
+        {
+            ThrowWithScreenshot(
+                session,
+                appData,
+                "healthy-remote-owner-b-transcript",
+                $"Healthy conversation B's authoritative replay was not visible. Visible texts: [{string.Join(", ", session.GetVisibleTexts(messagesList))}]");
+        }
+
+        var failureTextInTranscript = session.TryFindVisibleText(
+            "Failed to load session: no remote session binding is available for the profile-bound conversation.",
+            messagesList,
+            TimeSpan.FromSeconds(1));
+        Assert.Null(failureTextInTranscript);
+
+        var staleCachedTranscript = session.TryFindVisibleText(
+            "GUI Missing Remote Binding cached transcript",
+            messagesList,
+            TimeSpan.FromSeconds(1));
+        Assert.Null(staleCachedTranscript);
     }
 
     [Fact]
@@ -3934,8 +4015,9 @@ public sealed class ChatSkeletonSmokeTests
         {
             try
             {
+                session.BringMainWindowToFront();
                 var element = session.FindByAutomationId(automationId, TimeSpan.FromSeconds(4));
-                session.ActivateElement(element);
+                session.ClickElement(element);
                 return;
             }
             catch (Exception ex) when (ex is TimeoutException or Win32Exception or COMException or InvalidOperationException)
