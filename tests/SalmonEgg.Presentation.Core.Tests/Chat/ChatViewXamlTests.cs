@@ -321,6 +321,20 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
+    public void ChatTranscriptItemsSource_DoesNotMaterializeViaSecondProjectionOwner()
+    {
+        // Architecture lock (AGENTS.md §5.6): CreateItem is not an authoritative owner.
+        // Reintroducing _source.CreateItem(...) in the ListView adapter forks VM identity
+        // from ChatTranscriptVirtualizedMessageCollection, which forces Replace→native Reset
+        // storms and blank mixed-template rows on Skia. Behavioral contracts live in
+        // TranscriptMaterializationIdentityTests; this only forbids the second owner path.
+        var itemsSourceCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Transcript\ListViewTranscriptItemsSource.cs");
+
+        Assert.DoesNotContain("_source.CreateItem(", itemsSourceCode, StringComparison.Ordinal);
+        Assert.Contains("_source[index]", itemsSourceCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatView_GamepadNavigation_ConsumesTranscriptFocusWithoutBypassingNativeListView()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");

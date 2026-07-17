@@ -218,6 +218,68 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
         Assert.Equal("tool_call", newItem.ContentType);
     }
 
+    [Fact]
+    public void CreateItem_DoesNotRegisterSourceCache_SoStreamingEmitsReplaceInsteadOfPatch()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedAction>();
+        sut.CollectionChanged += (_, args) => events.Add(args.Action);
+        sut.Reset("conv-1", BuildTranscript(1), Project, MatchesSnapshot, PatchProjectedMessage);
+
+        var orphan = sut.CreateItem(0);
+        events.Clear();
+
+        var streamed = BuildTranscript(1).SetItem(
+            0,
+            new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "streamed markdown + tool mix"
+            });
+
+        sut.Reset("conv-1", streamed, Project, MatchesSnapshot, PatchProjectedMessage);
+
+        Assert.Equal([NotifyCollectionChangedAction.Replace], events);
+        Assert.False(sut.MatchesItem(0, orphan));
+        Assert.Equal("Message 0", orphan.TextContent);
+        Assert.NotSame(orphan, sut[0]);
+        Assert.Equal("streamed markdown + tool mix", sut[0].TextContent);
+    }
+
+    [Fact]
+    public void Indexer_RegistersSourceCache_SoStreamingPatchesWithoutCollectionChange()
+    {
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedAction>();
+        sut.CollectionChanged += (_, args) => events.Add(args.Action);
+        sut.Reset("conv-1", BuildTranscript(1), Project, MatchesSnapshot, PatchProjectedMessage);
+
+        var bound = sut[0];
+        var propertyChanges = new List<string?>();
+        bound.PropertyChanged += (_, args) => propertyChanges.Add(args.PropertyName);
+        events.Clear();
+
+        var streamed = BuildTranscript(1).SetItem(
+            0,
+            new ConversationMessageSnapshot
+            {
+                Id = "message-0",
+                Timestamp = new DateTime(2026, 5, 8, 0, 0, 0, DateTimeKind.Utc),
+                ContentType = "text",
+                TextContent = "streamed markdown + tool mix"
+            });
+
+        sut.Reset("conv-1", streamed, Project, MatchesSnapshot, PatchProjectedMessage);
+
+        Assert.Empty(events);
+        Assert.Same(bound, sut[0]);
+        Assert.True(sut.MatchesItem(0, bound));
+        Assert.Equal("streamed markdown + tool mix", bound.TextContent);
+        Assert.Contains(nameof(ChatMessageViewModel.TextContent), propertyChanges);
+    }
+
     private static ImmutableList<ConversationMessageSnapshot> BuildTranscript(int count) =>
         Enumerable.Range(0, count)
             .Select(CreateMessage)
