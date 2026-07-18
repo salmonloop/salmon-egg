@@ -401,6 +401,10 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
             _applyingSnapshot = true;
             try
             {
+                // Sticky markdown failure is a UI attempt state, not protocol fact. Authoritative
+                // rehydrate always starts a fresh presentation attempt for the snapshot body.
+                IsMarkdownFallbackSticky = false;
+
                 Id = string.IsNullOrWhiteSpace(snapshot.Id)
                     ? string.IsNullOrWhiteSpace(Id) ? Guid.NewGuid().ToString() : Id
                     : snapshot.Id;

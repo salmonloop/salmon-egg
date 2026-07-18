@@ -1,4 +1,5 @@
 using SalmonEgg.Acp.Content;
+using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
@@ -88,6 +89,34 @@ public sealed class ChatMessageViewModelMarkdownTests
         Assert.True(vm.IsMarkdownFallbackSticky);
         Assert.False(vm.ShouldRenderMarkdown);
         Assert.True(vm.ShouldRenderPlainText);
+    }
+
+    [Fact]
+    public void ApplySnapshot_ClearsRenderFailureSticky_ForAuthoritativeRehydrate()
+    {
+        // Sticky is a UI attempt state, not protocol state. ApplySnapshot is the
+        // authoritative rehydrate path and must start a fresh presentation attempt.
+        var vm = ChatMessageViewModel.CreateFromTextContent(
+            "m-sticky",
+            new TextContentBlock("```bad"),
+            isOutgoing: false);
+        vm.MarkMarkdownRenderFailed();
+        Assert.True(vm.IsMarkdownFallbackSticky);
+        Assert.False(vm.ShouldRenderMarkdown);
+
+        vm.ApplySnapshot(
+            new ConversationMessageSnapshot
+            {
+                Id = "m-sticky",
+                ContentType = "text",
+                TextContent = "```csharp\nConsole.WriteLine(\"ok\");\n```",
+                IsOutgoing = false
+            },
+            projectionIndex: 0);
+
+        Assert.False(vm.IsMarkdownFallbackSticky);
+        Assert.True(vm.ShouldRenderMarkdown);
+        Assert.Equal(ChatMarkdownRenderMode.MarkdownReady, vm.MarkdownRenderMode);
     }
 
     [Fact]

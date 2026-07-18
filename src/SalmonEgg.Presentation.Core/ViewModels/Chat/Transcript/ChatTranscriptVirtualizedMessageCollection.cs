@@ -410,7 +410,8 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
         ConversationMessageSnapshot newSnapshot)
         => ReferenceEquals(oldSnapshot, newSnapshot)
            || (string.Equals(oldSnapshot.Id, newSnapshot.Id, StringComparison.Ordinal)
-               && oldSnapshot.Timestamp == newSnapshot.Timestamp
+               // Instant equality owns time comparison; ambient DateTimeKind is not identity.
+               && ConversationMessageTimestamp.InstantEquals(oldSnapshot.Timestamp, newSnapshot.Timestamp)
                && oldSnapshot.IsOutgoing == newSnapshot.IsOutgoing
                && string.Equals(oldSnapshot.ContentType ?? string.Empty, newSnapshot.ContentType ?? string.Empty, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.Title ?? string.Empty, newSnapshot.Title ?? string.Empty, StringComparison.Ordinal)
