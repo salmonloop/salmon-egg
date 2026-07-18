@@ -6,7 +6,7 @@
 
 ### 开发环境
 
-- **.NET 10.0 SDK**（推荐 10.0.109，允许 patch 前滚）
+- **.NET 10.0 SDK**（推荐 10.0.302，允许 patch 前滚）
   - 下载地址：https://dotnet.microsoft.com/download/dotnet/10.0
   - 验证安装：`dotnet --version`
 
@@ -168,7 +168,7 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 # 安装 Android 工作负载（首次需要）
 dotnet workload install android
 
-# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.109）
+# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.302）
 
 # 运行在 Android 模拟器
 dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \

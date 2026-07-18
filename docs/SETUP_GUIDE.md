@@ -254,7 +254,7 @@ dotnet test
 ```bash
 # 安装所需工作负载
 dotnet workload install android ios wasm-tools
-# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.109）
+# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.302）
 
 # 或者只安装需要的平台
 dotnet workload install wasm-tools  # 仅 WebAssembly

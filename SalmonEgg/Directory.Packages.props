@@ -13,28 +13,29 @@
   <ItemGroup>
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="CommunityToolkit.Labs.WinUI.Controls.MarkdownTextBlock" Version="0.1.251217-build.2433" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Graph" Version="6.2.0" />
-    <PackageVersion Include="Microsoft.Identity.Client" Version="4.86.0" />
-    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.86.0" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260224000" />
+    <PackageVersion Include="Microsoft.Identity.Client" Version="4.86.1" />
+    <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.86.1" />
+    <!-- Stay on Windows App SDK 1.8 line until Uno 6.6 + WinUI packaging are validated on 2.x. -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260710003" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260709004" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
-    <PackageVersion Include="System.Security.Permissions" Version="10.0.9" />
-    <PackageVersion Include="Uno.WinUI.Lottie" Version="6.5.237" />
-    <PackageVersion Include="Uno.Extensions.Reactive" Version="7.1.4" />
-    <PackageVersion Include="Uno.Extensions.Reactive.WinUI" Version="7.1.4" />
-    <PackageVersion Include="Uno.Extensions.Reactive.Messaging" Version="7.1.4" />
-    <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.205" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Permissions" Version="10.0.10" />
+    <PackageVersion Include="Uno.WinUI.Lottie" Version="6.6.166" />
+    <PackageVersion Include="Uno.Extensions.Reactive" Version="7.2.3" />
+    <PackageVersion Include="Uno.Extensions.Reactive.WinUI" Version="7.2.3" />
+    <PackageVersion Include="Uno.Extensions.Reactive.Messaging" Version="7.2.3" />
+    <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.Markdown" Version="7.1.206" />
     <PackageVersion Include="Uno.Fonts.Fluent" Version="2.8.1" />
     <PackageVersion Include="Uno.Fonts.OpenSans" Version="2.8.1" />
-    <!-- Uno 6.5.31 still resolves this transitively on desktop; pin the patched version centrally. -->
+    <!-- Uno 6.6 Skia X11 requires Tmds.DBus.Protocol >= 0.92.0; pin a current stable version centrally. -->
     <PackageVersion Include="Tmds.DBus.Protocol"
-                    Version="0.21.3"
+                    Version="0.94.2"
                     Condition="'$(TargetFramework)' == 'net10.0-desktop'" />
   </ItemGroup>
 </Project>
