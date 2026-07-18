@@ -129,6 +129,27 @@ public sealed class TranscriptProjectionRestoreTokenProjectorTests
     }
 
     [Fact]
+    public void ApplySnapshot_ProjectsProtocolMessageIdOntoViewModel()
+    {
+        // ProtocolMessageId is authoritative identity when app Id is empty; the VM must own
+        // the same fact so patch matching / restore keys stay single-sourced.
+        var vm = new SalmonEgg.Presentation.ViewModels.Chat.ChatMessageViewModel();
+        vm.ApplySnapshot(
+            new ConversationMessageSnapshot
+            {
+                Id = string.Empty,
+                ProtocolMessageId = "acp-msg-9",
+                ContentType = "text",
+                TextContent = "partial",
+                IsOutgoing = false
+            },
+            projectionIndex: 3);
+
+        Assert.Equal("acp-msg-9", vm.ProtocolMessageId);
+        Assert.Equal("proto:acp-msg-9", vm.ProjectionItemKey);
+    }
+
+    [Fact]
     public void MissingMessageId_PrefersToolCallIdForToolCallRows()
     {
         var snapshot = new ConversationMessageSnapshot

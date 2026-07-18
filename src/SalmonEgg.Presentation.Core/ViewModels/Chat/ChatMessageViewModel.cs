@@ -45,6 +45,13 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         [ObservableProperty]
         private bool _isMarkdownFallbackSticky;
 
+        /// <summary>
+        /// Authoritative ACP protocol message id when the application Id is absent or secondary.
+        /// Carried on the VM so patch matching and restore keys share one fact owner.
+        /// </summary>
+        [ObservableProperty]
+        private string? _protocolMessageId;
+
         // 图片内容
         [ObservableProperty]
         private string _imageData = string.Empty;
@@ -416,6 +423,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ContentType = snapshot.ContentType ?? string.Empty;
                 Title = snapshot.Title ?? string.Empty;
                 TextContent = snapshot.TextContent ?? string.Empty;
+                ProtocolMessageId = snapshot.ProtocolMessageId;
                 ImageData = snapshot.ImageData ?? string.Empty;
                 ImageMimeType = snapshot.ImageMimeType ?? string.Empty;
                 AudioData = snapshot.AudioData ?? string.Empty;
