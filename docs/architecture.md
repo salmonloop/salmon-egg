@@ -78,7 +78,12 @@ SalmonEgg.sln
     └── SalmonEgg.GuiTests.Windows/         # GUI smoke（Windows FlaUI）
 ```
 
-GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，BrowserWasm 行为使用 Playwright/Chromium，Skia Desktop 行为使用 `scripts/gates/run-skia-desktop-gui-smoke-gates.sh` 在真实 `net10.0-desktop` 产物上验证 shell readiness；Linux 还通过 X11 probe 验证窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。当前 Uno Skia X11 host 未向 AT-SPI bus 暴露稳定语义 provider，Linux Skia smoke 不声明 AutomationId 或控件语义树覆盖；新增 Linux semantic GUI gate 的前提是使用系统原生 AT-SPI provider，而不是截图、X11 属性或应用内 test hook。跨平台一致性由共享 ViewModel/Core 行为测试和平台专属 GUI gate 共同保证。
+GUI smoke 不共享单一 driver。Windows 原生行为使用 FlaUI/UIA3，BrowserWasm 行为使用 Playwright/Chromium，Skia Desktop 行为使用 `scripts/gates/run-skia-desktop-gui-smoke-gates.sh` 在真实 `net10.0-desktop` 产物上验证：
+
+1. shell readiness（`MainPage: initial shell content activated`）；
+2. portable AppData seed（`SalmonEgg.TestSupport.SkiaDesktopGuiSeedWriter`）恢复的混排 transcript（markdown + tool_call + mode_change + image）已被权威 projection 写入 `MessageHistory`（`ChatTranscript: projected conversation=…`）。
+
+Linux 还通过 X11 probe 验证窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。当前 Uno Skia X11 host 未向 AT-SPI bus 暴露稳定语义 provider，Linux Skia smoke 不声明 AutomationId 或控件语义树覆盖；新增 Linux semantic GUI gate 的前提是使用系统原生 AT-SPI provider，而不是截图、X11 属性或应用内 test hook。跨平台一致性由共享 ViewModel/Core 行为测试和平台专属 GUI gate 共同保证。
 
 ## 能力边界（跨平台）
 

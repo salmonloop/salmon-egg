@@ -1,44 +1,59 @@
 # SalmonEgg 项目设置指南
 
-> Status: historical bootstrap record. Do not execute the scaffolding, package installation, target-framework, or troubleshooting commands in this document against the current repository. For current development, use `../BUILD_GUIDE.md`, `../AGENTS.md`, `PROJECT_STATUS.md`, `../global.json`, and `../SalmonEgg/Directory.Packages.props`.
+> Status: **historical bootstrap record** (早期脚手架笔记)。  
+> **不要**把本文中的 `dotnet new` / 手装包 / 旧 TFM 故障排除当作当前仓库命令执行。  
+> 现行事实源：
+>
+> | 用途 | 文件 |
+> |------|------|
+> | 构建与运行 | [`../BUILD_GUIDE.md`](../BUILD_GUIDE.md) |
+> | Agent 规则 | [`../AGENTS.md`](../AGENTS.md) |
+> | 项目状态 | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) |
+> | .NET SDK / Uno.Sdk pin | [`../global.json`](../global.json)、[`../SalmonEgg/global.json`](../SalmonEgg/global.json) |
+> | 集中包版本 | [`../SalmonEgg/Directory.Packages.props`](../SalmonEgg/Directory.Packages.props) |
+>
+> **当前仓库锁定（2026-07 起）**：.NET SDK **10.0.302**（`rollForward: latestMinor`）、Uno.Sdk **6.6.29**、`Microsoft.Extensions.*` / `System.Text.Json` **10.0.10**。  
+> 下文若出现与上表冲突的版本号，以 `global.json` / `Directory.Packages.props` 为准；正文示例已尽量改成现行 pin，仅保留历史脚手架步骤形态。
 
 ## 概述
 
-本文档提供了 SalmonEgg 项目的详细设置说明。该项目采用四层架构（Clean Architecture），使用 Uno Platform 构建跨平台原生应用。
+本文档记录 SalmonEgg **早期**从零搭 Clean Architecture + Uno 工程的步骤。现行开发请直接克隆仓库并按 `BUILD_GUIDE.md` 构建。
 
 ## 系统要求
 
 ### 必需软件
 
-1. **.NET 10.0 SDK** 或更高版本
+1. **.NET 10.0 SDK 10.0.302**（或兼容的 10.0.3xx patch）
    - 下载地址: https://dotnet.microsoft.com/download/dotnet/10.0
-   - 验证安装: `dotnet --version`
+   - 验证安装: `dotnet --version`（应输出 `10.0.302` 或同代 3xx）
+   - 事实源: 仓库根 `global.json`
 
-2. **Visual Studio 2022** (17.12+) 或 **Visual Studio Code**
-   - Visual Studio 2022: https://visualstudio.microsoft.com/
+2. **Visual Studio 18.8+**（Windows 原生 WinUI / MSIX）或 **VS Code / CLI**
+   - Visual Studio: https://visualstudio.microsoft.com/
    - VS Code: https://code.visualstudio.com/
 
-3. **Uno Platform 模板**
+3. **Uno Platform 模板**（仅历史脚手架需要；当前仓库已存在，无需再 `dotnet new`）
    ```bash
    dotnet new install Uno.Templates
    ```
 
 ### 可选软件（根据目标平台）
 
-- **Windows 开发**: Windows 10 1809+, UWP workload，Windows SDK 10.0.26100.0
-- **Android 开发**: Android SDK (API Level 21+), Android Emulator
-- **iOS 开发**: macOS 12.0+, Xcode 14.0+
-- **WebAssembly**: 现代浏览器
+- **Windows 开发**: Windows 10 1809+, Windows SDK 10.0.26100.0，signtool 用 SDK 10.0.22621.0
+- **Android 开发**: Android SDK / workload（`EnableMobileTargets=true` 时）
+- **iOS 开发**: macOS + Xcode + iOS workload（`EnableIosTarget=true` 时）
+- **WebAssembly**: 现代浏览器 + `wasm-tools` workload
+- **Linux Skia Desktop**: Xvfb / libX11 / libXtst 等（见 `BUILD_GUIDE.md`）
 
 ## 项目初始化步骤
 
 ### 1. 验证环境
 
 ```bash
-# 检查 .NET 版本（需要 10.0+）
+# 检查 .NET SDK（应对齐 global.json：10.0.302 / 10.0.3xx）
 dotnet --version
 
-# 检查 Uno Platform 模板
+# 检查 Uno Platform 模板（仅脚手架场景）
 dotnet new list | grep -i uno
 ```
 
@@ -78,7 +93,8 @@ dotnet sln add SalmonEgg/SalmonEgg/SalmonEgg.csproj
 #### Domain 层（领域层）
 
 ```bash
-dotnet new classlib -n SalmonEgg.Domain -f netstandard2.1 -o src/SalmonEgg.Domain
+# 现行仓库目标为 net10.0（历史笔记曾写 netstandard2.1，勿再回退）
+dotnet new classlib -n SalmonEgg.Domain -f net10.0 -o src/SalmonEgg.Domain
 dotnet sln add src/SalmonEgg.Domain/SalmonEgg.Domain.csproj
 
 # 创建目录结构
@@ -90,7 +106,7 @@ mkdir -p src/SalmonEgg.Domain/Exceptions
 #### Application 层（应用层）
 
 ```bash
-dotnet new classlib -n SalmonEgg.Application -f netstandard2.1 -o src/SalmonEgg.Application
+dotnet new classlib -n SalmonEgg.Application -f net10.0 -o src/SalmonEgg.Application
 dotnet sln add src/SalmonEgg.Application/SalmonEgg.Application.csproj
 
 # 创建目录结构
@@ -105,7 +121,7 @@ dotnet add src/SalmonEgg.Application/SalmonEgg.Application.csproj reference src/
 #### Infrastructure 层（基础设施层）
 
 ```bash
-dotnet new classlib -n SalmonEgg.Infrastructure -f netstandard2.1 -o src/SalmonEgg.Infrastructure
+dotnet new classlib -n SalmonEgg.Infrastructure -f net10.0 -o src/SalmonEgg.Infrastructure
 dotnet sln add src/SalmonEgg.Infrastructure/SalmonEgg.Infrastructure.csproj
 
 # 创建目录结构
@@ -150,15 +166,18 @@ dotnet add tests/SalmonEgg.Application.Tests/SalmonEgg.Application.Tests.csproj 
 
 #### Infrastructure 层
 
+> 现行仓库已通过各层 `.csproj` 与 `SalmonEgg/Directory.Packages.props` 管理版本；以下仅作**历史脚手架示例**，版本号已改为当前 pin。
+
 ```bash
 cd src/SalmonEgg.Infrastructure
-dotnet add package System.Text.Json --version 10.0.3
-dotnet add package Websocket.Client --version 5.3.0
-dotnet add package Polly --version 8.6.6
-dotnet add package Serilog --version 4.3.1
+dotnet add package Websocket.Client --version 5.5.0
+dotnet add package Polly --version 8.7.0
+dotnet add package Serilog --version 4.4.0
 dotnet add package Serilog.Sinks.File --version 7.0.0
 dotnet add package Serilog.Sinks.Console --version 6.1.1
-dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.3
+dotnet add package Microsoft.Extensions.DependencyInjection --version 10.0.10
+dotnet add package System.Reactive --version 6.1.0
+dotnet add package YamlDotNet --version 18.1.0
 cd ../..
 ```
 
@@ -166,52 +185,68 @@ cd ../..
 
 ```bash
 cd src/SalmonEgg.Application
-dotnet add package FluentValidation --version 11.9.2
-dotnet add package Microsoft.Extensions.DependencyInjection.Abstractions --version 10.0.3
+dotnet add package FluentValidation --version 12.1.1
+dotnet add package Microsoft.Extensions.DependencyInjection.Abstractions --version 10.0.10
 dotnet add package System.Reactive --version 6.1.0
 cd ../..
 ```
 
-#### Presentation 层
+#### ACP / Presentation.Core
 
 ```bash
+# ACP（netstandard2.1 目标需要显式 System.Text.Json）
+cd src/SalmonEgg.Acp
+dotnet add package System.Text.Json --version 10.0.10
+cd ../..
+
+# Presentation.Core（集中 MVVM / Reactive）
+cd src/SalmonEgg.Presentation.Core
+dotnet add package CommunityToolkit.Mvvm --version 8.4.2
+dotnet add package Microsoft.Extensions.Localization.Abstractions --version 10.0.10
+dotnet add package Microsoft.Extensions.Logging.Abstractions --version 10.0.10
+dotnet add package Uno.Extensions.Reactive --version 7.2.3
+dotnet add package Uno.Extensions.Reactive.Messaging --version 7.2.3
+cd ../..
+```
+
+#### Presentation 宿主（Uno 应用）
+
+```bash
+# 主应用使用 Uno.Sdk + Directory.Packages.props；不要在脚手架阶段手写与 global.json 冲突的 Uno 版本。
 cd SalmonEgg/SalmonEgg
-dotnet add package CommunityToolkit.Mvvm
-dotnet add package Microsoft.Extensions.DependencyInjection
-dotnet add package Microsoft.Extensions.Logging
+# 参考 SalmonEgg/Directory.Packages.props：
+# CommunityToolkit.Mvvm 8.4.2, Microsoft.Extensions.* 10.0.10,
+# MSAL 4.86.1, Uno.Extensions.Reactive 7.2.3, Uno.WinUI.Lottie 6.6.166 等
 cd ../..
 ```
 
 #### 测试项目
 
 ```bash
-# 为每个测试项目添加测试包
+# 现行测试使用 xunit.v3 + Microsoft.Testing.Platform（见各测试 csproj）
 cd tests/SalmonEgg.Domain.Tests
-dotnet add package xunit
-dotnet add package xunit.runner.visualstudio
-dotnet add package FsCheck
-dotnet add package FsCheck.Xunit
-dotnet add package Moq
-dotnet add package FluentAssertions
+dotnet add package xunit.v3.mtp-v2 --version 3.2.2
+dotnet add package coverlet.MTP --version 10.0.1
+dotnet add package FsCheck --version 3.3.3
 cd ../..
 
-# 对其他测试项目重复相同操作
 cd tests/SalmonEgg.Infrastructure.Tests
-dotnet add package xunit
-dotnet add package xunit.runner.visualstudio
-dotnet add package FsCheck
-dotnet add package FsCheck.Xunit
-dotnet add package Moq
-dotnet add package FluentAssertions
+dotnet add package xunit.v3.mtp-v2 --version 3.2.2
+dotnet add package coverlet.MTP --version 10.0.1
+dotnet add package FsCheck --version 3.3.3
+dotnet add package Moq --version 4.20.72
 cd ../..
 
 cd tests/SalmonEgg.Application.Tests
-dotnet add package xunit
-dotnet add package xunit.runner.visualstudio
-dotnet add package FsCheck
-dotnet add package FsCheck.Xunit
-dotnet add package Moq
-dotnet add package FluentAssertions
+dotnet add package xunit.v3.mtp-v2 --version 3.2.2
+dotnet add package coverlet.MTP --version 10.0.1
+dotnet add package Moq --version 4.20.72
+cd ../..
+
+cd tests/SalmonEgg.Presentation.Core.Tests
+dotnet add package xunit.v3.mtp-v2 --version 3.2.2
+dotnet add package coverlet.MTP --version 10.0.1
+dotnet add package Moq --version 4.20.72
 cd ../..
 ```
 
@@ -219,55 +254,56 @@ cd ../..
 
 ```bash
 # 恢复所有依赖
-dotnet restore
+dotnet restore SalmonEgg.sln
 
 # 构建解决方案
-dotnet build
+dotnet build SalmonEgg.sln --configuration Release
 
-# 运行测试
-dotnet test
+# 运行测试（MTP：必须 --solution / --project）
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
 ```
 
 ## 常见问题
 
-### 问题 1: Uno Platform 版本不兼容
+### 问题 1: Uno Platform / Uno.Sdk 版本不兼容
 
-**症状**: 错误提示包不兼容 net8.0
+**症状**: 包还原失败、隐式 Uno 包与 `global.json` 不一致
 
 **解决方案**: 
-- 确保安装了 .NET 10.0 SDK
-- 更新 Uno Platform 模板: `dotnet new install Uno.Templates --force`
+- 确保安装 **.NET SDK 10.0.302**（或同代 3xx）
+- 根目录与 `SalmonEgg/global.json` 中 **Uno.Sdk 均为 6.6.29**
+- 不要单独升级/降级 `Uno.WinUI.*` 与 `Uno.Sdk` 错代
 
-### 问题 2: Websocket.Client 不兼容 netstandard2.0
+### 问题 2: 层目标框架与历史 netstandard 笔记冲突
 
-**症状**: NU1202 错误，Websocket.Client 需要 netstandard2.1
+**症状**: 文档仍写 Domain/Application 为 netstandard2.1，但当前仓库多为 **net10.0**
 
 **解决方案**:
-- 将 Infrastructure 层目标框架改为 netstandard2.1
-- 同时更新 Domain 和 Application 层为 netstandard2.1
+- 以各层 `.csproj` 的 `TargetFramework(s)` 为准（现行 Domain/Application/Infrastructure/Presentation.Core 为 `net10.0`；ACP 为 `netstandard2.1;net10.0`）
+- 历史脚手架中的 netstandard 指令仅供考古，不要反向改回
 
 ### 问题 3: 工作负载未安装
 
-**症状**: NETSDK1147 错误，需要安装 Android/iOS 工作负载
+**症状**: NETSDK1147 / UNOWA0001，需要 Android/iOS/wasm-tools
 
 **解决方案**:
 ```bash
-# 安装所需工作负载
-dotnet workload install android ios wasm-tools
-# CI manifest 应与 `global.json` 中的 SDK patch 保持一致（当前为 10.0.302）
+# 在已安装的 SDK 10.0.302 上安装 workload
+dotnet workload install wasm-tools
+# 移动端按需：
+# dotnet workload install android
+# dotnet workload install ios   # 需 macOS
 
-# 或者只安装需要的平台
-dotnet workload install wasm-tools  # 仅 WebAssembly
+# CI manifest / 本机 SDK patch 应与 global.json（当前 10.0.302）一致
 ```
 
-### 问题 4: FluentValidation 版本不兼容
+### 问题 4: FluentValidation / 包版本过时
 
-**症状**: FluentValidation 12.x 需要 net8.0
+**症状**: 仍按 11.x + netstandard 笔记安装，与现行 Application 层冲突
 
 **解决方案**:
-- 使用 FluentValidation 11.9.2 版本（支持 netstandard2.1）
-- 或者将 Application 层升级到 net8.0
-
+- 现行 Application 使用 **FluentValidation 12.1.1**、目标 **net10.0**
+- 一律以 `Directory.Packages.props` 与各层 `.csproj` 为准，勿再降回 11.9.2
 ## 历史开发工作流（不可作为当前命令参考）
 
 ### 日常开发

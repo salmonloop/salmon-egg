@@ -25,8 +25,8 @@ Salmon Egg 是一款依托 ACP 协议打造的桌面端智能体客户端。
 
 ## 技术栈
 
-- Uno Platform 6.5+
-- .NET 10
+- Uno Platform 6.6+（仓库锁定 `Uno.Sdk` 6.6.29）
+- .NET 10（仓库锁定 SDK 10.0.302，允许 10.0.3xx patch 前滚）
 - WinUI 3（Windows）
 - Clean Architecture + MVVM
 
@@ -51,9 +51,9 @@ SalmonEgg/
 
 ### 环境要求
 
-- .NET SDK 10.0
-- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）
-- Visual Studio 2022 17.12+ 或等效命令行工具链
+- .NET SDK **10.0.302** 或兼容的 **10.0.3xx** patch（见 `global.json`）
+- Windows 10 1809+ / Windows 11（WinUI 3 / MSIX）；Windows 建议 Visual Studio **18.8+**
+- 或等效命令行工具链（Linux/macOS 可构建 Desktop / WASM）
 
 ### 常用命令
 
