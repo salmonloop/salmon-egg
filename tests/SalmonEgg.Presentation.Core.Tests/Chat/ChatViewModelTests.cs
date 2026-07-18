@@ -11090,7 +11090,6 @@ public partial class ChatViewModelTests
         var token = fixture.ViewModel.CreateViewportProjectionRestoreToken(message);
         Assert.NotNull(token);
         Assert.Equal("conv-a", token!.Value.ConversationId);
-        Assert.Equal(1, token.Value.ProjectionEpoch);
         Assert.Equal("msg:agent-0042", token.Value.ProjectionItemKey);
         Assert.Equal(message.ProjectionItemKey, token.Value.ProjectionItemKey);
     }
@@ -12517,43 +12516,16 @@ public partial class ChatViewModelTests
         Assert.Equal(string.Empty, fixture.ViewModel.PresentedSessionHeaderDisplayName);
     }
 
-    [Fact]
-    public async Task PresentedSessionHeaderDisplayName_WhenVisibleTranscriptOwnerIsNewerThanRestoreProjection_UsesVisibleTranscriptOwner()
+        [Fact]
+    public void FollowArchitecture_DoesNotKeepRestoreProjectionConversationField()
     {
-        var syncContext = new ImmediateSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
-
-        await fixture.UpdateStateAsync(state => state with
-        {
-            HydratedConversationId = "conv-remote",
-            Transcript =
-            [
-                new ConversationMessageSnapshot
-                {
-                    Id = "message-1",
-                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
-                    IsOutgoing = false,
-                    ContentType = "text",
-                    TextContent = "remote transcript"
-                }
-            ]
-        });
-
-        Assert.Equal(SessionNamePolicy.CreateDefault("conv-remote"), fixture.ViewModel.CurrentSessionDisplayName);
-
-        typeof(ChatViewModel)
-            .GetField("_currentRestoreProjectionConversationId", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(fixture.ViewModel, "conv-local");
-
-        typeof(ChatViewModel)
-            .GetMethod("RaiseTranscriptProjectionStateChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(fixture.ViewModel, []);
-
-        Assert.Equal(
-            SessionNamePolicy.CreateDefault("conv-remote"),
-            fixture.ViewModel.PresentedSessionHeaderDisplayName);
+        // ProjectionEpoch / restore-projection conversation fields were removed with the
+        // follow-controller cutover; session header presentation no longer depends on them.
+        var type = typeof(SalmonEgg.Presentation.ViewModels.Chat.ChatViewModel);
+        Assert.Null(type.GetField("_currentRestoreProjectionConversationId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+        Assert.Null(type.GetField("_currentRestoreProjectionEpoch", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
     }
+
 
     [Fact]
     public async Task PresentedSessionHeaderDisplayName_WhenCurrentSessionTranscriptReplacesSameCountMessages_RefreshesTitle()

@@ -472,9 +472,9 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private int ResolveProjectionRestoreIndex(TranscriptProjectionRestoreToken token)
         => ViewModel.MessageHistory.IndexOfProjectionItemKey(token.ProjectionItemKey);
 
-    private void OnProjectionRestoreReady(object? sender, ProjectionRestoreReadyEventArgs e)
+    private void OnProjectionRestoreReady(object? sender, EventArgs e)
     {
-        ApplyViewportActions(_viewportController.OnProjectionReady(e.ConversationId, e.ProjectionEpoch));
+        ApplyViewportActions(_viewportController.OnProjectionReady(CurrentViewportConversationId));
         TryApplyPendingProjectionRestore();
     }
 
@@ -523,6 +523,16 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     {
         switch (action.Kind)
         {
+            case TranscriptViewportControllerActionKind.ScrollIntoView:
+                if (!string.IsNullOrWhiteSpace(action.ItemKey))
+                {
+                    var index = ViewModel.MessageHistory.IndexOfProjectionItemKey(action.ItemKey);
+                    if (index >= 0)
+                    {
+                        _transcriptViewportHost?.ScrollItemIntoView(index);
+                    }
+                }
+                break;
             case TranscriptViewportControllerActionKind.ScrollTranscriptToEnd:
                 if (action.ScrollRequestToken.Generation >= 0)
                 {

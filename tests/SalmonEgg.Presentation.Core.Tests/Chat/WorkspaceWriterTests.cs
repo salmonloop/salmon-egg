@@ -148,8 +148,6 @@ public sealed class WorkspaceWriterTests
         var restored = workspace.GetConversationSnapshot("conv-a");
 
         Assert.NotNull(restored);
-        Assert.Equal("msg:agent-001", restored!.RestoreProjectionItemKey);
-        Assert.Equal(1, restored.RestoreProjectionEpoch);
     }
 
     [Fact]

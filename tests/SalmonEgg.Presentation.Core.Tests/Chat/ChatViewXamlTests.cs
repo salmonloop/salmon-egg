@@ -239,22 +239,20 @@ public sealed class ChatViewXamlTests
         Assert.Contains("ViewChanged", hostCode, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ChatTranscriptViewport_ViewCodeUsesSharedControllerInsteadOfOwningOrchestrator()
+        [Fact]
+    public void ChatTranscriptViewport_ViewCodeUsesFollowControllerWithoutOwningOrchestrator()
     {
         var chatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCode = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
         var controllerCode = LoadText(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
 
-        Assert.Contains("TranscriptViewportController", chatViewCode, StringComparison.Ordinal);
-        Assert.Contains("TranscriptViewportController", miniChatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("TranscriptViewportOrchestrator", chatViewCode, StringComparison.Ordinal);
         Assert.DoesNotContain("TranscriptViewportOrchestrator", miniChatViewCode, StringComparison.Ordinal);
-        Assert.Contains("TranscriptViewportOrchestrator", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
         Assert.DoesNotContain("Microsoft.UI.Xaml", controllerCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScrollViewer", controllerCode, StringComparison.Ordinal);
-        Assert.DoesNotContain("ListView", controllerCode, StringComparison.Ordinal);
     }
+
 
     [Fact]
     [Trait("Suite", "Smoke")]

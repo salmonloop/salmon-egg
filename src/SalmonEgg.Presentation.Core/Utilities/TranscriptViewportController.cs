@@ -1,106 +1,114 @@
+using System;
+using System.Collections.Generic;
+using SalmonEgg.Presentation.Core.Services.Chat;
+
 namespace SalmonEgg.Presentation.Utilities;
 
-public readonly record struct TranscriptViewportViewState(
-    bool IsViewReady,
-    bool IsViewportReady,
-    bool HasMessages,
-    bool IsAtBottom);
-
-public enum TranscriptViewportControllerActionKind
-{
-    None = 0,
-    ScrollTranscriptToEnd = 1,
-    StopProgrammaticScroll = 2,
-    AutoFollowAttached = 3,
-    AutoFollowDetached = 4,
-    RequestRestore = 5,
-}
-
-public readonly record struct TranscriptViewportControllerAction(
-    TranscriptViewportControllerActionKind Kind,
-    TranscriptScrollRequestToken ScrollRequestToken = default,
-    TranscriptProjectionRestoreToken? RestoreToken = null,
-    int Generation = -1);
-
+/// <summary>
+/// Epoch-free follow controller facade preserving ChatView call signatures.
+/// Intent: FollowingBottom vs PinnedToItem; context: conversationId + activation generation;
+/// anchor: restorable item key. Native ListView executes scroll.
+/// </summary>
 public sealed class TranscriptViewportController
 {
-    private readonly TranscriptViewportOrchestrator _orchestrator = new();
+    private readonly TranscriptFollowController _follow = new();
     private string _conversationId = string.Empty;
     private bool _isLoaded;
     private bool _isSessionActive;
     private bool _isOverlayVisible;
+    private bool _programmaticScrollInFlight;
+    private bool _userScrollIntentPending;
+    private int _activationGeneration;
+    private TranscriptProjectionRestoreToken? _pinnedToken;
+    private TranscriptScrollRequestToken _activeScrollToken;
+    private bool _hasActiveScrollToken;
 
-    public TranscriptViewportOrchestratorSnapshot Snapshot => _orchestrator.Snapshot;
+    public TranscriptViewportOrchestratorSnapshot Snapshot => new(
+        State,
+        IsAutoFollowAttached,
+        IsViewportDetached,
+        HasPendingSettle,
+        IsProgrammaticScrollInFlight,
+        AttachToBottomIntentPending,
+        UserScrollIntentPending,
+        UserScrollIntentCompleted,
+        ScrollToEndScheduled: false,
+        Generation,
+        ScheduledScrollRequestVersion: 0,
+        ActiveScrollGeneration: _hasActiveScrollToken ? _activeScrollToken.Generation : -1);
 
-    public TranscriptViewportState State => _orchestrator.State;
+    public TranscriptViewportState State
+        => !_isLoaded || string.IsNullOrWhiteSpace(_conversationId)
+            ? TranscriptViewportState.Suspended
+            : _follow.State.Mode switch
+            {
+                TranscriptFollowMode.FollowingBottom => TranscriptViewportState.Following,
+                TranscriptFollowMode.PinnedToItem => TranscriptViewportState.DetachedByUser,
+                _ => TranscriptViewportState.Suspended
+            };
 
-    public bool IsViewportDetached => _orchestrator.IsViewportDetached;
-
-    public bool IsAutoFollowAttached => _orchestrator.IsAutoFollowAttached;
-
-    public bool HasPendingSettle => _orchestrator.HasPendingSettle;
-
-    public bool HasActiveScrollGeneration => _orchestrator.HasActiveScrollGeneration;
-
-    public bool IsProgrammaticScrollInFlight => _orchestrator.IsProgrammaticScrollInFlight;
-
-    public bool AttachToBottomIntentPending => _orchestrator.AttachToBottomIntentPending;
-
-    public bool UserScrollIntentPending => _orchestrator.UserScrollIntentPending;
-
-    public bool UserScrollIntentCompleted => _orchestrator.UserScrollIntentCompleted;
-
-    public int Generation => _orchestrator.Generation;
-
-    public TranscriptViewportTransition? LastTransition => _orchestrator.LastTransition;
+    public bool IsViewportDetached => _follow.IsPinned;
+    public bool IsAutoFollowAttached => _follow.IsFollowingBottom;
+    public bool HasPendingSettle => false;
+    public bool HasActiveScrollGeneration => _hasActiveScrollToken;
+    public bool IsProgrammaticScrollInFlight => _programmaticScrollInFlight;
+    public bool AttachToBottomIntentPending => false;
+    public bool UserScrollIntentPending => _userScrollIntentPending;
+    public bool UserScrollIntentCompleted => !_userScrollIntentPending;
+    public int Generation => _activationGeneration;
+    public TranscriptViewportTransition? LastTransition => null;
 
     public TranscriptViewportConversationState? GetConversationState(string conversationId)
-        => _orchestrator.GetConversationState(conversationId);
+    {
+        if (!string.Equals(_conversationId, conversationId, StringComparison.Ordinal))
+        {
+            return null;
+        }
 
-    public void MarkProjectionRestoreQueued()
-        => _orchestrator.MarkProjectionRestoreQueued();
+        return new TranscriptViewportConversationState(
+            State,
+            Anchor: null,
+            LastKnownBottomState: _follow.IsFollowingBottom,
+            LastActivationGeneration: _activationGeneration,
+            RestorePending: false,
+            RestoreToken: _pinnedToken);
+    }
 
-    public void MarkDetachedViewportInteractionStarted()
-        => _orchestrator.MarkDetachedViewportInteractionStarted();
+    public void MarkProjectionRestoreQueued() { }
+    public void MarkDetachedViewportInteractionStarted() { }
+    public void MarkUserScrollIntentStarted() => _userScrollIntentPending = true;
+    public void MarkUserScrollIntentCompleted() => _userScrollIntentPending = false;
 
-    public void MarkUserScrollIntentStarted()
-        => _orchestrator.MarkUserScrollIntentStarted();
-
-    public void MarkUserScrollIntentCompleted()
-        => _orchestrator.MarkUserScrollIntentCompleted();
-
-    public void Load(
-        string? conversationId,
-        bool isSessionActive,
-        bool isOverlayVisible,
-        bool hasMessages)
+    public void Load(string? conversationId, bool isSessionActive, bool isOverlayVisible, bool hasMessages)
     {
         _isLoaded = true;
-        _orchestrator.StartLifecycleGeneration();
-        _orchestrator.ResetInteractionState();
-        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
-        _ = ApplyCommand(_orchestrator.Activate(_conversationId, ResolveInitialActivationKind(_conversationId)));
-        if (!_isOverlayVisible && hasMessages && !_orchestrator.IsViewportDetached)
+        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        _userScrollIntentPending = false;
+        _programmaticScrollInFlight = false;
+        _hasActiveScrollToken = false;
+        if (!_isOverlayVisible && isSessionActive && !string.IsNullOrWhiteSpace(_conversationId))
         {
-            _orchestrator.BeginSettleRound(_conversationId);
+            _activationGeneration++;
+            _ = _follow.Activate(_conversationId, _activationGeneration);
+        }
+        else
+        {
+            _follow.Deactivate();
         }
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> Unload()
     {
-        var actions = new List<TranscriptViewportControllerAction>();
-        actions.AddRange(AbandonContext("ViewUnloaded"));
         _isLoaded = false;
-        _orchestrator.StartLifecycleGeneration();
-        _orchestrator.ResetInteractionState();
-        _orchestrator.ResetScheduledScrollState();
-        _ = ApplyCommand(_orchestrator.InvalidateContext(_conversationId));
+        _follow.Deactivate();
         _conversationId = string.Empty;
         _isSessionActive = false;
         _isOverlayVisible = false;
-        return actions;
+        _hasActiveScrollToken = false;
+        _pinnedToken = null;
+        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnConversationChanged(
@@ -109,28 +117,18 @@ public sealed class TranscriptViewportController
         bool isOverlayVisible,
         bool hasMessages)
     {
-        var actions = new List<TranscriptViewportControllerAction>();
-        actions.AddRange(AbandonContext("ConversationChanged"));
-        if (!string.IsNullOrWhiteSpace(_conversationId))
-        {
-            actions.AddRange(ApplyCommand(_orchestrator.InvalidateContext(_conversationId)));
-        }
-
-        _orchestrator.ResetForConversationChange();
-        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
-        _orchestrator.ClearUserScrollIntent();
-        actions.AddRange(ApplyCommand(_orchestrator.Activate(
-            _conversationId,
-            TranscriptViewportActivationKind.WarmReturn)));
-        if (!_orchestrator.IsViewportDetached && CanTrackViewport(hasMessages))
+        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        _userScrollIntentPending = false;
+        if (string.IsNullOrWhiteSpace(_conversationId) || isOverlayVisible || !isSessionActive)
         {
-            _orchestrator.BeginSettleRound(_conversationId);
+            _follow.Deactivate();
+            return [];
         }
 
-        actions.AddRange(TryIssueScrollRequest(CreateViewStateFromAvailability(hasMessages)));
-        return actions;
+        _activationGeneration++;
+        return ToActions(_follow.Activate(_conversationId, _activationGeneration), hasMessages);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> ActivateCurrentConversation(
@@ -139,257 +137,145 @@ public sealed class TranscriptViewportController
         bool isOverlayVisible,
         bool hasMessages,
         TranscriptViewportActivationKind activationKind)
-    {
-        _conversationId = ResolveAuthoritativeConversationId(conversationId, isSessionActive);
-        _isSessionActive = isSessionActive;
-        _isOverlayVisible = isOverlayVisible;
-        var actions = new List<TranscriptViewportControllerAction>();
-        actions.AddRange(ApplyCommand(_orchestrator.Activate(
-            _conversationId,
-            activationKind)));
-        if (!_orchestrator.IsViewportDetached && CanTrackViewport(hasMessages))
-        {
-            _orchestrator.BeginSettleRound(_conversationId);
-        }
-
-        actions.AddRange(TryIssueScrollRequest(CreateViewStateFromAvailability(hasMessages)));
-        return actions;
-    }
+        => OnConversationChanged(conversationId, isSessionActive, isOverlayVisible, hasMessages);
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnMessagesAppended(
         int addedCount,
         TranscriptViewportViewState viewState)
     {
-        var actions = new List<TranscriptViewportControllerAction>();
-        if (!_isLoaded)
+        if (!_isLoaded || string.IsNullOrWhiteSpace(_conversationId))
         {
-            return actions;
+            return [];
         }
 
-        if (_isSessionActive
-            && viewState.HasMessages
-            && !_orchestrator.HasPendingSettle
-            && !_orchestrator.IsViewportDetached)
-        {
-            _orchestrator.BeginSettleRound(_conversationId);
-        }
-
-        if (_orchestrator.HasPendingSettle && _orchestrator.IsViewportDetached)
-        {
-            actions.AddRange(ApplyScrollDecision(_orchestrator.AbortSettleForUserInteraction(), viewState));
-            return actions;
-        }
-
-        actions.AddRange(TryRetargetActiveScrollRequest(addedCount, viewState));
-        if (actions.Count > 0)
-        {
-            return actions;
-        }
-
-        actions.AddRange(TryIssueScrollRequest(viewState));
-        if (actions.Count > 0)
-        {
-            return actions;
-        }
-
-        actions.AddRange(ApplyCommand(_orchestrator.Handle(
-            _orchestrator.CreateTranscriptAppendedEvent(_conversationId, addedCount))));
-        return actions;
+        return ContentChanged(pinStillResolvable: true, pinIsVisible: true);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnViewportChanged(
         TranscriptViewportViewState viewState,
         TranscriptProjectionRestoreToken? restoreToken = null)
     {
-        var actions = new List<TranscriptViewportControllerAction>();
-        if (!CanObserveViewport(viewState))
+        if (!_isLoaded || string.IsNullOrWhiteSpace(_conversationId))
         {
-            return actions;
+            return [];
         }
 
-        if (_orchestrator.HasPendingSettle && _orchestrator.IsViewportDetached)
+        var topKey = restoreToken?.ProjectionItemKey;
+        var request = _follow.Observe(new TranscriptViewportObservation(
+            _conversationId,
+            _activationGeneration,
+            viewState.HasMessages,
+            viewState.IsAtBottom,
+            _programmaticScrollInFlight,
+            topKey));
+
+        if (_follow.IsPinned && restoreToken is { } token)
         {
-            actions.AddRange(ApplyScrollDecision(_orchestrator.AbortSettleForUserInteraction(), viewState));
-            actions.AddRange(ObserveViewport(viewState, restoreToken));
-            return actions;
+            _pinnedToken = token;
+        }
+        else if (_follow.IsFollowingBottom)
+        {
+            _pinnedToken = null;
         }
 
-        if (_orchestrator.HasPendingSettle)
-        {
-            actions.AddRange(OnScheduledScrollObservationCore(viewState));
-            actions.AddRange(TryIssueScrollRequest(viewState));
-        }
-
-        actions.AddRange(ObserveViewport(viewState, restoreToken));
-        return actions;
+        return ToActions(request, viewState.HasMessages);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportIntent(
         TranscriptViewportViewState viewState,
         TranscriptProjectionRestoreToken? restoreToken = null)
-    {
-        var actions = new List<TranscriptViewportControllerAction>();
-        actions.AddRange(AbandonContext("UserInterrupted"));
-
-        if (_orchestrator.IsViewportDetached)
-        {
-            _orchestrator.MarkAttachToBottomIntent();
-            if (viewState.IsAtBottom)
-            {
-                _orchestrator.ClearAttachIntent();
-                actions.AddRange(ApplyCommand(_orchestrator.Handle(
-                    _orchestrator.CreateUserAttachedEvent(_conversationId))));
-            }
-
-            return actions;
-        }
-
-        if (viewState.IsAtBottom)
-        {
-            _orchestrator.MarkUserScrollIntentStarted();
-            _orchestrator.StopInitialScrollForManualInteraction();
-            return actions;
-        }
-
-        _orchestrator.ClearAttachIntentOnly();
-        var command = restoreToken is { } token
-            ? _orchestrator.Handle(_orchestrator.CreateUserDetachedEvent(_conversationId, token))
-            : _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId));
-        actions.AddRange(ApplyCommand(command));
-        _orchestrator.StopInitialScrollForManualInteraction();
-        if (_orchestrator.HasPendingSettle)
-        {
-            actions.AddRange(ApplyScrollDecision(_orchestrator.AbortSettleForUserInteraction(), viewState));
-        }
-
-        return actions;
-    }
+        => OnViewportChanged(viewState, restoreToken);
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportDetachIntent(
         TranscriptViewportViewState viewState,
         TranscriptProjectionRestoreToken? restoreToken = null)
-    {
-        var actions = new List<TranscriptViewportControllerAction>();
-        actions.AddRange(AbandonContext("UserInterrupted"));
-
-        if (_orchestrator.IsViewportDetached)
-        {
-            _orchestrator.MarkAttachToBottomIntent();
-            return actions;
-        }
-
-        _orchestrator.MarkUserScrollIntentStarted();
-        _orchestrator.ClearAttachIntentOnly();
-        _orchestrator.StopInitialScrollForManualInteraction();
-        var command = viewState.IsAtBottom
-            ? _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId))
-            : restoreToken is { } token
-                ? _orchestrator.Handle(_orchestrator.CreateUserDetachedEvent(_conversationId, token))
-                : _orchestrator.Handle(_orchestrator.CreateUserIntentScrollEvent(_conversationId));
-        actions.AddRange(ApplyCommand(command));
-        if (_orchestrator.HasPendingSettle)
-        {
-            actions.AddRange(ApplyScrollDecision(_orchestrator.AbortSettleForUserInteraction(), viewState));
-        }
-
-        return actions;
-    }
+        => OnViewportChanged(viewState, restoreToken);
 
     public void OnUserPointerPressed(bool isDetached)
-    {
-        if (isDetached || _orchestrator.IsViewportDetached)
-        {
-            _orchestrator.MarkDetachedViewportInteractionStarted();
-            return;
-        }
-
-        _orchestrator.MarkUserScrollIntentStarted();
-    }
+        => _userScrollIntentPending = true;
 
     public void OnUserPointerReleased()
-    {
-        _orchestrator.MarkUserScrollIntentCompleted();
-    }
+        => _userScrollIntentPending = false;
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnScheduledScrollObservation(
         TranscriptScrollRequestToken requestToken,
         TranscriptViewportViewState viewState)
     {
-        if (!_orchestrator.MatchesActiveScrollRequest(requestToken, _conversationId))
+        if (!MatchesActiveScrollRequest(requestToken))
         {
             return [];
         }
 
-        return OnScheduledScrollObservationCore(viewState);
+        _programmaticScrollInFlight = false;
+        _hasActiveScrollToken = false;
+        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnProjectionReady(
         string? conversationId,
-        long projectionEpoch)
+        long projectionEpochIgnored = 0)
     {
-        if (!_isLoaded
-            || !_isSessionActive
-            || string.IsNullOrWhiteSpace(conversationId))
+        if (!_isLoaded || !_isSessionActive || string.IsNullOrWhiteSpace(conversationId))
         {
             return [];
         }
 
-        return ApplyCommand(_orchestrator.Handle(
-            _orchestrator.CreateProjectionReadyEvent(conversationId, projectionEpoch)));
+        if (!string.Equals(_conversationId, conversationId, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        // Content changed: if pinned and not visible, re-anchor; if following, scroll end.
+        return ContentChanged(pinStillResolvable: _pinnedToken is not null, pinIsVisible: false);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> SuspendForOverlay()
     {
         _isOverlayVisible = true;
-        _orchestrator.ResetInteractionState();
-        if (string.IsNullOrWhiteSpace(_conversationId))
-        {
-            return [];
-        }
-
-        return ApplyCommand(_orchestrator.InvalidateContext(_conversationId));
+        _follow.Deactivate();
+        _hasActiveScrollToken = false;
+        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreConfirmed(
         TranscriptProjectionRestoreToken token,
         int generation)
     {
-        _orchestrator.ReleaseAutoScrollTracking();
-        return ApplyCommand(_orchestrator.Handle(
-            _orchestrator.CreateRestoreConfirmedEvent(token.ConversationId, generation, token)));
+        _programmaticScrollInFlight = false;
+        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreUnavailable(
         string? conversationId,
         int generation,
         string reason)
-    {
-        _orchestrator.ReleaseAutoScrollTracking();
-        return ApplyCommand(_orchestrator.Handle(
-            _orchestrator.CreateRestoreUnavailableEvent(
-                string.IsNullOrWhiteSpace(conversationId) ? _conversationId : conversationId,
-                generation,
-                reason)));
-    }
+        => ContentChanged(pinStillResolvable: false, pinIsVisible: false);
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreAbandoned(
         string? conversationId,
         int generation,
         string reason)
     {
-        _orchestrator.ReleaseAutoScrollTracking();
-        return ApplyCommand(_orchestrator.Handle(
-            _orchestrator.CreateRestoreAbandonedEvent(
-                string.IsNullOrWhiteSpace(conversationId) ? _conversationId : conversationId,
-                generation,
-                reason)));
+        _hasActiveScrollToken = false;
+        return [];
     }
 
     public bool TryCaptureActiveScrollRequest(out TranscriptScrollRequestToken token)
-        => _orchestrator.TryCaptureActiveScrollRequestToken(_conversationId, out token);
+    {
+        if (_hasActiveScrollToken)
+        {
+            token = _activeScrollToken;
+            return true;
+        }
+
+        token = default;
+        return false;
+    }
 
     public bool MatchesActiveScrollRequest(TranscriptScrollRequestToken token)
-        => _orchestrator.MatchesActiveScrollRequest(token, _conversationId);
+        => _hasActiveScrollToken
+           && token.Generation == _activeScrollToken.Generation
+           && string.Equals(token.ConversationId, _activeScrollToken.ConversationId, StringComparison.Ordinal);
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnActiveScrollObservation(
         TranscriptViewportViewState viewState)
@@ -402,200 +288,81 @@ public sealed class TranscriptViewportController
         return OnScheduledScrollObservation(token, viewState);
     }
 
-    private IReadOnlyList<TranscriptViewportControllerAction> OnScheduledScrollObservationCore(
-        TranscriptViewportViewState viewState)
+    private IReadOnlyList<TranscriptViewportControllerAction> ContentChanged(
+        bool pinStillResolvable,
+        bool pinIsVisible)
     {
-        var observation = ResolveSettleObservation(viewState);
-        var actions = ApplyScrollDecision(_orchestrator.ReportSettled(_conversationId, observation), viewState);
-        if (actions.Count > 0)
-        {
-            return actions;
-        }
-
-        return [];
-    }
-
-    private IReadOnlyList<TranscriptViewportControllerAction> TryIssueScrollRequest(
-        TranscriptViewportViewState viewState)
-        => ApplyScrollDecision(
-            _orchestrator.TryIssueScrollRequest(
-                _conversationId,
-                hasMessages: viewState.HasMessages,
-                isReady: CanIssueScrollRequest(viewState)),
-            viewState);
-
-    private IReadOnlyList<TranscriptViewportControllerAction> TryRetargetActiveScrollRequest(
-        int addedCount,
-        TranscriptViewportViewState viewState)
-    {
-        if (addedCount <= 0
-            || !_orchestrator.HasActiveScrollGeneration
-            || !_orchestrator.IsAutoFollowAttached
-            || _orchestrator.IsViewportDetached
-            || !CanRetargetActiveScrollRequest(viewState)
-            || !_orchestrator.TryCaptureActiveScrollRequestToken(_conversationId, out var requestToken))
+        if (string.IsNullOrWhiteSpace(_conversationId))
         {
             return [];
         }
 
-        return [new TranscriptViewportControllerAction(
-            TranscriptViewportControllerActionKind.ScrollTranscriptToEnd,
-            requestToken,
-            Generation: requestToken.Generation)];
-    }
-
-    private bool CanRetargetActiveScrollRequest(TranscriptViewportViewState viewState)
-        => CanTrackViewport(viewState.HasMessages)
-            && viewState.IsViewReady;
-
-    private IReadOnlyList<TranscriptViewportControllerAction> ApplyScrollDecision(
-        TranscriptScrollDecision decision,
-        TranscriptViewportViewState viewState)
-    {
-        switch (decision.Action)
+        if (_follow.IsPinned && _pinnedToken is { } pin)
         {
-            case TranscriptScrollAction.IssueScrollRequest:
-                if (!_orchestrator.TryCaptureActiveScrollRequestToken(_conversationId, out var requestToken))
-                {
-                    return [];
-                }
-
-                return [new TranscriptViewportControllerAction(
-                    TranscriptViewportControllerActionKind.ScrollTranscriptToEnd,
-                    requestToken,
-                    Generation: decision.Generation)];
-
-            case TranscriptScrollAction.Completed:
-            case TranscriptScrollAction.Aborted:
-            case TranscriptScrollAction.Exhausted:
-                _orchestrator.ReleaseAutoScrollTracking();
-                _ = viewState;
-                return [];
-
-            default:
-                return [];
+            pinStillResolvable = TranscriptItemKey.IsRestorable(pin.ProjectionItemKey) && pinStillResolvable;
         }
+
+        return ToActions(
+            _follow.OnContentChanged(_conversationId, _activationGeneration, pinStillResolvable, pinIsVisible),
+            hasMessages: true);
     }
 
-    private IReadOnlyList<TranscriptViewportControllerAction> ObserveViewport(
-        TranscriptViewportViewState viewState,
-        TranscriptProjectionRestoreToken? restoreToken)
+    private IReadOnlyList<TranscriptViewportControllerAction> ToActions(
+        TranscriptScrollRequest request,
+        bool hasMessages)
     {
-        var fact = new TranscriptViewportFact(
-            HasItems: viewState.HasMessages,
-            IsReady: viewState.IsViewportReady,
-            IsAtBottom: viewState.IsAtBottom,
-            IsProgrammaticScrollInFlight: _orchestrator.IsProgrammaticScrollInFlight);
-        return ApplyCommand(_orchestrator.ObserveViewportFact(_conversationId, fact, restoreToken).Command);
-    }
-
-    private IReadOnlyList<TranscriptViewportControllerAction> ApplyCommand(TranscriptViewportCommand command)
-    {
-        switch (command.Kind)
+        if (request.Kind == TranscriptScrollRequestKind.None || !hasMessages)
         {
-            case TranscriptViewportCommandKind.IssueScrollToEnd:
-                if (_orchestrator.TryBeginScrollToEndSchedule(_conversationId, out var scheduleToken)
-                    && _orchestrator.CanExecuteScrollToEndSchedule(scheduleToken, _conversationId))
-                {
-                    _orchestrator.ReleaseScrollToEndSchedule(scheduleToken);
-                    return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.ScrollTranscriptToEnd)];
-                }
-
-                return [];
-
-            case TranscriptViewportCommandKind.RequestRestore:
-                if (command.RestoreToken is { } restoreToken)
-                {
-                    _orchestrator.MarkProjectionRestoreQueued();
-                    return [new TranscriptViewportControllerAction(
-                        TranscriptViewportControllerActionKind.RequestRestore,
-                        RestoreToken: restoreToken,
-                        Generation: command.Generation)];
-                }
-
-                return [];
-
-            case TranscriptViewportCommandKind.StopProgrammaticScroll:
-                _orchestrator.StopProgrammaticScroll();
-                if (_orchestrator.HasPendingSettle)
-                {
-                    _ = _orchestrator.AbortSettleForUserInteraction();
-                }
-
-                return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.StopProgrammaticScroll)];
-
-            case TranscriptViewportCommandKind.MarkAutoFollowDetached:
-                _orchestrator.ClearAttachIntentOnly();
-                _orchestrator.ClearScrollToEndScheduled();
-                return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.AutoFollowDetached)];
-
-            case TranscriptViewportCommandKind.MarkAutoFollowAttached:
-                _orchestrator.ClearAttachIntentOnly();
-                return [new TranscriptViewportControllerAction(TranscriptViewportControllerActionKind.AutoFollowAttached)];
-
-            default:
-                return [];
+            return MapModeSideEffects(request);
         }
+
+        var token = new TranscriptScrollRequestToken(_activationGeneration, _conversationId);
+        _activeScrollToken = token;
+        _hasActiveScrollToken = true;
+        _programmaticScrollInFlight = true;
+
+        var kind = request.Kind == TranscriptScrollRequestKind.ScrollIntoView
+            ? TranscriptViewportControllerActionKind.ScrollIntoView
+            : TranscriptViewportControllerActionKind.ScrollTranscriptToEnd;
+
+        var actions = new List<TranscriptViewportControllerAction>
+        {
+            new(kind, token, _pinnedToken, _activationGeneration, request.ItemKey)
+        };
+        actions.AddRange(MapModeSideEffects(request));
+        return actions;
     }
 
-    private IReadOnlyList<TranscriptViewportControllerAction> AbandonContext(string reason)
+    private IReadOnlyList<TranscriptViewportControllerAction> MapModeSideEffects(
+        TranscriptScrollRequest request)
     {
-        _ = reason;
+        // Emit follow mode markers for automation/logging paths that switch on them.
+        if (_follow.IsPinned)
+        {
+            return
+            [
+                new TranscriptViewportControllerAction(
+                    TranscriptViewportControllerActionKind.AutoFollowDetached,
+                    Generation: _activationGeneration,
+                    RestoreToken: _pinnedToken)
+            ];
+        }
+
+        if (_follow.IsFollowingBottom)
+        {
+            return
+            [
+                new TranscriptViewportControllerAction(
+                    TranscriptViewportControllerActionKind.AutoFollowAttached,
+                    Generation: _activationGeneration)
+            ];
+        }
+
         return [];
     }
 
-    private bool CanIssueScrollRequest(TranscriptViewportViewState viewState)
-        => CanTrackViewport(viewState.HasMessages)
-            && viewState.IsViewReady
-            && viewState.IsViewportReady;
-
-    private bool CanObserveViewport(TranscriptViewportViewState viewState)
-        => HasAuthoritativeConversationContext()
-            && viewState.IsViewReady;
-
-    private bool CanTrackViewport(bool hasMessages)
-        => HasAuthoritativeConversationContext()
-            && hasMessages;
-
-    private bool HasAuthoritativeConversationContext()
-        => _isLoaded
-            && _isSessionActive
-            && !_isOverlayVisible
-            && !string.IsNullOrWhiteSpace(_conversationId);
-
-    private static TranscriptScrollSettleObservation ResolveSettleObservation(
-        TranscriptViewportViewState viewState)
-    {
-        if (!viewState.HasMessages || !viewState.IsViewportReady)
-        {
-            return TranscriptScrollSettleObservation.NotReadyYet;
-        }
-
-        return viewState.IsAtBottom
-            ? TranscriptScrollSettleObservation.AtBottom
-            : TranscriptScrollSettleObservation.ReadyButNotAtBottom;
-    }
-
-    private TranscriptViewportActivationKind ResolveInitialActivationKind(string conversationId)
-    {
-        var existing = string.IsNullOrWhiteSpace(conversationId)
-            ? null
-            : _orchestrator.GetConversationState(conversationId);
-
-        return existing is null
-            ? TranscriptViewportActivationKind.ColdEnter
-            : TranscriptViewportActivationKind.WarmReturn;
-    }
-
-    private static string ResolveAuthoritativeConversationId(string? conversationId, bool isSessionActive)
+    private static string ResolveConversationId(string? conversationId, bool isSessionActive)
         => isSessionActive && !string.IsNullOrWhiteSpace(conversationId)
             ? conversationId
             : string.Empty;
-
-    private static TranscriptViewportViewState CreateViewStateFromAvailability(bool hasMessages)
-        => new(
-            IsViewReady: true,
-            IsViewportReady: true,
-            HasMessages: hasMessages,
-            IsAtBottom: false);
 }

@@ -54,12 +54,17 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public partial class ChatViewModel
 {
-    private ProjectionRestoreReadyPublicationKey? _lastProjectionRestoreReadyKey;
-    private long _currentRestoreProjectionEpoch = -1;
-    private string? _currentRestoreProjectionConversationId;
     private readonly ConversationOperationFailureState _conversationOperationFailureState = new();
 
-    public event EventHandler<ProjectionRestoreReadyEventArgs>? ProjectionRestoreReady;
+    /// <summary>Raised after authoritative transcript projection is applied for the active session.</summary>
+    public event EventHandler? TranscriptContentChanged;
+
+    // Temporary alias until views subscribe only to TranscriptContentChanged.
+    public event EventHandler? ProjectionRestoreReady
+    {
+        add => TranscriptContentChanged += value;
+        remove => TranscriptContentChanged -= value;
+    }
 
     public string? SessionActivationFailureMessage
     {
@@ -426,8 +431,7 @@ public partial class ChatViewModel
                 sessionChanged: false);
         }
 
-        UpdateRestoreProjectionMetadata(projection);
-        PublishProjectionRestoreReady(projection);
+        NotifyTranscriptContentChanged();
         ShowPlanPanel = projection.ShowPlanPanel;
         if (!sessionChanged)
         {
@@ -441,6 +445,24 @@ public partial class ChatViewModel
         WriteTranscriptProjectionBootFact(projection.HydratedConversationId, projection.Transcript.Count);
     }
 
+
+
+    public TranscriptProjectionRestoreToken? CreateViewportProjectionRestoreToken(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (string.IsNullOrWhiteSpace(CurrentSessionId)
+            || string.IsNullOrWhiteSpace(message.ProjectionItemKey)
+            || !TranscriptItemKey.IsRestorable(message.ProjectionItemKey))
+        {
+            return null;
+        }
+
+        return new TranscriptProjectionRestoreToken(CurrentSessionId, message.ProjectionItemKey);
+    }
+
+    private void NotifyTranscriptContentChanged()
+        => TranscriptContentChanged?.Invoke(this, EventArgs.Empty);
+
     private void WriteTranscriptProjectionBootFact(string? conversationId, int transcriptCount)
     {
         if (string.IsNullOrWhiteSpace(conversationId) || transcriptCount <= 0)
@@ -452,53 +474,6 @@ public partial class ChatViewModel
         // here after the authoritative transcript is applied to MessageHistory.
         DebugBootLog.Write(
             $"ChatTranscript: projected conversation={conversationId} count={transcriptCount} history={MessageHistory.Count}");
-    }
-
-    private void PublishProjectionRestoreReady(ChatUiProjection projection)
-    {
-        if (string.IsNullOrWhiteSpace(projection.HydratedConversationId)
-            || !projection.RestoreProjection.IsReady
-            || projection.RestoreProjection.Token is not { } token)
-        {
-            _lastProjectionRestoreReadyKey = null;
-            return;
-        }
-
-        var publicationKey = new ProjectionRestoreReadyPublicationKey(
-            projection.HydratedConversationId,
-            projection.RestoreProjection.ProjectionEpoch,
-            token);
-        if (_lastProjectionRestoreReadyKey == publicationKey)
-        {
-            return;
-        }
-
-        _lastProjectionRestoreReadyKey = publicationKey;
-
-        ProjectionRestoreReady?.Invoke(
-            this,
-            new ProjectionRestoreReadyEventArgs(
-                projection.HydratedConversationId,
-                projection.RestoreProjection.ProjectionEpoch,
-                token));
-    }
-
-    public TranscriptProjectionRestoreToken? CreateViewportProjectionRestoreToken(ChatMessageViewModel message)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-
-        if (string.IsNullOrWhiteSpace(CurrentSessionId)
-            || !string.Equals(CurrentSessionId, _currentRestoreProjectionConversationId, StringComparison.Ordinal)
-            || _currentRestoreProjectionEpoch < 0
-            || string.IsNullOrWhiteSpace(message.ProjectionItemKey))
-        {
-            return null;
-        }
-
-        return new TranscriptProjectionRestoreToken(
-            CurrentSessionId,
-            _currentRestoreProjectionEpoch,
-            message.ProjectionItemKey);
     }
 
     public async ValueTask<IReadOnlyList<ConversationMessageSnapshot>> GetCurrentSessionTranscriptSnapshotAsync(
@@ -520,15 +495,6 @@ public partial class ChatViewModel
                 : null)
             ?? ImmutableList<ConversationMessageSnapshot>.Empty;
         return transcript.Select(CloneSnapshot).ToArray();
-    }
-
-    private void UpdateRestoreProjectionMetadata(ChatUiProjection projection)
-    {
-        _currentRestoreProjectionConversationId = projection.HydratedConversationId;
-        _currentRestoreProjectionEpoch = projection.RestoreProjection.IsReady
-            ? projection.RestoreProjection.ProjectionEpoch
-            : -1;
-        RefreshCurrentSessionDisplayName();
     }
 
     private void ApplyConversationStatusProjection(ChatUiProjection projection)
@@ -704,29 +670,6 @@ public partial class ChatViewModel
 
 }
 
-public sealed class ProjectionRestoreReadyEventArgs : EventArgs
-{
-    public ProjectionRestoreReadyEventArgs(
-        string conversationId,
-        long projectionEpoch,
-        TranscriptProjectionRestoreToken restoreToken)
-    {
-        ConversationId = conversationId;
-        ProjectionEpoch = projectionEpoch;
-        RestoreToken = restoreToken;
-    }
-
-    public string ConversationId { get; }
-
-    public long ProjectionEpoch { get; }
-
-    public TranscriptProjectionRestoreToken RestoreToken { get; }
-}
-
-internal readonly record struct ProjectionRestoreReadyPublicationKey(
-    string ConversationId,
-    long ProjectionEpoch,
-    TranscriptProjectionRestoreToken RestoreToken);
 
 internal sealed record ConversationOperationFailure(string? ConversationId, string Message);
 

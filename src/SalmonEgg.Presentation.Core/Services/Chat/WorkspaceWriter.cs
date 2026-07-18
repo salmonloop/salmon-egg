@@ -23,7 +23,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
 {
     private const int DefaultThrottleMilliseconds = 500;
 
-    private readonly TranscriptProjectionRestoreTokenProjector _restoreTokenProjector = new();
     private readonly ChatConversationWorkspace _workspace;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly TimeSpan _throttleWindow;
@@ -343,10 +342,6 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             : canReuseExistingSnapshotRuntimeContent
                 ? existingSnapshot?.ConnectionInstanceId
                 : null;
-        var restoreProjection = _restoreTokenProjector.Project(
-            conversationId,
-            transcript,
-            firstVisibleIndex: transcript.Length - 1);
 
         return new ConversationWorkspaceSnapshot(
             conversationId,
@@ -362,9 +357,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             availableCommands,
             sessionInfo,
             usage,
-            snapshotConnectionInstanceId,
-            restoreProjection.Token?.ProjectionItemKey,
-            restoreProjection.Token?.ProjectionEpoch);
+            snapshotConnectionInstanceId);
     }
 
     private static bool HasSnapshotData(ConversationWorkspaceSnapshot snapshot)

@@ -2544,17 +2544,12 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 5, 6, 0, 1, 0, DateTimeKind.Utc),
-            ConnectionInstanceId: "conn-1",
-            RestoreProjectionItemKey: "msg:agent-001",
-            RestoreProjectionEpoch: 1),
-            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+            ConnectionInstanceId: "conn-1"));
 
         workspace.ClearConversationRuntimeContent("session-1");
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         Assert.NotNull(snapshot);
-        Assert.Null(snapshot!.RestoreProjectionItemKey);
-        Assert.Null(snapshot.RestoreProjectionEpoch);
     }
 
     [Fact]

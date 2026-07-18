@@ -838,29 +838,25 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void ChatViewCodeBehind_UsesProjectionOwnedRestoreCommandAndDoesNotFallbackToBottomOnRestoreFailure()
+    public void ChatViewCodeBehind_UsesFollowControllerWithoutProjectionEpoch()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-        var restoreSection = ExtractSection(
-            code,
-            "case TranscriptViewportControllerActionKind.RequestRestore:",
-            "case TranscriptViewportControllerActionKind.StopProgrammaticScroll:");
-
-        Assert.Contains("case TranscriptViewportControllerActionKind.RequestRestore:", code, StringComparison.Ordinal);
-        Assert.Contains("QueueProjectionOwnedRestore(restoreToken, action.Generation);", restoreSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScheduleScrollToEnd();", restoreSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("RequestScrollToEnd();", restoreSection, StringComparison.Ordinal);
+        var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
+        Assert.Contains("TranscriptViewportController", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", code, StringComparison.Ordinal);
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
     }
 
-    [Fact]
+
+        [Fact]
     public void ChatViewCodeBehind_DelegatesUserDetachIntentToViewportController()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-
         Assert.Contains("OnUserViewportDetachIntent(", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("CreateUserDetachedEvent(", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("CreateUserIntentScrollEvent(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", code, StringComparison.Ordinal);
     }
+
 
     [Fact]
     public void ChatViewCodeBehind_DelegatesViewportObservationPolicyToViewportController()
@@ -880,45 +876,36 @@ public sealed class NavigationCoreTests
     [Fact]
     public void ChatViewsCodeBehind_NativeViewportMovementPolicyIsOwnedByViewportController()
     {
-        foreach (var path in new[]
-        {
-            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
-            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
-        })
-        {
-            var code = LoadFile(path);
-            var refreshSection = ExtractSection(
-                code,
-                "private void TryRefreshViewportCoordinatorFromView",
-                "private TranscriptViewportViewState CreateViewportViewState");
-
-            Assert.Contains("_viewportController.OnViewportChanged(", refreshSection, StringComparison.Ordinal);
-            Assert.DoesNotContain("ObserveViewportFact(", refreshSection, StringComparison.Ordinal);
-            Assert.DoesNotContain("ShouldDetachForNativeViewportMovement", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("RefreshDetachedViewportRestoreToken", code, StringComparison.Ordinal);
-        }
-
         var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
-        Assert.Contains("ObserveViewport(", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
         Assert.Contains("OnUserViewportDetachIntent(", controllerCode, StringComparison.Ordinal);
-        Assert.Contains("CreateUserDetachedEvent(_conversationId", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("CreateUserDetachedEvent(_conversationId", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
+
+        foreach (var path in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
+        })
+        {
+            var code = LoadFile(path);
+            Assert.Contains("_viewportController.OnViewportChanged(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("ObserveViewportFact(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("ProjectionEpoch", code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
-    public void ViewportController_TranscriptSettleUsesNativeViewportAtBottomState()
+    public void ViewportController_UsesFollowControllerWithoutProjectionEpoch()
     {
-        var code = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
-        var observationSection = ExtractSection(
-            code,
-            "private static TranscriptScrollSettleObservation ResolveSettleObservation",
-            "private TranscriptViewportActivationKind ResolveInitialActivationKind");
-
-        Assert.Contains("viewState.IsAtBottom", observationSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsLastItemVisibleAtBottom", observationSection, StringComparison.Ordinal);
+        var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
     }
 
+
     [Fact]
-    public void ChatViewsCodeBehind_TranscriptSettleAdvancesFromNativeViewportChanges()
+    public void ChatViewsCodeBehind_ObserveViewportThroughController()
     {
         foreach (var path in new[]
         {
@@ -927,16 +914,11 @@ public sealed class NavigationCoreTests
         })
         {
             var code = LoadFile(path);
-            var viewportChangedSection = ExtractSection(
-                code,
-                "private void OnMessagesListViewportChanged",
-                "private void OnMessagesListPointerPressed");
-
-            Assert.Contains("_viewportController.OnViewportChanged(", viewportChangedSection, StringComparison.Ordinal);
-            Assert.DoesNotContain("TryAdvanceTranscriptSettleFromLayout", viewportChangedSection, StringComparison.Ordinal);
-            Assert.DoesNotContain("_viewportOrchestrator", viewportChangedSection, StringComparison.Ordinal);
+            Assert.Contains("OnViewportChanged(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("ProjectionEpoch", code, StringComparison.Ordinal);
         }
     }
+
 
     [Fact]
     public void ChatViewsCodeBehind_UseListViewTranscriptViewportHostWithoutItemsRepeaterViewportApis()
@@ -994,35 +976,16 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void TranscriptAutoFollowSettleState_IsOwnedBySingleCoreController()
+    public void TranscriptFollowState_IsOwnedBySingleCoreFollowController()
     {
         var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
-
-        Assert.Contains("private readonly TranscriptViewportOrchestrator _orchestrator", controllerCode, StringComparison.Ordinal);
-        Assert.Contains("OnViewportChanged(", controllerCode, StringComparison.Ordinal);
-        Assert.Contains("OnUserViewportDetachIntent(", controllerCode, StringComparison.Ordinal);
-
-        foreach (var path in new[]
-        {
-            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
-            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
-        })
-        {
-            var code = LoadFile(path);
-
-            Assert.Contains("TranscriptViewportController", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("TranscriptViewportOrchestrator", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private readonly TranscriptScrollSettler _transcriptScrollSettler", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private readonly TranscriptViewportCoordinator _viewportCoordinator", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private bool _attachToBottomIntentPending", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private bool _pointerScrollIntentPending", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private bool _pointerScrollReleasePending", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private bool _suspendAutoScrollTracking", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private int _scrollScheduleGeneration", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private int _scheduledScrollRequestVersion", code, StringComparison.Ordinal);
-            Assert.DoesNotContain("private int _activeTranscriptScrollGeneration", code, StringComparison.Ordinal);
-        }
+        var followCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptFollowController.cs");
+        Assert.Contains("TranscriptFollowController", controllerCode, StringComparison.Ordinal);
+        Assert.Contains("TranscriptFollowMode", followCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new TranscriptViewportOrchestrator", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
     }
+
 
     [Fact]
     public void ChatViewsCodeBehind_UseOpaqueTokensInsteadOfReadingOrchestratorInternalCounters()
@@ -1066,7 +1029,6 @@ public sealed class NavigationCoreTests
         {
             var code = LoadFile(path);
 
-            Assert.Contains("CreateViewportProjectionRestoreToken(ViewModel.MessageHistory[firstVisibleIndex])", code, StringComparison.Ordinal);
             Assert.DoesNotContain("OffsetHint", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TryGetRelativeOffsetWithinItem", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TrySetVerticalOffset", code, StringComparison.Ordinal);

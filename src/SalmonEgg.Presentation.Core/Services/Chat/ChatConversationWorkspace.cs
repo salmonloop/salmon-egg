@@ -263,9 +263,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 binding.AvailableCommands.Select(CloneAvailableCommand).ToArray(),
                 ConversationSessionInfoSnapshots.Clone(binding.SessionInfo),
                 CloneUsage(binding.Usage),
-                binding.SnapshotConnectionInstanceId,
-                binding.RestoreProjectionItemKey,
-                binding.RestoreProjectionEpoch);
+                binding.SnapshotConnectionInstanceId);
         }
     }
 
@@ -507,8 +505,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         binding.ShowPlanPanel = false;
         binding.SnapshotOrigin = ConversationWorkspaceSnapshotOrigin.Restored;
         binding.SnapshotConnectionInstanceId = null;
-        binding.RestoreProjectionItemKey = null;
-        binding.RestoreProjectionEpoch = null;
     }
 
     private static bool CanApplySnapshotRuntimeContent(
@@ -557,8 +553,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         binding.SnapshotConnectionInstanceId = origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
             ? snapshot.ConnectionInstanceId
             : null;
-        binding.RestoreProjectionItemKey = snapshot.RestoreProjectionItemKey;
-        binding.RestoreProjectionEpoch = snapshot.RestoreProjectionEpoch;
     }
 
     public async Task ApplySessionInfoUpdateAsync(
@@ -1475,9 +1469,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
         public string? SnapshotConnectionInstanceId { get; set; }
 
-        public string? RestoreProjectionItemKey { get; set; }
-
-        public long? RestoreProjectionEpoch { get; set; }
     }
 }
 
@@ -1501,9 +1492,7 @@ public sealed record ConversationWorkspaceSnapshot(
     IReadOnlyList<ConversationAvailableCommandSnapshot>? AvailableCommands = null,
     ConversationSessionInfoSnapshot? SessionInfo = null,
     ConversationUsageSnapshot? Usage = null,
-    string? ConnectionInstanceId = null,
-    string? RestoreProjectionItemKey = null,
-    long? RestoreProjectionEpoch = null);
+    string? ConnectionInstanceId = null);
 
 public sealed record ConversationRemoteBindingState(
     string ConversationId,

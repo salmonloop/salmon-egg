@@ -26,9 +26,9 @@ public readonly record struct TranscriptViewportTransition(
     string EventName,
     string Reason);
 
+/// <summary>Stable item pin only — no ProjectionEpoch content clock.</summary>
 public readonly record struct TranscriptProjectionRestoreToken(
     string ConversationId,
-    long ProjectionEpoch,
     string ProjectionItemKey);
 
 public enum TranscriptViewportActivationKind
@@ -38,98 +38,66 @@ public enum TranscriptViewportActivationKind
     OverlayResume = 2,
 }
 
-public abstract record TranscriptViewportEvent(string ConversationId, int Generation)
+public enum TranscriptViewportAnchorKind
 {
-    public sealed record SessionActivated(
-        string ConversationId,
-        int Generation,
-        TranscriptViewportActivationKind ActivationKind = TranscriptViewportActivationKind.ColdEnter)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record ConversationContextInvalidated(string ConversationId, int Generation)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record UserDetached : TranscriptViewportEvent
-    {
-        public UserDetached(
-            string ConversationId,
-            int Generation,
-            TranscriptProjectionRestoreToken restoreToken)
-            : base(ConversationId, Generation)
-        {
-            RestoreToken = restoreToken;
-        }
-
-        public UserDetached(
-            string ConversationId,
-            int Generation,
-            TranscriptViewportAnchor anchor)
-            : base(ConversationId, Generation)
-        {
-            Anchor = anchor;
-        }
-
-        public TranscriptProjectionRestoreToken? RestoreToken { get; }
-
-        public TranscriptViewportAnchor? Anchor { get; }
-    }
-
-    public sealed record UserAttached(string ConversationId, int Generation)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record UserIntentScroll(string ConversationId, int Generation)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record TranscriptAppended(string ConversationId, int Generation, int AddedCount)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public record ViewportObserved(
-        string ConversationId,
-        int Generation,
-        TranscriptViewportFact Fact)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record ProjectionReady(
-        string ConversationId,
-        int Generation,
-        long ProjectionEpoch)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record RestoreConfirmed(
-        string ConversationId,
-        int Generation,
-        TranscriptProjectionRestoreToken RestoreToken)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record RestoreUnavailable(
-        string ConversationId,
-        int Generation,
-        string Reason)
-        : TranscriptViewportEvent(ConversationId, Generation);
-
-    public sealed record RestoreAbandoned(
-        string ConversationId,
-        int Generation,
-        string Reason)
-        : TranscriptViewportEvent(ConversationId, Generation);
+    FirstVisibleItem = 0,
+    PrimaryReadingItem = 1,
 }
 
-public enum TranscriptViewportCommandKind
+public readonly record struct TranscriptViewportAnchor(
+    string MessageId,
+    TranscriptViewportAnchorKind Kind,
+    double RelativeOffsetWithinAnchor,
+    int TranscriptVersion,
+    int DistanceFromEnd = 0,
+    string? ContentSignature = null);
+
+public readonly record struct TranscriptViewportConversationState(
+    TranscriptViewportState Mode,
+    TranscriptViewportAnchor? Anchor,
+    bool LastKnownBottomState,
+    int LastActivationGeneration,
+    bool RestorePending,
+    TranscriptProjectionRestoreToken? RestoreToken = null);
+
+public readonly record struct TranscriptViewportOrchestratorSnapshot(
+    TranscriptViewportState State,
+    bool IsAutoFollowAttached,
+    bool IsViewportDetached,
+    bool HasPendingSettle,
+    bool IsProgrammaticScrollInFlight,
+    bool AttachToBottomIntentPending,
+    bool UserScrollIntentPending,
+    bool UserScrollIntentCompleted,
+    bool ScrollToEndScheduled,
+    int Generation,
+    int ScheduledScrollRequestVersion,
+    int ActiveScrollGeneration);
+
+public readonly record struct TranscriptScrollRequestToken(int Generation, string ConversationId);
+
+public readonly record struct TranscriptScrollScheduleToken(int Generation, int RequestVersion, string ConversationId);
+
+public readonly record struct TranscriptViewportViewState(
+    bool IsViewReady,
+    bool IsViewportReady,
+    bool HasMessages,
+    bool IsAtBottom);
+
+public enum TranscriptViewportControllerActionKind
 {
     None = 0,
-    IssueScrollToEnd = 1,
+    ScrollTranscriptToEnd = 1,
     StopProgrammaticScroll = 2,
-    MarkAutoFollowAttached = 3,
-    MarkAutoFollowDetached = 4,
-    RestoreAnchor = 5,
-    RequestRestore = 6,
+    AutoFollowAttached = 3,
+    AutoFollowDetached = 4,
+    RequestRestore = 5,
+    ScrollIntoView = 6,
 }
 
-public readonly record struct TranscriptViewportCommand(
-    TranscriptViewportCommandKind Kind,
-    string ConversationId,
-    int Generation,
-    string? Reason = null,
-    TranscriptViewportTransition? Transition = null,
-    TranscriptViewportAnchor? Anchor = null,
-    TranscriptProjectionRestoreToken? RestoreToken = null);
+public readonly record struct TranscriptViewportControllerAction(
+    TranscriptViewportControllerActionKind Kind,
+    TranscriptScrollRequestToken ScrollRequestToken = default,
+    TranscriptProjectionRestoreToken? RestoreToken = null,
+    int Generation = -1,
+    string? ItemKey = null);
