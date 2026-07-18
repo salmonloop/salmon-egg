@@ -146,20 +146,29 @@
                 </NavigationViewItem.Icon>
 
                 <NavigationViewItem.Content>
-                    <Grid ColumnDefinitions="*">
+                    <!--
+                      Scope ContextFlyout to the project content leaf, not the hierarchical
+                      NavigationViewItem. Session children live under MenuItemsHost (sibling of
+                      Content), so they are not descendants of this grid. Putting ContextFlyout on
+                      the parent NVI is wrong on Uno 6.5.x Skia: ContextRequested does not stop
+                      bubbling after the child flyout opens (unoplatform/uno#23440), so session
+                      right-click also opens the project menu. Leaf-scoped flyout matches WinUI
+                      ownership and is correct on fixed Uno versions too.
+                    -->
+                    <Grid ColumnDefinitions="*"
+                          Background="Transparent">
+                        <Grid.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem x:Uid="ProjectNavNewSessionItem"
+                                                Command="{x:Bind CreateSessionCommand}" />
+                            </MenuFlyout>
+                        </Grid.ContextFlyout>
                         <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="1"
                                    VerticalAlignment="Center" />
                     </Grid>
                 </NavigationViewItem.Content>
-
-                <NavigationViewItem.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem x:Uid="ProjectNavNewSessionItem"
-                                        Command="{x:Bind CreateSessionCommand}" />
-                    </MenuFlyout>
-                </NavigationViewItem.ContextFlyout>
             </NavigationViewItem>
         </DataTemplate>
 

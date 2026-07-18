@@ -176,6 +176,69 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_ProjectContextFlyout_IsScopedToContentLeaf_NotHierarchicalItem()
+    {
+        // Architecture lock: hierarchical NavigationViewItem owns MenuItemsHost for sessions.
+        // Project ContextFlyout must live on the content leaf so session right-click cannot
+        // also open the project menu (Uno 6.5.x Skia ContextRequested bubbling defect
+        // unoplatform/uno#23440, plus correct WinUI ownership either way).
+        var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));
+        var xNamespace = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+
+        var projectTemplate = document
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "ProjectNavTemplate", StringComparison.Ordinal));
+        var sessionTemplate = document
+            .Descendants()
+            .Single(element =>
+                string.Equals(element.Name.LocalName, "DataTemplate", StringComparison.Ordinal)
+                && string.Equals(element.Attribute(xNamespace + "Key")?.Value, "SessionNavTemplate", StringComparison.Ordinal));
+
+        var projectNavItem = projectTemplate
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "NavigationViewItem", StringComparison.Ordinal));
+        var sessionNavItem = sessionTemplate
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "NavigationViewItem", StringComparison.Ordinal));
+
+        // Property-element ContextFlyout under NVI itself is forbidden for hierarchical hosts.
+        // XAML property elements are named "NavigationViewItem.ContextFlyout" / "Grid.ContextFlyout".
+        Assert.DoesNotContain(
+            projectNavItem.Elements(),
+            element => element.Name.LocalName.EndsWith(".ContextFlyout", StringComparison.Ordinal)
+                || string.Equals(element.Name.LocalName, "ContextFlyout", StringComparison.Ordinal));
+
+        var contentProperty = projectNavItem
+            .Elements()
+            .SingleOrDefault(element =>
+                string.Equals(element.Name.LocalName, "NavigationViewItem.Content", StringComparison.Ordinal)
+                || string.Equals(element.Name.LocalName, "Content", StringComparison.Ordinal));
+        Assert.NotNull(contentProperty);
+
+        var contentGrid = contentProperty!
+            .Elements()
+            .FirstOrDefault(element => string.Equals(element.Name.LocalName, "Grid", StringComparison.Ordinal));
+        Assert.NotNull(contentGrid);
+        Assert.Contains(
+            contentGrid!.Elements(),
+            element => element.Name.LocalName.EndsWith(".ContextFlyout", StringComparison.Ordinal)
+                || string.Equals(element.Name.LocalName, "ContextFlyout", StringComparison.Ordinal));
+        Assert.Contains(
+            "ProjectNavNewSessionItem",
+            contentGrid.ToString(SaveOptions.DisableFormatting),
+            StringComparison.Ordinal);
+
+        // Session leaf may keep ContextFlyout on the NavigationViewItem itself — it is not a
+        // hierarchical menu host for further ContextFlyout parents in our tree.
+        Assert.Contains(
+            sessionNavItem.Elements(),
+            element => element.Name.LocalName.EndsWith(".ContextFlyout", StringComparison.Ordinal)
+                || string.Equals(element.Name.LocalName, "ContextFlyout", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void MainPage_ProjectExpansionUsesNativeNavigationViewBehavior()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml"));

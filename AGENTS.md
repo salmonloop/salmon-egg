@@ -87,3 +87,4 @@
    - 可编辑行与语义 ID：配置项、导航项、远端目录、profile、可编辑行和跨层 semantic id 必须由单一 resolver/catalog/row ViewModel owner 构造、解析和承载命令身份；禁止多处复制前缀、未知远端 id 回退本地路径、父 ViewModel 反复注入 stale command 或静默改写用户配置；验证覆盖本地/远端/未知/冲突 id 和新增、删除、再新增交互。
    - 真实构建验证：GUI smoke、安装包验证、发布前回归、WASM 导航和跨平台验证必须使用本次构建实际产出的安装物、二进制、发布包或静态产物；禁止旧安装、旁路产物、开发服务器缓存、隐藏测试入口或来源不明的运行实例替代；验证报告必须记录产物路径、版本/提交来源和启动实例来源。
    - 打包本地化资源：当共享 `.resx` 需要投影为 Uno / WinUI 原生资源时，生成项必须在各目标平台收集资源输入前进入对应资源图，并由平台原生资源加载器解析；禁止只挂接单一平台构建目标、用源码字符串扫描代替真实包检查或在 ResourceMap 缺失时静默回退；验证必须检查本次 MSIX 的 `resources.pri` ResourceMap，并覆盖 Desktop/WASM 构建与 Windows 安装包启动 smoke。
+   - 层级菜单 ContextFlyout 所有权：对 `NavigationViewItem` 等层级控件，`ContextFlyout` 只能挂在被右键的语义叶子（例如 project content grid / session item），不得挂在拥有 `MenuItemsSource` / `MenuItemsHost` 的父容器上；禁止用 code-behind 吃掉 `RightTapped`/`ContextRequested`、遍历视觉树补丁菜单，或假设子菜单打开后父菜单一定不会再开；验证覆盖父+子同时有菜单、仅父有菜单、仅子有菜单，以及 Skia Desktop 与 WinUI 同路径右键。
