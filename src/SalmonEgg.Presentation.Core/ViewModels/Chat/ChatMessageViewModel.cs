@@ -407,7 +407,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 ProjectionItemKey = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, projectionIndex);
                 // The snapshot owns the authoritative time (UTC), or none. We localize it for
                 // display only when present; absent time stays null and the UI hides the clock.
-                Timestamp = snapshot.Timestamp?.ToLocalTime();
+                Timestamp = ConversationMessageTimestamp.ToDisplayLocal(snapshot.Timestamp);
                 IsOutgoing = snapshot.IsOutgoing;
                 ContentType = snapshot.ContentType ?? string.Empty;
                 Title = snapshot.Title ?? string.Empty;

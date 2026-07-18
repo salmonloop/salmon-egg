@@ -68,7 +68,7 @@ public sealed class TranscriptProjectionRestoreTokenProjectorTests
     }
 
     [Fact]
-    public void MissingMessageId_UsesFallbackProjectionItemKey()
+    public void MissingMessageId_UsesIndexScopedFallbackWithoutMutableBody()
     {
         var sut = new TranscriptProjectionRestoreTokenProjector();
         var transcript = ImmutableList.Create(
@@ -79,15 +79,79 @@ public sealed class TranscriptProjectionRestoreTokenProjectorTests
 
         Assert.True(projection.IsReady);
         Assert.NotNull(projection.Token);
-        Assert.Equal("idx:1:text/plain:fallback", projection.Token.Value.ProjectionItemKey);
+        Assert.Equal("idx:1:text:in", projection.Token.Value.ProjectionItemKey);
+    }
+
+    [Fact]
+    public void MissingMessageId_StreamingTextContent_DoesNotInvalidateCapturedKey()
+    {
+        // First-principles defect: identity keys must not include mutable body text.
+        // Detached viewport restore captures ProjectionItemKey; ACP streams rewrite TextContent
+        // on the same row. Including TextContent made IndexOfProjectionItemKey miss the anchor
+        // and fall back to bottom follow after every chunk.
+        var beforeStream = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "text",
+            TextContent = "Hel",
+            IsOutgoing = false
+        };
+        var afterStream = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "text",
+            TextContent = "Hello, world",
+            IsOutgoing = false
+        };
+
+        var keyBefore = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(beforeStream, 0);
+        var keyAfter = TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(afterStream, 0);
+
+        Assert.Equal(keyBefore, keyAfter);
+        Assert.Equal("idx:0:text:in", keyBefore);
+    }
+
+    [Fact]
+    public void MissingMessageId_PrefersProtocolMessageIdOverIndexFallback()
+    {
+        var snapshot = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ProtocolMessageId = "acp-msg-9",
+            ContentType = "text",
+            TextContent = "partial",
+            IsOutgoing = false
+        };
+
+        Assert.Equal(
+            "proto:acp-msg-9",
+            TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, 3));
+    }
+
+    [Fact]
+    public void MissingMessageId_PrefersToolCallIdForToolCallRows()
+    {
+        var snapshot = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ToolCallId = "call-42",
+            ContentType = "tool_call",
+            Title = "Read",
+            IsOutgoing = false
+        };
+
+        Assert.Equal(
+            "tool:call-42",
+            TranscriptProjectionRestoreTokenProjector.CreateProjectionItemKey(snapshot, 2));
     }
 
     private static ConversationMessageSnapshot Message(string? id, string text)
         => new()
         {
             Id = id ?? string.Empty,
-            ContentType = "text/plain",
+            ContentType = "text",
             TextContent = text,
+            IsOutgoing = false,
             Timestamp = DateTime.UtcNow,
         };
 }

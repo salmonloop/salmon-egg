@@ -12,14 +12,29 @@ public sealed class TranscriptProjectionRestoreTokenProjector
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        // Identity ladder (first principles):
+        // 1) Durable application Id
+        // 2) Protocol message Id when present
+        // 3) Tool-call Id for tool rows
+        // 4) Epoch-scoped index + immutable template shape (never mutable body text)
         if (!string.IsNullOrWhiteSpace(message.Id))
         {
             return $"msg:{message.Id}";
         }
 
+        if (!string.IsNullOrWhiteSpace(message.ProtocolMessageId))
+        {
+            return $"proto:{message.ProtocolMessageId}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(message.ToolCallId))
+        {
+            return $"tool:{message.ToolCallId}";
+        }
+
         var contentType = message.ContentType ?? string.Empty;
-        var textContent = message.TextContent ?? string.Empty;
-        return $"idx:{projectionIndex}:{contentType}:{textContent}";
+        var direction = message.IsOutgoing ? "out" : "in";
+        return $"idx:{projectionIndex}:{contentType}:{direction}";
     }
 
     public TranscriptProjectionRestoreProjection Project(
