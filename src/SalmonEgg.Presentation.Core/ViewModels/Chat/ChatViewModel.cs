@@ -2345,43 +2345,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         NotifyComposerProjectionChanged();
     }
 
-    private static ConversationMessageSnapshot ToSnapshot(ChatMessageViewModel vm)
-    {
-        return new ConversationMessageSnapshot
-        {
-            Id = vm.Id,
-            // The VM stores the time in local time (or none); persist the UTC instant, or null
-            // when the source carried no authoritative message time.
-            Timestamp = ConversationMessageTimestamp.ToAuthoritativeUtc(vm.Timestamp),
-            IsOutgoing = vm.IsOutgoing,
-            ContentType = vm.ContentType ?? string.Empty,
-            Title = vm.Title ?? string.Empty,
-            TextContent = vm.TextContent ?? string.Empty,
-            ImageData = vm.ImageData ?? string.Empty,
-            ImageMimeType = vm.ImageMimeType ?? string.Empty,
-            AudioData = vm.AudioData ?? string.Empty,
-            AudioMimeType = vm.AudioMimeType ?? string.Empty,
-            ProtocolMessageId = null,
-            ToolCallId = vm.ToolCallId,
-            ToolCallKind = vm.ToolCallKind,
-            ToolCallStatus = vm.ToolCallStatus,
-            ToolCallJson = vm.ToolCallJson,
-            ToolCallRawInputJson = vm.ToolCallRawInputJson,
-            ToolCallRawOutputJson = vm.ToolCallRawOutputJson,
-            ToolCallContent = CloneToolCallContentList(vm.ToolCallContent),
-            ToolCallLocations = CloneToolCallLocationList(vm.ToolCallLocations),
-            PlanEntry = vm.PlanEntry != null
-                ? new ConversationPlanEntrySnapshot
-                {
-                    Content = vm.PlanEntry.Content,
-                    Status = vm.PlanEntry.Status,
-                    Priority = vm.PlanEntry.Priority
-                }
-                : null,
-            ModeId = vm.ModeId
-        };
-    }
-
     private ChatMessageViewModel CreateProjectedMessageFromSnapshot(ConversationMessageSnapshot s, int projectionIndex)
     {
         var viewModel = FromSnapshot(s, projectionIndex);

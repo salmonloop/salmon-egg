@@ -219,6 +219,45 @@ public sealed class ChatTranscriptVirtualizedMessageCollectionTests
     }
 
     [Fact]
+    public void Reset_WhenUncachedProtocolMessageIdChanges_PublishesReplace()
+    {
+        // ProtocolMessageId is restore/identity-relevant fact. Uncached equality must
+        // treat its change as projection-relevant (not ignore it while comparing other fields).
+        var sut = new ChatTranscriptVirtualizedMessageCollection();
+        var events = new List<NotifyCollectionChangedEventArgs>();
+        sut.CollectionChanged += (_, args) => events.Add(args);
+        sut.Reset(
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "m-1",
+                ContentType = "text",
+                TextContent = "hello",
+                ProtocolMessageId = null
+            }),
+            Project,
+            MatchesSnapshot,
+            PatchProjectedMessage);
+        events.Clear();
+
+        sut.Reset(
+            "conv-1",
+            ImmutableList.Create(new ConversationMessageSnapshot
+            {
+                Id = "m-1",
+                ContentType = "text",
+                TextContent = "hello",
+                ProtocolMessageId = "proto-1"
+            }),
+            Project,
+            MatchesSnapshot,
+            PatchProjectedMessage);
+
+        var replace = Assert.Single(events);
+        Assert.Equal(NotifyCollectionChangedAction.Replace, replace.Action);
+    }
+
+    [Fact]
     public void CreateItem_DoesNotRegisterSourceCache_SoStreamingEmitsReplaceInsteadOfPatch()
     {
         var sut = new ChatTranscriptVirtualizedMessageCollection();

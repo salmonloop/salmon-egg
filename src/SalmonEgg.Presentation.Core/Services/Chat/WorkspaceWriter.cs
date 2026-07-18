@@ -616,7 +616,7 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
     private static bool MessageEquals(ConversationMessageSnapshot left, ConversationMessageSnapshot right)
     {
         return string.Equals(left.Id, right.Id, StringComparison.Ordinal)
-            && left.Timestamp == right.Timestamp
+            && ConversationMessageTimestamp.InstantEquals(left.Timestamp, right.Timestamp)
             && left.IsOutgoing == right.IsOutgoing
             && string.Equals(left.ContentType, right.ContentType, StringComparison.Ordinal)
             && string.Equals(left.Title, right.Title, StringComparison.Ordinal)
