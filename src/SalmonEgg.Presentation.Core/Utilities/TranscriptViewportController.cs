@@ -79,7 +79,11 @@ public sealed class TranscriptViewportController
     public void MarkUserScrollIntentStarted() => _userScrollIntentPending = true;
     public void MarkUserScrollIntentCompleted() => _userScrollIntentPending = false;
 
-    public void Load(string? conversationId, bool isSessionActive, bool isOverlayVisible, bool hasMessages)
+    public IReadOnlyList<TranscriptViewportControllerAction> Load(
+        string? conversationId,
+        bool isSessionActive,
+        bool isOverlayVisible,
+        bool hasMessages)
     {
         _isLoaded = true;
         _isSessionActive = isSessionActive;
@@ -88,15 +92,16 @@ public sealed class TranscriptViewportController
         _userScrollIntentPending = false;
         _programmaticScrollInFlight = false;
         _hasActiveScrollToken = false;
+        _pinnedToken = null;
         if (!_isOverlayVisible && isSessionActive && !string.IsNullOrWhiteSpace(_conversationId))
         {
             _activationGeneration++;
-            _ = _follow.Activate(_conversationId, _activationGeneration);
+            // Cold/warm enter always follows bottom; do not infer pin from pre-layout geometry.
+            return ToActions(_follow.Activate(_conversationId, _activationGeneration), hasMessages);
         }
-        else
-        {
-            _follow.Deactivate();
-        }
+
+        _follow.Deactivate();
+        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> Unload()
@@ -154,8 +159,48 @@ public sealed class TranscriptViewportController
     public IReadOnlyList<TranscriptViewportControllerAction> OnViewportChanged(
         TranscriptViewportViewState viewState,
         TranscriptProjectionRestoreToken? restoreToken = null)
+        => ObserveViewport(viewState, restoreToken, isUserGesture: false);
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportIntent(
+        TranscriptViewportViewState viewState,
+        TranscriptProjectionRestoreToken? restoreToken = null)
+        => ObserveViewport(viewState, restoreToken, isUserGesture: true);
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportDetachIntent(
+        TranscriptViewportViewState viewState,
+        TranscriptProjectionRestoreToken? restoreToken = null)
+        => ObserveViewport(viewState, restoreToken, isUserGesture: true);
+
+    private IReadOnlyList<TranscriptViewportControllerAction> ObserveViewport(
+        TranscriptViewportViewState viewState,
+        TranscriptProjectionRestoreToken? restoreToken,
+        bool isUserGesture)
     {
         if (!_isLoaded || string.IsNullOrWhiteSpace(_conversationId))
+        {
+            return [];
+        }
+
+        // A user gesture is the authoritative "I've taken control" signal: it overrides any
+        // in-flight programmatic scroll so the pin is honored. A passive geometry tick must
+        // keep respecting the programmatic scroll so the initial settle is not mistaken for
+        // a user detach.
+        if (isUserGesture)
+        {
+            _userScrollIntentPending = true;
+            _programmaticScrollInFlight = false;
+            _hasActiveScrollToken = false;
+        }
+
+        // First principles: pin only from user intent (or an explicit restorable token),
+        // never from pre-layout / passive geometry while still following bottom.
+        var mayPin =
+            isUserGesture
+            || _follow.IsPinned
+            || _userScrollIntentPending
+            || restoreToken is { ProjectionItemKey: { Length: > 0 } };
+
+        if (!viewState.IsAtBottom && !mayPin)
         {
             return [];
         }
@@ -169,9 +214,16 @@ public sealed class TranscriptViewportController
             _programmaticScrollInFlight,
             topKey));
 
-        if (_follow.IsPinned && restoreToken is { } token)
+        if (_follow.IsPinned)
         {
-            _pinnedToken = token;
+            if (restoreToken is { } token)
+            {
+                _pinnedToken = token;
+            }
+            else if (TranscriptItemKey.IsRestorable(topKey))
+            {
+                _pinnedToken = new TranscriptProjectionRestoreToken(_conversationId, topKey!);
+            }
         }
         else if (_follow.IsFollowingBottom)
         {
@@ -180,16 +232,6 @@ public sealed class TranscriptViewportController
 
         return ToActions(request, viewState.HasMessages);
     }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportIntent(
-        TranscriptViewportViewState viewState,
-        TranscriptProjectionRestoreToken? restoreToken = null)
-        => OnViewportChanged(viewState, restoreToken);
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnUserViewportDetachIntent(
-        TranscriptViewportViewState viewState,
-        TranscriptProjectionRestoreToken? restoreToken = null)
-        => OnViewportChanged(viewState, restoreToken);
 
     public void OnUserPointerPressed(bool isDetached)
         => _userScrollIntentPending = true;
@@ -225,8 +267,12 @@ public sealed class TranscriptViewportController
             return [];
         }
 
-        // Content changed: if pinned and not visible, re-anchor; if following, scroll end.
-        return ContentChanged(pinStillResolvable: _pinnedToken is not null, pinIsVisible: false);
+        // Content stream/patch: keep pin stable when still resolvable. Do NOT force re-anchor
+        // on every projection tick (that caused ScrollIntoView storms while streaming).
+        // Visibility-driven re-anchor is owned by OnViewportChanged observations.
+        var pinResolvable = _pinnedToken is { } pin
+            && TranscriptItemKey.IsRestorable(pin.ProjectionItemKey);
+        return ContentChanged(pinStillResolvable: pinResolvable || !_follow.IsPinned, pinIsVisible: true);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> SuspendForOverlay()
