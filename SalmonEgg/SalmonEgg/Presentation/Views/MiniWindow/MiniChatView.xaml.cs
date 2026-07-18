@@ -248,14 +248,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
         if (e.PropertyName == nameof(ChatViewModel.IsSessionActive))
         {
-            if (_viewportController.State is TranscriptViewportState.DetachedPendingRestore
-                or TranscriptViewportState.DetachedRestoring)
-            {
-                TryApplyPendingProjectionRestore();
-                TryRefreshViewportCoordinatorFromView();
-                return;
-            }
-
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             TryIssueTranscriptScrollRequestIfAttached();
@@ -265,14 +257,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         if (e.PropertyName == nameof(ChatViewModel.MessageHistory))
         {
             EnsureViewModelTracking();
-            if (_viewportController.State is TranscriptViewportState.DetachedPendingRestore
-                or TranscriptViewportState.DetachedRestoring)
-            {
-                TryApplyPendingProjectionRestore();
-                TryRefreshViewportCoordinatorFromView();
-                return;
-            }
-
             ResetAutoScrollStateForConversationChange();
             TryIssueTranscriptScrollRequestIfAttached();
             return;
@@ -570,11 +554,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     }
 
     private bool IsViewportDetachedByUser()
-    {
-        return _viewportController.State is TranscriptViewportState.DetachedByUser
-            or TranscriptViewportState.DetachedPendingRestore
-            or TranscriptViewportState.DetachedRestoring;
-    }
+        => _viewportController.State is TranscriptViewportState.DetachedByUser;
 
     private string CurrentViewportConversationId => ViewModel.CurrentSessionId ?? string.Empty;
 

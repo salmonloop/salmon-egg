@@ -1,15 +1,14 @@
 namespace SalmonEgg.Presentation.Utilities;
 
+/// <summary>
+/// Public follow surface for ChatView automation. Maps 1:1 to TranscriptFollowMode
+/// (+ Suspended when no active conversation). No restore/settle intermediate states.
+/// </summary>
 public enum TranscriptViewportState
 {
-    Idle = 0,
-    Settling = 1,
-    Following = 2,
-    DetachedByUser = 3,
-    Suspended = 4,
-    DetachedPendingRestore = 5,
-    DetachedRestoring = 6,
-    BootstrapSettling = 7,
+    Suspended = 0,
+    Following = 1,
+    DetachedByUser = 2,
 }
 
 public readonly record struct TranscriptViewportFact(

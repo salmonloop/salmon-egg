@@ -933,11 +933,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     }
 
     private bool IsViewportDetachedByUser()
-    {
-        return _viewportController.State is TranscriptViewportState.DetachedByUser
-            or TranscriptViewportState.DetachedPendingRestore
-            or TranscriptViewportState.DetachedRestoring;
-    }
+        => _viewportController.State is TranscriptViewportState.DetachedByUser;
 
     private string CurrentViewportConversationId => ViewModel.CurrentSessionId ?? string.Empty;
 
@@ -1026,16 +1022,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         if (e.PropertyName == nameof(ChatViewModel.IsSessionActive))
         {
-            if (_viewportController.State is TranscriptViewportState.DetachedPendingRestore
-                or TranscriptViewportState.DetachedRestoring)
-            {
-                BeginLayoutLoadingIfPendingMessages();
-                TryApplyPendingProjectionRestore();
-                TryRefreshViewportCoordinatorFromView();
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             TryIssueTranscriptScrollRequestIfAttached();
@@ -1047,16 +1033,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         if (e.PropertyName == nameof(ChatViewModel.MessageHistory))
         {
             EnsureMessageTracking();
-            if (_viewportController.State is TranscriptViewportState.DetachedPendingRestore
-                or TranscriptViewportState.DetachedRestoring)
-            {
-                BeginLayoutLoadingIfPendingMessages();
-                TryApplyPendingProjectionRestore();
-                TryRefreshViewportCoordinatorFromView();
-                UpdateTranscriptViewportAutomationState();
-                return;
-            }
-
             ResetAutoScrollStateForConversationChange();
             TryIssueTranscriptScrollRequestIfAttached();
             BeginLayoutLoadingIfPendingMessages();
@@ -1373,12 +1349,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         return _viewportController.State switch
         {
-            TranscriptViewportState.Idle => "untracked",
-            TranscriptViewportState.Settling => "pending",
             TranscriptViewportState.Following => "bottom",
             TranscriptViewportState.DetachedByUser => "not_bottom",
-            TranscriptViewportState.DetachedPendingRestore => "pending",
-            TranscriptViewportState.DetachedRestoring => "pending",
             TranscriptViewportState.Suspended => "loading",
             _ => "untracked",
         };
