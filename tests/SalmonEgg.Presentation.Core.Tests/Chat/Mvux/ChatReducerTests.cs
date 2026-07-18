@@ -458,6 +458,66 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void UpsertTranscript_WhenMessageIdsAreEmpty_DoesNotCollapseDistinctMessages()
+    {
+        // Production defect: ConversationMessageSnapshot.Id defaults to string.Empty.
+        // Upsert matched by raw string.Equals(Id), so every empty-Id snapshot replaced the
+        // first empty-Id row and silently dropped distinct transcript content (corrupt
+        // persistence, partial projectors, or any path that forgot to assign Id).
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+        var first = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "text",
+            TextContent = "first empty-id message"
+        };
+        var second = new ConversationMessageSnapshot
+        {
+            Id = string.Empty,
+            ContentType = "tool_call",
+            Title = "Read file",
+            ToolCallId = "tool-1"
+        };
+
+        var afterFirst = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-1", first));
+        var afterSecond = ChatReducer.Reduce(afterFirst, new UpsertTranscriptMessageAction("conv-1", second));
+
+        var transcript = afterSecond.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        Assert.Equal(2, transcript!.Count);
+        Assert.Equal("first empty-id message", transcript[0].TextContent);
+        Assert.Equal("tool_call", transcript[1].ContentType);
+        Assert.Equal("tool-1", transcript[1].ToolCallId);
+    }
+
+    [Fact]
+    public void UpsertTranscript_WhenMessageIdIsStable_StillReplacesSameRow()
+    {
+        var initialState = ChatState.Empty with { HydratedConversationId = "conv-1" };
+        var original = new ConversationMessageSnapshot
+        {
+            Id = "m-stable",
+            ContentType = "text",
+            TextContent = "before"
+        };
+        var replacement = new ConversationMessageSnapshot
+        {
+            Id = "m-stable",
+            ContentType = "text",
+            TextContent = "after"
+        };
+
+        var afterOriginal = ChatReducer.Reduce(initialState, new UpsertTranscriptMessageAction("conv-1", original));
+        var afterReplace = ChatReducer.Reduce(afterOriginal, new UpsertTranscriptMessageAction("conv-1", replacement));
+
+        var transcript = afterReplace.ResolveContentSlice("conv-1")?.Transcript;
+        Assert.NotNull(transcript);
+        var message = Assert.Single(transcript!);
+        Assert.Equal("m-stable", message.Id);
+        Assert.Equal("after", message.TextContent);
+    }
+
+    [Fact]
     public void GivenBackgroundConversationSessionState_WhenSelectingThatConversation_ThenSessionStateProjectsFromStoredSlice()
     {
         var initialState = ChatState.Empty with

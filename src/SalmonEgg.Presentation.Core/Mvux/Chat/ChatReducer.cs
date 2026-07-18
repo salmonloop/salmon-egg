@@ -511,6 +511,15 @@ public static class ChatReducer
         ConversationMessageSnapshot message)
     {
         var current = transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+
+        // Only non-empty Ids are authoritative upsert keys. ConversationMessageSnapshot.Id
+        // defaults to string.Empty; treating blank Ids as equal would collapse unrelated
+        // rows (corrupt persistence / projectors that forgot to assign Id) into one message.
+        if (string.IsNullOrWhiteSpace(message.Id))
+        {
+            return current.Add(message);
+        }
+
         var existingIndex = -1;
         for (var i = 0; i < current.Count; i++)
         {
