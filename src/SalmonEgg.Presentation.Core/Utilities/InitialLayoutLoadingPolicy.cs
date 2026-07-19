@@ -4,9 +4,6 @@ public static class InitialLayoutLoadingPolicy
 {
     public static bool ShouldKeepLoading(
         bool isSessionActive,
-        int messageCount,
-        bool hasPendingInitialScroll,
-        bool lastItemContainerGenerated,
         bool isHydrating,
         bool isRemoteHydrationPending)
     {
@@ -15,23 +12,8 @@ public static class InitialLayoutLoadingPolicy
             return false;
         }
 
-        // Keep loading while we're hydrating remote state, even if messageCount is 0.
+        // Keep loading while we're hydrating remote state, even if the transcript is empty.
         // This prevents the "flash of empty chat interface" when switching sessions.
-        if (isHydrating || isRemoteHydrationPending)
-        {
-            return true;
-        }
-
-        if (messageCount <= 0)
-        {
-            return false;
-        }
-
-        if (lastItemContainerGenerated)
-        {
-            return false;
-        }
-
-        return hasPendingInitialScroll;
+        return isHydrating || isRemoteHydrationPending;
     }
 }

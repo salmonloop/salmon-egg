@@ -65,14 +65,39 @@ public sealed class ChatViewXamlTests
         var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
 
-        Assert.Contains("TryIssueTranscriptScrollRequestIfAttached();", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("TryIssueTranscriptScrollRequestIfAttached();", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n                {\n                    TryIssueTranscriptScrollRequest();\n                }\n                TryIssueTranscriptScrollRequest();", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                TryIssueTranscriptScrollRequest();\n            }\n            TryIssueTranscriptScrollRequest();", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("ApplyCurrentViewportStateIfAttached();", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("ApplyCurrentViewportStateIfAttached();", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n                {\n                    ApplyCurrentViewportState();\n                }\n                ApplyCurrentViewportState();", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                ApplyCurrentViewportState();\n            }\n            ApplyCurrentViewportState();", miniChatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", chatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", chatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", miniChatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", miniChatViewCodeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewsCodeBehind_DoesNotRetainLegacyViewportShimSurface()
+    {
+        foreach (var path in new[]
+        {
+            @"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs",
+            @"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs"
+        })
+        {
+            var code = LoadText(path);
+
+            Assert.DoesNotContain("OnMessagesAppended(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("MarkProjectionRestoreQueued()", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("MarkDetachedViewportInteractionStarted()", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("StopProgrammaticScroll", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowDetached", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowAttached", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("IsViewReady:", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("IsViewportReady:", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("HasLastItemContainerGenerated(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_restoreDetachedViewportAfterOverlay", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_restoreDetachedViewportConversationId", code, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

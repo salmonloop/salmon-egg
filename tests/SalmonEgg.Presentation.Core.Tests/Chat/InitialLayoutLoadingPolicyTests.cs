@@ -6,30 +6,24 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat;
 public sealed class InitialLayoutLoadingPolicyTests
 {
     [Theory]
-    [InlineData(true, 3, true, false, false, false, true)]
-    [InlineData(true, 3, false, false, false, false, false)]
-    [InlineData(true, 3, true, true, false, false, false)]
-    [InlineData(true, 0, true, false, false, false, false)]
-    [InlineData(false, 3, true, false, false, false, false)]
-    [InlineData(true, 0, true, false, true, false, true)] // Hydrating should keep loading
-    [InlineData(true, 0, true, false, false, true, true)] // Remote hydration pending should keep loading
-    public void ShouldKeepLoading_UsesPendingInitialScrollAsTheFallbackExitGate(
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, true, true)]
+    [InlineData(false, true, true, false)]
+    public void ShouldKeepLoading_TracksOnlyActiveHydration(
         bool isSessionActive,
-        int messageCount,
-        bool hasPendingInitialScroll,
-        bool lastItemContainerGenerated,
         bool isHydrating,
         bool isRemoteHydrationPending,
         bool expected)
     {
+        // Act
         var actual = InitialLayoutLoadingPolicy.ShouldKeepLoading(
             isSessionActive,
-            messageCount,
-            hasPendingInitialScroll,
-            lastItemContainerGenerated,
             isHydrating,
             isRemoteHydrationPending);
 
+        // Assert
         Assert.Equal(expected, actual);
     }
 }

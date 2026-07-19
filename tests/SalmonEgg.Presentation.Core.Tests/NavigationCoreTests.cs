@@ -986,6 +986,28 @@ public sealed class NavigationCoreTests
         Assert.DoesNotContain("ProjectionEpoch", controllerCode, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TranscriptViewportContracts_DoesNotReintroduceLegacyCompatibilityShell()
+    {
+        var contractsCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportContracts.cs");
+        var controllerCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportController.cs");
+
+        Assert.DoesNotContain("TranscriptViewportFact", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportTransition", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportAnchorKind", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportAnchor", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportOrchestratorSnapshot", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptScrollScheduleToken", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("HasPendingSettle", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("AttachToBottomIntentPending", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("LastTransition", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MarkProjectionRestoreQueued", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("MarkDetachedViewportInteractionStarted", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StopProgrammaticScroll", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowDetached", controllerCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowAttached", controllerCode, StringComparison.Ordinal);
+    }
+
 
     [Fact]
     public void ChatViewsCodeBehind_UseOpaqueTokensInsteadOfReadingOrchestratorInternalCounters()
@@ -1033,6 +1055,35 @@ public sealed class NavigationCoreTests
             Assert.DoesNotContain("TryGetRelativeOffsetWithinItem", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TrySetVerticalOffset", code, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void TranscriptViewportContracts_ExposeOnlyCurrentFollowAndRestoreShape()
+    {
+        var contractsCode = LoadFile(@"src\SalmonEgg.Presentation.Core\Utilities\TranscriptViewportContracts.cs");
+
+        Assert.Contains("public enum TranscriptViewportState", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public readonly record struct TranscriptProjectionRestoreToken", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public enum TranscriptViewportActivationKind", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public readonly record struct TranscriptViewportConversationState", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public readonly record struct TranscriptScrollRequestToken", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public readonly record struct TranscriptViewportViewState", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("public enum TranscriptViewportControllerActionKind", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("ScrollTranscriptToEnd = 1", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("RequestRestore = 5", contractsCode, StringComparison.Ordinal);
+        Assert.Contains("ScrollIntoView = 6", contractsCode, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("TranscriptViewportFact", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportTransition", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportAnchorKind", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportAnchor", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportOrchestratorSnapshot", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptScrollScheduleToken", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("StopProgrammaticScroll", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowDetached", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TranscriptViewportControllerActionKind.AutoFollowAttached", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsViewReady", contractsCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsViewportReady", contractsCode, StringComparison.Ordinal);
     }
 
     [Fact]

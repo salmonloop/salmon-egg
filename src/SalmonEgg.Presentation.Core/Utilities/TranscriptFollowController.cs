@@ -41,6 +41,25 @@ public sealed class TranscriptFollowController
         return ScrollToEnd(conversationId, activationGeneration, "ActivateFollowBottom");
     }
 
+    public void ActivatePinned(
+        string conversationId,
+        int activationGeneration,
+        string pinnedItemKey)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId)
+            || !TranscriptItemKey.IsRestorable(pinnedItemKey))
+        {
+            Deactivate();
+            return;
+        }
+
+        _state = new TranscriptFollowState(
+            conversationId,
+            activationGeneration,
+            TranscriptFollowMode.PinnedToItem,
+            pinnedItemKey);
+    }
+
     public void Deactivate()
     {
         _state = new TranscriptFollowState(

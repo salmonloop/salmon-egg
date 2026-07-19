@@ -5,13 +5,13 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 namespace SalmonEgg.Presentation.Utilities;
 
 /// <summary>
-/// Epoch-free follow controller facade preserving ChatView call signatures.
-/// Intent: FollowingBottom vs PinnedToItem; context: conversationId + activation generation;
-/// anchor: restorable item key. Native ListView executes scroll.
+/// Single owner of transcript follow state across conversation switches.
+/// Intent stays in Core; native ListView remains responsible for the actual scroll operation.
 /// </summary>
 public sealed class TranscriptViewportController
 {
     private readonly TranscriptFollowController _follow = new();
+    private readonly Dictionary<string, TranscriptViewportConversationState> _conversationStates = new(StringComparer.Ordinal);
     private string _conversationId = string.Empty;
     private bool _isLoaded;
     private bool _isSessionActive;
@@ -22,20 +22,6 @@ public sealed class TranscriptViewportController
     private TranscriptProjectionRestoreToken? _pinnedToken;
     private TranscriptScrollRequestToken _activeScrollToken;
     private bool _hasActiveScrollToken;
-
-    public TranscriptViewportOrchestratorSnapshot Snapshot => new(
-        State,
-        IsAutoFollowAttached,
-        IsViewportDetached,
-        HasPendingSettle,
-        IsProgrammaticScrollInFlight,
-        AttachToBottomIntentPending,
-        UserScrollIntentPending,
-        UserScrollIntentCompleted,
-        ScrollToEndScheduled: false,
-        Generation,
-        ScheduledScrollRequestVersion: 0,
-        ActiveScrollGeneration: _hasActiveScrollToken ? _activeScrollToken.Generation : -1);
 
     public TranscriptViewportState State
         => !_isLoaded || string.IsNullOrWhiteSpace(_conversationId)
@@ -49,34 +35,30 @@ public sealed class TranscriptViewportController
 
     public bool IsViewportDetached => _follow.IsPinned;
     public bool IsAutoFollowAttached => _follow.IsFollowingBottom;
-    public bool HasPendingSettle => false;
-    public bool HasActiveScrollGeneration => _hasActiveScrollToken;
-    public bool IsProgrammaticScrollInFlight => _programmaticScrollInFlight;
-    public bool AttachToBottomIntentPending => false;
     public bool UserScrollIntentPending => _userScrollIntentPending;
     public bool UserScrollIntentCompleted => !_userScrollIntentPending;
     public int Generation => _activationGeneration;
-    public TranscriptViewportTransition? LastTransition => null;
 
     public TranscriptViewportConversationState? GetConversationState(string conversationId)
     {
-        if (!string.Equals(_conversationId, conversationId, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(conversationId))
         {
             return null;
         }
 
-        return new TranscriptViewportConversationState(
-            State,
-            Anchor: null,
-            LastKnownBottomState: _follow.IsFollowingBottom,
-            LastActivationGeneration: _activationGeneration,
-            RestorePending: false,
-            RestoreToken: _pinnedToken);
+        if (string.Equals(_conversationId, conversationId, StringComparison.Ordinal)
+            && State != TranscriptViewportState.Suspended)
+        {
+            return CreateCurrentConversationState();
+        }
+
+        return _conversationStates.TryGetValue(conversationId, out var state)
+            ? state
+            : null;
     }
 
-    public void MarkProjectionRestoreQueued() { }
-    public void MarkDetachedViewportInteractionStarted() { }
     public void MarkUserScrollIntentStarted() => _userScrollIntentPending = true;
+
     public void MarkUserScrollIntentCompleted() => _userScrollIntentPending = false;
 
     public IReadOnlyList<TranscriptViewportControllerAction> Load(
@@ -88,30 +70,30 @@ public sealed class TranscriptViewportController
         _isLoaded = true;
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
-        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        ClearTransientScrollState();
         _userScrollIntentPending = false;
-        _programmaticScrollInFlight = false;
-        _hasActiveScrollToken = false;
-        _pinnedToken = null;
-        if (!_isOverlayVisible && isSessionActive && !string.IsNullOrWhiteSpace(_conversationId))
+        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+
+        if (CanActivateCurrentConversation())
         {
-            _activationGeneration++;
-            // Cold/warm enter always follows bottom; do not infer pin from pre-layout geometry.
-            return ToActions(_follow.Activate(_conversationId, _activationGeneration), hasMessages);
+            return ActivateResolvedConversation(TranscriptViewportActivationKind.ColdEnter, hasMessages);
         }
 
         _follow.Deactivate();
+        _pinnedToken = null;
         return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> Unload()
     {
+        PersistCurrentConversationState();
         _isLoaded = false;
         _follow.Deactivate();
         _conversationId = string.Empty;
         _isSessionActive = false;
         _isOverlayVisible = false;
-        _hasActiveScrollToken = false;
+        ClearTransientScrollState();
+        _userScrollIntentPending = false;
         _pinnedToken = null;
         return [];
     }
@@ -122,18 +104,12 @@ public sealed class TranscriptViewportController
         bool isOverlayVisible,
         bool hasMessages)
     {
-        _isSessionActive = isSessionActive;
-        _isOverlayVisible = isOverlayVisible;
-        _conversationId = ResolveConversationId(conversationId, isSessionActive);
-        _userScrollIntentPending = false;
-        if (string.IsNullOrWhiteSpace(_conversationId) || isOverlayVisible || !isSessionActive)
-        {
-            _follow.Deactivate();
-            return [];
-        }
-
-        _activationGeneration++;
-        return ToActions(_follow.Activate(_conversationId, _activationGeneration), hasMessages);
+        return ActivateConversation(
+            conversationId,
+            isSessionActive,
+            isOverlayVisible,
+            hasMessages,
+            TranscriptViewportActivationKind.WarmReturn);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> ActivateCurrentConversation(
@@ -142,10 +118,16 @@ public sealed class TranscriptViewportController
         bool isOverlayVisible,
         bool hasMessages,
         TranscriptViewportActivationKind activationKind)
-        => OnConversationChanged(conversationId, isSessionActive, isOverlayVisible, hasMessages);
+    {
+        return ActivateConversation(
+            conversationId,
+            isSessionActive,
+            isOverlayVisible,
+            hasMessages,
+            activationKind);
+    }
 
-    public IReadOnlyList<TranscriptViewportControllerAction> OnMessagesAppended(
-        int addedCount,
+    public IReadOnlyList<TranscriptViewportControllerAction> OnTranscriptContentChanged(
         TranscriptViewportViewState viewState)
     {
         if (!_isLoaded || string.IsNullOrWhiteSpace(_conversationId))
@@ -153,7 +135,7 @@ public sealed class TranscriptViewportController
             return [];
         }
 
-        return ContentChanged(pinStillResolvable: true, pinIsVisible: true);
+        return ContentChanged(pinStillResolvable: true, pinIsVisible: true, viewState.HasMessages);
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnViewportChanged(
@@ -171,6 +153,174 @@ public sealed class TranscriptViewportController
         TranscriptProjectionRestoreToken? restoreToken = null)
         => ObserveViewport(viewState, restoreToken, isUserGesture: true);
 
+    private IReadOnlyList<TranscriptViewportControllerAction> OnScheduledScrollObservation(
+        TranscriptScrollRequestToken requestToken)
+    {
+        if (!MatchesActiveScrollRequest(requestToken))
+        {
+            return [];
+        }
+
+        _programmaticScrollInFlight = false;
+        _hasActiveScrollToken = false;
+        PersistCurrentConversationState();
+        return [];
+    }
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnProjectionReady(
+        string? conversationId)
+    {
+        if (!_isLoaded || !_isSessionActive || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return [];
+        }
+
+        if (!string.Equals(_conversationId, conversationId, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var pinResolvable = _pinnedToken is { } pin
+            && TranscriptItemKey.IsRestorable(pin.ProjectionItemKey);
+        return ContentChanged(
+            pinStillResolvable: pinResolvable || !_follow.IsPinned,
+            pinIsVisible: true,
+            hasMessages: true);
+    }
+
+    public IReadOnlyList<TranscriptViewportControllerAction> SuspendForOverlay()
+    {
+        PersistCurrentConversationState();
+        _isOverlayVisible = true;
+        _follow.Deactivate();
+        ClearTransientScrollState();
+        _userScrollIntentPending = false;
+        return [];
+    }
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreConfirmed(
+        TranscriptProjectionRestoreToken token,
+        int generation)
+    {
+        if (MatchesRestoreContext(token.ConversationId, generation))
+        {
+            _programmaticScrollInFlight = false;
+            _hasActiveScrollToken = false;
+            PersistCurrentConversationState();
+        }
+
+        return [];
+    }
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreUnavailable(
+        string? conversationId,
+        int generation,
+        bool hasMessages)
+    {
+        if (!MatchesRestoreContext(conversationId, generation))
+        {
+            return [];
+        }
+
+        var actions = ContentChanged(pinStillResolvable: false, pinIsVisible: false, hasMessages);
+        PersistCurrentConversationState();
+        return actions;
+    }
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreAbandoned(
+        string? conversationId,
+        int generation)
+    {
+        if (!MatchesRestoreContext(conversationId, generation))
+        {
+            return [];
+        }
+
+        ClearTransientScrollState();
+        PersistCurrentConversationState();
+        return [];
+    }
+
+    public bool MatchesActiveScrollRequest(TranscriptScrollRequestToken token)
+        => _hasActiveScrollToken
+           && token.Generation == _activeScrollToken.Generation
+           && string.Equals(token.ConversationId, _activeScrollToken.ConversationId, StringComparison.Ordinal);
+
+    public IReadOnlyList<TranscriptViewportControllerAction> OnActiveScrollObservation()
+    {
+        if (!_hasActiveScrollToken)
+        {
+            return [];
+        }
+
+        return OnScheduledScrollObservation(_activeScrollToken);
+    }
+
+    private IReadOnlyList<TranscriptViewportControllerAction> ActivateConversation(
+        string? conversationId,
+        bool isSessionActive,
+        bool isOverlayVisible,
+        bool hasMessages,
+        TranscriptViewportActivationKind activationKind)
+    {
+        PersistCurrentConversationState();
+        _isSessionActive = isSessionActive;
+        _isOverlayVisible = isOverlayVisible;
+        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        ClearTransientScrollState();
+        _userScrollIntentPending = false;
+
+        if (!CanActivateCurrentConversation())
+        {
+            _follow.Deactivate();
+            _pinnedToken = null;
+            return [];
+        }
+
+        return ActivateResolvedConversation(activationKind, hasMessages);
+    }
+
+    private IReadOnlyList<TranscriptViewportControllerAction> ActivateResolvedConversation(
+        TranscriptViewportActivationKind activationKind,
+        bool hasMessages)
+    {
+        _activationGeneration++;
+        if (activationKind == TranscriptViewportActivationKind.ColdEnter)
+        {
+            _conversationStates.Remove(_conversationId);
+        }
+
+        if (ShouldRestoreStoredPin(activationKind)
+            && _conversationStates.TryGetValue(_conversationId, out var storedState)
+            && storedState.RestoreToken is { } restoreToken
+            && string.Equals(restoreToken.ConversationId, _conversationId, StringComparison.Ordinal)
+            && TranscriptItemKey.IsRestorable(restoreToken.ProjectionItemKey))
+        {
+            _pinnedToken = restoreToken;
+            _follow.ActivatePinned(
+                _conversationId,
+                _activationGeneration,
+                restoreToken.ProjectionItemKey);
+            _programmaticScrollInFlight = true;
+            _hasActiveScrollToken = false;
+            var actions = new List<TranscriptViewportControllerAction>
+            {
+                new(
+                    TranscriptViewportControllerActionKind.RequestRestore,
+                    RestoreToken: restoreToken,
+                    Generation: _activationGeneration)
+            };
+            PersistCurrentConversationState();
+            return actions;
+        }
+
+        _pinnedToken = null;
+        var request = _follow.Activate(_conversationId, _activationGeneration);
+        var result = ToActions(request, hasMessages);
+        PersistCurrentConversationState();
+        return result;
+    }
+
     private IReadOnlyList<TranscriptViewportControllerAction> ObserveViewport(
         TranscriptViewportViewState viewState,
         TranscriptProjectionRestoreToken? restoreToken,
@@ -181,19 +331,12 @@ public sealed class TranscriptViewportController
             return [];
         }
 
-        // A user gesture is the authoritative "I've taken control" signal: it overrides any
-        // in-flight programmatic scroll so the pin is honored. A passive geometry tick must
-        // keep respecting the programmatic scroll so the initial settle is not mistaken for
-        // a user detach.
         if (isUserGesture)
         {
             _userScrollIntentPending = true;
-            _programmaticScrollInFlight = false;
-            _hasActiveScrollToken = false;
+            ClearTransientScrollState();
         }
 
-        // First principles: pin only from user intent (or an explicit restorable token),
-        // never from pre-layout / passive geometry while still following bottom.
         var mayPin =
             isUserGesture
             || _follow.IsPinned
@@ -216,7 +359,8 @@ public sealed class TranscriptViewportController
 
         if (_follow.IsPinned)
         {
-            if (restoreToken is { } token)
+            if (restoreToken is { } token
+                && string.Equals(token.ConversationId, _conversationId, StringComparison.Ordinal))
             {
                 _pinnedToken = token;
             }
@@ -230,113 +374,15 @@ public sealed class TranscriptViewportController
             _pinnedToken = null;
         }
 
-        return ToActions(request, viewState.HasMessages);
-    }
-
-    public void OnUserPointerPressed(bool isDetached)
-        => _userScrollIntentPending = true;
-
-    public void OnUserPointerReleased()
-        => _userScrollIntentPending = false;
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnScheduledScrollObservation(
-        TranscriptScrollRequestToken requestToken,
-        TranscriptViewportViewState viewState)
-    {
-        if (!MatchesActiveScrollRequest(requestToken))
-        {
-            return [];
-        }
-
-        _programmaticScrollInFlight = false;
-        _hasActiveScrollToken = false;
-        return [];
-    }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnProjectionReady(
-        string? conversationId,
-        long projectionEpochIgnored = 0)
-    {
-        if (!_isLoaded || !_isSessionActive || string.IsNullOrWhiteSpace(conversationId))
-        {
-            return [];
-        }
-
-        if (!string.Equals(_conversationId, conversationId, StringComparison.Ordinal))
-        {
-            return [];
-        }
-
-        // Content stream/patch: keep pin stable when still resolvable. Do NOT force re-anchor
-        // on every projection tick (that caused ScrollIntoView storms while streaming).
-        // Visibility-driven re-anchor is owned by OnViewportChanged observations.
-        var pinResolvable = _pinnedToken is { } pin
-            && TranscriptItemKey.IsRestorable(pin.ProjectionItemKey);
-        return ContentChanged(pinStillResolvable: pinResolvable || !_follow.IsPinned, pinIsVisible: true);
-    }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> SuspendForOverlay()
-    {
-        _isOverlayVisible = true;
-        _follow.Deactivate();
-        _hasActiveScrollToken = false;
-        return [];
-    }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreConfirmed(
-        TranscriptProjectionRestoreToken token,
-        int generation)
-    {
-        _programmaticScrollInFlight = false;
-        return [];
-    }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreUnavailable(
-        string? conversationId,
-        int generation,
-        string reason)
-        => ContentChanged(pinStillResolvable: false, pinIsVisible: false);
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreAbandoned(
-        string? conversationId,
-        int generation,
-        string reason)
-    {
-        _hasActiveScrollToken = false;
-        return [];
-    }
-
-    public bool TryCaptureActiveScrollRequest(out TranscriptScrollRequestToken token)
-    {
-        if (_hasActiveScrollToken)
-        {
-            token = _activeScrollToken;
-            return true;
-        }
-
-        token = default;
-        return false;
-    }
-
-    public bool MatchesActiveScrollRequest(TranscriptScrollRequestToken token)
-        => _hasActiveScrollToken
-           && token.Generation == _activeScrollToken.Generation
-           && string.Equals(token.ConversationId, _activeScrollToken.ConversationId, StringComparison.Ordinal);
-
-    public IReadOnlyList<TranscriptViewportControllerAction> OnActiveScrollObservation(
-        TranscriptViewportViewState viewState)
-    {
-        if (!TryCaptureActiveScrollRequest(out var token))
-        {
-            return [];
-        }
-
-        return OnScheduledScrollObservation(token, viewState);
+        var actions = ToActions(request, viewState.HasMessages);
+        PersistCurrentConversationState();
+        return actions;
     }
 
     private IReadOnlyList<TranscriptViewportControllerAction> ContentChanged(
         bool pinStillResolvable,
-        bool pinIsVisible)
+        bool pinIsVisible,
+        bool hasMessages)
     {
         if (string.IsNullOrWhiteSpace(_conversationId))
         {
@@ -348,9 +394,17 @@ public sealed class TranscriptViewportController
             pinStillResolvable = TranscriptItemKey.IsRestorable(pin.ProjectionItemKey) && pinStillResolvable;
         }
 
-        return ToActions(
+        var actions = ToActions(
             _follow.OnContentChanged(_conversationId, _activationGeneration, pinStillResolvable, pinIsVisible),
-            hasMessages: true);
+            hasMessages);
+
+        if (_follow.IsFollowingBottom)
+        {
+            _pinnedToken = null;
+        }
+
+        PersistCurrentConversationState();
+        return actions;
     }
 
     private IReadOnlyList<TranscriptViewportControllerAction> ToActions(
@@ -359,7 +413,7 @@ public sealed class TranscriptViewportController
     {
         if (request.Kind == TranscriptScrollRequestKind.None || !hasMessages)
         {
-            return MapModeSideEffects(request);
+            return [];
         }
 
         var token = new TranscriptScrollRequestToken(_activationGeneration, _conversationId);
@@ -375,37 +429,53 @@ public sealed class TranscriptViewportController
         {
             new(kind, token, _pinnedToken, _activationGeneration, request.ItemKey)
         };
-        actions.AddRange(MapModeSideEffects(request));
         return actions;
     }
 
-    private IReadOnlyList<TranscriptViewportControllerAction> MapModeSideEffects(
-        TranscriptScrollRequest request)
+    private void PersistCurrentConversationState()
     {
-        // Emit follow mode markers for automation/logging paths that switch on them.
-        if (_follow.IsPinned)
+        if (string.IsNullOrWhiteSpace(_conversationId))
         {
-            return
-            [
-                new TranscriptViewportControllerAction(
-                    TranscriptViewportControllerActionKind.AutoFollowDetached,
-                    Generation: _activationGeneration,
-                    RestoreToken: _pinnedToken)
-            ];
+            return;
         }
 
-        if (_follow.IsFollowingBottom)
+        var state = CreateCurrentConversationState();
+        if (state.Mode == TranscriptViewportState.Suspended)
         {
-            return
-            [
-                new TranscriptViewportControllerAction(
-                    TranscriptViewportControllerActionKind.AutoFollowAttached,
-                    Generation: _activationGeneration)
-            ];
+            return;
         }
 
-        return [];
+        _conversationStates[_conversationId] = state;
     }
+
+    private TranscriptViewportConversationState CreateCurrentConversationState()
+    {
+        var restoreToken = _follow.IsPinned ? _pinnedToken : null;
+        return new TranscriptViewportConversationState(
+            State,
+            RestoreToken: restoreToken);
+    }
+
+    private void ClearTransientScrollState()
+    {
+        _programmaticScrollInFlight = false;
+        _hasActiveScrollToken = false;
+    }
+
+    private bool CanActivateCurrentConversation()
+        => _isLoaded
+           && _isSessionActive
+           && !_isOverlayVisible
+           && !string.IsNullOrWhiteSpace(_conversationId);
+
+    private bool MatchesRestoreContext(string? conversationId, int generation)
+        => !string.IsNullOrWhiteSpace(conversationId)
+           && string.Equals(conversationId, _conversationId, StringComparison.Ordinal)
+           && generation == _activationGeneration;
+
+    private static bool ShouldRestoreStoredPin(TranscriptViewportActivationKind activationKind)
+        => activationKind is TranscriptViewportActivationKind.WarmReturn
+            or TranscriptViewportActivationKind.OverlayResume;
 
     private static string ResolveConversationId(string? conversationId, bool isSessionActive)
         => isSessionActive && !string.IsNullOrWhiteSpace(conversationId)

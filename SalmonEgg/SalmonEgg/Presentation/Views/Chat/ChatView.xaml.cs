@@ -30,8 +30,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private const double BottomGeometryTolerance = 2;
     private const int MaxRestoreAttempts = 32;
     private bool _wasOverlayVisible;
-    private bool _restoreDetachedViewportAfterOverlay;
-    private string? _restoreDetachedViewportConversationId;
     private bool _resumeViewportCoordinatorAfterOverlayPending;
     private bool _isTranscriptViewportLayerActive;
     private object? _activeTranscriptMessageAnchorItem;
@@ -82,8 +80,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isViewLoaded = true;
-        _restoreDetachedViewportAfterOverlay = false;
-        _restoreDetachedViewportConversationId = null;
         _resumeViewportCoordinatorAfterOverlayPending = false;
         ClearPendingProjectionRestore();
         ClearTranscriptMessageLayerState();
@@ -103,8 +99,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             RestoreViewportForWarmResume();
         }
         EnsureMessageTracking();
-        BeginLayoutLoadingIfPendingMessages();
-        TryIssueTranscriptScrollRequestIfAttached();
+        RefreshLayoutLoadingState();
+        ApplyCurrentViewportStateIfAttached();
         UpdateTranscriptViewportAutomationState();
         try
         {
@@ -120,8 +116,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         AbandonPendingProjectionRestore("ViewUnloaded");
         ApplyViewportActions(_viewportController.Unload());
         _isViewLoaded = false;
-        _restoreDetachedViewportAfterOverlay = false;
-        _restoreDetachedViewportConversationId = null;
         _resumeViewportCoordinatorAfterOverlayPending = false;
         DisposeTranscriptViewportHost();
         ClearPendingProjectionRestore();
@@ -178,12 +172,9 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         ResumeViewportCoordinatorAfterOverlayIfNeeded();
 
-        BeginLayoutLoadingIfPendingMessages();
         TryApplyPendingProjectionRestore();
-        ApplyViewportActions(_viewportController.OnMessagesAppended(
-            e.NewItems?.Count ?? 0,
-            CreateViewportViewState()));
-        RefreshLayoutLoadingState(HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
+        ApplyViewportActions(_viewportController.OnTranscriptContentChanged(CreateViewportViewState()));
+        RefreshLayoutLoadingState();
 
         UpdateTranscriptViewportAutomationState();
     }
@@ -217,10 +208,10 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         ResumeViewportCoordinatorAfterOverlayIfNeeded();
-        BeginLayoutLoadingIfPendingMessages();
+        RefreshLayoutLoadingState();
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
-        TryIssueTranscriptScrollRequest();
+        ApplyCurrentViewportState();
         TryRefreshViewportCoordinatorFromView();
         UpdateTranscriptViewportAutomationState();
     }
@@ -253,15 +244,14 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
     private void OnMessagesListViewportChanged(object? sender, EventArgs e)
     {
-        var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
-        RefreshLayoutLoadingState(lastItemContainerGenerated);
+        RefreshLayoutLoadingState();
 
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnViewportChanged(
-            CreateViewportViewState(lastItemContainerGenerated),
+            CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
-        RefreshLayoutLoadingState(lastItemContainerGenerated);
+        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 
@@ -275,7 +265,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         if (IsViewportDetachedByUser())
         {
-            _viewportController.MarkDetachedViewportInteractionStarted();
             FocusTranscriptScroller();
             return;
         }
@@ -806,7 +795,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         ApplyViewportActions(_viewportController.OnUserViewportDetachIntent(
             CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
-        RefreshLayoutLoadingState(HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
+        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 
@@ -837,7 +826,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         UpdateTranscriptViewportAutomationState();
     }
 
-    private void TryRefreshViewportCoordinatorFromView(bool? lastItemContainerGenerated = null)
+    private void TryRefreshViewportCoordinatorFromView()
     {
         if (!_isViewLoaded
             || _transcriptViewportHost is null
@@ -849,21 +838,14 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         ApplyViewportActions(_viewportController.OnViewportChanged(
-            CreateViewportViewState(lastItemContainerGenerated),
+            CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
     }
 
-    private TranscriptViewportViewState CreateViewportViewState(bool? lastItemContainerGenerated = null)
+    private TranscriptViewportViewState CreateViewportViewState()
     {
-        var messageCount = ViewModel.MessageHistory.Count;
-        var hasMessages = messageCount > 0;
+        var hasMessages = ViewModel.MessageHistory.Count > 0;
         return new TranscriptViewportViewState(
-            IsViewReady: _isViewLoaded
-                && _transcriptViewportHost is not null
-                && !ViewModel.IsActivationOverlayVisible
-                && ViewModel.IsSessionActive
-                && !string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId),
-            IsViewportReady: hasMessages && (lastItemContainerGenerated ?? HasLastItemContainerGenerated(messageCount)),
             HasMessages: hasMessages,
             IsAtBottom: IsListViewportAtBottom());
     }
@@ -907,18 +889,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                     QueueProjectionOwnedRestore(restoreToken, action.Generation);
                 }
                 break;
-
-            case TranscriptViewportControllerActionKind.StopProgrammaticScroll:
-                ClearPendingProjectionRestore();
-                break;
-
-            case TranscriptViewportControllerActionKind.AutoFollowDetached:
-                ClearPendingProjectionRestore();
-                break;
-
-            case TranscriptViewportControllerActionKind.AutoFollowAttached:
-                ClearPendingProjectionRestore();
-                break;
         }
     }
 
@@ -940,7 +910,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private void QueueProjectionOwnedRestore(TranscriptProjectionRestoreToken token, int generation)
     {
         _projectionRestoreController.Queue(token, generation);
-        _viewportController.MarkProjectionRestoreQueued();
         TryApplyPendingProjectionRestore();
     }
 
@@ -988,14 +957,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 ApplyViewportActions(_viewportController.OnRestoreUnavailable(
                     result.ConversationId ?? CurrentViewportConversationId,
                     result.Generation,
-                    result.Reason ?? "RestoreUnavailable"));
+                    ViewModel.MessageHistory.Count > 0));
                 break;
 
             case TranscriptProjectionRestoreResultKind.Abandoned:
                 ApplyViewportActions(_viewportController.OnRestoreAbandoned(
                     result.ConversationId ?? CurrentViewportConversationId,
-                    result.Generation,
-                    result.Reason ?? "RestoreAbandoned"));
+                    result.Generation));
                 break;
         }
     }
@@ -1014,8 +982,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         {
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
-            TryIssueTranscriptScrollRequestIfAttached();
-            BeginLayoutLoadingIfPendingMessages();
+            ApplyCurrentViewportStateIfAttached();
+            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -1024,8 +992,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         {
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
-            TryIssueTranscriptScrollRequestIfAttached();
-            BeginLayoutLoadingIfPendingMessages();
+            ApplyCurrentViewportStateIfAttached();
+            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -1034,8 +1002,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         {
             EnsureMessageTracking();
             ResetAutoScrollStateForConversationChange();
-            TryIssueTranscriptScrollRequestIfAttached();
-            BeginLayoutLoadingIfPendingMessages();
+            ApplyCurrentViewportStateIfAttached();
+            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -1054,37 +1022,26 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
     }
 
-    private void BeginLayoutLoadingIfPendingMessages()
-    {
-        RefreshLayoutLoadingState();
-    }
-
-    private void RefreshLayoutLoadingState(bool lastItemContainerGenerated = false)
+    private void RefreshLayoutLoadingState()
     {
         ViewModel.IsLayoutLoading = InitialLayoutLoadingPolicy.ShouldKeepLoading(
             isSessionActive: ViewModel.IsSessionActive,
-            messageCount: ViewModel.MessageHistory.Count,
-            hasPendingInitialScroll: _viewportController.HasPendingSettle,
-            lastItemContainerGenerated: lastItemContainerGenerated,
             isHydrating: ViewModel.IsHydrating,
             isRemoteHydrationPending: ViewModel.IsRemoteHydrationPending);
         UpdateTranscriptViewportAutomationState();
     }
 
-    private bool TryIssueTranscriptScrollRequest()
+    private void ApplyCurrentViewportState()
     {
         var actions = _viewportController.OnViewportChanged(CreateViewportViewState());
         ApplyViewportActions(actions);
-        RefreshLayoutLoadingState(HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
-        UpdateTranscriptViewportAutomationState();
-        return actions.Count > 0;
     }
 
-    private void TryIssueTranscriptScrollRequestIfAttached()
+    private void ApplyCurrentViewportStateIfAttached()
     {
         if (!IsViewportDetachedByUser())
         {
-            TryIssueTranscriptScrollRequest();
+            ApplyCurrentViewportState();
         }
     }
 
@@ -1140,22 +1097,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return;
             }
 
-            var lastItemContainerGenerated = HasLastItemContainerGenerated(ViewModel.MessageHistory.Count);
-            ObserveActiveTranscriptScrollFromLayout(lastItemContainerGenerated);
-            TryIssueTranscriptScrollRequest();
-            TryRefreshViewportCoordinatorFromView(lastItemContainerGenerated);
+            ApplyViewportActions(_viewportController.OnActiveScrollObservation());
+            ApplyCurrentViewportState();
+            TryRefreshViewportCoordinatorFromView();
             UpdateTranscriptViewportAutomationState();
         });
-    }
-
-    private bool HasLastItemContainerGenerated(int itemCount)
-    {
-        if (_transcriptViewportHost is null || itemCount <= 0)
-        {
-            return false;
-        }
-
-        return _transcriptViewportHost.HasRealizedItem(itemCount - 1);
     }
 
     private bool IsListViewportAtBottom()
@@ -1173,14 +1119,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         return _transcriptViewportHost.IsAtBottom(itemCount, BottomThreshold, BottomGeometryTolerance);
     }
-
-    private bool ObserveActiveTranscriptScrollFromLayout(bool? lastItemContainerGenerated = null)
-    {
-        var actions = _viewportController.OnActiveScrollObservation(CreateViewportViewState(lastItemContainerGenerated));
-        ApplyViewportActions(actions);
-        return actions.Count > 0;
-    }
-
 
     private void ResetAutoScrollStateForConversationChange()
     {
@@ -1200,8 +1138,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        _restoreDetachedViewportAfterOverlay = false;
-        _restoreDetachedViewportConversationId = null;
         _resumeViewportCoordinatorAfterOverlayPending = false;
         ApplyViewportActions(_viewportController.OnConversationChanged(
             CurrentViewportConversationId,
@@ -1219,11 +1155,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         if (isOverlayVisible)
         {
-            if (IsViewportDetachedByUser())
-            {
-                _restoreDetachedViewportAfterOverlay = true;
-                _restoreDetachedViewportConversationId = CurrentViewportConversationId;
-            }
             _resumeViewportCoordinatorAfterOverlayPending = true;
             ApplyViewportActions(_viewportController.SuspendForOverlay());
             UpdateTranscriptViewportAutomationState();
@@ -1251,20 +1182,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         _resumeViewportCoordinatorAfterOverlayPending = false;
-        if (_restoreDetachedViewportAfterOverlay
-            && !string.Equals(_restoreDetachedViewportConversationId, CurrentViewportConversationId, StringComparison.Ordinal))
-        {
-            _restoreDetachedViewportAfterOverlay = false;
-            _restoreDetachedViewportConversationId = null;
-        }
-
-        _restoreDetachedViewportAfterOverlay = false;
-        _restoreDetachedViewportConversationId = null;
         ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);
         TryApplyPendingProjectionRestore();
-        TryIssueTranscriptScrollRequestIfAttached();
+        ApplyCurrentViewportStateIfAttached();
         TryRefreshViewportCoordinatorFromView();
-        RefreshLayoutLoadingState(HasLastItemContainerGenerated(ViewModel.MessageHistory.Count));
+        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 
@@ -1290,7 +1212,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
             ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);
             TryApplyPendingProjectionRestore();
-            TryIssueTranscriptScrollRequestIfAttached();
+            ApplyCurrentViewportStateIfAttached();
             TryRefreshViewportCoordinatorFromView();
             UpdateTranscriptViewportAutomationState();
         });
@@ -1321,11 +1243,10 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        var transition = _viewportController.LastTransition;
         var conversationState = string.IsNullOrWhiteSpace(CurrentViewportConversationId)
             ? null
             : _viewportController.GetConversationState(CurrentViewportConversationId);
-        var debug = $"state={state};coord={_viewportController.State};attached={_viewportController.IsAutoFollowAttached};current={CurrentViewportConversationId};generation={_viewportController.Generation};transition={(transition?.Reason ?? "<none>")};attachPending={_viewportController.AttachToBottomIntentPending};scrollIntentPending={_viewportController.UserScrollIntentPending};scrollIntentCompleted={_viewportController.UserScrollIntentCompleted};restoreConversation={_projectionRestoreController.PendingConversationId ?? "<none>"};restoreGeneration={_projectionRestoreController.PendingGeneration};restoreToken={(conversationState?.RestoreToken?.ProjectionItemKey ?? "<none>")}";
+        var debug = $"state={state};coord={_viewportController.State};attached={_viewportController.IsAutoFollowAttached};current={CurrentViewportConversationId};generation={_viewportController.Generation};scrollIntentPending={_viewportController.UserScrollIntentPending};scrollIntentCompleted={_viewportController.UserScrollIntentCompleted};restoreConversation={_projectionRestoreController.PendingConversationId ?? "<none>"};restoreGeneration={_projectionRestoreController.PendingGeneration};restoreToken={(conversationState?.RestoreToken?.ProjectionItemKey ?? "<none>")}";
         TranscriptViewportDebugProbe.Text = debug;
         AutomationProperties.SetName(TranscriptViewportDebugProbe, debug);
     }
