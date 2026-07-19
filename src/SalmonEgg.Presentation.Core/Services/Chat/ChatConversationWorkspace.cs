@@ -171,23 +171,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
     public async Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
-        RemoveConversation(conversationId, scheduleSave: false);
+        RemoveConversation(conversationId);
         await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
         return new ConversationMutationResult(true, false, null);
     }
 
     public async Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
-        RemoveConversation(conversationId, scheduleSave: false);
+        RemoveConversation(conversationId);
         await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
         return new ConversationMutationResult(true, false, null);
     }
-
-    public void ArchiveConversation(string conversationId)
-        => RemoveConversation(conversationId, scheduleSave: true);
-
-    public void DeleteConversation(string conversationId)
-        => RemoveConversation(conversationId, scheduleSave: true);
 
     public Task<bool> TryPrepareConversationActivationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
@@ -1033,7 +1027,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    private void RemoveConversation(string conversationId, bool scheduleSave)
+    private void RemoveConversation(string conversationId)
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -1060,11 +1054,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         _sessionManager.RemoveSession(conversationId);
-        if (scheduleSave)
-        {
-            ScheduleSave();
-        }
-
         NotifyConversationListChanged();
     }
 

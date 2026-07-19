@@ -1381,7 +1381,7 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
 
         await workspace.ApplySessionInfoUpdateAsync(
@@ -1414,7 +1414,7 @@ public sealed class ChatConversationWorkspaceTests
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
 
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
         Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
 
         await workspace.ApplySessionInfoUpdateAsync(
@@ -2307,7 +2307,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public void UpsertConversationSnapshot_DeletedConversation_DoesNotResurrectConversation()
+    public async Task UpsertConversationSnapshot_DeletedConversation_DoesNotResurrectConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -2322,7 +2322,7 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2337,7 +2337,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public void UpdateRemoteBinding_DeletedConversation_DoesNotResurrectConversation()
+    public async Task UpdateRemoteBinding_DeletedConversation_DoesNotResurrectConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
@@ -2352,7 +2352,7 @@ public sealed class ChatConversationWorkspaceTests
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
             LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-        workspace.DeleteConversation("session-1");
+        await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
 
         workspace.UpdateRemoteBinding("session-1", remoteSessionId: "remote-zombie", boundProfileId: "profile-zombie");
 
@@ -2620,7 +2620,7 @@ public sealed class ChatConversationWorkspaceTests
                 ShowPlanPanel: false,
                 CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                 LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
-            workspace.DeleteConversation("session-1");
+            await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
             await workspace.SaveAsync(TestContext.Current.CancellationToken);
         }
 
