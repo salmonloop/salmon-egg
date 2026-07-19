@@ -25,6 +25,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly IUiDispatcher _uiDispatcher;
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _sessionSwitchGate = new(1, 1);
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly Dictionary<string, ConversationBinding> _conversationBindings = new(StringComparer.Ordinal);
     private readonly HashSet<string> _deletedConversationTombstones = new(StringComparer.Ordinal);
     private CancellationTokenSource? _saveCts;
@@ -168,16 +169,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    public async Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         RemoveConversation(conversationId);
-        return Task.FromResult(new ConversationMutationResult(true, false, null));
+        await PersistMutationAsync(cancellationToken).ConfigureAwait(false);
+        return new ConversationMutationResult(true, false, null);
     }
 
-    public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    public async Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
         RemoveConversation(conversationId);
-        return Task.FromResult(new ConversationMutationResult(true, false, null));
+        await PersistMutationAsync(cancellationToken).ConfigureAwait(false);
+        return new ConversationMutationResult(true, false, null);
     }
 
     public void ArchiveConversation(string conversationId)
@@ -637,10 +640,10 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             }
         }
 
+        var shouldPersistMetadata = false;
         await PostToContextAsync(() =>
         {
             var conversationListChanged = false;
-            var shouldSave = false;
             lock (_stateGate)
             {
                 if (!_conversationBindings.TryGetValue(conversationId, out var binding))
@@ -709,7 +712,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 if (metadataChanged)
                 {
                     conversationListChanged = true;
-                    shouldSave = true;
+                    shouldPersistMetadata = true;
                 }
             }
 
@@ -717,12 +720,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             {
                 NotifyConversationListChanged();
             }
-
-            if (shouldSave)
-            {
-                ScheduleSave();
-            }
         }, cancellationToken).ConfigureAwait(false);
+
+        if (shouldPersistMetadata)
+        {
+            // Authoritative session metadata (cwd/title/additionalDirectories) is recovery-critical for
+            // project affinity and catalog restore. Persist immediately instead of relying on delayed save.
+            CancelScheduledSave();
+            if (_preferences.SaveLocalHistory != false)
+            {
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     public Task RegisterConversationAsync(
@@ -755,8 +764,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
-        _saveCts?.Cancel();
-        _saveCts?.Dispose();
+        CancelScheduledSave();
         _saveCts = new CancellationTokenSource();
         var token = _saveCts.Token;
 
@@ -777,7 +785,21 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }, token);
     }
 
-    public Task SaveAsync(CancellationToken cancellationToken = default)
+    public async Task SaveAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _saveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await SaveCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
+    private Task SaveCoreAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         PersistedConversationState[] conversationStates;
@@ -871,10 +893,27 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         _disposed = true;
+        CancelScheduledSave();
+        _sessionSwitchGate.Dispose();
+        _saveGate.Dispose();
+    }
+
+    private void CancelScheduledSave()
+    {
         _saveCts?.Cancel();
         _saveCts?.Dispose();
         _saveCts = null;
-        _sessionSwitchGate.Dispose();
+    }
+
+    private async Task PersistMutationAsync(CancellationToken cancellationToken)
+    {
+        if (_preferences.SaveLocalHistory == false)
+        {
+            return;
+        }
+
+        CancelScheduledSave();
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void ApplyRestoredDocument(ConversationDocument document)

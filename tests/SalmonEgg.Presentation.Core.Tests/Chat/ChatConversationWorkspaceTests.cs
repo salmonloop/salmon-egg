@@ -1935,6 +1935,66 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task ApplySessionInfoSnapshotAsync_AuthoritativeCwd_IsPersistedBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var authoritativeCwd = @"C:\remote\workspace";
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+            await workspace.ApplySessionInfoSnapshotAsync(
+                "session-1",
+                new ConversationSessionInfoSnapshot
+                {
+                    Cwd = authoritativeCwd,
+                    HasTitle = true
+                },
+                allowRegisterWhenMissing: true,
+                cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var savedRecord = Assert.Single(saved.Conversations);
+        Assert.Equal(authoritativeCwd, savedRecord.Cwd);
+        Assert.Equal(authoritativeCwd, savedRecord.SessionInfo?.Cwd);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(
+            store,
+            new FakeSessionManager(),
+            preferences,
+            syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+
+        var restoredSnapshot = restoredWorkspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(restoredSnapshot);
+        Assert.Equal(authoritativeCwd, restoredSnapshot!.SessionInfo?.Cwd);
+    }
+
+    [Fact]
     public async Task GetCatalog_WhenSessionManagerCwdDrifts_UsesWorkspaceSessionInfoCwdForProjection()
     {
         var syncContext = new ImmediateSynchronizationContext();
