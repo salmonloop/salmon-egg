@@ -82,7 +82,7 @@ jobs:
       - name: Install Android SDK platform
         shell: bash
         run: |
-          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Android
@@ -107,7 +107,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Install iOS workload
-        run: dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
+        run: dotnet workload install ios android --skip-manifest-update --disable-parallel --no-http-cache
 
       - name: Build iOS Simulator
         run: >-
