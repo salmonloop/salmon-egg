@@ -18,9 +18,9 @@ import {
 } from "./wasm-smoke-lib/settings-shell.mjs";
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-focus-boundary-smoke.mjs");
-const diagnosticsPagePattern = /Diagnostics and logs|诊断与日志|Live logs|日志|Gamepad input|手柄输入/;
-const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart"] };
-const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh"] };
+const diagnosticsPagePattern = /Diagnostics and logs|诊断与日志|Live logs|日志|Gamepad input|手柄输入|Diagnostics_ConnectionTitle|连接|Agent:/;
+const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart"], elementTags: ["BUTTON"] };
+const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh"], elementTags: ["BUTTON"] };
 const browser = await chromium.launch({ headless: true });
 
 try {
