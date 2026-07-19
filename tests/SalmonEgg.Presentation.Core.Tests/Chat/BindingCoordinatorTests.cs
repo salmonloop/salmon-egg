@@ -569,7 +569,50 @@ public sealed class BindingCoordinatorTests
         return chatStore;
     }
 
-    private static ChatConversationWorkspace CreateWorkspace(
+    
+    [Fact]
+    public async Task UpdateBinding_PersistsRemoteOwnershipBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+                ConversationId: "session-1",
+                Transcript: [],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+            await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+            var initialState = ChatState.Empty;
+            var state = State.Value(this, () => initialState);
+            var chatStore = CreateChatStore(state, initialState);
+            var coordinator = new BindingCoordinator(workspace, chatStore.Object);
+
+            var result = await coordinator.UpdateBindingAsync("session-1", "remote-1", "profile-1");
+            Assert.Equal(BindingUpdateStatus.Success, result.Status);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var record = Assert.Single(saved.Conversations);
+        Assert.Equal("remote-1", record.RemoteSessionId);
+        Assert.Equal("profile-1", record.BoundProfileId);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(store, new FakeSessionManager(), preferences, syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+        var binding = restoredWorkspace.GetRemoteBinding("session-1");
+        Assert.NotNull(binding);
+        Assert.Equal("remote-1", binding!.RemoteSessionId);
+        Assert.Equal("profile-1", binding.BoundProfileId);
+    }
+
+private static ChatConversationWorkspace CreateWorkspace(
         IConversationStore store,
         ISessionManager sessionManager,
         AppPreferencesViewModel preferences,
@@ -631,11 +674,16 @@ public sealed class BindingCoordinatorTests
     {
         public ConversationDocument LoadResult { get; set; } = new();
 
+        public ConversationDocument? LastSavedDocument { get; private set; }
+
         public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(LoadResult);
 
         public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            LastSavedDocument = document;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeSessionManager : ISessionManager

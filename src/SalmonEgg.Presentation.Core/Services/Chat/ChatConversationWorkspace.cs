@@ -171,23 +171,23 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
     public async Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
-        RemoveConversation(conversationId);
-        await PersistMutationAsync(cancellationToken).ConfigureAwait(false);
+        RemoveConversation(conversationId, scheduleSave: false);
+        await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
         return new ConversationMutationResult(true, false, null);
     }
 
     public async Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
     {
-        RemoveConversation(conversationId);
-        await PersistMutationAsync(cancellationToken).ConfigureAwait(false);
+        RemoveConversation(conversationId, scheduleSave: false);
+        await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
         return new ConversationMutationResult(true, false, null);
     }
 
     public void ArchiveConversation(string conversationId)
-        => RemoveConversation(conversationId);
+        => RemoveConversation(conversationId, scheduleSave: true);
 
     public void DeleteConversation(string conversationId)
-        => RemoveConversation(conversationId);
+        => RemoveConversation(conversationId, scheduleSave: true);
 
     public Task<bool> TryPrepareConversationActivationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
@@ -726,12 +726,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         {
             // Authoritative session metadata (cwd/title/additionalDirectories) is recovery-critical for
             // project affinity and catalog restore. Persist immediately instead of relying on delayed save.
-            CancelScheduledSave();
-            if (_preferences.SaveLocalHistory != false)
-            {
-                await SaveAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    public Task PersistRecoveryMetadataAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return PersistRecoveryMetadataCoreAsync(cancellationToken);
     }
 
     public Task RegisterConversationAsync(
@@ -905,15 +907,15 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         _saveCts = null;
     }
 
-    private async Task PersistMutationAsync(CancellationToken cancellationToken)
+    private Task PersistRecoveryMetadataCoreAsync(CancellationToken cancellationToken)
     {
         if (_preferences.SaveLocalHistory == false)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         CancelScheduledSave();
-        await SaveAsync(cancellationToken).ConfigureAwait(false);
+        return SaveAsync(cancellationToken);
     }
 
     private void ApplyRestoredDocument(ConversationDocument document)
@@ -1031,7 +1033,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    private void RemoveConversation(string conversationId)
+    private void RemoveConversation(string conversationId, bool scheduleSave)
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(conversationId))
@@ -1058,7 +1060,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
 
         _sessionManager.RemoveSession(conversationId);
-        ScheduleSave();
+        if (scheduleSave)
+        {
+            ScheduleSave();
+        }
+
         NotifyConversationListChanged();
     }
 

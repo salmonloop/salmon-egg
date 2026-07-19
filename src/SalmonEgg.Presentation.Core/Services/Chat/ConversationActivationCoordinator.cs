@@ -298,19 +298,23 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             await _chatStore.Dispatch(new SelectConversationAction(null));
         }
 
-        ApplyConversationRemoval(context.ConversationId, removalMode);
+        await ApplyConversationRemovalAsync(context.ConversationId, removalMode).ConfigureAwait(false);
         return new ConversationMutationResult(true, context.ClearsActiveConversation, null);
     }
 
-    private void ApplyConversationRemoval(string conversationId, ConversationRemovalMode removalMode)
+    private async Task ApplyConversationRemovalAsync(string conversationId, ConversationRemovalMode removalMode)
     {
         switch (removalMode)
         {
             case ConversationRemovalMode.Archive:
-                _conversationWorkspace.ArchiveConversation(conversationId);
+                await _conversationWorkspace
+                    .ArchiveConversationAsync(conversationId)
+                    .ConfigureAwait(false);
                 break;
             case ConversationRemovalMode.Delete:
-                _conversationWorkspace.DeleteConversation(conversationId);
+                await _conversationWorkspace
+                    .DeleteConversationAsync(conversationId)
+                    .ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(removalMode), removalMode, "Unknown removal mode.");

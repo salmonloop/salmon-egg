@@ -1995,6 +1995,60 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task DeleteConversationAsync_Tombstone_IsPersistedBeforeRestart()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1",
+                        Cwd = @"C:\remote\workspace"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+
+        using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
+        {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+            await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
+        }
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        Assert.Contains("session-1", saved.DeletedConversationIds);
+        Assert.Empty(saved.Conversations);
+
+        store.LoadResult = saved;
+        using var restoredWorkspace = CreateWorkspace(
+            store,
+            new FakeSessionManager(),
+            preferences,
+            syncContext);
+        await restoredWorkspace.RestoreAsync(TestContext.Current.CancellationToken);
+        await restoredWorkspace.ApplySessionInfoUpdateAsync(
+            "session-1",
+            title: "zombie",
+            updatedAtUtc: DateTime.UtcNow,
+            allowRegisterWhenMissing: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain("session-1", restoredWorkspace.GetKnownConversationIds());
+        Assert.Null(restoredWorkspace.GetConversationSnapshot("session-1"));
+    }
+
+    [Fact]
     public async Task GetCatalog_WhenSessionManagerCwdDrifts_UsesWorkspaceSessionInfoCwdForProjection()
     {
         var syncContext = new ImmediateSynchronizationContext();
