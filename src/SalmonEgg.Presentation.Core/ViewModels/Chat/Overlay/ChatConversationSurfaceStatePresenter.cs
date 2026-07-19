@@ -45,6 +45,10 @@ internal static class ChatConversationSurfaceStatePresenter
         var shouldPromoteLayoutLoadingToBlockingPresenter =
             input.IsLayoutLoading
             && (isVisibleTranscriptStaleForCurrentSession || isCurrentVisibleConversationSupersededByShellIntent);
+        var shouldBlockCurrentConversationContentForActivation =
+            shouldShowHistoryOverlay
+            || shouldShowProjectedHydrationOverlay
+            || isSessionSwitchOverlayVisible;
 
         var activationOverlayVisible =
             shouldShowConnectionLifecycleOverlay
@@ -67,6 +71,7 @@ internal static class ChatConversationSurfaceStatePresenter
         var shouldShowBlockingLoadingMask =
             (activationOverlayVisible
                 && (!hasVisibleTranscriptContent
+                    || shouldBlockCurrentConversationContentForActivation
                     || isSessionSwitchOverlayBlockingVisibleTranscript
                     || isVisibleTranscriptStaleForCurrentSession
                     || isCurrentVisibleConversationSupersededByShellIntent))

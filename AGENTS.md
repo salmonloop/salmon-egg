@@ -77,6 +77,7 @@
    - 单一状态链路：导航、选择、内容切换、加载、错误恢复、搜索和全局入口必须进入同一 authoritative 状态链路；禁止第二套事件、延迟回写、局部缓存或事后纠偏覆盖主状态；验证覆盖快速切换、重复点击、失败恢复、分页外激活和 stale 回调。
    - UI 线程与 latest intent：异步结果、远端事件、后台任务、语音/诊断结果和搜索结果进入 UI 可绑定状态前，必须完成 UI 线程封送并确认仍匹配最新用户意图；验证覆盖并发完成、取消、反序返回和最新意图判定。
    - 远程会话事实源：远程 session 的正文、恢复、warm reuse、连接能力和发现列表必须来自 authoritative runtime / protocol / connection identity；发现接口只提供元数据，未连接条目不得泄露旧正文或提升为可交互运行态；验证覆盖冷/热恢复、连接身份变化、能力缺失、session/load fault 和首次权威加载前 UI 内容边界。
+   - 远程冷激活正文边界：当远程会话不满足 warm reuse 的 runtime、remoteSessionId、profileId 与 connectionInstanceId 全量匹配时，selection 投影前必须清空非权威正文/plan/config，activation/hydration overlay 在 `session/load` 或等价权威恢复完成前必须阻塞 header、transcript 与 input；禁止先展示本地 content slice、workspace snapshot、preview 或旧可见 transcript 再用 skeleton 纠偏；验证覆盖左侧导航 background hydration、同会话 cached content slice、connection identity mismatch、hydration replay 期间 visibility 与 warm reuse 不触发 `session/load`。
    - 协议与扩展边界：ACP 标准方法、字段和能力门控严格按官方 schema；自定义扩展必须使用协议允许的命名和 `_meta` / capability contract；禁止 legacy root 字段、未声明能力执行或扩展 payload 冒充标准字段；验证覆盖 schema、capability gating、method-not-found 和 contract round-trip。
    - 缓存与持久化边界：缓存、去重、确认、恢复、安全存储、日志、诊断包和导出只作为优化或平台服务副作用，事实来源必须是协议或平台 authoritative 标识；构造函数、getter、ViewModel 初始化和 DI 注册不得触发真实文件系统副作用；验证覆盖首次写入、unsupported platform、身份不匹配、重复/乱序结果和 stale 恢复拒绝。
    - 平台能力与原生 affordance：本地资源访问、系统 picker、剪贴板、标题栏、窗口控制、指针光标、受限平台配置和能力声明必须由统一平台能力事实源驱动；共享 UI 和业务层不得直接引用平台原生类型或绕过能力边界；验证覆盖支持平台、受限平台和共享层无原生类型泄漏。

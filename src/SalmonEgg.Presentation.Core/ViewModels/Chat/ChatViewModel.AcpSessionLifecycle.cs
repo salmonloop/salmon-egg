@@ -1402,6 +1402,12 @@ public partial class ChatViewModel
                 sessionId,
                 context.CancellationToken)
             .ConfigureAwait(false);
+        await ClearNonAuthoritativeRemoteProjectionBeforeSelectionAsync(
+                sessionId,
+                activationHydrationMode,
+                warmRuntimeSnapshot,
+                context.CancellationToken)
+            .ConfigureAwait(false);
         _chatUiProjectionApplicationCoordinator.ArmActivationSelectionProjection(
             sessionId,
             context.ActivationVersion);
@@ -1525,6 +1531,44 @@ public partial class ChatViewModel
         return remoteActivationSucceeded
             ? ConversationActivationOrchestratorResult.Success()
             : ConversationActivationOrchestratorResult.Failed();
+    }
+
+    private async Task ClearNonAuthoritativeRemoteProjectionBeforeSelectionAsync(
+        string sessionId,
+        ConversationActivationHydrationMode activationHydrationMode,
+        ConversationRuntimeSlice? warmRuntimeSnapshot,
+        CancellationToken cancellationToken)
+    {
+        if (activationHydrationMode != ConversationActivationHydrationMode.SelectionOnly)
+        {
+            return;
+        }
+
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
+        {
+            return;
+        }
+
+        var currentConnection = await ResolveWarmReuseConnectionIdentityAsync(
+                binding,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var runtimeState = ResolveWarmReuseRuntimeState(
+            warmRuntimeSnapshot,
+            state.ResolveRuntimeState(sessionId));
+        var warmReuseDecision = ConversationWarmReusePolicy.EvaluateRemoteWarmConversation(
+            runtimeState,
+            binding,
+            currentConnection,
+            HasReusableWarmProjection(state, sessionId));
+        if (warmReuseDecision.CanReuse)
+        {
+            return;
+        }
+
+        await ResetConversationProjectionForResyncAsync(sessionId, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ContinueConversationActivationAsync(

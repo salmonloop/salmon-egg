@@ -209,6 +209,143 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ConversationSessionSwitcherContract_WhenColdRemoteSelectionHasCachedStoreProjection_DoesNotExposeCachedTranscriptBeforeSessionLoadCompletes()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-current", @"C:\repo\current");
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var loadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-2", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, cancellationToken) =>
+            {
+                loadStarted.TrySetResult(null);
+                await allowLoadCompletion.Task.WaitAsync(cancellationToken);
+                return SessionLoadResponse.Completed;
+            });
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await syncContext.RunUntilCompletedAsync(fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-current",
+            Transcript = ImmutableList.Create(
+                new ConversationMessageSnapshot
+                {
+                    Id = "current-1",
+                    Timestamp = new DateTime(2026, 5, 20, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "current transcript"
+                }),
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-2", "profile-1")),
+            ConversationContents = ImmutableDictionary<string, ConversationContentSlice>.Empty
+                .Add("conv-remote", new ConversationContentSlice(
+                    ImmutableList.Create(
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "remote-cached-1",
+                            Timestamp = new DateTime(2026, 5, 20, 0, 0, 1, DateTimeKind.Utc),
+                            IsOutgoing = false,
+                            ContentType = "text",
+                            TextContent = "cached remote transcript"
+                        }),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false)),
+            RuntimeStates = ImmutableDictionary<string, ConversationRuntimeSlice>.Empty
+                .Add("conv-remote", new ConversationRuntimeSlice(
+                    ConversationId: "conv-remote",
+                    Phase: ConversationRuntimePhase.Warm,
+                    ConnectionInstanceId: "old-conn",
+                    RemoteSessionId: "remote-2",
+                    ProfileId: "profile-1",
+                    Reason: ConversationRuntimeReasons.SessionLoadCompleted,
+                    UpdatedAtUtc: new DateTime(2026, 5, 20, 0, 0, 2, DateTimeKind.Utc)))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        var exposedCachedTranscriptBeforeLoadCompleted = false;
+        fixture.ViewModel.PropertyChanged += (_, _) =>
+        {
+            if (string.Equals(fixture.ViewModel.CurrentSessionId, "conv-remote", StringComparison.Ordinal)
+                && fixture.ViewModel.MessageHistory.Any(message =>
+                    string.Equals(message.TextContent, "cached remote transcript", StringComparison.Ordinal))
+                && fixture.ViewModel.ShouldShowTranscriptSurface)
+            {
+                exposedCachedTranscriptBeforeLoadCompleted = true;
+            }
+        };
+
+        var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
+        var switchTask = switcher.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(loadStarted.Task.IsCompleted);
+        });
+
+        Assert.False(
+            exposedCachedTranscriptBeforeLoadCompleted,
+            "Cold remote selection exposed a cached transcript before session/load completed.");
+        Assert.Equal("conv-remote", fixture.ViewModel.CurrentSessionId);
+        Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.False(fixture.ViewModel.ShouldShowTranscriptSurface);
+
+        allowLoadCompletion.TrySetResult(null);
+        await syncContext.RunUntilCompletedAsync(switchTask);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(!fixture.ViewModel.IsRemoteHydrationPending);
+        });
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_WhenStartComposerIntentDiffersFromWarmRemoteBinding_StillSkipsRemoteSessionLoad()
     {
         var syncContext = new ImmediateSynchronizationContext();
