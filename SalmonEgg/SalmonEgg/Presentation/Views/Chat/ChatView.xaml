@@ -128,6 +128,7 @@
                               ColumnDefinitions="Auto,*"
                               ColumnSpacing="12">
                             <FontIcon Grid.Column="0"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       Glyph="&#xE8BD;"
                                       FontSize="16"
                                       Foreground="{ThemeResource AccentBrush}"
@@ -213,7 +214,10 @@
                             <ProgressRing IsActive="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay}"
                                           Width="16" Height="16"
                                           Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <FontIcon Glyph="&#xE783;" FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE783;"
+                                      FontSize="14"
+                                      Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                       Visibility="{x:Bind ViewModel.IsTurnStatusFaulted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{x:Bind ViewModel.TurnStatusText, Mode=OneWay}"
                                        FontSize="12"
@@ -272,6 +276,7 @@
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                                   ColumnSpacing="10">
                                 <FontIcon Grid.Column="0"
+                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           Glyph="&#xEA39;"
                                           FontSize="14"
                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
@@ -301,6 +306,7 @@
                                         MinHeight="32"
                                         VerticalAlignment="Top">
                                     <FontIcon Glyph="&#xE8C8;"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="12" />
                                 </Button>
                                 <Button Grid.Column="3"
@@ -313,6 +319,7 @@
                                         MinHeight="32"
                                         VerticalAlignment="Top">
                                     <FontIcon Glyph="&#xE711;"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="12" />
                                 </Button>
                             </Grid>

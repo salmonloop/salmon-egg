@@ -1047,15 +1047,20 @@ public partial class ChatViewModel
         }
     }
 
-    void IConversationPanelCleanup.CleanupAfterMutation(string conversationId, bool isCurrentSession)
+    void IConversationPanelCleanup.CleanupAfterMutation(string conversationId, bool clearsActiveConversation)
     {
         if (_uiDispatcher.HasThreadAccess)
         {
             RemoveBottomPanelState(conversationId);
+            RetireRemovedConversationActivation(conversationId, clearsActiveConversation);
             return;
         }
 
-        _ = PostToUiAsync(() => RemoveBottomPanelState(conversationId));
+        _ = PostToUiAsync(() =>
+        {
+            RemoveBottomPanelState(conversationId);
+            RetireRemovedConversationActivation(conversationId, clearsActiveConversation);
+        });
     }
 
     private void RemoveBottomPanelState(string conversationId)
@@ -1079,6 +1084,110 @@ public partial class ChatViewModel
             ActiveLocalTerminalSession = null;
             PendingAskUserRequest = selection.PendingAskUserRequest;
         }
+    }
+
+    private void RetireRemovedConversationActivation(string conversationId, bool clearsActiveConversation)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var ownsShellActivation = RetireRemovedConversationShellActivation(conversationId);
+        _ = RemoveConversationOverlayOwners(conversationId);
+        if (ownsShellActivation
+            || string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
+        {
+            _conversationActivationOrchestrator.SupersedeCurrentActivation("ConversationRemoved");
+        }
+    }
+
+    private bool RetireRemovedConversationShellActivation(string conversationId)
+    {
+        if (_shellNavigationRuntimeState is null)
+        {
+            return false;
+        }
+
+        var activeActivation = _shellNavigationRuntimeState.ActiveSessionActivation;
+        var ownsShellActivation =
+            activeActivation?.Matches(conversationId) == true
+            || string.Equals(_shellNavigationRuntimeState.DesiredSessionId, conversationId, StringComparison.Ordinal)
+            || string.Equals(_shellNavigationRuntimeState.CommittedSessionId, conversationId, StringComparison.Ordinal);
+        if (!ownsShellActivation)
+        {
+            return false;
+        }
+
+        if (activeActivation?.Matches(conversationId) == true)
+        {
+            _shellNavigationRuntimeState.ActiveSessionActivation = null;
+        }
+
+        if (string.Equals(_shellNavigationRuntimeState.DesiredSessionId, conversationId, StringComparison.Ordinal))
+        {
+            _shellNavigationRuntimeState.DesiredSessionId = null;
+        }
+
+        if (string.Equals(_shellNavigationRuntimeState.CommittedSessionId, conversationId, StringComparison.Ordinal))
+        {
+            _shellNavigationRuntimeState.CommittedSessionId = null;
+        }
+
+        _shellNavigationRuntimeState.IsSessionActivationInProgress = false;
+        _shellNavigationRuntimeState.ActiveSessionActivationVersion = 0;
+        return true;
+    }
+
+    private bool RemoveConversationOverlayOwners(string conversationId)
+    {
+        var ownsSessionSwitchOverlay = string.Equals(_sessionSwitchOverlayConversationId, conversationId, StringComparison.Ordinal);
+        var ownsSessionSwitchPreview = string.Equals(_sessionSwitchPreviewConversationId, conversationId, StringComparison.Ordinal);
+        var ownsConnectionLifecycleOverlay = string.Equals(_connectionLifecycleOverlayConversationId, conversationId, StringComparison.Ordinal);
+        var ownsHistoryOverlay = string.Equals(_historyOverlayConversationId, conversationId, StringComparison.Ordinal);
+        var ownsPendingHistoryDismissal = string.Equals(_pendingHistoryOverlayDismissConversationId, conversationId, StringComparison.Ordinal);
+        var ownsOverlay = ownsSessionSwitchOverlay
+            || ownsSessionSwitchPreview
+            || ownsConnectionLifecycleOverlay
+            || ownsHistoryOverlay
+            || ownsPendingHistoryDismissal;
+
+        if (!ownsOverlay)
+        {
+            return false;
+        }
+
+        if (ownsSessionSwitchPreview)
+        {
+            _sessionSwitchPreviewConversationId = null;
+        }
+
+        if (ownsPendingHistoryDismissal)
+        {
+            _pendingHistoryOverlayDismissConversationId = null;
+        }
+
+        if (ownsSessionSwitchOverlay || ownsSessionSwitchPreview)
+        {
+            IsSessionSwitching = false;
+        }
+
+        if (ownsHistoryOverlay || ownsConnectionLifecycleOverlay)
+        {
+            IsRemoteHydrationPending = false;
+        }
+
+        ClearKnownTranscriptGrowthRequirement(conversationId);
+        var overlayOwnersChanged = SetConversationOverlayOwners(
+            sessionSwitchConversationId: ownsSessionSwitchOverlay ? null : _sessionSwitchOverlayConversationId,
+            connectionLifecycleConversationId: ownsConnectionLifecycleOverlay ? null : _connectionLifecycleOverlayConversationId,
+            historyConversationId: ownsHistoryOverlay ? null : _historyOverlayConversationId);
+        if (ownsSessionSwitchPreview && !overlayOwnersChanged)
+        {
+            RaiseOverlayStateChanged();
+        }
+
+        return true;
     }
 
     public async Task<bool> SwitchConversationAsync(string conversationId, CancellationToken cancellationToken = default)

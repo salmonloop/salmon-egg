@@ -182,16 +182,19 @@
                             Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                             Visibility="{x:Bind IsInProgress, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                         <FontIcon
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Glyph="&#xE10B;"
                             FontSize="12"
                             Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                             Visibility="{x:Bind IsCompleted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                         <FontIcon
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Glyph="&#xE10A;"
                             FontSize="12"
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                             Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                         <FontIcon
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Glyph="&#xE711;"
                             FontSize="12"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

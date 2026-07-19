@@ -119,14 +119,16 @@
                                         AutomationProperties.AutomationId="MainNav.AddProject.Local"
                                         Command="{x:Bind AddLocalProjectCommand}">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE838;" />
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          Glyph="&#xE838;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem x:Uid="NavAddProjectRemoteItem"
                                         AutomationProperties.AutomationId="MainNav.AddProject.Remote"
                                         Command="{x:Bind SelectRemoteProjectCommand}">
                             <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE968;" />
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          Glyph="&#xE968;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                     </MenuFlyout>
@@ -406,6 +408,7 @@
                                     <FontIcon Grid.Column="0"
                                               Glyph="{x:Bind IconGlyph}"
                                               Margin="0,0,12,0"
+                                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                               FontSize="16"
                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                               Visibility="{x:Bind IconGlyph, Converter={StaticResource BoolToVisibilityConverter}}" />

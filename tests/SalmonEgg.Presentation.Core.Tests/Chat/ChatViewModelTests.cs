@@ -75,6 +75,7 @@ public partial class ChatViewModelTests
         IAcpConnectionSessionRegistry? connectionSessionRegistry = null,
         ISlashCommandSource? localSlashCommandSource = null,
         IAcpMcpServerResolver? mcpServerResolver = null,
+        IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         IPlatformShellService? platformShell = null,
         bool enableWorkspacePersistence = false)
     {
@@ -231,6 +232,7 @@ public partial class ChatViewModelTests
                 voiceInputService: voiceInputService,
                 applicationActivationSignalSource: applicationActivationSignalSource,
                 localTerminalPanelCoordinator: localTerminalPanelCoordinator,
+                conversationActivationOrchestrator: conversationActivationOrchestrator,
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
                 localSlashCommandSource: localSlashCommandSource,
@@ -12206,6 +12208,99 @@ public partial class ChatViewModelTests
         Assert.True(fixture.ViewModel.IsOverlayVisible);
         Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
         Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CleanupAfterMutation_WhenRemovedConversationOwnsPendingShellActivation_RetiresOverlayAndActivationVersion()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            DesiredSessionId = "conv-2",
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivationVersion = 5,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "conv-2",
+                "project-2",
+                5,
+                SessionActivationPhase.RemoteHydrationPending)
+        };
+        using var orchestrator = new ConversationActivationOrchestrator(
+            NullLogger<ConversationActivationOrchestrator>.Instance);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            shellNavigationRuntimeState: runtimeState,
+            conversationActivationOrchestrator: orchestrator);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "active transcript"
+                }
+            ]
+        });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.ShouldShowBlockingLoadingMask));
+        var activationVersion = orchestrator.CurrentActivationVersion;
+
+        ((IConversationPanelCleanup)fixture.ViewModel).CleanupAfterMutation(
+            "conv-2",
+            clearsActiveConversation: true);
+
+        Assert.Null(runtimeState.ActiveSessionActivation);
+        Assert.Null(runtimeState.DesiredSessionId);
+        Assert.False(runtimeState.IsSessionActivationInProgress);
+        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.True(orchestrator.CurrentActivationVersion > activationVersion);
+    }
+
+    [Fact]
+    public async Task CleanupAfterMutation_WhenRemovedConversationOwnsSessionSwitchPreview_NotifiesOverlayProjectionCleared()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        using var orchestrator = new ConversationActivationOrchestrator(
+            NullLogger<ConversationActivationOrchestrator>.Instance);
+        await using var fixture = CreateViewModel(syncContext, conversationActivationOrchestrator: orchestrator);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 3, 25, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "active transcript"
+                }
+            ]
+        });
+        fixture.ViewModel.PrimeSessionSwitchPreview("conv-2");
+        Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        var changedProperties = new List<string?>();
+        fixture.ViewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
+
+        ((IConversationPanelCleanup)fixture.ViewModel).CleanupAfterMutation(
+            "conv-2",
+            clearsActiveConversation: false);
+
+        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
+        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
+        Assert.Contains(nameof(ChatViewModel.IsActivationOverlayVisible), changedProperties);
+        Assert.Contains(nameof(ChatViewModel.ShouldShowBlockingLoadingMask), changedProperties);
+        Assert.Contains(nameof(ChatViewModel.IsInputEnabled), changedProperties);
+        Assert.Equal(0, orchestrator.CurrentActivationVersion);
     }
 
     [Fact]

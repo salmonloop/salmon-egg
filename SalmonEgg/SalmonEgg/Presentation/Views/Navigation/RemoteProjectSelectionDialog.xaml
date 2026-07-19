@@ -62,7 +62,8 @@
                     VerticalAlignment="Center"
                     Spacing="{StaticResource RemoteProjectSelectionEmptySpacing}"
                     Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-            <FontIcon Glyph="&#xE968;"
+            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                      Glyph="&#xE968;"
                       FontSize="{StaticResource RemoteProjectSelectionIconSize}"
                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                       HorizontalAlignment="Center"

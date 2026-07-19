@@ -3023,7 +3023,7 @@ public partial class ChatViewModel
     private static DateTime? ParseSessionUpdatedAtUtc(string? updatedAt)
         => AcpSessionTimestampPolicy.ParseUpdatedAtUtc(updatedAt);
 
-    private void SetConversationOverlayOwners(
+    private bool SetConversationOverlayOwners(
         string? sessionSwitchConversationId,
         string? connectionLifecycleConversationId,
         string? historyConversationId)
@@ -3032,7 +3032,7 @@ public partial class ChatViewModel
             && string.Equals(_connectionLifecycleOverlayConversationId, connectionLifecycleConversationId, StringComparison.Ordinal)
             && string.Equals(_historyOverlayConversationId, historyConversationId, StringComparison.Ordinal))
         {
-            return;
+            return false;
         }
 
         _sessionSwitchOverlayConversationId = sessionSwitchConversationId;
@@ -3060,6 +3060,7 @@ public partial class ChatViewModel
             IsRemoteHydrationPending);
 #endif
         RaiseOverlayStateChanged();
+        return true;
     }
 
     private void ScheduleSessionSwitchOverlayDismissal(long activationVersion, string conversationId)

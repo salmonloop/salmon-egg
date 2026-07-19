@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -16,6 +17,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
     private readonly IChatConnectionStore _chatConnectionStore;
     private readonly IConversationMutationPipeline _mutationPipeline;
     private readonly ILogger<ConversationActivationCoordinator> _logger;
+    private readonly IShellNavigationRuntimeState? _shellRuntimeState;
 
     public ConversationActivationCoordinator(
         ChatConversationWorkspace conversationWorkspace,
@@ -23,7 +25,8 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         IChatStore chatStore,
         IChatConnectionStore chatConnectionStore,
         ILogger<ConversationActivationCoordinator> logger,
-        IConversationMutationPipeline? mutationPipeline = null)
+        IConversationMutationPipeline? mutationPipeline = null,
+        IShellNavigationRuntimeState? shellRuntimeState = null)
     {
         _conversationWorkspace = conversationWorkspace ?? throw new ArgumentNullException(nameof(conversationWorkspace));
         _bindingCommands = bindingCommands ?? throw new ArgumentNullException(nameof(bindingCommands));
@@ -31,6 +34,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         _chatConnectionStore = chatConnectionStore ?? throw new ArgumentNullException(nameof(chatConnectionStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _mutationPipeline = mutationPipeline ?? new ConversationMutationPipeline();
+        _shellRuntimeState = shellRuntimeState;
     }
 
     public Task<ConversationActivationResult> ActivateSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -213,6 +217,7 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             .Dispatch(new SetSelectedProfileIntentAction(boundProfileId))
             .ConfigureAwait(false);
     }
+
     private async Task<ConversationMutationResult> RemoveConversationAsync(
         string conversationId,
         string? activeConversationId,
@@ -255,13 +260,27 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
         var currentState = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
         var hydratedConversationId = currentState.HydratedConversationId;
         var clearsActiveConversation = string.Equals(conversationId, hydratedConversationId, StringComparison.Ordinal)
-            || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal);
+            || string.Equals(activeConversationId, conversationId, StringComparison.Ordinal)
+            || IsPendingShellActivationConversation(conversationId);
 
         return new RemovalTransactionContext(
             conversationId,
             clearsActiveConversation,
             hydratedConversationId,
             currentState.ResolveBinding(conversationId));
+    }
+
+    private bool IsPendingShellActivationConversation(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId) || _shellRuntimeState is null)
+        {
+            return false;
+        }
+
+        var activeActivation = _shellRuntimeState.ActiveSessionActivation;
+        return _shellRuntimeState.IsSessionActivationInProgress
+               && (activeActivation?.Matches(conversationId) == true
+                   || string.Equals(_shellRuntimeState.DesiredSessionId, conversationId, StringComparison.Ordinal));
     }
 
     private async Task<ConversationMutationResult> ExecuteRemovalTransactionAsync(

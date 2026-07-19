@@ -36,6 +36,7 @@
 
   terminal.open(terminalElement);
   installTerminalModeHandlers();
+  applyTransportOptions();
 
   function postWebViewMessage(message) {
     try {
@@ -165,12 +166,18 @@
   }
 
   function setTransportMode(nextMode) {
-    transportMode = 'pseudoConsole';
+    const normalizedMode = nextMode === 'pseudoConsole' ? 'pseudoConsole' : 'pipe';
+    if (transportMode === normalizedMode) {
+      return;
+    }
+
+    transportMode = normalizedMode;
+    win32InputMode = false;
     applyTransportOptions();
   }
 
   function applyTransportOptions() {
-    terminal.options.convertEol = false;
+    terminal.options.convertEol = transportMode !== 'pseudoConsole';
     terminal.options.windowsPty =
       transportMode === 'pseudoConsole'
       ? { backend: 'conpty' }

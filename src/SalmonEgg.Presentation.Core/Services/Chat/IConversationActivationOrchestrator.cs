@@ -22,6 +22,13 @@ public interface IConversationActivationOrchestrator : IDisposable
     bool IsLatestActivationVersion(long activationVersion);
 
     /// <summary>
+    /// Retires the current activation owner without starting another conversation activation.
+    /// </summary>
+    /// <param name="reason">Diagnostic reason recorded by the caller.</param>
+    /// <returns>The new activation version that superseded any previous owner.</returns>
+    long SupersedeCurrentActivation(string reason);
+
+    /// <summary>
     /// Runs the latest-intent activation pipeline for a conversation.
     /// </summary>
     /// <param name="request">The activation request.</param>

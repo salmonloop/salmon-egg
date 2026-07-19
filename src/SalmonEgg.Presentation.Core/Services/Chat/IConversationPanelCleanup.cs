@@ -6,5 +6,5 @@ namespace SalmonEgg.Presentation.Core.Services.Chat;
 /// </summary>
 public interface IConversationPanelCleanup
 {
-    void CleanupAfterMutation(string conversationId, bool isCurrentSession);
+    void CleanupAfterMutation(string conversationId, bool clearsActiveConversation);
 }

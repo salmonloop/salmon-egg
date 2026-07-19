@@ -78,7 +78,8 @@
                                                   Visibility="{x:Bind ViewModel.CloudConfig.IsChecking, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                   Width="32"
                                                   Height="32"/>
-                                    <FontIcon Glyph="&#xE930;"
+                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                              Glyph="&#xE930;"
                                               Visibility="{x:Bind ViewModel.CloudConfig.IsChecking, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"
                                               HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>

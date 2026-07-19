@@ -1384,7 +1384,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 chatStore,
                 chatConnectionStore,
                 NullLogger<ConversationActivationCoordinator>.Instance,
-                _conversationMutationPipeline);
+                _conversationMutationPipeline,
+                shellNavigationRuntimeState);
         _conversationActivationOrchestrator = conversationActivationOrchestrator
             ?? new ConversationActivationOrchestrator(NullLogger<ConversationActivationOrchestrator>.Instance);
         _conversationCatalogPresenter = conversationCatalogPresenter ?? throw new ArgumentNullException(nameof(conversationCatalogPresenter));

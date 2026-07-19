@@ -873,6 +873,56 @@ public sealed class ConversationActivationCoordinatorTests
     }
 
     [Fact]
+    public async Task ArchiveConversation_PendingShellActivation_ClearsActiveConversation()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var preferences = CreatePreferences(syncContext);
+        var workspaceStore = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+
+        var state = State.Value(new object(), () => ChatState.Empty);
+        var chatStore = CreateChatStore(state);
+        var connectionStore = CreateConnectionStore();
+        var bindingCommands = new BindingCoordinator(workspace, chatStore);
+        var shellRuntimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            DesiredSessionId = "session-1",
+            IsSessionActivationInProgress = true,
+            ActiveSessionActivationVersion = 7,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                7,
+                SessionActivationPhase.RemoteHydrationPending)
+        };
+        var coordinator = new ConversationActivationCoordinator(
+            workspace,
+            bindingCommands,
+            chatStore,
+            connectionStore,
+            Mock.Of<ILogger<ConversationActivationCoordinator>>(),
+            shellRuntimeState: shellRuntimeState);
+
+        var result = await coordinator.ArchiveConversationAsync("session-1", activeConversationId: null, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.ClearedActiveConversation);
+        Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
+        var currentState = await chatStore.GetCurrentStateAsync();
+        Assert.Null(currentState.HydratedConversationId);
+    }
+
+    [Fact]
     public async Task ArchiveConversation_WhenWorkspaceMutationFails_DoesNotClearVisibleSelection()
     {
         var syncContext = new ImmediateSynchronizationContext();

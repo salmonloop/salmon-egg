@@ -640,8 +640,11 @@ public sealed class ChatViewXamlTests
 
         Assert.Contains("terminal.parser.registerCsiHandler", script, StringComparison.Ordinal);
         Assert.Contains("windowsPty", script, StringComparison.Ordinal);
+        Assert.Contains("const normalizedMode = nextMode === 'pseudoConsole' ? 'pseudoConsole' : 'pipe';", script, StringComparison.Ordinal);
+        Assert.Contains("terminal.options.convertEol = transportMode !== 'pseudoConsole';", script, StringComparison.Ordinal);
         Assert.DoesNotContain("replaceAll('\\u001b[?9001h'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("replaceAll('\\u001b[?9001l'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("transportMode = 'pseudoConsole';\n    applyTransportOptions();", script, StringComparison.Ordinal);
     }
 
     private static string LoadChatViewXaml()

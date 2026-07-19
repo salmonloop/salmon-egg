@@ -530,7 +530,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatStore>(),
                 sp.GetRequiredService<IChatConnectionStore>(),
                 sp.GetRequiredService<ILogger<ConversationActivationCoordinator>>(),
-                sp.GetRequiredService<IConversationMutationPipeline>()));
+                sp.GetRequiredService<IConversationMutationPipeline>(),
+                sp.GetRequiredService<IShellNavigationRuntimeState>()));
 
         // Main shell navigation (Start + Projects -> Sessions tree)
         services.AddSingleton<INavigationSelectionProjector, NavigationSelectionProjector>();

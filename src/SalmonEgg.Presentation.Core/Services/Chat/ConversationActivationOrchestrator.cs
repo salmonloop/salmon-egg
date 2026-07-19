@@ -34,6 +34,34 @@ public sealed class ConversationActivationOrchestrator : IConversationActivation
         => CurrentActivationVersion == activationVersion;
 
     /// <inheritdoc />
+    public long SupersedeCurrentActivation(string reason)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        var activationVersion = Interlocked.Increment(ref _activationVersion);
+        CancellationTokenSource? currentCts;
+        lock (_sync)
+        {
+            currentCts = _currentActivationCts;
+            _currentActivationCts = null;
+        }
+
+        try
+        {
+            currentCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        _logger.LogInformation(
+            "Conversation activation superseded without replacement. activationVersion={ActivationVersion} reason={Reason}",
+            activationVersion,
+            reason);
+        return activationVersion;
+    }
+
+    /// <inheritdoc />
     public async Task<ConversationActivationOrchestratorResult> ActivateAsync(
         ConversationActivationOrchestratorRequest request,
         IConversationActivationOrchestratorSink sink,

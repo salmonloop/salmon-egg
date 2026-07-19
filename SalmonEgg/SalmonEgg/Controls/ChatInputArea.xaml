@@ -81,7 +81,7 @@
                                 <DataTemplate x:DataType="vm:SlashCommandViewModel">
                                     <Grid ColumnDefinitions="Auto,*" Padding="8,6">
                                         <TextBlock Text="{x:Bind DisplayText, Mode=OneWay}"
-                                                   FontFamily="Consolas"
+                                                   FontFamily="{StaticResource AppMonospaceFontFamily}"
                                                    FontSize="13"
                                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                    Margin="0,0,12,0"/>

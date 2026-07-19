@@ -158,9 +158,7 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
                 return result;
             }
 
-            var isCurrentSession = string.Equals(conversationId, activeConversationId, StringComparison.Ordinal);
-
-            _panelCleanup?.CleanupAfterMutation(conversationId, isCurrentSession);
+            _panelCleanup?.CleanupAfterMutation(conversationId, result.ClearedActiveConversation);
 
             if (_attentionStore is not null)
             {

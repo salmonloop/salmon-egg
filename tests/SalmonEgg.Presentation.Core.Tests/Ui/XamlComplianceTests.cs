@@ -2748,6 +2748,48 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void FontIconsWithGlyph_UseSymbolThemeFontFamily_ForCrossPlatformGlyphRendering()
+    {
+        var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var failures = new List<string>();
+
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var document = XDocument.Parse(File.ReadAllText(xamlFile));
+            foreach (var icon in document.Descendants().Where(element => element.Name.LocalName == "FontIcon"))
+            {
+                if (icon.Attribute("Glyph") is null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                    icon.Attribute("FontFamily")?.Value,
+                    "{ThemeResource SymbolThemeFontFamily}",
+                    StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var id = icon.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Name")?.Value
+                         ?? icon.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "AutomationProperties.AutomationId")?.Value
+                         ?? icon.Attribute(XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml") + "Uid")?.Value
+                         ?? icon.Attribute("Glyph")?.Value
+                         ?? "<unnamed>";
+                failures.Add($"{Path.GetRelativePath(FindRepoRoot(), xamlFile)} FontIcon {id}");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
     public void NumberBoxes_UseSystemFocusVisuals_ForGamepadFocusVisibility()
     {
         var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
