@@ -199,4 +199,31 @@ public sealed class ChatConversationSurfaceStatePresenterTests
         Assert.True(state.ShouldShowLoadingOverlayStatusPill);
         Assert.Equal(ChatViewModel.LoadingOverlayStage.PreparingSession, state.OverlayLoadingStage);
     }
+
+    [Fact]
+    public void Resolve_LayoutLoadingState_DoesNotOverrideVisibilityState()
+    {
+        var state = ChatConversationSurfaceStatePresenter.Resolve(new ChatConversationSurfaceStateInput(
+            IsSessionActive: true,
+            CurrentSessionId: "conv-1",
+            MessageHistoryCount: 1,
+            VisibleTranscriptConversationId: "conv-2",
+            IsChatShellVisibleForRemoteUi: true,
+            IsConnecting: false,
+            IsInitializing: false,
+            IsHydrating: false,
+            IsLayoutLoading: true,
+            IsSessionSwitching: false,
+            SessionSwitchOverlayConversationId: null,
+            SessionSwitchPreviewConversationId: null,
+            ConnectionLifecycleOverlayConversationId: null,
+            HistoryOverlayConversationId: null,
+            PendingShellActivationConversationId: null,
+            HydrationLoadedMessageCount: 0));
+
+        Assert.False(state.IsActivationOverlayVisible);
+        Assert.True(state.IsOverlayVisible);
+        Assert.False(state.ShouldShowBlockingLoadingMask);
+        Assert.False(state.ShouldShowLoadingOverlayPresenter);
+    }
 }
