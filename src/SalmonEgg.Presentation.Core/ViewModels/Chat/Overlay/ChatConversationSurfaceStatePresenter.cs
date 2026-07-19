@@ -42,9 +42,6 @@ internal static class ChatConversationSurfaceStatePresenter
             && (!input.IsSessionActive
                 || !MatchesCurrentSession(input.CurrentSessionId, input.PendingShellActivationConversationId)
                 || !input.IsChatShellVisibleForRemoteUi);
-        var shouldPromoteLayoutLoadingToBlockingPresenter =
-            input.IsLayoutLoading
-            && (isVisibleTranscriptStaleForCurrentSession || isCurrentVisibleConversationSupersededByShellIntent);
 
         var activationOverlayVisible =
             shouldShowConnectionLifecycleOverlay
@@ -69,13 +66,11 @@ internal static class ChatConversationSurfaceStatePresenter
                 && (!hasVisibleTranscriptContent
                     || isSessionSwitchOverlayBlockingVisibleTranscript
                     || isVisibleTranscriptStaleForCurrentSession
-                    || isCurrentVisibleConversationSupersededByShellIntent))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
+                    || isCurrentVisibleConversationSupersededByShellIntent));
         var shouldShowLoadingOverlayStatusPill =
             activationOverlayVisible && !string.IsNullOrWhiteSpace(overlayStatusText);
         var shouldShowLoadingOverlayPresenter =
-            (activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
+            (activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill));
         var isOverlayVisible = activationOverlayVisible || shouldShowLayoutLoading;
         var shouldShowActiveConversationRoot =
             input.IsSessionActive
