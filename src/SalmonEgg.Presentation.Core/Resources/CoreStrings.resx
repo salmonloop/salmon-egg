@@ -543,6 +543,12 @@
   <data name="Shortcuts_ConflictSeparator" xml:space="preserve">
     <value>，</value>
   </data>
+  <data name="ShortcutAction_NewSession" xml:space="preserve">
+    <value>新建会话</value>
+  </data>
+  <data name="ShortcutAction_Search" xml:space="preserve">
+    <value>搜索</value>
+  </data>
 
   <!-- Settings: ACP connection -->
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">

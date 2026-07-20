@@ -539,6 +539,12 @@ Create the corresponding Markdown file in:
   <data name="Shortcuts_ConflictSeparator" xml:space="preserve">
     <value>, </value>
   </data>
+  <data name="ShortcutAction_NewSession" xml:space="preserve">
+    <value>New session</value>
+  </data>
+  <data name="ShortcutAction_Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
   <data name="AgentProfile_StatusConnecting" xml:space="preserve">
     <value>Connecting...</value>
   </data>

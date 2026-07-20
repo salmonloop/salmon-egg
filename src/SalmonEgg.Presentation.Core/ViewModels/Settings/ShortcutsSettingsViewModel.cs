@@ -6,6 +6,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 
@@ -15,6 +16,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
 {
     private readonly AppPreferencesViewModel _preferences;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly IAppLanguageService? _languageService;
     private bool _isApplyingPreferenceState;
 
     public ObservableCollection<ShortcutEntryViewModel> Shortcuts { get; } = new();
@@ -58,10 +60,12 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
 
     public ShortcutsSettingsViewModel(
         AppPreferencesViewModel preferences,
-        IStringLocalizer<CoreStrings> localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _languageService = languageService;
 
         PruneUnsupportedBindings();
         SeedDefaults();
@@ -71,6 +75,11 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         foreach (var s in Shortcuts)
         {
             s.PropertyChanged += OnShortcutPropertyChanged;
+        }
+
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
         }
     }
 
@@ -85,7 +94,7 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         {
             Shortcuts.Add(new ShortcutEntryViewModel(
                 definition.ActionId,
-                definition.DisplayName,
+                ResolveActionDisplayName(definition),
                 definition.DefaultGesture));
         }
     }
@@ -187,6 +196,44 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(ConflictMessage));
     }
 
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => ReprojectLocalizedActionNames();
+
+    private void ReprojectLocalizedActionNames()
+    {
+        foreach (var shortcut in Shortcuts)
+        {
+            if (!AppShortcutCatalog.TryGet(shortcut.ActionId, out var definition))
+            {
+                continue;
+            }
+
+            shortcut.UpdateName(ResolveActionDisplayName(definition));
+        }
+
+        OnPropertyChanged(nameof(ConflictMessage));
+    }
+
+    private string ResolveActionDisplayName(AppShortcutDefinition definition)
+    {
+        var resourceKey = definition.ActionId switch
+        {
+            AppShortcutActionIds.NewSession => "ShortcutAction_NewSession",
+            AppShortcutActionIds.Search => "ShortcutAction_Search",
+            _ => null
+        };
+
+        if (resourceKey is null)
+        {
+            return definition.DisplayName;
+        }
+
+        var localized = _localizer[resourceKey];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? definition.DisplayName
+            : localized.Value;
+    }
+
     [RelayCommand]
     private void RestoreDefaults()
     {
@@ -208,7 +255,7 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
 
     public string ActionId { get; }
 
-    public string Name { get; }
+    public string Name { get; private set; }
 
     public string DefaultGesture { get; }
 
@@ -247,6 +294,17 @@ public sealed partial class ShortcutEntryViewModel : ObservableObject
         {
             Gesture = normalized;
         }
+    }
+
+    public void UpdateName(string name)
+    {
+        if (string.Equals(Name, name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Name = name;
+        OnPropertyChanged(nameof(Name));
     }
 
     private void RestoreDefault()

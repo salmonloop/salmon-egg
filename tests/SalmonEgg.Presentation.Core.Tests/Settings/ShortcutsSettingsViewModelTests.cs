@@ -1,3 +1,6 @@
+using SalmonEgg.Presentation.Core.Resources;
+using Microsoft.Extensions.Localization;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,11 +30,13 @@ public sealed class ShortcutsSettingsViewModelTests
             first =>
             {
                 Assert.Equal("new_session", first.ActionId);
+                Assert.Equal("新建会话", first.Name);
                 Assert.Equal("Ctrl+N", first.DefaultGesture);
             },
             second =>
             {
                 Assert.Equal("search", second.ActionId);
+                Assert.Equal("搜索", second.Name);
                 Assert.Equal("Ctrl+K", second.DefaultGesture);
             });
         Assert.DoesNotContain(viewModel.Shortcuts, shortcut => shortcut.ActionId == "toggle_right_pane");
@@ -109,6 +114,34 @@ public sealed class ShortcutsSettingsViewModelTests
         Assert.Equal("Alt+K", preferences.GetKeyBinding("search"));
     }
 
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsActionDisplayNames()
+    {
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var languageService = new RecordingAppLanguageService();
+        var localizer = new MutableCoreStringLocalizer(new Dictionary<string, string>
+        {
+            ["ShortcutAction_NewSession"] = "New session",
+            ["ShortcutAction_Search"] = "Search",
+            ["Shortcuts_InvalidGestureMessage"] = "Invalid gesture",
+            ["Shortcuts_ConflictMessage"] = "Conflict: {0}",
+            ["Shortcuts_ConflictSeparator"] = ", "
+        });
+
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer, languageService);
+
+        Assert.Equal("New session", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+        Assert.Equal("Search", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);
+
+        localizer.Set("ShortcutAction_NewSession", "新建会话");
+        localizer.Set("ShortcutAction_Search", "搜索");
+        languageService.RaiseLanguageChanged();
+
+        Assert.Equal("新建会话", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+        Assert.Equal("搜索", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(AppSettings settings)
     {
         var appSettingsService = new Mock<IAppSettingsService>();
@@ -133,5 +166,50 @@ public sealed class ShortcutsSettingsViewModelTests
 
         await preferences.InitializeAsync();
         return preferences;
+    }
+
+    private sealed class RecordingAppLanguageService : IAppLanguageService
+    {
+        public bool IsSupported => true;
+        public string CurrentLanguageTag => "en";
+        public event EventHandler? LanguageChanged;
+
+        public Task ApplyLanguageOverrideAsync(string languageTag) => Task.CompletedTask;
+
+        public void RaiseLanguageChanged() => LanguageChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private sealed class MutableCoreStringLocalizer : IStringLocalizer<CoreStrings>
+    {
+        private readonly Dictionary<string, string> _values;
+
+        public MutableCoreStringLocalizer(Dictionary<string, string> values)
+        {
+            _values = values;
+        }
+
+        public void Set(string key, string value) => _values[key] = value;
+
+        public LocalizedString this[string name]
+            => _values.TryGetValue(name, out var value)
+                ? new LocalizedString(name, value, resourceNotFound: false)
+                : new LocalizedString(name, name, resourceNotFound: true);
+
+        public LocalizedString this[string name, params object[] arguments]
+        {
+            get
+            {
+                var localized = this[name];
+                if (localized.ResourceNotFound)
+                {
+                    return localized;
+                }
+
+                return new LocalizedString(name, string.Format(localized.Value, arguments), resourceNotFound: false);
+            }
+        }
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
+            => _values.Select(pair => new LocalizedString(pair.Key, pair.Value, resourceNotFound: false));
     }
 }

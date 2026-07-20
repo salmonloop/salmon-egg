@@ -95,6 +95,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["McpSettings_ClipboardFilled"] = "McpSettings_ClipboardFilled",
         ["AcpRemoteDirectories_SaveValidationRemotePathRequired"] = "AcpRemoteDirectories_SaveValidationRemotePathRequired",
         ["Acp_RemoteDirectoryDelete.Content"] = "Delete",
+        ["ShortcutAction_NewSession"] = "新建会话",
+        ["ShortcutAction_Search"] = "搜索",
         ["Shortcuts_InvalidGestureMessage"] = "存在无效快捷键格式，请修正后保存。",
         ["Shortcuts_ConflictMessage"] = "存在冲突：{0}",
         ["Shortcuts_ConflictSeparator"] = "，",

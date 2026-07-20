@@ -7,8 +7,8 @@ public static class AppShortcutCatalog
 {
     private static readonly IReadOnlyList<AppShortcutDefinition> EditableActionsInternal =
     [
-        new(AppShortcutActionIds.NewSession, "新建会话", "Ctrl+N"),
-        new(AppShortcutActionIds.Search, "搜索", "Ctrl+K")
+        new(AppShortcutActionIds.NewSession, "New session", "Ctrl+N"),
+        new(AppShortcutActionIds.Search, "Search", "Ctrl+K")
     ];
 
     private static readonly Dictionary<string, AppShortcutDefinition> ByIdInternal =
