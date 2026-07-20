@@ -57,6 +57,34 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+            <!-- Short windows: denser empty chrome so fixed icon rings do not dominate the
+                 details pane. Comfortable restores marketing-scale empty art. Mirrors StartView
+                 HeroHeightStates (MinWindowHeight=760). -->
+            <VisualStateGroup x:Name="EmptyStateHeightStates">
+                <VisualState x:Name="EmptyHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="NoSelectionEmptyHost.Spacing" Value="12" />
+                        <Setter Target="NoSelectionEmptyBadge.Width" Value="72" />
+                        <Setter Target="NoSelectionEmptyBadge.Height" Value="72" />
+                        <Setter Target="NoSelectionEmptyIcon.FontSize" Value="32" />
+                        <Setter Target="SessionsEmptyHost.Spacing" Value="10" />
+                        <Setter Target="SessionsEmptyIcon.FontSize" Value="32" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="EmptyHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="NoSelectionEmptyHost.Spacing" Value="24" />
+                        <Setter Target="NoSelectionEmptyBadge.Width" Value="120" />
+                        <Setter Target="NoSelectionEmptyBadge.Height" Value="120" />
+                        <Setter Target="NoSelectionEmptyIcon.FontSize" Value="56" />
+                        <Setter Target="SessionsEmptyHost.Spacing" Value="16" />
+                        <Setter Target="SessionsEmptyIcon.FontSize" Value="48" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <!-- Left Pane: Profiles Master List -->
@@ -142,13 +170,15 @@
                             
                             <Border Grid.Column="0"
                                     Width="36" Height="36"
-                                    CornerRadius="6"
-                                    Background="{ThemeResource SystemControlBackgroundAccentBrush}"
-                                    Opacity="0.8">
-                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                          Glyph="{x:Bind TransportGlyph}"
-                                          Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                          FontSize="16" />
+                                    CornerRadius="8"
+                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                    Opacity="0.18"
+                                    VerticalAlignment="Center">
+                                <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                              Glyph="{x:Bind TransportGlyph}"
+                                              Foreground="{ThemeResource AccentBrush}" />
+                                </Viewbox>
                             </Border>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -180,14 +210,21 @@
               Visibility="{x:Bind ViewModel.ShowDetailsPane, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <!-- Empty State when no profile is selected -->
             <Grid Visibility="{x:Bind ViewModel.HasNoSelectedProfile, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="24">
-                    <Grid Width="120" Height="120">
+                <StackPanel x:Name="NoSelectionEmptyHost"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12">
+                    <Grid x:Name="NoSelectionEmptyBadge" Width="72" Height="72">
                         <Ellipse Fill="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
-                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" Glyph="&#xE716;" FontSize="56" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <FontIcon x:Name="NoSelectionEmptyIcon"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  Glyph="&#xE716;"
+                                  FontSize="32"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                     <StackPanel Spacing="8">
-                        <TextBlock x:Uid="DiscoverSessionsNoSelectionTitle" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        <TextBlock x:Uid="DiscoverSessionsNoSelectionDescription" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionTitle" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock x:Uid="DiscoverSessionsNoSelectionDescription" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -288,14 +325,20 @@
 
                         <Grid Grid.Row="2"
                               Visibility="{x:Bind ViewModel.ShowEmptyState, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            <StackPanel x:Name="SessionsEmptyHost"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="10">
+                                <FontIcon x:Name="SessionsEmptyIcon"
+                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                           Glyph="&#xE8B7;"
-                                          FontSize="48"
+                                          FontSize="32"
                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <TextBlock x:Uid="DiscoverSessionsEmptyTitle"
                                            Style="{ThemeResource TitleTextBlockStyle}"
-                                           HorizontalAlignment="Center" />
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap" />
                                 <TextBlock x:Uid="DiscoverSessionsEmptyDescription"
                                            Style="{ThemeResource BodyTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -1598,6 +1598,42 @@ public sealed class XamlComplianceTests
         Assert.Contains("IsFocusEngagementEnabled=\"True\"", xaml);
     }
 
+
+    [Fact]
+    public void DiscoverSessionsPage_ProfileTransportChipsUseFluentAccentThemePattern()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        // Profiles list and session rows share the Fluent soft-accent chip used on
+        // AcpConnectionSettingsPage (AccentFill + low Opacity + AccentBrush icon).
+        Assert.Contains("Background=\"{ThemeResource AccentFillColorDefaultBrush}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource AccentBrush}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SystemControlBackgroundAccentBrush", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TextOnAccentFillColorPrimaryBrush", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.8\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_EmptyStatesAdaptDensityByWindowHeight()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("x:Name=\"EmptyStateHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"EmptyHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"EmptyHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NoSelectionEmptyHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NoSelectionEmptyBadge\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NoSelectionEmptyIcon\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionsEmptyHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionsEmptyIcon\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"NoSelectionEmptyBadge.Width\" Value=\"72\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"NoSelectionEmptyBadge.Width\" Value=\"120\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionsEmptyIcon.FontSize\" Value=\"32\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionsEmptyIcon.FontSize\" Value=\"48\"", xaml, StringComparison.Ordinal);
+    }
+
+
     [Fact]
     public void MainPage_SearchUsesNativeAutoSuggestBoxWithoutFocusPatches()
     {
