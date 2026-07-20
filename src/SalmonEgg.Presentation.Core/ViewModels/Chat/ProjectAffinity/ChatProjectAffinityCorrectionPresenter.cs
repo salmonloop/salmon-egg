@@ -60,9 +60,9 @@ public sealed class ChatProjectAffinityCorrectionPresenter
             EffectiveSource: resolution.Source,
             Message: resolution.Source switch
             {
-                ProjectAffinitySource.Override => "已应用本地项目覆盖，可随时清除。",
-                ProjectAffinitySource.NeedsMapping => "远程会话未匹配到本地项目，请手动更正。",
-                _ => "当前会话归类为“未归类”，可手动更正。"
+                ProjectAffinitySource.Override => "Local project override applied. You can clear it anytime.",
+                ProjectAffinitySource.NeedsMapping => "This remote session is not matched to a local project. Correct it manually.",
+                _ => "This session is unclassified. You can correct it manually."
             },
             SelectedOverrideProjectId: selectedOverrideProjectId);
     }

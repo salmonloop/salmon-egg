@@ -55,7 +55,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
         Assert.False(state.HasOverride);
         Assert.Equal(NavigationProjectIds.Unclassified, state.EffectiveProjectId);
         Assert.Equal(ProjectAffinitySource.NeedsMapping, state.EffectiveSource);
-        Assert.Equal("远程会话未匹配到本地项目，请手动更正。", state.Message);
+        Assert.Equal("This remote session is not matched to a local project. Correct it manually.", state.Message);
         Assert.Collection(
             state.Options,
             first => Assert.Equal("Alpha", first.DisplayName),
@@ -82,7 +82,7 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
         Assert.True(state.HasOverride);
         Assert.Equal("project-1", state.EffectiveProjectId);
         Assert.Equal(ProjectAffinitySource.Override, state.EffectiveSource);
-        Assert.Equal("已应用本地项目覆盖，可随时清除。", state.Message);
+        Assert.Equal("Local project override applied. You can clear it anytime.", state.Message);
         Assert.Equal("project-1", state.SelectedOverrideProjectId);
     }
 

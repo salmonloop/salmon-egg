@@ -97,6 +97,7 @@ public sealed class ResourceViewModelTests
         Assert.False(viewModel.IsBinaryResource);
         Assert.Equal(5, viewModel.Size);
         Assert.True(viewModel.IsResourceContent);
+        Assert.Equal("Resource content", viewModel.Title);
     }
 
     [Fact]
@@ -123,5 +124,18 @@ public sealed class ResourceViewModelTests
         var block = new ResourceLinkContentBlock(uri: "https://host/x.md", name: "Display Name");
 
         Assert.Equal("Display Name", ResourceViewModel.CreateFromLink(block).Name);
+    }
+
+    [Fact]
+    public void CreateFromLink_UsesEnglishFallbackTitleWhenMissing()
+    {
+        var block = new ResourceLinkContentBlock(
+            uri: "https://example.com/docs/report.pdf",
+            name: null,
+            title: null);
+
+        var viewModel = ResourceViewModel.CreateFromLink(block);
+
+        Assert.Equal("Resource link", viewModel.Title);
     }
 }
