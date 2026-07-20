@@ -486,7 +486,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
                 .Callback(() => _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new TransportErrorEventArgs("无法启动进程：stdio command not found")))
+                    new TransportErrorEventArgs("Unable to start process: stdio command not found")))
                 .ReturnsAsync(false);
             var client = CreateClient(parser);
 
@@ -496,7 +496,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Contains("Failed to connect to the transport", ex.Message, StringComparison.Ordinal);
-            Assert.Contains("无法启动进程：stdio command not found", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("Unable to start process: stdio command not found", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -580,11 +580,11 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 isConnected = false;
                 _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new TransportErrorEventArgs("Agent 进程已退出"));
+                    new TransportErrorEventArgs("Agent process exited"));
 
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                     async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
-                Assert.Contains("Agent 进程已退出", ex.Message, StringComparison.Ordinal);
+                Assert.Contains("Agent process exited", ex.Message, StringComparison.Ordinal);
             }
             finally
             {
@@ -612,7 +612,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 {
                     _transportMock.Raise(
                         t => t.ErrorOccurred += null,
-                        new TransportErrorEventArgs("发送消息失败：broken pipe"));
+                        new TransportErrorEventArgs("Failed to send message: broken pipe"));
                     sessionNewSent.TrySetResult(null);
                 })
                 .ReturnsAsync(false);
@@ -625,7 +625,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 await sessionNewSent.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                     async () => await createTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
-                Assert.Contains("发送消息失败：broken pipe", ex.Message, StringComparison.Ordinal);
+                Assert.Contains("Failed to send message: broken pipe", ex.Message, StringComparison.Ordinal);
             }
             finally
             {
@@ -682,7 +682,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
                 new TransportErrorEventArgs(
-                    "进程启动后立即退出，退出码=255",
+                    "Process exited immediately after start. ExitCode=255",
                     kind: TransportErrorKind.ProcessStartFailed));
 
             Assert.NotNull(receivedError);
@@ -702,7 +702,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
                 new TransportErrorEventArgs(
-                    "进程错误：}",
+                    "Process error: }",
                     kind: TransportErrorKind.AgentStderr));
 
             Assert.Empty(receivedErrors);
@@ -710,7 +710,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 logger => logger.LogError(It.Is<ErrorLogEntry>(entry =>
                     entry.ErrorCode == "AGENT_STDERR" &&
                     entry.Severity == ErrorSeverity.Info &&
-                    entry.ErrorMessage.Contains("进程错误：}", StringComparison.Ordinal))),
+                    entry.ErrorMessage.Contains("Process error: }", StringComparison.Ordinal))),
                 Times.Once);
         }
 

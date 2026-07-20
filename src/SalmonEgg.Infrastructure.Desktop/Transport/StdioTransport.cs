@@ -121,7 +121,7 @@ namespace SalmonEgg.Infrastructure.Transport
                 _process.EnableRaisingEvents = true;
                 _process.Exited += OnProcessExited;
 
-                _logger.Information("[StdioTransport.Connect] 准备启动进程：{Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
+                _logger.Information("[StdioTransport.Connect] Starting process. Command={Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
@@ -129,7 +129,7 @@ namespace SalmonEgg.Infrastructure.Transport
                     lock (_lock)
                     {
                         _process.Start();
-                        _logger.Information("[StdioTransport.Connect] 进程已启动 PID={Pid}", _process.Id);
+                        _logger.Information("[StdioTransport.Connect] Process started. PID={Pid}", _process.Id);
                     }
                 }, cancellationToken).ConfigureAwait(false);
 
@@ -141,7 +141,7 @@ namespace SalmonEgg.Infrastructure.Transport
 
                 if (!_process.HasExited)
                 {
-                    _logger.Information("[StdioTransport.Connect] 启动读取循环");
+                    _logger.Information("[StdioTransport.Connect] Starting read loops");
 
                     // 启动读取循环
                     _ = ReadLoopAsync(_readCts.Token);
@@ -149,24 +149,24 @@ namespace SalmonEgg.Infrastructure.Transport
 
                     IsConnected = true;
 
-                    _logger.Information("[StdioTransport.Connect] 连接成功，PID={Pid}", _process.Id);
+                    _logger.Information("[StdioTransport.Connect] Connected. PID={Pid}", _process.Id);
                     return true;
                 }
                 else
                 {
-                    _logger.Warning("[StdioTransport.Connect] 进程已退出，退出码={ExitCode}", _process.ExitCode);
+                    _logger.Warning("[StdioTransport.Connect] Process exited. ExitCode={ExitCode}", _process.ExitCode);
                     await DrainExitedProcessErrorAsync().ConfigureAwait(false);
                     OnErrorOccurred(new TransportErrorEventArgs(
-                        $"进程启动后立即退出，退出码={_process.ExitCode}",
+                        $"Process exited immediately after start. ExitCode={_process.ExitCode}",
                         kind: TransportErrorKind.ProcessStartFailed));
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.Connect] 启动失败");
+                _logger.Error(ex, "[StdioTransport.Connect] Start failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"无法启动进程：{ex.Message}",
+                    $"Unable to start process: {ex.Message}",
                     ex,
                     TransportErrorKind.ProcessStartFailed));
                 return false;
@@ -239,7 +239,7 @@ namespace SalmonEgg.Infrastructure.Transport
                 catch (Exception ex)
                 {
                     OnErrorOccurred(new TransportErrorEventArgs(
-                        $"断开连接时出错：{ex.Message}",
+                        $"Error while disconnecting: {ex.Message}",
                         ex,
                         TransportErrorKind.DisconnectFailed));
                     return false;
@@ -255,9 +255,9 @@ namespace SalmonEgg.Infrastructure.Transport
             // 检查连接状态（不使用锁，避免死锁）
             if (!IsConnected || _stdin == null)
             {
-                _logger.Warning("[StdioTransport.SendMessage] 失败：未连接或 _stdin 为 null");
+                _logger.Warning("[StdioTransport.SendMessage] Failed: not connected or _stdin is null");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    "传输未连接",
+                    "Transport is not connected",
                     kind: TransportErrorKind.NotConnected));
                 return false;
             }
@@ -265,9 +265,9 @@ namespace SalmonEgg.Infrastructure.Transport
             // 检查进程是否已退出
             if (_process != null && _process.HasExited)
             {
-                _logger.Error("[StdioTransport.SendMessage] 失败：进程已退出，退出码={ExitCode}", _process.ExitCode);
+                _logger.Error("[StdioTransport.SendMessage] Failed: process exited. ExitCode={ExitCode}", _process.ExitCode);
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"Agent 进程已退出，退出码={_process.ExitCode}",
+                    $"Agent process exited. ExitCode={_process.ExitCode}",
                     kind: TransportErrorKind.ProcessExited));
                 IsConnected = false;
                 return false;
@@ -275,22 +275,22 @@ namespace SalmonEgg.Infrastructure.Transport
 
             try
             {
-                _logger.Information("[StdioTransport.SendMessage] 发送消息，Length={Length}", message.Length);
+                _logger.Information("[StdioTransport.SendMessage] Sending message. Length={Length}", message.Length);
 
                 // 发送消息后添加换行符
                 await _stdin.WriteAsync(message + Environment.NewLine).ConfigureAwait(false);
-                _logger.Debug("[StdioTransport.SendMessage] 已写入 stdin，正在 Flush...");
+                _logger.Debug("[StdioTransport.SendMessage] Wrote stdin; flushing...");
 
                 await _stdin.FlushAsync().ConfigureAwait(false);
-                _logger.Debug("[StdioTransport.SendMessage] Flush 完成");
+                _logger.Debug("[StdioTransport.SendMessage] Flush completed");
 
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.SendMessage] 发送失败");
+                _logger.Error(ex, "[StdioTransport.SendMessage] Send failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"发送消息失败：{ex.Message}",
+                    $"Failed to send message: {ex.Message}",
                     ex,
                     TransportErrorKind.SendFailed));
                 IsConnected = false;
@@ -305,7 +305,7 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             try
             {
-                _logger.Information("[StdioTransport.ReadLoop] 启动读取循环，PID={Pid}", _process?.Id);
+                _logger.Information("[StdioTransport.ReadLoop] Starting. PID={Pid}", _process?.Id);
                 int lineCount = 0;
                 // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
                 while (!cancellationToken.IsCancellationRequested && _stdout != null)
@@ -313,34 +313,34 @@ namespace SalmonEgg.Infrastructure.Transport
                     var line = await _stdout.ReadLineAsync().ConfigureAwait(false);
                     if (line == null)
                     {
-                        _logger.Warning("[StdioTransport.ReadLoop] ReadLine 返回 null，流可能已结束");
+                        _logger.Warning("[StdioTransport.ReadLoop] ReadLine returned null; stream may have ended");
                         break;
                     }
                     lineCount++;
-                    _logger.Debug("[StdioTransport.ReadLoop] 收到第{Count}行，Length={Length}", lineCount, line.Length);
+                    _logger.Debug("[StdioTransport.ReadLoop] Received line {Count}. Length={Length}", lineCount, line.Length);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Debug("[StdioTransport.ReadLoop] 触发 OnMessageReceived，Line={Count}, Length={Length}", lineCount, line.Length);
+                        _logger.Debug("[StdioTransport.ReadLoop] Raising OnMessageReceived. Line={Count}, Length={Length}", lineCount, line.Length);
                         OnMessageReceived(new MessageReceivedEventArgs(line));
                     }
                     else
                     {
-                        _logger.Debug("[StdioTransport.ReadLoop] 忽略空行");
+                        _logger.Debug("[StdioTransport.ReadLoop] Ignoring empty line");
                     }
                 }
-                _logger.Warning("[StdioTransport.ReadLoop] 读取循环结束 - 共读取{Count}行，取消={Cancelled}",
+                _logger.Warning("[StdioTransport.ReadLoop] Ended after {Count} lines. Cancelled={Cancelled}",
                     lineCount, cancellationToken.IsCancellationRequested);
             }
             catch (OperationCanceledException)
             {
-                _logger.Verbose("[StdioTransport.ReadLoop] 读取循环被取消");
+                _logger.Verbose("[StdioTransport.ReadLoop] Cancelled");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.ReadLoop] 读取循环出错");
+                _logger.Error(ex, "[StdioTransport.ReadLoop] Failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"读取输出失败：{ex.Message}",
+                    $"Failed to read process output: {ex.Message}",
                     ex,
                     TransportErrorKind.StdoutReadFailed));
             }
@@ -353,33 +353,33 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             try
             {
-                _logger.Information("[StdioTransport.ReadError] 启动错误读取循环，PID={Pid}", _process?.Id);
+                _logger.Information("[StdioTransport.ReadError] Starting. PID={Pid}", _process?.Id);
 
                 while (!cancellationToken.IsCancellationRequested && _stderr != null)
                 {
                     var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
                     if (line == null) break;
-                    _logger.Verbose("[StdioTransport.ReadError] 收到 stderr 行，Length={Length}", line.Length);
+                    _logger.Verbose("[StdioTransport.ReadError] Received stderr line. Length={Length}", line.Length);
 
                     if (!string.IsNullOrWhiteSpace(line))
                     {
-                        _logger.Warning("[StdioTransport.ReadError] 进程 stderr 非空，Length={Length}", line.Length);
+                        _logger.Warning("[StdioTransport.ReadError] Non-empty process stderr. Length={Length}", line.Length);
                         OnErrorOccurred(new TransportErrorEventArgs(
-                            $"进程错误：{line}",
+                            $"Process error: {line}",
                             kind: TransportErrorKind.AgentStderr));
                     }
                 }
-                _logger.Warning("[StdioTransport.ReadError] 错误读取循环结束");
+                _logger.Warning("[StdioTransport.ReadError] Ended");
             }
             catch (OperationCanceledException)
             {
-                _logger.Verbose("[StdioTransport.ReadError] 错误读取循环被取消");
+                _logger.Verbose("[StdioTransport.ReadError] Cancelled");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[StdioTransport.ReadError] 错误读取循环出错");
+                _logger.Error(ex, "[StdioTransport.ReadError] Failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"读取错误流失败：{ex.Message}",
+                    $"Failed to read process error stream: {ex.Message}",
                     ex,
                     TransportErrorKind.StderrReadFailed));
             }
@@ -498,9 +498,9 @@ namespace SalmonEgg.Infrastructure.Transport
                     continue;
                 }
 
-                _logger.Warning("[StdioTransport.Connect] 进程快速退出 stderr 非空，Length={Length}", line.Length);
+                _logger.Warning("[StdioTransport.Connect] Fast-exit process stderr is non-empty. Length={Length}", line.Length);
                 OnErrorOccurred(new TransportErrorEventArgs(
-                    $"进程错误：{line}",
+                    $"Process error: {line}",
                     kind: TransportErrorKind.AgentStderr));
             }
         }
@@ -513,7 +513,7 @@ namespace SalmonEgg.Infrastructure.Transport
             IsConnected = false;
             _readCts?.Cancel();
             OnErrorOccurred(new TransportErrorEventArgs(
-                "Agent 进程已退出",
+                "Agent process exited",
                 kind: TransportErrorKind.ProcessExited));
         }
 
