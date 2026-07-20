@@ -15,10 +15,10 @@ public sealed class NavigationCoreTests
     {
         var now = DateTime.UtcNow;
 
-        Assert.Equal("刚刚", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromSeconds(30)));
-        Assert.Equal("2 分", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromMinutes(2)));
-        Assert.Equal("3 小时", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromHours(3)));
-        Assert.Equal("2 天", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromDays(2)));
+        Assert.Equal("Just now", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromSeconds(30)));
+        Assert.Equal("2 min", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromMinutes(2)));
+        Assert.Equal("3 hr", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromHours(3)));
+        Assert.Equal("2 d", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromDays(2)));
     }
 
     [Fact]

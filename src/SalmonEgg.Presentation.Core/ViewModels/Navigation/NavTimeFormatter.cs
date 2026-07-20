@@ -21,20 +21,20 @@ public static class NavTimeFormatter
 
         if (delta < TimeSpan.FromMinutes(1))
         {
-            return "刚刚";
+            return "Just now";
         }
 
         if (delta < TimeSpan.FromHours(1))
         {
-            return $"{Math.Max(1, (int)delta.TotalMinutes)} 分";
+            return $"{Math.Max(1, (int)delta.TotalMinutes)} min";
         }
 
         if (delta < TimeSpan.FromDays(1))
         {
-            return $"{Math.Max(1, (int)delta.TotalHours)} 小时";
+            return $"{Math.Max(1, (int)delta.TotalHours)} hr";
         }
 
-        return $"{Math.Max(1, (int)delta.TotalDays)} 天";
+        return $"{Math.Max(1, (int)delta.TotalDays)} d";
     }
 
     public static string NormalizePathForPrefixMatch(string? path)
