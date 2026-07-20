@@ -3070,6 +3070,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MainPage_TaskOverviewEmptyHost_AdaptsMarginByWindowHeight()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("x:Name=\"TaskOverviewHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TaskOverviewHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TaskOverviewHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TaskOverviewEmptyHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TaskOverviewEmptyHost.Margin\" Value=\"0,12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TaskOverviewEmptyHost.Margin\" Value=\"0,40\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatSurfaces_SecondaryTextUsesThemeBrushWithoutStackedOpacity()
     {
         var chatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
