@@ -14,7 +14,7 @@ public class RightPanelServiceTests
     [Fact]
     public async Task Dispose_ShouldCompleteAfterModeChange()
     {
-        using var store = new TestShellLayoutStore();
+        await using var store = new TestShellLayoutStore();
         var service = new RightPanelService(store);
         using var signal = new ManualResetEventSlim(false);
         service.ModeChanged += (_, _) => signal.Set();
@@ -32,7 +32,7 @@ public class RightPanelServiceTests
     [Fact]
     public async Task CurrentMode_ShouldChangeStateAndNotify()
     {
-        using var store = new TestShellLayoutStore();
+        await using var store = new TestShellLayoutStore();
         using var service = new RightPanelService(store);
         using var signal = new ManualResetEventSlim(false);
         var modeChangedCalled = 0;
@@ -49,7 +49,7 @@ public class RightPanelServiceTests
     [Fact]
     public async Task CurrentMode_ShouldNotNotifyIfValueIsSame()
     {
-        using var store = new TestShellLayoutStore();
+        await using var store = new TestShellLayoutStore();
         using var service = new RightPanelService(store);
         using var signal = new ManualResetEventSlim(false);
         service.ModeChanged += (_, _) => signal.Set();
@@ -80,7 +80,7 @@ public class RightPanelServiceTests
         Assert.True(predicate(), "Timed out waiting for expected asynchronous condition.");
     }
 
-    private sealed class TestShellLayoutStore : IShellLayoutStore, IDisposable
+    private sealed class TestShellLayoutStore : IShellLayoutStore, IAsyncDisposable
     {
         private readonly IState<ShellLayoutState> _state;
         private readonly IState<ShellLayoutSnapshot> _snapshot;
@@ -120,16 +120,16 @@ public class RightPanelServiceTests
             Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             if (_snapshot is IAsyncDisposable snapshotDisposable)
             {
-                snapshotDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                await snapshotDisposable.DisposeAsync();
             }
 
             if (_state is IAsyncDisposable stateDisposable)
             {
-                stateDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                await stateDisposable.DisposeAsync();
             }
         }
     }
