@@ -80,10 +80,11 @@ public sealed class AcpConnectionSettingsViewModelTests
         var profiles = CreateProfiles(preferences);
         var chat = new TestSettingsChatConnection();
         var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
 
-        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, new TestCoreStringLocalizer());
+        using var viewModel = new AcpConnectionSettingsViewModel(chat, profiles, preferences, CreateTransportSupportPolicy(preferences), logger.Object, localizer);
 
-        Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+        Assert.Equal(localizer["AcpConnection_TransportStdio"], viewModel.TransportOptions[0].Name);
     }
 
     [Fact]
@@ -900,7 +901,8 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var pending = new TaskCompletionSource();
         var commands = new TestConnectionCommands { ConnectProfileInPoolTask = pending };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -913,7 +915,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsTransitioning);
             Assert.False(item.IsStableConnected);
             Assert.False(item.IsStableDisconnected);
-            Assert.Equal("连接中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusConnecting"], item.StatusLabel);
             Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
         }
         finally
@@ -954,7 +956,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             default));
         var pending = new TaskCompletionSource();
         var commands = new TestConnectionCommands { DisconnectProfileInPoolTask = pending };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -967,7 +970,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsTransitioning);
             Assert.False(item.IsStableConnected);
             Assert.False(item.IsStableDisconnected);
-            Assert.Equal("断开中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusDisconnecting"], item.StatusLabel);
             Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
         }
         finally
@@ -1046,7 +1049,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             ReconnectProfileCallback = () => registry.RemoveByProfile("profile-a"),
             ReconnectProfileTask = pendingReconnect
         };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        var localizer = new TestCoreStringLocalizer();
+        using var item = CreateAgentProfileItem("profile-a", registry, commands, localizer);
 
         try
         {
@@ -1055,7 +1059,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             Assert.True(item.IsConnecting);
             Assert.False(item.IsConnected);
             Assert.True(item.IsTransitioning);
-            Assert.Equal("重连中...", item.StatusLabel);
+            Assert.Equal(localizer["AgentProfile_StatusReconnecting"], item.StatusLabel);
         }
         finally
         {
@@ -1300,7 +1304,8 @@ public sealed class AcpConnectionSettingsViewModelTests
     private static AgentProfileItemViewModel CreateAgentProfileItem(
         string profileId,
         InMemoryAcpConnectionSessionRegistry registry,
-        TestConnectionCommands commands)
+        TestConnectionCommands commands,
+        TestCoreStringLocalizer? localizer = null)
         => new(
             new ServerConfiguration { Id = profileId, Name = profileId },
             registry,
@@ -1308,7 +1313,7 @@ public sealed class AcpConnectionSettingsViewModelTests
             commands,
             NullLogger<AgentProfileItemViewModel>.Instance,
             new ImmediateUiDispatcher(),
-            new TestCoreStringLocalizer());
+            localizer ?? new TestCoreStringLocalizer());
 
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
