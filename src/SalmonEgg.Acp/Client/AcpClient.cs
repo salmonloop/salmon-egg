@@ -176,7 +176,7 @@ namespace SalmonEgg.Acp.Client
         {
             if (_isInitialized)
             {
-                throw new InvalidOperationException("客户端已初始化");
+                throw new InvalidOperationException("ACP client is already initialized.");
             }
 
             // 确保传输层已连接
@@ -201,7 +201,7 @@ namespace SalmonEgg.Acp.Client
             var validationResult = _validator.ValidateResponse(response);
             if (!validationResult.IsValid)
             {
-                throw new AcpException(JsonRpcErrorCode.InvalidRequest, $"响应验证失败：{string.Join("; ", validationResult.Errors)}");
+                throw new AcpException(JsonRpcErrorCode.InvalidRequest, $"Response validation failed: {string.Join("; ", validationResult.Errors)}");
             }
 
             if (response.IsError)
@@ -1758,7 +1758,7 @@ namespace SalmonEgg.Acp.Client
             }
 
             const string sshBridgeGuidance =
-                " 如果这是 SSH stdio bridge，请避免使用 ssh -t，确保 stdout 只输出 ACP 帧，并优先启用 BatchMode=yes。";
+                " If this is an SSH stdio bridge, avoid ssh -t, ensure stdout emits only ACP frames, and prefer BatchMode=yes.";
 
             return errorMessage.Contains("ssh -t", StringComparison.Ordinal)
                 ? errorMessage
@@ -1782,8 +1782,8 @@ namespace SalmonEgg.Acp.Client
         {
             var transportErrorMessage = _lastTransportErrorMessage;
             return string.IsNullOrWhiteSpace(transportErrorMessage)
-                ? "无法连接到传输层"
-                : "无法连接到传输层：" + transportErrorMessage;
+                ? "Failed to connect to the transport."
+                : "Failed to connect to the transport: " + transportErrorMessage;
         }
 
         private string CreateTransportSendFailureMessage(string method)

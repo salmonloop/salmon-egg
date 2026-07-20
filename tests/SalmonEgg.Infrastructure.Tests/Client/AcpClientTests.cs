@@ -495,7 +495,36 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                     new ClientInfo("Test", "1.0.0"),
                     ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
+            Assert.Contains("Failed to connect to the transport", ex.Message, StringComparison.Ordinal);
             Assert.Contains("无法启动进程：stdio command not found", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenAlreadyInitialized_ThrowsEnglishInvalidOperationException()
+        {
+            var parser = new MessageParser();
+            var client = CreateClient(parser);
+
+            var initResponse = new InitializeResponse(
+                1,
+                new AgentInfo("TestAgent", "1.0.0"),
+                new AgentCapabilities());
+
+            SetupJsonRpcResponse(
+                "initialize",
+                JsonSerializer.SerializeToElement(initResponse, parser.Options),
+                parser);
+
+            await client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                client.InitializeAsync(new InitializeParams(
+                    new ClientInfo("Test", "1.0.0"),
+                    ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
+
+            Assert.Contains("already initialized", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
