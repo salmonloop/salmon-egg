@@ -12,6 +12,15 @@ namespace SalmonEgg.Presentation.Core.Services;
 
 public sealed class NavigationCoordinator : INavigationCoordinator
 {
+    public const string ConnectionNotInitializedMessage =
+        "The ACP connection has not finished initializing.";
+
+    public const string LoadSessionCapabilityMissingMessage =
+        "The current agent does not advertise ACP loadSession capability, so discovered remote sessions cannot be imported.";
+
+    public const string SessionImportActivationFailedMessage =
+        "Failed to load and import the session. Check the connection status.";
+
     private readonly IShellSelectionMutationSink _selectionSink;
     private readonly IShellNavigationRuntimeState _runtimeState;
     private readonly IConversationSessionSwitcher _conversationSessionSwitcher;
@@ -269,12 +278,12 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         var chatService = _discoverConnectionFacade.CurrentChatService;
         if (chatService is not { IsConnected: true, IsInitialized: true })
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "ACP 连接尚未完成初始化。");
+            return new DiscoverRemoteSessionOpenResult(false, null, ConnectionNotInitializedMessage);
         }
 
         if (chatService.AgentCapabilities?.SupportsSessionLoading != true)
         {
-            return new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。");
+            return new DiscoverRemoteSessionOpenResult(false, null, LoadSessionCapabilityMissingMessage);
         }
 
         var importRequest = BeginDiscoveredRemoteSessionImport(request.RemoteSessionId);
@@ -354,7 +363,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             return new DiscoverRemoteSessionOpenResult(
                 false,
                 openResult.LocalConversationId,
-                "加载会话并导入失败，请检查连接状态。");
+                SessionImportActivationFailedMessage);
         }
 
         return openResult;

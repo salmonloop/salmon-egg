@@ -253,7 +253,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, result.ErrorMessage);
         Assert.Empty(switcher.ActivatedSessionIds);
         Assert.Empty(switcher.OpenRequests);
     }
@@ -289,7 +289,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, result.ErrorMessage);
         Assert.Empty(switcher.ActivatedSessionIds);
         Assert.Empty(switcher.OpenRequests);
     }
@@ -462,7 +462,7 @@ public sealed class NavigationCoordinatorTests
             new DiscoverRemoteSessionOpenRequest("remote-1", "/repo", "profile-1", "Remote"));
 
         Assert.False(result.Succeeded);
-        Assert.Equal("加载会话并导入失败，请检查连接状态。", result.ErrorMessage);
+        Assert.Equal(NavigationCoordinator.SessionImportActivationFailedMessage, result.ErrorMessage);
         Assert.Equal(new[] { "local-1" }, switcher.ActivatedSessionIds);
         Assert.Equal(new[] { "local-1" }, switcher.DiscardedDiscoveredSessionIds);
         Assert.Equal(NavigationSelectionState.StartSelection, selectionStore.CurrentSelection);

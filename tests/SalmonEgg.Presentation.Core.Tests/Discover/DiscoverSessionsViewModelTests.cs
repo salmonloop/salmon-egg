@@ -475,7 +475,7 @@ public sealed class DiscoverSessionsViewModelTests
             };
             var navigationCoordinator = new StubNavigationCoordinator
             {
-                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, "当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。")
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(false, null, NavigationCoordinator.LoadSessionCapabilityMissingMessage)
             };
             using var viewModel = CreateViewModel(
                 profilesViewModel,
@@ -485,7 +485,7 @@ public sealed class DiscoverSessionsViewModelTests
             await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
 
             Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
-            Assert.Equal("当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。", viewModel.ErrorMessage);
+            Assert.Equal(NavigationCoordinator.LoadSessionCapabilityMissingMessage, viewModel.ErrorMessage);
         }
         finally
         {
