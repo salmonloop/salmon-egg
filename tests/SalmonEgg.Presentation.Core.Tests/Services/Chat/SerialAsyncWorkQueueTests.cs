@@ -48,7 +48,7 @@ public sealed class SerialAsyncWorkQueueTests
         tcs.SetResult(true);
         await enqueued;
 
-        Assert.True(tcs.Task.Result);
+        Assert.True(await tcs.Task);
     }
 
     [Fact]
