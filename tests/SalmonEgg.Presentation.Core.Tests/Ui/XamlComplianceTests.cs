@@ -2363,6 +2363,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AboutPage_OpenSourceAcknowledgements_AdaptsMaxHeightByWindowHeight()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml");
+
+        Assert.Contains("x:Name=\"OpenSourceHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"OpenSourceHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"OpenSourceHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"OpenSourceAcknowledgementsList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"220\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"OpenSourceAcknowledgementsList.MaxHeight\" Value=\"360\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AboutPage_DefaultsOpenSourceAcknowledgementsToCollapsedDisclosure()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml"));
