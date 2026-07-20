@@ -11927,7 +11927,7 @@ public partial class ChatViewModelTests
         Assert.Equal(ChatViewModel.LoadingOverlayStage.Connecting, fixture.ViewModel.OverlayLoadingStage);
         Assert.True(shellOverlay.ShowsPresenter);
         Assert.True(shellOverlay.ShowsStatusPill);
-        Assert.Contains("连接", shellOverlay.StatusText, StringComparison.Ordinal);
+        Assert.Contains("Connecting to assistant", shellOverlay.StatusText, StringComparison.Ordinal);
 
         allowConnectCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(switchTask);
@@ -12158,7 +12158,7 @@ public partial class ChatViewModelTests
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
         Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
         Assert.DoesNotContain("ACP", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("协议", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("protocol", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
 
         fixture.ViewModel.IsSessionSwitching = false;
         await fixture.UpdateStateAsync(state => state with { IsHydrating = true });
@@ -12166,7 +12166,7 @@ public partial class ChatViewModelTests
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
         Assert.DoesNotContain("ACP", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("协议", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.DoesNotContain("protocol", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -13075,12 +13075,9 @@ public partial class ChatViewModelTests
         });
 
         static bool IsHydrationLifecycleStatus(string status) =>
-            status.Contains("加载", StringComparison.Ordinal)
-            || status.Contains("打开", StringComparison.Ordinal)
-            || status.Contains("获取", StringComparison.Ordinal)
-            || status.Contains("同步", StringComparison.Ordinal)
-            || status.Contains("整理", StringComparison.Ordinal)
-            || status.Contains("完成", StringComparison.Ordinal);
+            status.Contains("Loading chat history", StringComparison.Ordinal)
+            || status.Contains("Connecting to assistant", StringComparison.Ordinal)
+            || status.Contains("Preparing chat environment", StringComparison.Ordinal);
 
         var hydrationStatusIndex = observedStatuses.FindIndex(IsHydrationLifecycleStatus);
         Assert.True(hydrationStatusIndex >= 0, $"Observed status sequence never entered hydration: [{string.Join(" | ", observedStatuses)}]");
