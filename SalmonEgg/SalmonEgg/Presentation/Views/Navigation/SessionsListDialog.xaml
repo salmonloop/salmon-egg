@@ -50,8 +50,8 @@
                                  Visibility="{x:Bind HasUnreadAttention, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                         <TextBlock Grid.Column="2"
                                    Text="{x:Bind RelativeTimeText, Mode=OneWay}"
-                                   Opacity="0.6"
-                                   FontSize="12"
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Margin="12,0,0,0"/>
                     </Grid>
                 </DataTemplate>

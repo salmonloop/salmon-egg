@@ -3019,6 +3019,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("Text=\"{x:Bind ViewModel.SelectedSlashCommand.InputHint, Mode=OneWay}\"", chatInputXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Opacity=\"0.7\"", chatInputXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Opacity=\"0.6\"", chatInputXaml, StringComparison.Ordinal);
+
+        var sessionsDialogXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml");
+        Assert.Contains("Text=\"{x:Bind RelativeTimeText, Mode=OneWay}\"", sessionsDialogXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", sessionsDialogXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.6\"", sessionsDialogXaml, StringComparison.Ordinal);
     }
 
     [Fact]
