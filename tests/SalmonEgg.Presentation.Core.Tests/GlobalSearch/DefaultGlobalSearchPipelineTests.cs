@@ -13,10 +13,13 @@ public sealed class DefaultGlobalSearchPipelineTests
     [Fact]
     public async Task SearchAsync_SettingsAndCommandsUseLocalizedResources()
     {
-        var pipeline = new DefaultGlobalSearchPipeline(new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var pipeline = new DefaultGlobalSearchPipeline(localizer);
 
+        // Query against English localized copy (and command tag "theme") so the pipeline
+        // fixture tracks production CoreStrings.en rather than Chinese-only fixture text.
         var result = await pipeline.SearchAsync(
-            "主题",
+            "theme",
             new GlobalSearchSourceSnapshot(
                 ImmutableArray<GlobalSearchSessionSource>.Empty,
                 ImmutableArray<GlobalSearchProjectSource>.Empty),
@@ -28,14 +31,14 @@ public sealed class DefaultGlobalSearchPipelineTests
             items,
             item => item.Kind == SearchResultKind.Setting
                 && item.Id == "General"
-                && item.Title == "常规"
-                && item.Subtitle == "主题、语言、启动选项");
+                && item.Title == localizer["SettingsSection_General"]
+                && item.Subtitle == localizer["SettingsSearchSubtitle_General"]);
         Assert.Contains(
             items,
             item => item.Kind == SearchResultKind.Command
                 && item.Id == "toggle_theme"
-                && item.Title == "切换主题"
-                && item.Subtitle == "在亮色、暗色和系统主题间切换");
+                && item.Title == localizer["SearchCommand_ToggleThemeTitle"]
+                && item.Subtitle == localizer["SearchCommand_ToggleThemeSubtitle"]);
     }
 
     [Fact]

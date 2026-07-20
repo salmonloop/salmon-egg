@@ -28,9 +28,9 @@ public sealed class SettingsShellViewModelTests
     {
         var localizer = new TestCoreStringLocalizer();
 
-        Assert.Equal("设置", SettingsSectionCatalog.ResolveRootTitle(localizer));
-        Assert.Equal("诊断与日志", SettingsSectionCatalog.ResolveTitle(localizer, SettingsSectionCatalog.DiagnosticsKey));
-        Assert.Equal("常规", SettingsSectionCatalog.ResolveTitle(localizer, "Missing"));
+        Assert.Equal(localizer["Nav_Settings"], SettingsSectionCatalog.ResolveRootTitle(localizer));
+        Assert.Equal(localizer["SettingsSection_Diagnostics"], SettingsSectionCatalog.ResolveTitle(localizer, SettingsSectionCatalog.DiagnosticsKey));
+        Assert.Equal(localizer["SettingsSection_General"], SettingsSectionCatalog.ResolveTitle(localizer, "Missing"));
     }
 
     [Fact]
