@@ -147,18 +147,18 @@ internal static class ChatConversationSurfaceStatePresenter
     private static string ResolveOverlayStatusText(ChatViewModel.LoadingOverlayStage stage, long hydrationLoadedMessageCount)
         => stage switch
         {
-            ChatViewModel.LoadingOverlayStage.Connecting => "正在连接助手...",
-            ChatViewModel.LoadingOverlayStage.InitializingProtocol => "正在准备聊天环境...",
+            ChatViewModel.LoadingOverlayStage.Connecting => "Connecting to assistant...",
+            ChatViewModel.LoadingOverlayStage.InitializingProtocol => "Preparing chat environment...",
             ChatViewModel.LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(hydrationLoadedMessageCount),
-            ChatViewModel.LoadingOverlayStage.PreparingSession => "正在切换聊天...",
+            ChatViewModel.LoadingOverlayStage.PreparingSession => "Switching chat...",
             _ => string.Empty
         };
 
     private static string BuildHydrationStatusText(long loadedCount)
-        => FormatHydrationStatus("正在加载聊天记录", loadedCount);
+        => FormatHydrationStatus("Loading chat history", loadedCount);
 
     private static string FormatHydrationStatus(string baseText, long loadedCount)
         => loadedCount > 0
-            ? $"{baseText}（已加载 {loadedCount} 条消息）"
+            ? $"{baseText} ({loadedCount} messages loaded)"
             : $"{baseText}...";
 }

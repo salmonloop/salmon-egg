@@ -11005,7 +11005,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.Contains("已加载 2 条消息", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("2 messages loaded", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -12141,7 +12141,7 @@ public partial class ChatViewModelTests
         });
 
         await WaitForConditionAsync(() => Task.FromResult(
-            fixture.ViewModel.OverlayStatusText.Contains("已加载 1 条消息", StringComparison.Ordinal)));
+            fixture.ViewModel.OverlayStatusText.Contains("1 messages loaded", StringComparison.Ordinal)));
     }
 
     [Fact]

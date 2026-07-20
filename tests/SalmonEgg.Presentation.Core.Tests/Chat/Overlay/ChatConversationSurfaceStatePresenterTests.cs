@@ -56,8 +56,8 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             HydrationLoadedMessageCount: 2));
 
         Assert.Equal(ChatViewModel.LoadingOverlayStage.HydratingHistory, state.OverlayLoadingStage);
-        Assert.Contains("正在加载聊天记录", state.OverlayStatusText, StringComparison.Ordinal);
-        Assert.Contains("已加载 2 条消息", state.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Loading chat history", state.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("2 messages loaded", state.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public sealed class ChatConversationSurfaceStatePresenterTests
         Assert.True(state.IsActivationOverlayVisible);
         Assert.True(state.ShouldShowBlockingLoadingMask);
         Assert.True(state.ShouldShowLoadingOverlayPresenter);
-        Assert.Contains("切换", state.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", state.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
