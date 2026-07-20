@@ -3021,6 +3021,23 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void HeroSuggestionCard_AdaptsDensityByWindowHeight()
+    {
+        var cardXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\HeroSuggestionCard.xaml");
+
+        Assert.Contains("x:Name=\"HeroCardHeightStates\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CardHeightCompact\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CardHeightComfortable\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroSuggestionButton.MinHeight\" Value=\"88\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroSuggestionButton.MinHeight\" Value=\"112\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource AccentBrush}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", cardXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", cardXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StartView_SecondaryTextUsesThemeBrushWithoutStackedOpacity()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml"));

@@ -12,38 +12,79 @@
             <Setter Property="Margin" Value="7,6" />
             <Setter Property="Padding" Value="18,14" />
             <Setter Property="MinWidth" Value="216" />
-            <Setter Property="MinHeight" Value="112" />
+            <Setter Property="MinHeight" Value="88" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Top" />
         </Style>
     </UserControl.Resources>
 
-    <Button Style="{StaticResource HeroSuggestionButtonStyle}"
-            Command="{x:Bind ActionCommand, Mode=OneWay}"
-            CommandParameter="{x:Bind Suggestion, Mode=OneWay}"
-            AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
-            AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
-        <StackPanel Spacing="10">
-            <StackPanel Orientation="Horizontal"
-                        Spacing="8">
-                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                          Glyph="{x:Bind Icon, Mode=OneWay}"
-                          FontSize="18"
-                          Foreground="{ThemeResource AccentBrush}" />
-                <TextBlock x:Uid="Start_QuickLaunchLabel"
-                           FontSize="12"
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <!-- Card density follows StartView HeroHeightStates (MinWindowHeight=760).
+                 Compact trims min height / padding / type so three stacked cards cost less
+                 vertical budget on short windows; comfortable restores full marketing density. -->
+            <VisualStateGroup x:Name="HeroCardHeightStates">
+                <VisualState x:Name="CardHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionButton.Padding" Value="14,10" />
+                        <Setter Target="HeroSuggestionButton.MinHeight" Value="88" />
+                        <Setter Target="HeroSuggestionButton.CornerRadius" Value="12" />
+                        <Setter Target="HeroCardContent.Spacing" Value="6" />
+                        <Setter Target="HeroCardIcon.FontSize" Value="16" />
+                        <Setter Target="HeroCardTitle.FontSize" Value="13" />
+                        <Setter Target="HeroCardSubtitle.FontSize" Value="11" />
+                        <Setter Target="HeroCardSubtitle.MaxLines" Value="2" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="CardHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionButton.Padding" Value="18,14" />
+                        <Setter Target="HeroSuggestionButton.MinHeight" Value="112" />
+                        <Setter Target="HeroSuggestionButton.CornerRadius" Value="14" />
+                        <Setter Target="HeroCardContent.Spacing" Value="10" />
+                        <Setter Target="HeroCardIcon.FontSize" Value="18" />
+                        <Setter Target="HeroCardTitle.FontSize" Value="14" />
+                        <Setter Target="HeroCardSubtitle.FontSize" Value="12" />
+                        <Setter Target="HeroCardSubtitle.MaxLines" Value="2" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Button x:Name="HeroSuggestionButton"
+                Style="{StaticResource HeroSuggestionButtonStyle}"
+                Command="{x:Bind ActionCommand, Mode=OneWay}"
+                CommandParameter="{x:Bind Suggestion, Mode=OneWay}"
+                AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
+            <StackPanel x:Name="HeroCardContent" Spacing="6">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8">
+                    <FontIcon x:Name="HeroCardIcon"
+                              FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                              Glyph="{x:Bind Icon, Mode=OneWay}"
+                              FontSize="16"
+                              Foreground="{ThemeResource AccentBrush}" />
+                    <TextBlock x:Uid="Start_QuickLaunchLabel"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <TextBlock x:Name="HeroCardTitle"
+                           Text="{x:Bind Title, Mode=OneWay}"
+                           FontSize="13"
                            FontWeight="SemiBold"
+                           Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="HeroCardSubtitle"
+                           Text="{x:Bind Subtitle, Mode=OneWay}"
+                           FontSize="11"
+                           MaxLines="2"
+                           TextWrapping="WrapWholeWords"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-            <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                       FontSize="14"
-                       FontWeight="SemiBold"
-                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
-                       FontSize="12"
-                       MaxLines="2"
-                       TextWrapping="WrapWholeWords"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-        </StackPanel>
-    </Button>
+        </Button>
+    </Grid>
 </UserControl>
