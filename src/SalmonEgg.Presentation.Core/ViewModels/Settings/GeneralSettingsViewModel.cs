@@ -34,10 +34,10 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
         try
         {
             var confirmed = await _ui.ConfirmAsync(
-                title: "清理缓存",
-                message: "将删除本地缓存目录下的所有文件。",
-                primaryButtonText: "清理",
-                closeButtonText: "取消").ConfigureAwait(true);
+                title: "Clear cache",
+                message: "This deletes all files in the local cache folder.",
+                primaryButtonText: "Clear",
+                closeButtonText: "Cancel").ConfigureAwait(true);
 
             if (!confirmed)
             {
@@ -45,12 +45,12 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
             }
 
             await _maintenance.ClearCacheAsync().ConfigureAwait(false);
-            await _ui.ShowInfoAsync("已清理本地缓存。").ConfigureAwait(true);
+            await _ui.ShowInfoAsync("Local cache cleared.").ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "ClearCache failed");
-            await _ui.ShowInfoAsync("清理缓存失败，请稍后重试。").ConfigureAwait(true);
+            await _ui.ShowInfoAsync("Failed to clear cache. Please try again later.").ConfigureAwait(true);
         }
     }
 }
