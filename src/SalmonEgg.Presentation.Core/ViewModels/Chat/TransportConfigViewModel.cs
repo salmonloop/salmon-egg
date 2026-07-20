@@ -79,7 +79,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
             case TransportType.Stdio:
                 if (string.IsNullOrWhiteSpace(StdioCommand))
                 {
-                    return (false, "Stdio 传输必须指定命令或启动器");
+                    return (false, "Stdio transport requires a command or launcher.");
                 }
                 return (true, null);
 
@@ -87,33 +87,33 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
             case TransportType.HttpSse:
                 if (string.IsNullOrWhiteSpace(RemoteUrl))
                 {
-                    return (false, "远程传输必须指定 URL");
+                    return (false, "Remote transport requires a URL.");
                 }
 
                 if (!Uri.TryCreate(RemoteUrl, UriKind.Absolute, out _))
                 {
-                    return (false, "URL 格式无效");
+                    return (false, "Invalid URL format.");
                 }
 
-                // 简单验证协议
+                // Protocol prefix checks mirror TransportFactory / endpoint policy messaging.
                 if (SelectedTransportType == TransportType.WebSocket &&
                     !RemoteUrl.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) &&
                     !RemoteUrl.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (false, "WebSocket URL 必须以 ws:// 或 wss:// 开头");
+                    return (false, "WebSocket URL must start with ws:// or wss://.");
                 }
 
                 if (SelectedTransportType == TransportType.HttpSse &&
                     !RemoteUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                     !RemoteUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (false, "HTTP SSE URL 必须以 http:// 或 https:// 开头");
+                    return (false, "HTTP SSE URL must start with http:// or https://.");
                 }
 
                 return (true, null);
 
             default:
-                return (false, "不支持的传输类型");
+                return (false, "Unsupported transport type.");
         }
     }
 
