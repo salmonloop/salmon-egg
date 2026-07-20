@@ -252,8 +252,11 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory(supportsStdioTransport: true);
 
-        Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.Stdio, command: null, arguments: null));
+
+        Assert.Equal("command", ex.ParamName);
+        Assert.Contains("Stdio transport requires a command", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -270,8 +273,11 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory();
 
-        Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.WebSocket, url: "not-a-url"));
+
+        Assert.Equal("url", ex.ParamName);
+        Assert.Contains("Invalid WebSocket URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -315,8 +321,11 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory();
 
-        Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentException>(() =>
             factory.CreateTransport(TransportType.HttpSse, url: " "));
+
+        Assert.Equal("url", ex.ParamName);
+        Assert.Contains("HTTP SSE transport requires a URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -324,8 +333,10 @@ public sealed class TransportFactoryTests
     {
         var factory = CreateFactory();
 
-        Assert.Throws<NotSupportedException>(() =>
+        var ex = Assert.Throws<NotSupportedException>(() =>
             factory.CreateTransport((TransportType)999));
+
+        Assert.Contains("Unsupported transport type", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

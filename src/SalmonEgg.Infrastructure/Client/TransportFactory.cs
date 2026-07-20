@@ -93,7 +93,7 @@ public class TransportFactory : ITransportFactory
             TransportType.Stdio => CreateStdioTransport(command, arguments),
             TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
             TransportType.HttpSse => CreateHttpSseTransport(url),
-            _ => throw new NotSupportedException($"不支持的传输类型：{transportType}")
+            _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
         };
     }
 
@@ -117,7 +117,7 @@ public class TransportFactory : ITransportFactory
 
         if (string.IsNullOrWhiteSpace(command))
         {
-            throw new ArgumentException("Stdio 传输必须指定命令", nameof(command));
+            throw new ArgumentException("Stdio transport requires a command.", nameof(command));
         }
 
         var argsArray = arguments?.ToArray() ?? Array.Empty<string>();
@@ -136,12 +136,12 @@ public class TransportFactory : ITransportFactory
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            throw new ArgumentException("WebSocket 传输必须指定 URL", nameof(url));
+            throw new ArgumentException("WebSocket transport requires a URL.", nameof(url));
         }
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out _))
         {
-            throw new ArgumentException($"无效的 WebSocket URL: {url}", nameof(url));
+            throw new ArgumentException($"Invalid WebSocket URL: {url}", nameof(url));
         }
 
         _logger.Information("创建 WebSocket 传输：Url={Url}", url);
@@ -164,12 +164,12 @@ public class TransportFactory : ITransportFactory
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            throw new ArgumentException("HTTP SSE 传输必须指定 URL", nameof(url));
+            throw new ArgumentException("HTTP SSE transport requires a URL.", nameof(url));
         }
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out _))
         {
-            throw new ArgumentException($"无效的 HTTP SSE URL: {url}", nameof(url));
+            throw new ArgumentException($"Invalid HTTP SSE URL: {url}", nameof(url));
         }
 
         _logger.Information("创建 HTTP SSE 传输：Url={Url}", url);
