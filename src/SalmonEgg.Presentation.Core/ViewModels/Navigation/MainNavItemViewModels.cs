@@ -263,7 +263,11 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             return;
         }
 
-        _ = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
+        var result = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
+        if (!result.Succeeded)
+        {
+            await _ui.ShowInfoAsync("归档会话失败，请稍后重试。").ConfigureAwait(true);
+        }
     }
 }
 

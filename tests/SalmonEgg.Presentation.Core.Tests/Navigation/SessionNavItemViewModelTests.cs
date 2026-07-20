@@ -50,6 +50,34 @@ public sealed class SessionNavItemViewModelTests
         Assert.Null(typeof(SessionNavItemViewModel).GetProperty("MoveCommand"));
     }
 
+    [Fact]
+    public async Task ArchiveCommand_OnFailure_ShowsUserFeedback()
+    {
+        var ui = new RecordingUiInteractionService();
+        var catalog = new RecordingChatSessionCatalog
+        {
+            ArchiveResult = new ConversationMutationResult(false, false, "ConversationRemovalPersistFailed"),
+        };
+        var item = CreateItem(ui, catalog);
+
+        await item.ArchiveCommand.ExecuteAsync(null);
+
+        Assert.Single(ui.InfoMessages);
+        Assert.Contains("归档", ui.InfoMessages[0]);
+    }
+
+    [Fact]
+    public async Task ArchiveCommand_OnSuccess_DoesNotShowFeedback()
+    {
+        var ui = new RecordingUiInteractionService();
+        var catalog = new RecordingChatSessionCatalog();
+        var item = CreateItem(ui, catalog);
+
+        await item.ArchiveCommand.ExecuteAsync(null);
+
+        Assert.Empty(ui.InfoMessages);
+    }
+
     private static SessionNavItemViewModel CreateItem(
         IUiInteractionService ui,
         IChatSessionCatalog chatSessionCatalog,
@@ -79,12 +107,20 @@ public sealed class SessionNavItemViewModelTests
 
     private sealed class RecordingUiInteractionService : IUiInteractionService
     {
+        public List<string> InfoMessages { get; } = new();
+
+        public bool ConfirmResult { get; set; } = true;
+
         public bool CanPickFolder => false;
 
-        public Task ShowInfoAsync(string message) => Task.CompletedTask;
+        public Task ShowInfoAsync(string message)
+        {
+            InfoMessages.Add(message);
+            return Task.CompletedTask;
+        }
 
         public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
-            => Task.FromResult(false);
+            => Task.FromResult(ConfirmResult);
 
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText)
             => Task.FromResult<string?>(null);
@@ -100,6 +136,8 @@ public sealed class SessionNavItemViewModelTests
 
     private sealed class RecordingChatSessionCatalog : IChatSessionCatalog
     {
+        public ConversationMutationResult ArchiveResult { get; set; } = new(true, false, null);
+
         public bool IsConversationListLoading => false;
 
         public int ConversationListVersion => 0;
@@ -115,10 +153,10 @@ public sealed class SessionNavItemViewModelTests
         public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
+            => Task.FromResult(ArchiveResult);
 
         public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
+            => Task.FromResult(ArchiveResult);
 
     }
 
