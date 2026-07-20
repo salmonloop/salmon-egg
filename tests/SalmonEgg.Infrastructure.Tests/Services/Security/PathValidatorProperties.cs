@@ -81,7 +81,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
             var safePath = System.IO.Path.Combine("safe", safeSegment);
 
             var errors = _validator.GetValidationErrors(safePath);
-            var hasTraversalError = errors.Exists(e => e.Contains("遍历"));
+            var hasTraversalError = errors.Exists(e => e.Contains("traversal", StringComparison.OrdinalIgnoreCase));
 
             return !hasTraversalError;
         }
@@ -96,7 +96,7 @@ namespace SalmonEgg.Infrastructure.Tests.Services.Security
             var isValid = _validator.ValidatePath(maliciousPath);
             var errors = _validator.GetValidationErrors(maliciousPath);
 
-            return !isValid && errors.Exists(e => e.Contains("空字节"));
+            return !isValid && errors.Exists(e => e.Contains("null byte", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>

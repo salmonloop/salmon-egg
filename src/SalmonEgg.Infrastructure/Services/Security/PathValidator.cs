@@ -61,20 +61,20 @@ namespace SalmonEgg.Infrastructure.Services.Security
 
             if (string.IsNullOrWhiteSpace(path))
             {
-                errors.Add("路径不能为空");
+                errors.Add("Path cannot be empty.");
                 return errors;
             }
 
             // 检查路径遍历模式
             if (PathTraversalPattern.IsMatch(path))
             {
-                errors.Add("路径包含不允许的遍历模式（..、~、$HOME 等）");
+                errors.Add("Path contains disallowed traversal patterns (.., ~, $HOME, etc.).");
             }
 
             // 检查空字节
             if (path.Contains('\0'))
             {
-                errors.Add("路径包含空字节");
+                errors.Add("Path contains a null byte.");
                 // Path APIs will throw when null bytes are present; fail fast once detected.
                 return errors;
             }
@@ -89,12 +89,12 @@ namespace SalmonEgg.Infrastructure.Services.Security
 
                     if (!IsPathWithinAllowedDirectory(normalizedPath, normalizedAllowed))
                     {
-                        errors.Add($"路径不在允许的目录范围内：{_allowedDirectory}");
+                        errors.Add($"Path is outside the allowed directory: {_allowedDirectory}");
                     }
                 }
                 catch (Exception)
                 {
-                    errors.Add("路径规范化失败");
+                    errors.Add("Path normalization failed.");
                 }
             }
 
@@ -104,7 +104,7 @@ namespace SalmonEgg.Infrastructure.Services.Security
             {
                 if (invalidChars.Contains(c))
                 {
-                    errors.Add($"路径包含非法字符：'{c}'");
+                    errors.Add($"Path contains an invalid character: '{c}'");
                     break;
                 }
             }
@@ -118,12 +118,12 @@ namespace SalmonEgg.Infrastructure.Services.Security
                     var normalized = NormalizePath(path);
                     if (normalized == "/" || normalized == "\\")
                     {
-                        errors.Add("不允许访问根目录");
+                        errors.Add("Access to the root directory is not allowed.");
                     }
                 }
                 catch
                 {
-                    errors.Add("路径规范化失败");
+                    errors.Add("Path normalization failed.");
                 }
             }
 
@@ -156,7 +156,7 @@ namespace SalmonEgg.Infrastructure.Services.Security
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"路径规范化失败：{path}", ex);
+                throw new InvalidOperationException($"Path normalization failed: {path}", ex);
             }
         }
 
@@ -234,7 +234,7 @@ namespace SalmonEgg.Infrastructure.Services.Security
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"无法设置允许的目录：{allowedDirectory}", ex);
+                throw new InvalidOperationException($"Unable to set allowed directory: {allowedDirectory}", ex);
             }
         }
 
@@ -259,7 +259,7 @@ namespace SalmonEgg.Infrastructure.Services.Security
 
             if (errors.Count > 0)
             {
-                throw new ArgumentException($"路径验证失败：{string.Join("; ", errors)}");
+                throw new ArgumentException($"Path validation failed: {string.Join("; ", errors)}");
             }
 
             return NormalizePath(path);
@@ -290,17 +290,17 @@ namespace SalmonEgg.Infrastructure.Services.Security
 
                 if (!IsPathWithinAllowedDirectory(normalizedPath, normalizedAllowed))
                 {
-                    errors.Add($"路径不在允许的目录范围内：{directory}");
+                    errors.Add($"Path is outside the allowed directory: {directory}");
                 }
             }
             catch (Exception)
             {
-                errors.Add("路径规范化失败");
+                errors.Add("Path normalization failed.");
             }
 
             if (errors.Count > 0)
             {
-                throw new ArgumentException($"路径验证失败：{string.Join("; ", errors)}");
+                throw new ArgumentException($"Path validation failed: {string.Join("; ", errors)}");
             }
 
             return NormalizePath(path);
