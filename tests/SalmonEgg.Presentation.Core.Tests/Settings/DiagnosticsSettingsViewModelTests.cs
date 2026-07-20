@@ -59,15 +59,17 @@ public sealed class DiagnosticsSettingsViewModelTests
         var storageLocations = new Mock<IStorageLocationService>();
         storageLocations.Setup(service => service.OpenAsync(AppStorageLocation.Logs)).ReturnsAsync(false);
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsExternalOpen: false,
             storageLocations: storageLocations,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.OpenLogsFolderCommand.ExecuteAsync(null);
 
         storageLocations.Verify(service => service.OpenAsync(AppStorageLocation.Logs), Times.Once);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持打开本地文件或目录。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_ExternalOpenUnsupported"]), Times.Once);
     }
 
     [Fact]
@@ -75,15 +77,17 @@ public sealed class DiagnosticsSettingsViewModelTests
     {
         var bundle = new Mock<IDiagnosticsBundleService>();
         var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = CreateViewModel(
             supportsLocalFileExport: false,
             bundle: bundle,
-            ui: ui);
+            ui: ui,
+            localizer: localizer);
 
         await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
 
         bundle.Verify(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()), Times.Never);
-        ui.Verify(service => service.ShowInfoAsync("当前平台暂不支持导出本地文件。"), Times.Once);
+        ui.Verify(service => service.ShowInfoAsync(localizer["Platform_LocalFileExportUnsupported"]), Times.Once);
     }
 
     private static DiagnosticsSettingsViewModel CreateViewModel(
@@ -94,8 +98,10 @@ public sealed class DiagnosticsSettingsViewModelTests
         Mock<IUiInteractionService>? ui = null,
         LiveLogViewerViewModel? liveLogViewer = null,
         GamepadDiagnosticsViewModel? gamepadDiagnostics = null,
-        VoiceInputDiagnosticsViewModel? voiceInputDiagnostics = null)
+        VoiceInputDiagnosticsViewModel? voiceInputDiagnostics = null,
+        TestCoreStringLocalizer? localizer = null)
     {
+        localizer ??= new TestCoreStringLocalizer();
         var chat = (ChatViewModel)RuntimeHelpers.GetUninitializedObject(typeof(ChatViewModel));
         var paths = new Mock<IAppDataService>();
         paths.SetupGet(p => p.AppDataRootPath).Returns("C:/app");
@@ -116,7 +122,7 @@ public sealed class DiagnosticsSettingsViewModelTests
             liveLogViewer ?? CreateLiveLogViewer(),
             voiceInputDiagnostics ?? CreateVoiceInputDiagnostics(),
             gamepadDiagnostics ?? CreateGamepadDiagnostics(),
-            new TestCoreStringLocalizer(),
+            localizer,
             Mock.Of<ILogger<DiagnosticsSettingsViewModel>>());
     }
 
