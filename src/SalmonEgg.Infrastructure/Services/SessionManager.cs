@@ -27,7 +27,7 @@ namespace SalmonEgg.Infrastructure.Services
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
-                throw new ArgumentException("会话 ID 不能为空", nameof(sessionId));
+                throw new ArgumentException("Session ID cannot be empty.", nameof(sessionId));
             }
 
             var session = new Session(sessionId, cwd);
@@ -40,7 +40,7 @@ namespace SalmonEgg.Infrastructure.Services
             }
             else
             {
-                throw new InvalidOperationException($"会话 '{sessionId}' 已存在");
+                throw new InvalidOperationException($"Session '{sessionId}' already exists.");
             }
         }
 
