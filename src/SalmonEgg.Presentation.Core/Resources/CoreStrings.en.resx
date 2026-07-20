@@ -811,4 +811,19 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>Remove local setup</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>The saved cloud sync configuration is invalid. Edit the connection and check the required fields.</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>That remote project no longer exists.</value></data>
+  <data name="General_ClearCacheTitle" xml:space="preserve">
+    <value>Clear cache</value>
+  </data>
+  <data name="General_ClearCacheMessage" xml:space="preserve">
+    <value>This deletes all files in the local cache folder.</value>
+  </data>
+  <data name="General_ClearCachePrimary" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="General_ClearCacheSuccess" xml:space="preserve">
+    <value>Local cache cleared.</value>
+  </data>
+  <data name="General_ClearCacheFailed" xml:space="preserve">
+    <value>Failed to clear cache. Please try again later.</value>
+  </data>
 </root>

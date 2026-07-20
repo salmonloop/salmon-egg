@@ -272,7 +272,14 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["DataStorage_CloudSyncOneDriveUnavailable"] = "OneDrive is not configured in this build. Choose another provider.",
         ["DataStorage_CloudSyncValidationFailed"] = "The saved cloud sync configuration is invalid. Edit the connection and check the required fields.",
         ["About_MissingDocumentMessage"] = "The {0} file was not found.",
-        ["About_MissingDocumentWithFolderMessage"] = "The {0} file was not found.\nCreate the corresponding Markdown file in:\n{1}"
+        ["About_MissingDocumentWithFolderMessage"] = "The {0} file was not found.\nCreate the corresponding Markdown file in:\n{1}",
+        ["General_ClearCacheTitle"] = "Clear cache",
+        ["General_ClearCacheMessage"] = "This deletes all files in the local cache folder.",
+        ["General_ClearCachePrimary"] = "Clear",
+        ["General_ClearCacheSuccess"] = "Local cache cleared.",
+        ["General_ClearCacheFailed"] = "Failed to clear cache. Please try again later.",
+        ["Common_Cancel"] = "Cancel",
+
     };
 
     public LocalizedString this[string name] => new(name, Resolve(name));

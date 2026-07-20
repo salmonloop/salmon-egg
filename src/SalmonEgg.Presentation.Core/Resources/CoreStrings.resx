@@ -817,4 +817,19 @@
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>移除本机设置</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>已保存的云同步配置无效。请编辑连接并检查必填项。</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>该远程项目已不存在。</value></data>
+  <data name="General_ClearCacheTitle" xml:space="preserve">
+    <value>清除缓存</value>
+  </data>
+  <data name="General_ClearCacheMessage" xml:space="preserve">
+    <value>这将删除本地缓存文件夹中的所有文件。</value>
+  </data>
+  <data name="General_ClearCachePrimary" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="General_ClearCacheSuccess" xml:space="preserve">
+    <value>本地缓存已清除。</value>
+  </data>
+  <data name="General_ClearCacheFailed" xml:space="preserve">
+    <value>清除缓存失败，请稍后重试。</value>
+  </data>
 </root>
