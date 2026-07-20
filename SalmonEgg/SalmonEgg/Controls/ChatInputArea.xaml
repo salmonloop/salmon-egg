@@ -60,6 +60,22 @@
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
+
+                <!-- Short windows: densify slash-menu and multi-line input MaxHeight so the
+                     pinned composer leaves more transcript room. Comfortable restores the
+                     prior 220/240 caps (MinWindowHeight=760, same threshold as Start/Diagnostics). -->
+                <VisualStateGroup x:Name="ComposerHeightStates">
+                    <VisualState x:Name="ComposerHeightCompact" />
+                    <VisualState x:Name="ComposerHeightComfortable">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowHeight="760" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="SlashCommandsList.MaxHeight" Value="220" />
+                            <Setter Target="InputBox.MaxHeight" Value="240" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
             </VisualStateManager.VisualStateGroups>
             <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <!-- Slash commands menu -->
@@ -76,7 +92,7 @@
                                   SelectionChanged="OnSlashCommandsListSelectionChanged"
                                   SelectionMode="Single"
                                   IsEnabled="{x:Bind ViewModel.AreComposerToolsEnabled, Mode=OneWay}"
-                                  MaxHeight="220">
+                                  MaxHeight="140">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:SlashCommandViewModel">
                                     <Grid ColumnDefinitions="Auto,*" Padding="8,6">
@@ -136,7 +152,7 @@
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
                                      MinHeight="44"
-                                     MaxHeight="240"
+                                     MaxHeight="140"
                                      Style="{StaticResource ComposerTextBoxStyle}"
                                      IsEnabled="{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}"
                                      KeyboardAcceleratorPlacementMode="Hidden"

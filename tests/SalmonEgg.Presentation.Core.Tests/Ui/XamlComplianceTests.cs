@@ -3381,6 +3381,32 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatInputArea_ComposerHeightsDensifyOnShortWindowHeights()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+
+        Assert.Contains("x:Name=\"ComposerHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ComposerHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ComposerHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SlashCommandsList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"InputBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SlashCommandsList.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"InputBox.MaxHeight\" Value=\"240\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+
+        // VSM must live on the single content root Grid (ComposerLayoutRoot), not a second UserControl child.
+        Assert.Contains("x:Name=\"ComposerLayoutRoot\"", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"ComposerLayoutRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("ComposerHeightStates", StringComparison.Ordinal));
+
+        // Touch-target MinHeights stay fixed; densify only the growth caps.
+        Assert.Contains("MinHeight=\"44\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResizeGrip_KeepsPlatformCursorImplementationOutOfSharedControl()
     {
         var sharedControl = LoadText(@"SalmonEgg\SalmonEgg\Controls\ResizeGrip.cs");
