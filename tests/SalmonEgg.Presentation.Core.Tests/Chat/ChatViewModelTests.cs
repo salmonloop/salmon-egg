@@ -6196,7 +6196,7 @@ public partial class ChatViewModelTests
             }
         };
 
-    private sealed class ViewModelFixture : IDisposable, IAsyncDisposable
+    private sealed class ViewModelFixture : IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
@@ -6364,10 +6364,6 @@ public partial class ChatViewModelTests
             GC.KeepAlive(_attentionStateOwner);
         }
 
-        public void Dispose()
-        {
-            DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
     }
 
     private sealed class GateSecondSelectionActivationCoordinator : IConversationActivationCoordinator
@@ -6519,7 +6515,7 @@ public partial class ChatViewModelTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class DisplayCatalogTestScope : IDisposable, IAsyncDisposable
+    private sealed class DisplayCatalogTestScope : IAsyncDisposable
     {
         private readonly IState<ConversationAttentionState> _attentionState;
 
@@ -6535,12 +6531,6 @@ public partial class ChatViewModelTests
         }
 
         public ConversationCatalogDisplayPresenter Presenter { get; }
-
-        public void Dispose()
-        {
-            Presenter.Dispose();
-            _attentionState.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
 
         public async ValueTask DisposeAsync()
         {
