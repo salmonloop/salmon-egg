@@ -72,7 +72,8 @@ public sealed class GamepadDiagnosticsViewModelTests
     public async Task RefreshSnapshotCommand_WhenUnsupported_DoesNotPollPlatformService()
     {
         var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
-        var viewModel = CreateViewModel(service, supportsGamepadInput: false);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, supportsGamepadInput: false, localizer: localizer);
         viewModel.ConnectedGamepadsText = "9";
         viewModel.ConnectedRawControllersText = "8";
         viewModel.InputSourceText = "RawGameController";
@@ -82,12 +83,12 @@ public sealed class GamepadDiagnosticsViewModelTests
         await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
 
         Assert.Equal(0, service.ReadCount);
-        Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
+        Assert.Equal(localizer["GamepadDiagnostics_StatusUnsupported"], viewModel.StatusText);
         Assert.Equal("0", viewModel.ConnectedGamepadsText);
         Assert.Equal("0", viewModel.ConnectedRawControllersText);
-        Assert.Equal("无", viewModel.InputSourceText);
-        Assert.Equal("无", viewModel.ActiveInputsText);
-        Assert.Equal("未检测到 Raw 控制器", viewModel.RawControllersText);
+        Assert.Equal(localizer["GamepadDiagnostics_InputSourceNone"], viewModel.InputSourceText);
+        Assert.Equal(localizer["GamepadDiagnostics_ActiveInputsNone"], viewModel.ActiveInputsText);
+        Assert.Equal(localizer["GamepadDiagnostics_RawControllersNone"], viewModel.RawControllersText);
         Assert.False(viewModel.CanStartMonitoring);
     }
 
@@ -95,7 +96,8 @@ public sealed class GamepadDiagnosticsViewModelTests
     public async Task StartMonitoringCommand_WhenUnsupported_DoesNotPollPlatformService()
     {
         var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
-        var viewModel = CreateViewModel(service, supportsGamepadInput: false);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(service, supportsGamepadInput: false, localizer: localizer);
 
         await viewModel.StartMonitoringCommand.ExecuteAsync(null);
 
@@ -103,7 +105,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.False(viewModel.IsMonitoring);
         Assert.False(viewModel.CanStartMonitoring);
         Assert.False(viewModel.CanStopMonitoring);
-        Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
+        Assert.Equal(localizer["GamepadDiagnostics_StatusUnsupported"], viewModel.StatusText);
     }
 
     [Fact]
@@ -150,24 +152,26 @@ public sealed class GamepadDiagnosticsViewModelTests
             Mock.Of<ILogger<GamepadDiagnosticsViewModel>>(),
             languageService.Object);
 
-        Assert.Equal("当前平台不支持手柄输入", viewModel.StatusText);
+        localizer.SetLanguageTag("zh-Hans");
+        Assert.Equal(localizer["GamepadDiagnostics_StatusUnsupported"], viewModel.StatusText);
 
         currentLanguageTag = "en-US";
         localizer.SetLanguageTag("en-US");
         languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
 
-        Assert.Equal("Gamepad input is not supported on this platform", viewModel.StatusText);
+        Assert.Equal(localizer["GamepadDiagnostics_StatusUnsupported"], viewModel.StatusText);
     }
 
     private static GamepadDiagnosticsViewModel CreateViewModel(
         IGamepadDiagnosticsService service,
-        bool supportsGamepadInput)
+        bool supportsGamepadInput,
+        TestCoreStringLocalizer? localizer = null)
     {
         return new GamepadDiagnosticsViewModel(
             service,
             CreateCapabilities(supportsGamepadInput),
             new ImmediateUiDispatcher(),
-            new TestCoreStringLocalizer(),
+            localizer ?? new TestCoreStringLocalizer(),
             Mock.Of<ILogger<GamepadDiagnosticsViewModel>>());
     }
 
@@ -194,13 +198,13 @@ public sealed class GamepadDiagnosticsViewModelTests
         localizer.Set("en-US", "GamepadDiagnostics_StatusNotStarted", "Not started");
         localizer.Set("en-US", "GamepadDiagnostics_StatusMonitoring", "Monitoring");
         localizer.Set("en-US", "GamepadDiagnostics_StatusStopped", "Stopped");
-        localizer.Set("en-US", "GamepadDiagnostics_StatusUnsupported", "Gamepad input is not supported on this platform");
-        localizer.Set("en-US", "GamepadDiagnostics_StatusFailed", "Failed to read, try again later");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusUnsupported", "Gamepad input is not supported on this platform.");
+        localizer.Set("en-US", "GamepadDiagnostics_StatusFailed", "Read failed. Try again later.");
         localizer.Set("en-US", "GamepadDiagnostics_InputSourceNone", "None");
         localizer.Set("en-US", "GamepadDiagnostics_ActiveInputsNone", "None");
-        localizer.Set("en-US", "GamepadDiagnostics_RawControllersNone", "No Raw controllers detected");
-        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWireless", "Wireless");
-        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWired", "Wired");
+        localizer.Set("en-US", "GamepadDiagnostics_RawControllersNone", "No raw controllers detected.");
+        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWireless", "wireless");
+        localizer.Set("en-US", "GamepadDiagnostics_ConnectionWired", "wired");
         return localizer;
     }
 
