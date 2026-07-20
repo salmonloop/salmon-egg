@@ -18,8 +18,30 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </ContentDialog.Resources>
 
+    <Grid>
+        <!-- Short windows: densify editor stack spacing. Comfortable restores Spacing=12 at
+             MinWindowHeight=760. ScrollViewer still owns overflow for the form fields. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ConfigurationEditorHeightStates">
+                <VisualState x:Name="ConfigurationEditorHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="ConfigurationEditorContent.Spacing" Value="8" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ConfigurationEditorHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="ConfigurationEditorContent.Spacing" Value="12" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Spacing="12"
+        <StackPanel x:Name="ConfigurationEditorContent"
+                    Spacing="8"
                     MaxWidth="560"
                     Padding="4"
                     HorizontalAlignment="Stretch">
@@ -61,4 +83,5 @@
                        TextWrapping="Wrap"/>
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </ContentDialog>

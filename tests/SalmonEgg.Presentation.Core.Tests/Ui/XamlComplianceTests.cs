@@ -1418,6 +1418,19 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ConfigurationEditorDialog_AdaptsSpacingByWindowHeight()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml");
+
+        Assert.Contains("x:Name=\"ConfigurationEditorHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ConfigurationEditorContent\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ConfigurationEditorContent.Spacing\" Value=\"8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ConfigurationEditorContent.Spacing\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConfigurationEditorDialog_TextsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml");
