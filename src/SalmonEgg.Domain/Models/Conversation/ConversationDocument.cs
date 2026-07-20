@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {
@@ -128,6 +130,7 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool HasUpdatedAt { get; set; }
 
+        [JsonConverter(typeof(AcpMetaDictionaryJsonConverter))]
         public Dictionary<string, object?>? Meta { get; set; }
     }
 

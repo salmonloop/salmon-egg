@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -188,7 +189,7 @@ internal static class AcpMetaJson
         writer.WriteEndObject();
     }
 
-    private static void WriteObject(
+    internal static void WriteObject(
         Utf8JsonWriter writer,
         IEnumerable<KeyValuePair<string, object?>> values)
     {
@@ -210,10 +211,12 @@ internal static class AcpMetaJson
                 writer.WriteNullValue();
                 break;
             case JsonElement element:
-                element.WriteTo(writer);
+                // Preserve the original JSON token text (e.g. 1.2300e+02, "\u4f60\u597d").
+                // JsonElement.WriteTo re-encodes and can change casing/form of escapes.
+                writer.WriteRawValue(element.GetRawText());
                 break;
             case JsonDocument document:
-                document.RootElement.WriteTo(writer);
+                writer.WriteRawValue(document.RootElement.GetRawText());
                 break;
             case string text:
                 writer.WriteStringValue(text);
@@ -266,5 +269,35 @@ internal static class AcpMetaJson
             default:
                 throw new JsonException($"Unsupported ACP '_meta' value type: {value.GetType().FullName}");
         }
+    }
+}
+
+/// <summary>
+/// Serializes ACP <c>_meta</c> dictionaries while preserving raw JSON token text for
+/// values stored as <see cref="JsonElement"/> / <see cref="JsonDocument"/>.
+/// </summary>
+public sealed class AcpMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
+{
+    public static Dictionary<string, object?>? Clone(Dictionary<string, object?>? meta)
+        => AcpMetaJson.Clone(meta);
+
+    public override Dictionary<string, object?>? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+        => AcpMetaJson.ReadValue(ref reader);
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        Dictionary<string, object?>? value,
+        JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        AcpMetaJson.WriteObject(writer, value);
     }
 }

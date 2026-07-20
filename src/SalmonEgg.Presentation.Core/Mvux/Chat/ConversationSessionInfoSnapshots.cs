@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.Utilities;
 
@@ -22,9 +23,7 @@ internal static class ConversationSessionInfoSnapshots
             AdditionalDirectories = CloneAdditionalDirectories(sessionInfo.AdditionalDirectories),
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
-            Meta = sessionInfo.Meta is null
-                ? null
-                : new Dictionary<string, object?>(sessionInfo.Meta, StringComparer.Ordinal)
+            Meta = AcpMetaDictionaryJsonConverter.Clone(sessionInfo.Meta)
         };
     }
 
@@ -34,12 +33,11 @@ internal static class ConversationSessionInfoSnapshots
     {
         ArgumentNullException.ThrowIfNull(incoming);
 
-        var mergedMeta = existing?.Meta is null
-            ? new Dictionary<string, object?>(StringComparer.Ordinal)
-            : new Dictionary<string, object?>(existing.Meta, StringComparer.Ordinal);
+        var mergedMeta = AcpMetaDictionaryJsonConverter.Clone(existing?.Meta)
+            ?? new Dictionary<string, object?>(StringComparer.Ordinal);
         if (incoming.Meta is not null)
         {
-            foreach (var pair in incoming.Meta)
+            foreach (var pair in AcpMetaDictionaryJsonConverter.Clone(incoming.Meta)!)
             {
                 mergedMeta[pair.Key] = pair.Value;
             }
