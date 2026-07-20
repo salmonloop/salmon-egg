@@ -71,7 +71,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -108,7 +108,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(false));
@@ -162,7 +162,7 @@ public sealed class NavigationCoordinatorTests
                 .Setup(s => s.NavigateToChat(It.IsAny<long>()))
                 .Throws(new InvalidOperationException("Navigation failed"));
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
@@ -500,7 +500,7 @@ public sealed class NavigationCoordinatorTests
                 .Callback<string, IReadOnlyList<SessionNavItemViewModel>, Action<string>>((_, _, onPickSession) => pickSession = onPickSession)
                 .Returns(Task.CompletedTask);
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -907,7 +907,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var runtimeState = new ShellNavigationRuntimeStateStore();
             var switchStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -968,7 +968,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = new TokenAwareShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1007,7 +1007,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public void SyncSelectionFromShellContent_Start_SelectsStart()
+    public async Task SyncSelectionFromShellContent_Start_SelectsStart()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1019,7 +1019,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1051,7 +1051,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1071,7 +1071,7 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
-    public void SyncSelectionFromShellContent_Settings_SelectsSettings()
+    public async Task SyncSelectionFromShellContent_Settings_SelectsSettings()
     {
         var originalContext = SynchronizationContext.Current;
         var syncContext = new ImmediateSynchronizationContext();
@@ -1083,7 +1083,7 @@ public sealed class NavigationCoordinatorTests
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
             var selectionStore = new ShellSelectionStateStore();
             var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true));
             var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object);
@@ -1115,7 +1115,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1189,7 +1189,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await SetConnectedProfileAsync(chat, "profile-1", "conn-1");
@@ -1265,7 +1265,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1344,7 +1344,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 "session-2",
@@ -1411,7 +1411,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             chat.Workspace.UpdateRemoteBinding("session-2", "remote-2", "profile-1");
@@ -1561,7 +1561,7 @@ public sealed class NavigationCoordinatorTests
             var shellNavigation = CreateShellNavigationService();
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1654,7 +1654,7 @@ public sealed class NavigationCoordinatorTests
                 });
             var runtimeState = new ShellNavigationRuntimeStateStore();
 
-            using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object, runtimeState);
             await chat.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
             chat.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
 
@@ -1993,7 +1993,7 @@ public sealed class NavigationCoordinatorTests
         }
     }
 
-    private sealed class ChatViewModelHarness : IDisposable
+    private sealed class ChatViewModelHarness : IAsyncDisposable
     {
         private readonly IState<ChatState> _state;
         private readonly IState<ChatConnectionState> _connectionState;
@@ -2029,11 +2029,11 @@ public sealed class NavigationCoordinatorTests
 
         public IChatConnectionStore ConnectionStore { get; }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             ViewModel.Dispose();
-            _connectionState.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _state.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await _connectionState.DisposeAsync();
+            await _state.DisposeAsync();
         }
     }
 
