@@ -1622,6 +1622,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"EmptyHeightCompact\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"EmptyHeightComfortable\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ProfilesHeaderHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ProfilesHeaderHost.Margin\" Value=\"16,16,16,10\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ProfilesHeaderHost.Margin\" Value=\"24,32,24,16\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"NoSelectionEmptyHost\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"NoSelectionEmptyBadge\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"NoSelectionEmptyIcon\"", xaml, StringComparison.Ordinal);

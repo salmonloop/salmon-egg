@@ -63,6 +63,8 @@
             <VisualStateGroup x:Name="EmptyStateHeightStates">
                 <VisualState x:Name="EmptyHeightCompact">
                     <VisualState.Setters>
+                        <Setter Target="ProfilesHeaderHost.Margin" Value="16,16,16,10" />
+                        <Setter Target="ProfilesHeaderHost.Spacing" Value="4" />
                         <Setter Target="NoSelectionEmptyHost.Spacing" Value="12" />
                         <Setter Target="NoSelectionEmptyBadge.Width" Value="72" />
                         <Setter Target="NoSelectionEmptyBadge.Height" Value="72" />
@@ -76,6 +78,8 @@
                         <AdaptiveTrigger MinWindowHeight="760" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
+                        <Setter Target="ProfilesHeaderHost.Margin" Value="24,32,24,16" />
+                        <Setter Target="ProfilesHeaderHost.Spacing" Value="8" />
                         <Setter Target="NoSelectionEmptyHost.Spacing" Value="24" />
                         <Setter Target="NoSelectionEmptyBadge.Width" Value="120" />
                         <Setter Target="NoSelectionEmptyBadge.Height" Value="120" />
@@ -98,7 +102,10 @@
             </Grid.RowDefinitions>
 
             <!-- Header -->
-            <StackPanel Grid.Row="0" Margin="24,32,24,16" Spacing="8">
+            <StackPanel x:Name="ProfilesHeaderHost"
+                        Grid.Row="0"
+                        Margin="16,16,16,10"
+                        Spacing="4">
                 <TextBlock
                     x:Uid="DiscoverSessionsTitle"
                     AutomationProperties.AutomationId="DiscoverSessions.Title"
