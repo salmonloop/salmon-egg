@@ -4248,11 +4248,12 @@ public sealed class ChatSkeletonSmokeTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("会话", StringComparison.Ordinal)
-                || status.Contains("聊天", StringComparison.Ordinal)
-                || status.Contains("消息", StringComparison.Ordinal))
+        return (status.StartsWith("Connecting to assistant", StringComparison.Ordinal)
+                || status.StartsWith("Preparing chat environment", StringComparison.Ordinal)
+                || status.StartsWith("Loading chat history", StringComparison.Ordinal)
+                || status.StartsWith("Switching chat", StringComparison.Ordinal))
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 }

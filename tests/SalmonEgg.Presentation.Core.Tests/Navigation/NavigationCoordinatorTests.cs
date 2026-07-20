@@ -994,7 +994,7 @@ public sealed class NavigationCoordinatorTests
             Assert.False(activationTask.IsCompleted);
             Assert.True(chat.ViewModel.IsOverlayVisible);
             Assert.True(chat.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Contains("切换", chat.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+            Assert.Contains("Switching chat", chat.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
             shellNavigation.CompleteFirst(ShellNavigationResult.Success());
 
@@ -2233,10 +2233,13 @@ public sealed class NavigationCoordinatorTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("聊天", StringComparison.Ordinal) || status.Contains("消息", StringComparison.Ordinal))
+        return (status.StartsWith("Connecting to assistant", StringComparison.Ordinal)
+                || status.StartsWith("Preparing chat environment", StringComparison.Ordinal)
+                || status.StartsWith("Loading chat history", StringComparison.Ordinal)
+                || status.StartsWith("Switching chat", StringComparison.Ordinal))
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class TokenAwareShellNavigationService : IShellNavigationService, IActivationTokenShellNavigationService

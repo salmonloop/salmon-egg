@@ -11583,7 +11583,7 @@ public partial class ChatViewModelTests
             Assert.Equal(pendingBeforePrime, syncContext.PendingCount);
             Assert.True(fixture.ViewModel.IsOverlayVisible);
             Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-            Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+            Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
             var pendingBeforeClear = syncContext.PendingCount;
             fixture.ViewModel.ClearSessionSwitchPreview("conv-1");
@@ -12156,7 +12156,7 @@ public partial class ChatViewModelTests
         fixture.ViewModel.IsSessionSwitching = true;
 
         Assert.False(string.IsNullOrWhiteSpace(fixture.ViewModel.OverlayStatusText));
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
         Assert.DoesNotContain("ACP", fixture.ViewModel.OverlayStatusText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("协议", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
 
@@ -12197,7 +12197,7 @@ public partial class ChatViewModelTests
         Assert.True(fixture.ViewModel.HasVisibleTranscriptContent);
         Assert.True(fixture.ViewModel.IsOverlayVisible);
         Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -12325,7 +12325,7 @@ public partial class ChatViewModelTests
         Assert.Equal(ShellNavigationContent.Start, runtimeState.CurrentShellContent);
         Assert.True(fixture.ViewModel.IsActivationOverlayVisible);
         Assert.True(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.Contains("切换", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -12401,7 +12401,7 @@ public partial class ChatViewModelTests
         Assert.True(shellOverlay.IsOverlayVisible);
         Assert.True(shellOverlay.ShowsBlockingMask);
         Assert.True(shellOverlay.ShowsPresenter);
-        Assert.Contains("切换", shellOverlay.StatusText, StringComparison.Ordinal);
+        Assert.Contains("Switching chat", shellOverlay.StatusText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -13087,7 +13087,7 @@ public partial class ChatViewModelTests
 
         var regressedToPreparing = observedStatuses
             .Skip(hydrationStatusIndex + 1)
-            .Any(status => status.Contains("切换", StringComparison.Ordinal));
+            .Any(status => status.Contains("Switching chat", StringComparison.Ordinal));
         Assert.False(
             regressedToPreparing,
             $"Overlay status regressed to session-switch preparation after hydration started. Sequence=[{string.Join(" | ", observedStatuses)}]");
@@ -17770,10 +17770,10 @@ public partial class ChatViewModelTests
             return false;
         }
 
-        return (status.StartsWith("正在", StringComparison.Ordinal) || status.StartsWith("即将", StringComparison.Ordinal))
-            && (status.Contains("聊天", StringComparison.Ordinal) || status.Contains("消息", StringComparison.Ordinal))
+        return status.StartsWith("Loading chat history", StringComparison.Ordinal)
             && !status.Contains("ACP", StringComparison.OrdinalIgnoreCase)
-            && !status.Contains("协议", StringComparison.Ordinal);
+            && !status.Contains("protocol", StringComparison.OrdinalIgnoreCase)
+            && !status.Contains("session/load", StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
