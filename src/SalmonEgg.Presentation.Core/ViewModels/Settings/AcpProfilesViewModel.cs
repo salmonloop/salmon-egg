@@ -168,7 +168,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         }
 
         SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-            ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+            ?? "Settings saved. The current connection still uses the old configuration until reconnect.";
         IsSavedCurrentConnectionNoticeOpen = true;
     }
 
@@ -438,7 +438,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         if (IsSavedCurrentConnectionNoticeOpen)
         {
             SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-                ?? "配置已保存。当前连接仍使用旧配置，重新连接后生效。";
+                ?? "Settings saved. The current connection still uses the old configuration until reconnect.";
         }
 
         foreach (var item in ProfileItems)
