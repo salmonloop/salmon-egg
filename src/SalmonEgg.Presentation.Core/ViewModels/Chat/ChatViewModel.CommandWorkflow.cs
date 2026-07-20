@@ -485,10 +485,10 @@ public partial class ChatViewModel
 
     private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
-            Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
-            Error: Localize("Selector_Mode_Error", "模式不可用"),
-            Default: Localize("Selector_Mode_Default", "默认模式"));
+            Unresolved: Localize("Selector_Mode_Unresolved", "Mode is not ready"),
+            Loading: Localize("Selector_Mode_Loading", "Loading modes..."),
+            Error: Localize("Selector_Mode_Error", "Mode unavailable"),
+            Default: Localize("Selector_Mode_Default", "Default mode"));
 
     private SelectorProjectionResult ResolveChatModelSelectorProjection()
     {
@@ -539,9 +539,9 @@ public partial class ChatViewModel
 
     private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
-            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
-            Error: Localize("Selector_Model_Error", "模型不可用"));
+            Unresolved: Localize("Selector_Model_Unresolved", "Model is not ready"),
+            Loading: Localize("Selector_Model_Loading", "Loading models..."),
+            Error: Localize("Selector_Model_Error", "Models unavailable"));
 
     private string Localize(string key, string fallback)
     {

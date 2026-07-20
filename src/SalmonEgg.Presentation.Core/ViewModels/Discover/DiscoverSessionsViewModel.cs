@@ -76,12 +76,12 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
     public string? LoadingStatus => LoadPhase switch
     {
-        DiscoverSessionsLoadPhase.Connecting => Localize("Discover_LoadingConnecting", "正在连接到 Agent..."),
-        DiscoverSessionsLoadPhase.Initializing => Localize("Discover_LoadingInitializing", "正在初始化 ACP 协议..."),
-        DiscoverSessionsLoadPhase.ListingSessions => Localize("Discover_LoadingListingSessions", "正在获取会话列表..."),
-        DiscoverSessionsLoadPhase.ImportingSession => Localize("Discover_LoadingImportingSession", "正在导入会话..."),
-        DiscoverSessionsLoadPhase.ActivatingSession => Localize("Discover_LoadingActivatingSession", "正在打开会话..."),
-        DiscoverSessionsLoadPhase.HydratingSession => Localize("Discover_LoadingHydratingSession", "正在加载会话历史..."),
+        DiscoverSessionsLoadPhase.Connecting => Localize("Discover_LoadingConnecting", "Connecting to agent..."),
+        DiscoverSessionsLoadPhase.Initializing => Localize("Discover_LoadingInitializing", "Initializing ACP protocol..."),
+        DiscoverSessionsLoadPhase.ListingSessions => Localize("Discover_LoadingListingSessions", "Fetching sessions..."),
+        DiscoverSessionsLoadPhase.ImportingSession => Localize("Discover_LoadingImportingSession", "Importing session..."),
+        DiscoverSessionsLoadPhase.ActivatingSession => Localize("Discover_LoadingActivatingSession", "Opening session..."),
+        DiscoverSessionsLoadPhase.HydratingSession => Localize("Discover_LoadingHydratingSession", "Loading session history..."),
         _ => null
     };
 
@@ -314,13 +314,13 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             {
                 throw new InvalidOperationException(
                     string.IsNullOrWhiteSpace(_connectionFacade.ConnectionErrorMessage)
-                        ? Localize("Discover_ErrorConnectionNotInitialized", "ACP 连接尚未完成初始化。")
+                        ? Localize("Discover_ErrorConnectionNotInitialized", "The ACP connection has not finished initializing.")
                         : _connectionFacade.ConnectionErrorMessage);
             }
 
             if (chatService.AgentCapabilities?.SupportsSessionList != true)
             {
-                throw new InvalidOperationException(Localize("Discover_ErrorListCapabilityMissing", "当前 Agent 未声明 session/list 能力。"));
+                throw new InvalidOperationException(Localize("Discover_ErrorListCapabilityMissing", "The current agent does not advertise session/list capability."));
             }
 
             await PostToUiAsync(() => LoadPhase = DiscoverSessionsLoadPhase.ListingSessions).ConfigureAwait(false);
@@ -353,8 +353,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         NavigationRemoteDirectoryIds: _projectPreferences.NavigationRemoteDirectoryIds));
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
-                        string.IsNullOrWhiteSpace(session.Title) ? Localize("Discover_UntitledSession", "未命名会话") : session.Title,
-                        Localize("Discover_NoDescription", "暂无描述"),
+                        string.IsNullOrWhiteSpace(session.Title) ? Localize("Discover_UntitledSession", "Untitled session") : session.Title,
+                        Localize("Discover_NoDescription", "No description"),
                         AcpSessionTimestampPolicy.ParseUpdatedAtUtc(session.UpdatedAt),
                         LoadSessionCommand,
                         session.Cwd,
@@ -451,7 +451,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     }
 
                     ErrorMessage = string.IsNullOrWhiteSpace(openResult.ErrorMessage)
-                        ? Localize("Discover_ErrorImportFailed", "导入会话失败。")
+                        ? Localize("Discover_ErrorImportFailed", "Session import failed.")
                         : openResult.ErrorMessage;
                     LoadPhase = DiscoverSessionsLoadPhase.Error;
                 }).ConfigureAwait(false);
@@ -485,7 +485,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     return;
                 }
 
-                ErrorMessage = FormatLocalize("Discover_ErrorImportException", "导入会话时出错: {0}", ex.Message);
+                ErrorMessage = FormatLocalize("Discover_ErrorImportException", "Error importing session: {0}", ex.Message);
                 LoadPhase = DiscoverSessionsLoadPhase.Error;
             }).ConfigureAwait(false);
         }
@@ -549,7 +549,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             return _connectionFacade.ConnectionErrorMessage!;
         }
 
-        return FormatLocalize("Discover_ErrorListFailed", "无法获取会话列表: {0}", ex.Message);
+        return FormatLocalize("Discover_ErrorListFailed", "Unable to fetch sessions: {0}", ex.Message);
     }
 
     private string ResolveAffinityBadgeText(

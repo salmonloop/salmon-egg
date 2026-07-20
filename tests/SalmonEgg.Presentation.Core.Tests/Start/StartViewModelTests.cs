@@ -44,8 +44,8 @@ public sealed class StartViewModelTests
 {
     private static readonly TimeSpan PreviousFixedDraftIdentityWaitTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan DraftIdentityWaitRegressionBuffer = TimeSpan.FromMilliseconds(150);
-    private const string RemoteModeProjectPrompt = "请先选择远程项目";
-    private const string RemoteProjectPrompt = "请选择远程项目";
+    private const string RemoteModeProjectPrompt = "Select a remote project first";
+    private const string RemoteProjectPrompt = "Select a remote project";
 
     [Fact]
     public async Task StartSessionAndSendAsync_DoesNotInvokeWorkflow_WhenPromptIsBlank()
@@ -384,7 +384,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal(NavigationProjectIds.Unclassified, startViewModel.SelectedStartProjectId);
             Assert.Equal(NavigationProjectIds.Unclassified, option.ProjectId);
-            Assert.Equal("未归类", option.DisplayName);
+            Assert.Equal("Unclassified", option.DisplayName);
         }
         finally
         {
@@ -2154,7 +2154,7 @@ public sealed class StartViewModelTests
 
             Assert.Equal("profile switch failed", startViewModel.StartSessionDraftErrorMessage);
             Assert.Equal(SelectorPlaceholderKind.Error, startViewModel.StartModeSelectorProjection.PlaceholderKind);
-            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Equal("Mode unavailable", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
             Assert.True(startViewModel.StartModeSelectorProjection.IsSubmitBlocked);
             Assert.NotEqual(SelectorPlaceholderKind.Unresolved, startViewModel.StartModeSelectorProjection.PlaceholderKind);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
@@ -2208,7 +2208,7 @@ public sealed class StartViewModelTests
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
 
             Assert.Equal(SelectorPlaceholderKind.Default, startViewModel.StartAgentSelectorProjection.PlaceholderKind);
-            Assert.Equal("未选择 Agent", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
+            Assert.Equal("No agent selected", startViewModel.SelectedStartAgentSelectorItem?.DisplayName);
             Assert.False(startViewModel.StartAgentSelectorProjection.IsSubmitBlocked);
             Assert.DoesNotContain(startViewModel.StartAgentSelectorProjection.DisplayItems, item => !item.IsPlaceholder);
         }
@@ -2310,8 +2310,8 @@ public sealed class StartViewModelTests
 
             Assert.True(startViewModel.HasStartSessionDraftError);
             Assert.Equal("Internal error: Already initialized", startViewModel.StartSessionDraftErrorMessage);
-            Assert.Equal("模式不可用", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
-            Assert.Equal("模式不可用", startViewModel.StartModeSelectorProjection.SubmitBlockReason);
+            Assert.Equal("Mode unavailable", startViewModel.SelectedStartModeSelectorItem?.DisplayName);
+            Assert.Equal("Mode unavailable", startViewModel.StartModeSelectorProjection.SubmitBlockReason);
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
         }
         finally

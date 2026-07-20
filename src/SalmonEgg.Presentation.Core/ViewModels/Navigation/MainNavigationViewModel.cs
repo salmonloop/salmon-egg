@@ -256,7 +256,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         SettingsItem.UpdateTitle(Localize("Nav_Settings", "Settings"));
         SessionsLabelItem.UpdateTitle(Localize("Nav_Sessions", "Sessions"));
 
-        var unclassifiedTitle = Localize("Nav_Unclassified", "未归类");
+        var unclassifiedTitle = Localize("Nav_Unclassified", "Unclassified");
         foreach (var project in Items
                      .OfType<ProjectNavItemViewModel>()
                      .Where(project => string.Equals(
@@ -587,7 +587,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 break;
 
             case AddProjectStatus.RejectedUnknownRemote:
-                await _ui.ShowInfoAsync(Localize("AddProject_RemoteProjectMissing", "该远程项目已不存在。"))
+                await _ui.ShowInfoAsync(Localize("AddProject_RemoteProjectMissing", "That remote project no longer exists."))
                     .ConfigureAwait(true);
                 break;
 
@@ -951,7 +951,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             (new ProjectDefinition
             {
                 ProjectId = UnclassifiedProjectId,
-                Name = Localize("Nav_Unclassified", "未归类"),
+                Name = Localize("Nav_Unclassified", "Unclassified"),
                 RootPath = string.Empty
             }, true)
         };
@@ -1183,7 +1183,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         var project = new ProjectDefinition
         {
             ProjectId = UnclassifiedProjectId,
-            Name = Localize("Nav_Unclassified", "未归类"),
+            Name = Localize("Nav_Unclassified", "Unclassified"),
             RootPath = string.Empty
         };
         var vm = new ProjectNavItemViewModel(project, isSystemProject: true, PrepareStartForProjectAsync, _navigationState, _uiDispatcher) { IsExpanded = true };

@@ -216,7 +216,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             Assert.Equal(0, listCalls);
             Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
-            Assert.Equal("无法获取会话列表: 当前 Agent 未声明 session/list 能力。", viewModel.ErrorMessage);
+            Assert.Equal("Unable to fetch sessions: The current agent does not advertise session/list capability.", viewModel.ErrorMessage);
         }
         finally
         {
@@ -557,7 +557,7 @@ public sealed class DiscoverSessionsViewModelTests
 
             await importStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
             Assert.True(viewModel.IsLoading);
-            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
+            Assert.Equal("Importing session...", viewModel.LoadingStatus);
 
             allowImportCompletion.TrySetResult(null);
             await loadTask;
@@ -629,7 +629,7 @@ public sealed class DiscoverSessionsViewModelTests
             Assert.False(viewModel.CanRefreshSessions);
             Assert.False(viewModel.AreSessionActionsEnabled);
             Assert.False(viewModel.LoadSessionCommand.CanExecute(CreateSessionItem()));
-            Assert.Equal("正在导入会话...", viewModel.LoadingStatus);
+            Assert.Equal("Importing session...", viewModel.LoadingStatus);
 
             allowActivationCompletion.TrySetResult(null);
             await loadTask;

@@ -347,23 +347,23 @@ public sealed partial class StartViewModel : ObservableObject
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.AnalyzeCodebase",
             "\uE943",
-            Localize("StartSuggestion_AnalyzeCodebaseTitle", "分析代码库"),
-            Localize("StartSuggestion_AnalyzeCodebaseSubtitle", "深入理解项目架构与逻辑"),
-            Localize("StartSuggestion_AnalyzeCodebasePrompt", "请帮我分析一下当前代码库的架构和核心逻辑。"),
+            Localize("StartSuggestion_AnalyzeCodebaseTitle", "Analyze codebase"),
+            Localize("StartSuggestion_AnalyzeCodebaseSubtitle", "Understand the project architecture and logic"),
+            Localize("StartSuggestion_AnalyzeCodebasePrompt", "Analyze the current codebase architecture and core logic."),
             ExecuteSuggestionCommand));
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.RecommendTasks",
             "\uE762",
-            Localize("StartSuggestion_RecommendTasksTitle", "推荐开发任务"),
-            Localize("StartSuggestion_RecommendTasksSubtitle", "明确接下来该做什么"),
-            Localize("StartSuggestion_RecommendTasksPrompt", "根据当前进度，推荐几个接下来可以进行的开发任务或优化点。"),
+            Localize("StartSuggestion_RecommendTasksTitle", "Recommend tasks"),
+            Localize("StartSuggestion_RecommendTasksSubtitle", "Clarify what to work on next"),
+            Localize("StartSuggestion_RecommendTasksPrompt", "Based on current progress, recommend a few development tasks or improvements to tackle next."),
             ExecuteSuggestionCommand));
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.ResolveErrors",
             "\uEBE8",
-            Localize("StartSuggestion_ResolveErrorsTitle", "解决最近报错"),
-            Localize("StartSuggestion_ResolveErrorsSubtitle", "提交错误日志让我看看"),
-            Localize("StartSuggestion_ResolveErrorsPrompt", "我刚才遇到了一些报错，请帮我分析并解决它们。"),
+            Localize("StartSuggestion_ResolveErrorsTitle", "Resolve recent errors"),
+            Localize("StartSuggestion_ResolveErrorsSubtitle", "Share the error log for analysis"),
+            Localize("StartSuggestion_ResolveErrorsPrompt", "I ran into some errors. Analyze them and help fix them."),
             ExecuteSuggestionCommand));
     }
 
@@ -675,9 +675,9 @@ public sealed partial class StartViewModel : ObservableObject
 
     private ModelSelectorPlaceholderLabels ResolveModelSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Model_Unresolved", "模型尚未就绪"),
-            Loading: Localize("Selector_Model_Loading", "正在加载模型..."),
-            Error: Localize("Selector_Model_Error", "模型不可用"));
+            Unresolved: Localize("Selector_Model_Unresolved", "Model is not ready"),
+            Loading: Localize("Selector_Model_Loading", "Loading models..."),
+            Error: Localize("Selector_Model_Error", "Models unavailable"));
 
     private void RefreshAllSelectorProjections()
     {
@@ -837,7 +837,7 @@ public sealed partial class StartViewModel : ObservableObject
         var isRemoteProfile = IsSelectedProfileRemote();
         var options = new List<StartProjectOptionViewModel>
         {
-            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "未归类"), isSelectable: !isRemoteProfile),
+            new(NavigationProjectIds.Unclassified, Localize("Nav_Unclassified", "Unclassified"), isSelectable: !isRemoteProfile),
         };
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -928,11 +928,11 @@ public sealed partial class StartViewModel : ObservableObject
     private ModeSelectorPlaceholderLabels ResolveModeSelectorPlaceholderLabels(bool remoteSelectionRequired = false)
         => new(
             Unresolved: remoteSelectionRequired
-                ? Localize("Selector_Mode_RemoteSelectionRequired", "请先选择远程项目")
-                : Localize("Selector_Mode_Unresolved", "模式尚未就绪"),
-            Loading: Localize("Selector_Mode_Loading", "正在加载模式..."),
-            Error: Localize("Selector_Mode_Error", "模式不可用"),
-            Default: Localize("Selector_Mode_Default", "默认模式"));
+                ? Localize("Selector_Mode_RemoteSelectionRequired", "Select a remote project first")
+                : Localize("Selector_Mode_Unresolved", "Mode is not ready"),
+            Loading: Localize("Selector_Mode_Loading", "Loading modes..."),
+            Error: Localize("Selector_Mode_Error", "Mode unavailable"),
+            Default: Localize("Selector_Mode_Default", "Default mode"));
 
     private string ResolveStartSessionDraftErrorMessage()
     {
@@ -961,16 +961,16 @@ public sealed partial class StartViewModel : ObservableObject
 
     private AgentSelectorPlaceholderLabels ResolveAgentSelectorPlaceholderLabels()
         => new(
-            Loading: Localize("Selector_Agent_Loading", "正在连接 Agent..."),
-            Error: Localize("Selector_Agent_Error", "Agent 不可用"),
-            Unresolved: Localize("Selector_Agent_Unresolved", "选择 Agent"),
-            Empty: Localize("Selector_Agent_Empty", "未选择 Agent"));
+            Loading: Localize("Selector_Agent_Loading", "Connecting agent..."),
+            Error: Localize("Selector_Agent_Error", "Agent unavailable"),
+            Unresolved: Localize("Selector_Agent_Unresolved", "Select an agent"),
+            Empty: Localize("Selector_Agent_Empty", "No agent selected"));
 
     private ProjectSelectorPlaceholderLabels ResolveProjectSelectorPlaceholderLabels()
         => new(
-            Unresolved: Localize("Selector_Project_Unresolved", "项目不可用"),
-            Fallback: Localize("Nav_Unclassified", "未归类"),
-            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "请选择远程项目"));
+            Unresolved: Localize("Selector_Project_Unresolved", "Project unavailable"),
+            Fallback: Localize("Nav_Unclassified", "Unclassified"),
+            RemoteSelectionRequired: Localize("Selector_Project_RemoteSelectionRequired", "Select a remote project"));
 
     private string Localize(string key, string fallback)
     {
