@@ -770,7 +770,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "导航树重建过程中发生异常，已拦截以防止闪退");
+            _logger.LogWarning(ex, "Navigation tree rebuild failed and was swallowed to keep the shell stable.");
         }
     }
 

@@ -58,7 +58,7 @@ public class ChatServiceFactory
         IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
-        _logger?.Information("正在创建新的 ChatService 实例：TransportType={TransportType}", transportType);
+        _logger?.Information("Creating ChatService instance. TransportType={TransportType}", transportType);
 
         // 1. 创建传输层
         var transport = _transportFactory.CreateTransport(transportType, command, arguments, url);
@@ -76,7 +76,7 @@ public class ChatServiceFactory
         {
             throw new ArgumentNullException(nameof(configuration));
         }
-        _logger?.Information("正在根据配置创建新的 ChatService 实例：ProfileId={ProfileId}, TransportType={TransportType}", configuration.Id, configuration.Transport);
+        _logger?.Information("Creating ChatService instance from configuration. ProfileId={ProfileId}, TransportType={TransportType}", configuration.Id, configuration.Transport);
 
         var transport = _transportFactory.CreateTransport(configuration);
         var acpClient = _acpClientFactory.CreateClient(transport);

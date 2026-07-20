@@ -53,7 +53,7 @@ public class TransportFactory : ITransportFactory
         IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
-        _logger.Information("正在创建传输实例：{TransportType}", transportType);
+        _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
         var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
 
         return CreateTransportCore(transportType, command, arguments, url, webSocketConnectTimeout);
@@ -66,7 +66,7 @@ public class TransportFactory : ITransportFactory
             throw new ArgumentNullException(nameof(configuration));
         }
 
-        _logger.Information("正在根据配置创建传输实例：{TransportType}, {ProfileId}", configuration.Transport, configuration.Id);
+        _logger.Information("Creating transport instance from configuration. TransportType={TransportType}, ProfileId={ProfileId}", configuration.Transport, configuration.Id);
         var webSocketConnectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
 
         return CreateTransportCore(
@@ -86,7 +86,7 @@ public class TransportFactory : ITransportFactory
         TimeSpan webSocketConnectTimeout,
         ProxyConfig? proxy = null)
     {
-        _logger.Information("正在创建传输实例：{TransportType}", transportType);
+        _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
 
         return transportType switch
         {
@@ -121,7 +121,7 @@ public class TransportFactory : ITransportFactory
         }
 
         var argsArray = arguments?.ToArray() ?? Array.Empty<string>();
-        _logger.Information("创建 Stdio 传输：Command={Command}, ArgsCount={ArgsCount}", command, argsArray.Length);
+        _logger.Information("Creating Stdio transport. Command={Command}, ArgsCount={ArgsCount}", command, argsArray.Length);
 
         return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
     }
@@ -144,7 +144,7 @@ public class TransportFactory : ITransportFactory
             throw new ArgumentException($"Invalid WebSocket URL: {url}", nameof(url));
         }
 
-        _logger.Information("创建 WebSocket 传输：Url={Url}", url);
+        _logger.Information("Creating WebSocket transport. Url={Url}", url);
 
         var logger = _logger;
         var inner = new SalmonEgg.Infrastructure.Network.WebSocketTransport(
@@ -172,7 +172,7 @@ public class TransportFactory : ITransportFactory
             throw new ArgumentException($"Invalid HTTP SSE URL: {url}", nameof(url));
         }
 
-        _logger.Information("创建 HTTP SSE 传输：Url={Url}", url);
+        _logger.Information("Creating HTTP SSE transport. Url={Url}", url);
 
         var logger = _logger;
         var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(logger);
