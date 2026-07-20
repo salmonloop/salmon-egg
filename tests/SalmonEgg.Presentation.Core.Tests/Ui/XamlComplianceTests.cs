@@ -1004,6 +1004,21 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AgentProfileEditor_AdaptsDensityByWindowHeightAndAvoidsDoublePadding()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
+
+        Assert.Contains("x:Name=\"AgentProfileEditorHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AgentProfileEditorContent\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AgentProfileEditorContent.Spacing\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AgentProfileEditorContent.Spacing\" Value=\"18\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource SettingsPageVerticalPadding}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Padding=\"40,24\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ChatInputArea_DoesNotUseHardcodedWhiteForeground()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
@@ -3167,8 +3182,12 @@ public sealed class XamlComplianceTests
         var shellGrid = document
             .Descendants()
             .Single(element => element.Name.LocalName == "Grid"
-                && string.Equals(element.Attribute("Padding")?.Value, "40,24", StringComparison.Ordinal));
+                && string.Equals(GetAttributeByLocalName(element, "Name"), "SettingsShellRoot", StringComparison.Ordinal));
 
+        Assert.Contains("x:Name=\"SettingsShellHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SettingsShellRoot.Padding\" Value=\"24,12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SettingsShellRoot.Padding\" Value=\"40,24\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SettingsShellPage : Page, IPrimaryContentFocusTarget", code, StringComparison.Ordinal);
         Assert.Contains("public bool TryFocusPrimaryContentTarget()", code, StringComparison.Ordinal);
         Assert.Contains("=> TryFocusCurrentSectionNavigationItem();", code, StringComparison.Ordinal);
