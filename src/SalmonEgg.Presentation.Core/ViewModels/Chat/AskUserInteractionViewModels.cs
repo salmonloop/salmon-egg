@@ -54,14 +54,14 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
     {
         if (OnSubmit is null)
         {
-            ErrorMessage = "当前无法提交答案。";
+            ErrorMessage = "Answers cannot be submitted right now.";
             return;
         }
 
         var answers = BuildAnswers();
         if (answers.Count == 0 || !AreAllQuestionsAnswered())
         {
-            ErrorMessage = "请先完成所有问题。";
+            ErrorMessage = "Answer all questions before submitting.";
             return;
         }
 
@@ -73,13 +73,13 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
             var succeeded = await OnSubmit(answers).ConfigureAwait(true);
             if (!succeeded)
             {
-                ErrorMessage = "提交答案失败，请重试。";
+                ErrorMessage = "Failed to submit answers. Please try again.";
             }
         }
         catch (Exception ex)
         {
             ErrorMessage = string.IsNullOrWhiteSpace(ex.Message)
-                ? "提交答案失败，请重试。"
+                ? "Failed to submit answers. Please try again."
                 : ex.Message;
         }
         finally
@@ -142,7 +142,7 @@ public sealed class AskUserQuestionViewModel
         Header = header ?? string.Empty;
         QuestionText = questionText ?? string.Empty;
         IsMultiSelect = isMultiSelect;
-        SelectionHint = isMultiSelect ? "可多选" : "单选";
+        SelectionHint = isMultiSelect ? "Multiple choice" : "Single choice";
 
         foreach (var option in options ?? Array.Empty<AskUserOptionViewModel>())
         {
