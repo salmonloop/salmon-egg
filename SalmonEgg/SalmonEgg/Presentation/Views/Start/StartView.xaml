@@ -16,12 +16,45 @@
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <DataTemplate x:Key="HeroSuggestionItemTemplate"
+                      x:DataType="local_vm:QuickSuggestionViewModel">
+            <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"
+                                            Loaded="OnHeroSuggestionCardLoaded" />
+        </DataTemplate>
+        <ItemsPanelTemplate x:Key="HeroSuggestionPanelVertical">
+            <StackPanel Orientation="Vertical" />
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="HeroSuggestionPanelHorizontal">
+            <StackPanel Orientation="Horizontal" />
+        </ItemsPanelTemplate>
     </Page.Resources>
 
     <Grid x:Name="StartRoot"
           RowDefinitions="*,Auto"
           Background="Transparent"
           Padding="24,20,24,24">
+
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="HeroSuggestionLayoutStates">
+                <!-- Narrow (default): cards stack vertically so they never overflow at any
+                     window width or nav-pane state. Wide: single centered row when the window
+                     is wide enough to fit three cards even with the pane expanded
+                     (3 * (216 MinWidth + 14 margin) + edges + 300 open pane + page padding). -->
+                <VisualState x:Name="Narrow">
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionsHost.ItemsPanel" Value="{StaticResource HeroSuggestionPanelVertical}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Wide">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1060" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="HeroSuggestionsHost.ItemsPanel" Value="{StaticResource HeroSuggestionPanelHorizontal}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
         <TextBlock HorizontalAlignment="Left"
                    VerticalAlignment="Top"
@@ -35,14 +68,7 @@
         <Grid x:Name="HeroLayer"
               Grid.Row="0"
               Margin="0,28,0,24"
-              VerticalAlignment="Center"
-              RenderTransformOrigin="0.5,0.5">
-            <Grid.RenderTransform>
-                <TransformGroup>
-                    <ScaleTransform x:Name="HeroScaleTransform" ScaleX="1" ScaleY="1" />
-                    <TranslateTransform x:Name="HeroTranslateTransform" Y="0" />
-                </TransformGroup>
-            </Grid.RenderTransform>
+              VerticalAlignment="Center">
             <StackPanel MaxWidth="980"
                         HorizontalAlignment="Center"
                         Spacing="28">
@@ -73,19 +99,9 @@
                               AutomationProperties.AutomationId="StartView.Suggestions"
                               HorizontalAlignment="Center"
                               XYFocusKeyboardNavigation="Enabled"
-                              ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local_vm:QuickSuggestionViewModel">
-                            <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"
-                                                            Loaded="OnHeroSuggestionCardLoaded" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                              ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
+                              ItemTemplate="{StaticResource HeroSuggestionItemTemplate}"
+                              ItemsPanel="{StaticResource HeroSuggestionPanelVertical}" />
             </StackPanel>
         </Grid>
 
