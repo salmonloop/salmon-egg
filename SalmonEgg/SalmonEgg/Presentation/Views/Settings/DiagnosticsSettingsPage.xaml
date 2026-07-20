@@ -16,8 +16,26 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
     </views:SettingsPageBase.Resources>
 
-    <ScrollViewer Padding="0"
-                  HorizontalScrollBarVisibility="Disabled">
+    <Grid>
+        <!-- Short windows: densify the live-log TextBox fixed Height so the diagnostics surface
+             remains scrollable without a large reserved chrome block. Comfortable restores
+             the prior 320px height (MinWindowHeight=760, same threshold as Start/ACP/MCP). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LiveLogHeightStates">
+                <VisualState x:Name="LiveLogHeightCompact" />
+                <VisualState x:Name="LiveLogHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="LiveLogTextBox.Height" Value="320" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <ScrollViewer Padding="0"
+                      HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
                 <StackPanel Spacing="28"
@@ -668,7 +686,7 @@
                                          AcceptsReturn="True"
                                          TextChanged="OnLiveLogTextChanged"
                                          TextWrapping="Wrap"
-                                         Height="320" />
+                                         Height="160" />
 
                                 <TextBlock x:Uid="Diagnostics_LiveLogHint"
                                            Style="{StaticResource SettingsRowDescriptionTextStyle}"
@@ -765,5 +783,6 @@
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

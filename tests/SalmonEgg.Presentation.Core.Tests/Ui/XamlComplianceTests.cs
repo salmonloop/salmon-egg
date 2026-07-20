@@ -3245,6 +3245,24 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void DiagnosticsSettings_LiveLogHeightDensifiesOnShortWindowHeights()
+    {
+        var diagnostics = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+
+        Assert.Contains("x:Name=\"LiveLogHeightStates\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"LiveLogTextBox\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Target=\"LiveLogTextBox.Height\" Value=\"320\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Height=\"160\"", diagnostics, StringComparison.Ordinal);
+
+        // VSM must live on a single content root (Grid), not as a second Page child.
+        Assert.Contains("<Grid>", diagnostics, StringComparison.Ordinal);
+        Assert.True(
+            diagnostics.IndexOf("<Grid>", StringComparison.Ordinal)
+            < diagnostics.IndexOf("LiveLogHeightStates", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ResizeGrip_KeepsPlatformCursorImplementationOutOfSharedControl()
     {
         var sharedControl = LoadText(@"SalmonEgg\SalmonEgg\Controls\ResizeGrip.cs");
