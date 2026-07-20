@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -26,7 +27,50 @@ public sealed class ConfigurationEditorViewModelTests
             transportSupportPolicy,
             logger.Object);
 
-        Assert.Equal("Stdio（子进程）", viewModel.TransportOptions[0].Name);
+        Assert.Equal("Stdio (subprocess)", viewModel.TransportOptions[0].Name);
+    }
+
+    [Fact]
+    public void ProxyModeOptions_Should_UseStableEnglishLabels()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            logger.Object);
+
+        Assert.Equal(
+            new[] { "Use system proxy", "No proxy", "Custom proxy" },
+            viewModel.ProxyModeOptions.Select(option => option.Name).ToArray());
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenValidationFails_UsesEnglishErrorPrefix()
+    {
+        var validator = new ServerConfigurationValidator();
+        var configurationService = new Mock<IConfigurationService>();
+        var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
+        var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var viewModel = new ConfigurationEditorViewModel(
+            validator,
+            configurationService.Object,
+            transportSupportPolicy,
+            logger.Object);
+
+        viewModel.LoadBlankConfiguration();
+        viewModel.Name = string.Empty;
+        viewModel.Transport = TransportType.WebSocket;
+        viewModel.ServerUrl = "not-a-url";
+
+        await viewModel.SaveConfigurationAsync();
+
+        Assert.True(viewModel.HasError);
+        Assert.StartsWith("Validation failed:", viewModel.ErrorMessage, StringComparison.Ordinal);
+        configurationService.Verify(x => x.SaveConfigurationAsync(It.IsAny<ServerConfiguration>()), Times.Never);
     }
 
     [Fact]

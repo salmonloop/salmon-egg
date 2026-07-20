@@ -281,7 +281,7 @@ public partial class ConfigurationEditorViewModel(
             if (!validationResult.IsValid)
             {
                 var errors = string.Join("; ", validationResult.Errors);
-                SetError("验证失败：" + errors);
+                SetError("Validation failed: " + errors);
                 return;
             }
 
@@ -289,13 +289,13 @@ public partial class ConfigurationEditorViewModel(
         }
         catch (ConfigurationPersistenceException ex)
         {
-            Logger.LogError(ex, "保存配置失败：{Reason}", ex.Reason);
-            SetError("保存配置失败：" + ex.UserMessage);
+            Logger.LogError(ex, "Failed to save configuration: {Reason}", ex.Reason);
+            SetError("Failed to save configuration: " + ex.UserMessage);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "保存配置失败");
-            SetError("保存配置失败：" + ex.Message);
+            Logger.LogError(ex, "Failed to save configuration");
+            SetError("Failed to save configuration: " + ex.Message);
         }
     }
 
@@ -311,7 +311,7 @@ public partial class ConfigurationEditorViewModel(
         var options = new ObservableCollection<TransportOption>();
         if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
-            options.Add(new TransportOption(TransportType.Stdio, "Stdio（子进程）"));
+            options.Add(new TransportOption(TransportType.Stdio, "Stdio (subprocess)"));
         }
 
         options.Add(new TransportOption(TransportType.WebSocket, "WebSocket"));
@@ -322,9 +322,9 @@ public partial class ConfigurationEditorViewModel(
     private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions()
         => new()
         {
-            new ProxyModeOption(ProxyMode.System, "使用系统代理"),
-            new ProxyModeOption(ProxyMode.None, "不使用代理"),
-            new ProxyModeOption(ProxyMode.Custom, "自定义代理")
+            new ProxyModeOption(ProxyMode.System, "Use system proxy"),
+            new ProxyModeOption(ProxyMode.None, "No proxy"),
+            new ProxyModeOption(ProxyMode.Custom, "Custom proxy")
         };
 
     private TransportType ResolveDefaultTransportType()
