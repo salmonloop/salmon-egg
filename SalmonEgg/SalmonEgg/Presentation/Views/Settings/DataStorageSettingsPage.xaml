@@ -16,11 +16,33 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Page.Resources>
 
+        <Grid>
+        <!-- Short windows: densify section stack spacing so settings remain scannable without
+             oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DataStorageHeightStates">
+                <VisualState x:Name="DataStorageHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="DataStorageContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="DataStorageHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="DataStorageContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28">
+                <StackPanel x:Name="DataStorageContentStack"
+                            Spacing="16">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="DataStorage_PageTitle"
                                    Style="{StaticResource SettingsPageTitleTextStyle}"/>
@@ -435,4 +457,5 @@
             </controls:ResponsiveContentHost.Child>
         </controls:ResponsiveContentHost>
     </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>

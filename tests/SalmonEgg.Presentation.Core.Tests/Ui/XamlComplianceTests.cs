@@ -1004,6 +1004,43 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void SettingsPages_DensifyContentStackSpacingOnShortHeights()
+    {
+        var appearance = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AppearanceSettingsPage.xaml");
+        var general = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\GeneralSettingsPage.xaml");
+        var dataStorage = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml");
+        var shortcuts = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\ShortcutsSettingsPage.xaml");
+
+        Assert.Contains("x:Name=\"AppearanceHeightStates\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AppearanceContentStack\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AppearanceContentStack.Spacing\" Value=\"16\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AppearanceContentStack.Spacing\" Value=\"28\"", appearance, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", appearance, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", appearance, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"GeneralHeightStates\"", general, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"GeneralContentStack\"", general, StringComparison.Ordinal);
+        Assert.Contains("Target=\"GeneralContentStack.Spacing\" Value=\"16\"", general, StringComparison.Ordinal);
+        Assert.Contains("Target=\"GeneralContentStack.Spacing\" Value=\"28\"", general, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", general, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", general, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"DataStorageHeightStates\"", dataStorage, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DataStorageContentStack\"", dataStorage, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DataStorageContentStack.Spacing\" Value=\"16\"", dataStorage, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DataStorageContentStack.Spacing\" Value=\"28\"", dataStorage, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", dataStorage, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", dataStorage, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"ShortcutsHeightStates\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ShortcutsContentStack\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ShortcutsContentStack.Spacing\" Value=\"14\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ShortcutsContentStack.Spacing\" Value=\"24\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", shortcuts, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", shortcuts, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AgentProfileEditor_AdaptsDensityByWindowHeightAndAvoidsDoublePadding()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AgentProfileEditorPage.xaml");
