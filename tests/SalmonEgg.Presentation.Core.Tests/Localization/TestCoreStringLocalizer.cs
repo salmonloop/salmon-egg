@@ -173,7 +173,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["About_VersionInfoVersionLabel"] = "版本",
         ["About_VersionInfoProtocolLabel"] = "协议",
         ["About_VersionInfoCopied"] = "版本信息已复制到剪贴板。",
-        ["About_ClipboardUnsupported"] = "当前平台暂不支持剪贴板复制。",
+        ["About_ClipboardUnsupported"] = "Clipboard copy is not supported on this platform.",
         ["About_ReportAiContentSubject"] = "举报 Salmon Egg 中的不当 AI 内容",
         ["About_ReportAiContentBodyPrompt"] = "请在此描述 Salmon Egg 中显示的不当 AI 生成内容。",
         ["About_AcknowledgementVersionFallback"] = "版本未列出",

@@ -725,7 +725,7 @@
                                 <controls:ResponsiveFormRow>
                                     <controls:ResponsiveFormRow.Label>
                                         <TextBlock x:Uid="Diagnostics_AgentLabel"
-                                                   Text="Agent："
+                                                   Text="Agent:"
                                                    Style="{StaticResource SettingsRowTitleTextStyle}"
                                                    VerticalAlignment="Center"/>
                                     </controls:ResponsiveFormRow.Label>
