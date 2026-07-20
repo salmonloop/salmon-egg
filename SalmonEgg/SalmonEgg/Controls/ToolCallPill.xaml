@@ -182,6 +182,23 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Short windows: densify expanded detail / raw payload MaxHeight so tool-call
+                 disclosure stays usable without reserving a large block in the transcript.
+                 Comfortable restores the prior 320/220 caps (MinWindowHeight=760). -->
+            <VisualStateGroup x:Name="DetailHeightStates">
+                <VisualState x:Name="DetailHeightCompact" />
+                <VisualState x:Name="DetailHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="DetailScrollViewer.MaxHeight" Value="320" />
+                        <Setter Target="RawInputScrollViewer.MaxHeight" Value="220" />
+                        <Setter Target="RawOutputScrollViewer.MaxHeight" Value="220" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <StackPanel Orientation="Vertical" Spacing="4">
@@ -309,7 +326,7 @@
                     <StackPanel Spacing="8" Margin="28,8,0,0">
                         <ScrollViewer
                             x:Name="DetailScrollViewer"
-                            MaxHeight="320"
+                            MaxHeight="160"
                             VerticalScrollBarVisibility="Auto"
                             HorizontalScrollBarVisibility="Disabled"
                             Visibility="{x:Bind HasDisplayItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -340,7 +357,11 @@
                                             CornerRadius="6"
                                             Padding="12"
                                             Visibility="{x:Bind HasRawInput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                            <ScrollViewer
+                                                x:Name="RawInputScrollViewer"
+                                                MaxHeight="140"
+                                                VerticalScrollBarVisibility="Auto"
+                                                HorizontalScrollBarVisibility="Auto">
                                                 <TextBlock
                                                     Text="{x:Bind RawInput, Mode=OneWay}"
                                                     FontFamily="{ThemeResource AppMonospaceFontFamily}"
@@ -361,7 +382,11 @@
                                             CornerRadius="6"
                                             Padding="12"
                                             Visibility="{x:Bind HasRawOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                            <ScrollViewer
+                                                x:Name="RawOutputScrollViewer"
+                                                MaxHeight="140"
+                                                VerticalScrollBarVisibility="Auto"
+                                                HorizontalScrollBarVisibility="Auto">
                                                 <TextBlock
                                                     Text="{x:Bind RawOutput, Mode=OneWay}"
                                                     FontFamily="{ThemeResource AppMonospaceFontFamily}"

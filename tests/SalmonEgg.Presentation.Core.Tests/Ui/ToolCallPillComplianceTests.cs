@@ -106,6 +106,32 @@ public sealed class ToolCallPillComplianceTests
         Assert.DoesNotContain("<Setter Property=\"Template\"", xaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ToolCallPill_DetailHeightsDensifyOnShortWindowHeights()
+    {
+        var xaml = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Controls\ToolCallPill.xaml"));
+
+        Assert.Contains("x:Name=\"DetailHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DetailHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DetailHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DetailScrollViewer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RawInputScrollViewer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RawOutputScrollViewer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"160\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DetailScrollViewer.MaxHeight\" Value=\"320\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RawInputScrollViewer.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RawOutputScrollViewer.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+
+        // VSM must live on the single content root (RootFrame Border), not as a second UserControl child.
+        Assert.Contains("x:Name=\"RootFrame\"", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"RootFrame\"", StringComparison.Ordinal)
+            < xaml.IndexOf("DetailHeightStates", StringComparison.Ordinal));
+    }
+
     private static string GetRepoPath(string relativePath)
         => Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
