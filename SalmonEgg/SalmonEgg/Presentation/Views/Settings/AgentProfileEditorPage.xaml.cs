@@ -39,7 +39,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         _profiles = App.ServiceProvider.GetRequiredService<AcpProfilesViewModel>();
 
         InitializeComponent();
-        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
         UpdateBreadcrumb();
     }
 
@@ -54,14 +54,14 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         {
             // Returning to this page should not keep any old input.
             ViewModel.LoadBlankConfiguration();
-            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
             UpdateBreadcrumb();
             return;
         }
 
         if (e.Parameter is AgentProfileEditorArgs args && args.IsEditing && !string.IsNullOrWhiteSpace(args.ProfileId))
         {
-            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "编辑");
+            PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "Edit");
             var config = await _configurationService.LoadConfigurationAsync(args.ProfileId);
             if (config != null)
             {
@@ -76,7 +76,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
             return;
         }
 
-        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "新建");
+        PageTitle = ResolveResourceString("AgentProfileEditorPageTitleNew", "New");
         ViewModel.LoadBlankConfiguration();
         UpdateBreadcrumb();
     }

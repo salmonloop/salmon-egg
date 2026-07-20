@@ -14,7 +14,7 @@ public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyC
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IReadOnlyList<SessionNavItemViewModel> _allSessions;
     private string _filterText = string.Empty;
-    private string _dialogTitle = ResolveResourceString("SessionsDialogDefaultTitle", "会话");
+    private string _dialogTitle = ResolveResourceString("SessionsDialogDefaultTitle", "Sessions");
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -58,7 +58,7 @@ public sealed partial class SessionsListDialog : ContentDialog, INotifyPropertyC
     {
         _allSessions = sessions ?? Array.Empty<SessionNavItemViewModel>();
         _dialogTitle = string.IsNullOrWhiteSpace(title)
-            ? ResolveResourceString("SessionsDialogDefaultTitle", "会话")
+            ? ResolveResourceString("SessionsDialogDefaultTitle", "Sessions")
             : title.Trim();
 
         InitializeComponent();

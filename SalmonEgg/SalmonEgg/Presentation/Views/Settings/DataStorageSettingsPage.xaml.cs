@@ -43,10 +43,10 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = ResolveString("DataStorage_ClearCacheDialog.Title", "清理缓存"),
-            Content = ResolveString("DataStorage_ClearCacheDialog.Content", "将删除本地缓存目录下的所有文件。"),
-            PrimaryButtonText = ResolveString("DataStorage_ClearCacheDialog.PrimaryButtonText", "清理"),
-            SecondaryButtonText = ResolveString("DataStorage_ClearCacheDialog.SecondaryButtonText", "取消"),
+            Title = ResolveString("DataStorage_ClearCacheDialog.Title", "Clear cache"),
+            Content = ResolveString("DataStorage_ClearCacheDialog.Content", "This deletes all files in the local cache folder."),
+            PrimaryButtonText = ResolveString("DataStorage_ClearCacheDialog.PrimaryButtonText", "Clear"),
+            SecondaryButtonText = ResolveString("DataStorage_ClearCacheDialog.SecondaryButtonText", "Cancel"),
             DefaultButton = ContentDialogButton.Primary
         };
 
@@ -62,10 +62,10 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = ResolveString("DataStorage_ResetPreferencesDialog.Title", "恢复默认设置"),
-            Content = ResolveString("DataStorage_ResetPreferencesDialog.Content", "将恢复常规、外观、数据与存储、快捷键等设置到默认值。"),
-            PrimaryButtonText = ResolveString("DataStorage_ResetPreferencesDialog.PrimaryButtonText", "恢复"),
-            SecondaryButtonText = ResolveString("DataStorage_ResetPreferencesDialog.SecondaryButtonText", "取消"),
+            Title = ResolveString("DataStorage_ResetPreferencesDialog.Title", "Restore defaults"),
+            Content = ResolveString("DataStorage_ResetPreferencesDialog.Content", "This restores General, Appearance, Data & Storage, Shortcuts, and related settings to their defaults."),
+            PrimaryButtonText = ResolveString("DataStorage_ResetPreferencesDialog.PrimaryButtonText", "Restore"),
+            SecondaryButtonText = ResolveString("DataStorage_ResetPreferencesDialog.SecondaryButtonText", "Cancel"),
             DefaultButton = ContentDialogButton.Primary
         };
 
@@ -81,10 +81,10 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = ResolveString("DataStorage_ClearAllLocalDataDialog.Title", "清空所有本地数据"),
-            Content = ResolveString("DataStorage_ClearAllLocalDataDialog.Content", "这将删除所有本地数据（配置、日志、缓存、导出等）。该操作不可撤销。"),
-            PrimaryButtonText = ResolveString("DataStorage_ClearAllLocalDataDialog.PrimaryButtonText", "清空"),
-            SecondaryButtonText = ResolveString("DataStorage_ClearAllLocalDataDialog.SecondaryButtonText", "取消"),
+            Title = ResolveString("DataStorage_ClearAllLocalDataDialog.Title", "Clear all local data"),
+            Content = ResolveString("DataStorage_ClearAllLocalDataDialog.Content", "This deletes all local data, including configuration, logs, cache, and exports. This action cannot be undone."),
+            PrimaryButtonText = ResolveString("DataStorage_ClearAllLocalDataDialog.PrimaryButtonText", "Clear"),
+            SecondaryButtonText = ResolveString("DataStorage_ClearAllLocalDataDialog.SecondaryButtonText", "Cancel"),
             DefaultButton = ContentDialogButton.Primary
         };
 

@@ -158,7 +158,7 @@ public sealed class NavigationSelectionProjectorTests
 
         public Task<string?> PickFolderAsync() => Task.FromResult<string?>(null);
         public Task ShowInfoAsync(string message) => Task.CompletedTask;
-        public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "确定", string closeButtonText = "取消") => Task.FromResult(false);
+        public Task<bool> ConfirmAsync(string title, string message, string primaryButtonText = "OK", string closeButtonText = "Cancel") => Task.FromResult(false);
         public Task<string?> PromptTextAsync(string title, string primaryButtonText, string closeButtonText, string initialText) => Task.FromResult<string?>(null);
         public Task<RemoteProjectSelectionResult> ShowRemoteProjectSelectionAsync(RemoteProjectSelectionViewModel viewModel) => Task.FromResult(RemoteProjectSelectionResult.Cancel);
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;

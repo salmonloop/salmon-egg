@@ -33,9 +33,9 @@ public sealed class UiInteractionService : IUiInteractionService
         var dialog = new ContentDialog
         {
             XamlRoot = xamlRoot,
-            Title = ResolveResourceString("UiInteractionInfoDialogTitle", "提示"),
+            Title = ResolveResourceString("UiInteractionInfoDialogTitle", "Notice"),
             Content = message ?? string.Empty,
-            CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+            CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "OK")
         };
 
         await dialog.ShowAsync();
@@ -55,10 +55,10 @@ public sealed class UiInteractionService : IUiInteractionService
             Title = title ?? string.Empty,
             Content = message ?? string.Empty,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
-                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "OK")
                 : primaryButtonText,
             CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
-                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                ? ResolveResourceString("UiInteractionCancelButtonText", "Cancel")
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
@@ -88,10 +88,10 @@ public sealed class UiInteractionService : IUiInteractionService
             Title = title ?? string.Empty,
             Content = input,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
-                ? ResolveResourceString("UiInteractionConfirmButtonText", "确定")
+                ? ResolveResourceString("UiInteractionConfirmButtonText", "OK")
                 : primaryButtonText,
             CloseButtonText = string.IsNullOrWhiteSpace(closeButtonText)
-                ? ResolveResourceString("UiInteractionCancelButtonText", "取消")
+                ? ResolveResourceString("UiInteractionCancelButtonText", "Cancel")
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
@@ -131,9 +131,9 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             // Supported native picker failures keep the user on the same explicit path input flow.
             return await PromptTextAsync(
-                title: ResolveResourceString("UiInteractionPickFolderTitle", "添加项目"),
-                primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "确定"),
-                closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "取消"),
+                title: ResolveResourceString("UiInteractionPickFolderTitle", "Add project"),
+                primaryButtonText: ResolveResourceString("UiInteractionConfirmButtonText", "OK"),
+                closeButtonText: ResolveResourceString("UiInteractionCancelButtonText", "Cancel"),
                 initialText: "").ConfigureAwait(true);
         }
 
