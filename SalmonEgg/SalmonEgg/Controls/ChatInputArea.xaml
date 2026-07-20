@@ -88,13 +88,13 @@
                                         <TextBlock Grid.Column="1"
                                                    Text="{x:Bind Description, Mode=OneWay}"
                                                    TextWrapping="Wrap"
-                                                   Opacity="0.7"/>
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
                         <TextBlock Text="{x:Bind ViewModel.SelectedSlashCommand.InputHint, Mode=OneWay}"
-                                   Opacity="0.6"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    FontSize="12"/>
                     </StackPanel>
                 </Border>

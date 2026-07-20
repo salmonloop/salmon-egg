@@ -209,7 +209,6 @@
                                    Text="{x:Bind RelativeTimeText, Mode=OneWay}"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Opacity="0.55"
                                    Margin="8,0,0,0"/>
                     </Grid>
                 </NavigationViewItem.Content>
@@ -420,7 +419,7 @@
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{x:Bind SecondaryText}"
                                                    FontSize="12"
-                                                   Opacity="0.7"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                    TextTrimming="CharacterEllipsis"
                                                    Visibility="{x:Bind SecondaryText, Converter={StaticResource BoolToVisibilityConverter}}" />
                                     </StackPanel>
@@ -726,7 +725,7 @@
                                                        FontWeight="SemiBold"
                                                        HorizontalAlignment="Center" />
                                             <TextBlock x:Uid="TaskOverviewEmptySubtitle"
-                                                       Opacity="0.7"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                        Margin="0,8,0,0"
                                                        TextAlignment="Center"
                                                        HorizontalAlignment="Center" />

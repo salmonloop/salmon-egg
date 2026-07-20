@@ -142,7 +142,6 @@
                           Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
                 <TextBlock Text="{x:Bind ViewModel.TurnStatusText, Mode=OneWay}"
                            FontSize="11"
-                           Opacity="0.7"
                            VerticalAlignment="Center"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             </StackPanel>

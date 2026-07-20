@@ -158,7 +158,7 @@
                                    ToolTipService.ToolTip="{x:Bind ViewModel.CurrentAgentDisplayText, Mode=OneWay}"
                                    FontSize="12"
                                    FontWeight="SemiBold"
-                                   Opacity="0.72"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
@@ -221,7 +221,6 @@
                                       Visibility="{x:Bind ViewModel.IsTurnStatusFaulted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <TextBlock Text="{x:Bind ViewModel.TurnStatusText, Mode=OneWay}"
                                        FontSize="12"
-                                       Opacity="0.7"
                                        VerticalAlignment="Center"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>

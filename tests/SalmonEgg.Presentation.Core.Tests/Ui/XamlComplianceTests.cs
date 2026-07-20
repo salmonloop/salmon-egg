@@ -2995,6 +2995,33 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void ChatSurfaces_SecondaryTextUsesThemeBrushWithoutStackedOpacity()
+    {
+        var chatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml");
+        var miniChatXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+        var mainPageXaml = LoadXaml(@"SalmonEgg\SalmonEgg\MainPage.xaml");
+
+        Assert.Contains("Text=\"{x:Bind ViewModel.TurnStatusText, Mode=OneWay}\"", chatXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", chatXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.7\"", chatXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.72\"", chatXaml, StringComparison.Ordinal);
+
+        Assert.Contains("Text=\"{x:Bind ViewModel.TurnStatusText, Mode=OneWay}\"", miniChatXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.7\"", miniChatXaml, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("Opacity=\"0.55\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind SecondaryText}\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"TaskOverviewEmptySubtitle\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", mainPageXaml, StringComparison.Ordinal);
+
+        var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
+        Assert.Contains("Text=\"{x:Bind Description, Mode=OneWay}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SelectedSlashCommand.InputHint, Mode=OneWay}\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.7\"", chatInputXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=\"0.6\"", chatInputXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WindowMetricsProvider_DoesNotExposeAppWindowTitleBar()
     {
         var provider = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\WindowMetricsProvider.cs");
