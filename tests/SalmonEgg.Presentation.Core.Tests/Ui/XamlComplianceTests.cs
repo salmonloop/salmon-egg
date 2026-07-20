@@ -1397,6 +1397,27 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void NavigationDialogs_AdaptMaxHeightByWindowHeight()
+    {
+        var sessions = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml");
+        var remote = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\RemoteProjectSelectionDialog.xaml");
+
+        Assert.Contains("x:Name=\"SessionsDialogHeightStates\"", sessions, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionsDialogRoot\"", sessions, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"360\"", sessions, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionsDialogRoot.MaxHeight\" Value=\"560\"", sessions, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", sessions, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", sessions, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"RemoteProjectSelectionHeightStates\"", remote, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RemoteProjectSelectionRoot\"", remote, StringComparison.Ordinal);
+        Assert.Contains("RemoteProjectSelectionDialogMaxHeight\">360<", remote, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RemoteProjectSelectionRoot.MaxHeight\" Value=\"560\"", remote, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", remote, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", remote, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConfigurationEditorDialog_TextsAreLocalized()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\ConfigurationEditorDialog.xaml");
