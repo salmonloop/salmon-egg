@@ -13,6 +13,6 @@ public sealed class ServerConfigurationDisplayTests
             Transport = TransportType.Stdio
         };
 
-        Assert.Equal("Stdio（子进程）", configuration.TransportDisplayName);
+        Assert.Equal("Stdio (subprocess)", configuration.TransportDisplayName);
     }
 }
