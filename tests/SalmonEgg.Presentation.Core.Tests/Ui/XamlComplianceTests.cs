@@ -3217,6 +3217,33 @@ public sealed class XamlComplianceTests
         Assert.Contains("Stored secure data for key '{key}' could not be decrypted", code, StringComparison.Ordinal);
     }
 
+    
+    [Fact]
+    public void AcpAndMcpSettings_ListMinHeightDensifiesOnShortWindowHeights()
+    {
+        var acp = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+        var mcp = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\McpSettingsPage.xaml");
+
+        Assert.Contains("x:Name=\"ListHeightStates\"", acp, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", acp, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AcpProfilesList\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpProfilesList.MinHeight\" Value=\"140\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpRemoteDirectoriesList.MinHeight\" Value=\"120\"", acp, StringComparison.Ordinal);
+        Assert.Contains("MinHeight=\"88\"", acp, StringComparison.Ordinal);
+        Assert.Contains("MinHeight=\"72\"", acp, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"ListHeightStates\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"McpServersList.MinHeight\" Value=\"160\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("MinHeight=\"96\"", mcp, StringComparison.Ordinal);
+
+        // VSM must live on a single content root (Grid), not as a second Page child.
+        Assert.Contains("<Grid>", acp, StringComparison.Ordinal);
+        Assert.Contains("<Grid>", mcp, StringComparison.Ordinal);
+        Assert.True(acp.IndexOf("<Grid>", StringComparison.Ordinal) < acp.IndexOf("ListHeightStates", StringComparison.Ordinal));
+        Assert.True(mcp.IndexOf("<Grid>", StringComparison.Ordinal) < mcp.IndexOf("ListHeightStates", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ResizeGrip_KeepsPlatformCursorImplementationOutOfSharedControl()
     {

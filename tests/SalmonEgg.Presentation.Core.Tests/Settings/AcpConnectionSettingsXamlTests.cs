@@ -249,7 +249,8 @@ public sealed class AcpConnectionSettingsXamlTests
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
         var document = XDocument.Parse(xaml);
 
-        Assert.Contains("<ListView ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AcpProfilesList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectedItem=\"{x:Bind ViewModel.Profiles.SelectedProfileItem, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("SelectionMode=\"Single\"", xaml, StringComparison.Ordinal);
         Assert.Contains("<ToggleSwitch", xaml, StringComparison.Ordinal);

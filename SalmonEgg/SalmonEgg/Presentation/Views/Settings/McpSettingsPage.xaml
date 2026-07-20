@@ -20,270 +20,288 @@
 
     </Page.Resources>
 
-    <ScrollViewer Padding="0"
-                  HorizontalScrollBarVisibility="Disabled">
-        <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
-            <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28">
-                    <StackPanel Spacing="8">
-                        <TextBlock x:Uid="Mcp_PageTitle"
-                                   Text="MCP"
-                                   Style="{StaticResource SettingsPageTitleTextStyle}"/>
-                        <TextBlock x:Uid="Mcp_PageSummary"
-                                   Style="{StaticResource SettingsPageSummaryTextStyle}"/>
-                    </StackPanel>
+    <Grid>
+        <!-- Short windows: denser MCP server list reservation. Comfortable restores prior
+             MinHeight at MinWindowHeight=760 (mirrors Start/Discover height density). -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ListHeightStates">
+                <VisualState x:Name="ListHeightCompact" />
+                <VisualState x:Name="ListHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="McpServersList.MinHeight" Value="160" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
-                    <StackPanel Spacing="12">
-                        <StackPanel Spacing="10"
-                                    AutomationProperties.AutomationId="Mcp.Servers.Header">
-                            <TextBlock x:Uid="Mcp_ServersTitle"
-                                       Style="{StaticResource SettingsSectionTitleTextStyle}"/>
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="8"
-                                        HorizontalAlignment="Left">
-                                <Button x:Name="McpReloadButton"
-                                        x:Uid="Mcp_Reload"
-                                        AutomationProperties.AutomationId="Mcp.Reload"
-                                        Command="{x:Bind ViewModel.LoadCommand}"
-                                        IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
-                                <Button x:Name="McpAddServerButton"
-                                        x:Uid="Mcp_AddServer"
-                                        Command="{x:Bind ViewModel.AddServerCommand}"
-                                        AutomationProperties.AutomationId="Mcp.AddServer"
-                                        Style="{StaticResource AccentButtonStyle}"/>
-                            </StackPanel>
+        <ScrollViewer Padding="0"
+                      HorizontalScrollBarVisibility="Disabled">
+            <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
+                <controls:ResponsiveContentHost.Child>
+                    <StackPanel Spacing="28">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Uid="Mcp_PageTitle"
+                                       Text="MCP"
+                                       Style="{StaticResource SettingsPageTitleTextStyle}"/>
+                            <TextBlock x:Uid="Mcp_PageSummary"
+                                       Style="{StaticResource SettingsPageSummaryTextStyle}"/>
                         </StackPanel>
 
-                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
-                            <StackPanel>
-                                <Grid Style="{StaticResource SettingsRowGridStyle}"
-                                      ColumnDefinitions="*">
-                                    <StackPanel VerticalAlignment="Center"
-                                                Spacing="4">
-                                        <TextBlock x:Uid="Mcp_ServerCatalogDescription"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                   TextWrapping="Wrap"/>
-                                        <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                   TextWrapping="Wrap"
-                                                   AutomationProperties.AutomationId="Mcp.Status"/>
-                                    </StackPanel>
-                                </Grid>
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="10"
+                                        AutomationProperties.AutomationId="Mcp.Servers.Header">
+                                <TextBlock x:Uid="Mcp_ServersTitle"
+                                           Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Left">
+                                    <Button x:Name="McpReloadButton"
+                                            x:Uid="Mcp_Reload"
+                                            AutomationProperties.AutomationId="Mcp.Reload"
+                                            Command="{x:Bind ViewModel.LoadCommand}"
+                                            IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                    <Button x:Name="McpAddServerButton"
+                                            x:Uid="Mcp_AddServer"
+                                            Command="{x:Bind ViewModel.AddServerCommand}"
+                                            AutomationProperties.AutomationId="Mcp.AddServer"
+                                            Style="{StaticResource AccentButtonStyle}"/>
+                                </StackPanel>
+                            </StackPanel>
 
-                                <Border Height="1"
-                                        Margin="16,0"
-                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-
-                                <Border Margin="16,16,16,0"
-                                        Padding="0,16,0,0"
-                                        BorderThickness="0,1,0,0"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        Visibility="{x:Bind ViewModel.IsEditorOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                        AutomationProperties.AutomationId="Mcp.Editor.Panel">
-                                    <StackPanel Spacing="12">
-                                        <Grid ColumnDefinitions="*,Auto"
-                                              ColumnSpacing="12">
-                                            <StackPanel Spacing="4">
-                                                <TextBlock x:Uid="Mcp_EditorTitle"
-                                                           Style="{StaticResource SettingsRowTitleTextStyle}"/>
-                                                <TextBlock x:Uid="Mcp_EditorDescription"
-                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                           TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    x:Uid="Mcp_EditorClose"
-                                                    Command="{x:Bind ViewModel.CloseEditorCommand}"
-                                                    AutomationProperties.AutomationId="Mcp.Editor.Close"
-                                                    VerticalAlignment="Top"/>
-                                        </Grid>
-
-                                        <Grid ColumnDefinitions="*,Auto"
-                                              ColumnSpacing="12"
-                                              HorizontalAlignment="Stretch">
-                                            <TextBlock Text="{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}"
+                            <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                                <StackPanel>
+                                    <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                          ColumnDefinitions="*">
+                                        <StackPanel VerticalAlignment="Center"
+                                                    Spacing="4">
+                                            <TextBlock x:Uid="Mcp_ServerCatalogDescription"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="Wrap"/>
+                                            <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="Wrap"
-                                                       VerticalAlignment="Center"
-                                                       AutomationProperties.AutomationId="Mcp.Import.Status"/>
-                                            <Button Grid.Column="1"
-                                                    x:Uid="Mcp_FillFromClipboardJson"
-                                                    Command="{x:Bind ViewModel.FillEditorFromClipboardCommand}"
-                                                    AutomationProperties.AutomationId="Mcp.FillFromClipboardJson"/>
-                                        </Grid>
+                                                       AutomationProperties.AutomationId="Mcp.Status"/>
+                                        </StackPanel>
+                                    </Grid>
 
-                                        <ContentControl Content="{x:Bind ViewModel.EditingServer, Mode=OneWay}"
-                                                        HorizontalContentAlignment="Stretch">
-                                            <ContentControl.ContentTemplate>
-                                                <DataTemplate x:DataType="vm:McpServerRowViewModel">
-                                                    <StackPanel Spacing="12"
-                                                                HorizontalAlignment="Stretch">
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <Border Margin="16,16,16,0"
+                                            Padding="0,16,0,0"
+                                            BorderThickness="0,1,0,0"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            Visibility="{x:Bind ViewModel.IsEditorOpen, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            AutomationProperties.AutomationId="Mcp.Editor.Panel">
+                                        <StackPanel Spacing="12">
+                                            <Grid ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="12">
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock x:Uid="Mcp_EditorTitle"
+                                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                    <TextBlock x:Uid="Mcp_EditorDescription"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="1"
+                                                        x:Uid="Mcp_EditorClose"
+                                                        Command="{x:Bind ViewModel.CloseEditorCommand}"
+                                                        AutomationProperties.AutomationId="Mcp.Editor.Close"
+                                                        VerticalAlignment="Top"/>
+                                            </Grid>
+
+                                            <Grid ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="12"
+                                                  HorizontalAlignment="Stretch">
+                                                <TextBlock Text="{x:Bind ViewModel.ImportStatusMessage, Mode=OneWay}"
+                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"
+                                                           AutomationProperties.AutomationId="Mcp.Import.Status"/>
+                                                <Button Grid.Column="1"
+                                                        x:Uid="Mcp_FillFromClipboardJson"
+                                                        Command="{x:Bind ViewModel.FillEditorFromClipboardCommand}"
+                                                        AutomationProperties.AutomationId="Mcp.FillFromClipboardJson"/>
+                                            </Grid>
+
+                                            <ContentControl Content="{x:Bind ViewModel.EditingServer, Mode=OneWay}"
+                                                            HorizontalContentAlignment="Stretch">
+                                                <ContentControl.ContentTemplate>
+                                                    <DataTemplate x:DataType="vm:McpServerRowViewModel">
                                                         <StackPanel Spacing="12"
                                                                     HorizontalAlignment="Stretch">
-                                                            <TextBox x:Uid="Mcp_ServerName"
-                                                                     Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                     PlaceholderText="filesystem"
-                                                                     HorizontalAlignment="Stretch"/>
-                                                            <ComboBox x:Uid="Mcp_ServerTransport"
-                                                                      ItemsSource="{x:Bind TransportOptions, Mode=OneWay}"
-                                                                      DisplayMemberPath="Name"
-                                                                      SelectedValuePath="Transport"
-                                                                      SelectedValue="{x:Bind Transport, Mode=TwoWay}"
-                                                                      IsFocusEngagementEnabled="True"
-                                                                      HorizontalAlignment="Stretch"/>
-                                                        </StackPanel>
-
-                                                        <StackPanel Spacing="8"
-                                                                    HorizontalAlignment="Stretch"
-                                                                    Visibility="{x:Bind IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBox x:Uid="Mcp_ServerCommand"
-                                                                     Text="{x:Bind Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                     PlaceholderText="C:\tools\mcp-filesystem.exe"
-                                                                     HorizontalAlignment="Stretch"/>
-                                                            <StackPanel Spacing="4">
-                                                                <TextBox x:Uid="Mcp_ServerArguments"
-                                                                         Text="{x:Bind ArgumentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                         PlaceholderText="--root C:\repo"
+                                                            <StackPanel Spacing="12"
+                                                                        HorizontalAlignment="Stretch">
+                                                                <TextBox x:Uid="Mcp_ServerName"
+                                                                         Text="{x:Bind Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                         PlaceholderText="filesystem"
                                                                          HorizontalAlignment="Stretch"/>
-                                                                <TextBlock x:Uid="Mcp_ServerArgumentsHelp"
-                                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                                           TextWrapping="Wrap"/>
+                                                                <ComboBox x:Uid="Mcp_ServerTransport"
+                                                                          ItemsSource="{x:Bind TransportOptions, Mode=OneWay}"
+                                                                          DisplayMemberPath="Name"
+                                                                          SelectedValuePath="Transport"
+                                                                          SelectedValue="{x:Bind Transport, Mode=TwoWay}"
+                                                                          IsFocusEngagementEnabled="True"
+                                                                          HorizontalAlignment="Stretch"/>
                                                             </StackPanel>
-                                                            <Expander x:Uid="Mcp_ServerAdvanced"
-                                                                      IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
-                                                                      HorizontalAlignment="Stretch"
-                                                                      HorizontalContentAlignment="Stretch">
+
+                                                            <StackPanel Spacing="8"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        Visibility="{x:Bind IsStdio, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <TextBox x:Uid="Mcp_ServerCommand"
+                                                                         Text="{x:Bind Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                         PlaceholderText="C:\tools\mcp-filesystem.exe"
+                                                                         HorizontalAlignment="Stretch"/>
                                                                 <StackPanel Spacing="4">
-                                                                    <TextBox x:Uid="Mcp_ServerEnvironment"
-                                                                             Text="{x:Bind EnvironmentText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                             PlaceholderText="API_KEY=value"
-                                                                             AcceptsReturn="True"
-                                                                             TextWrapping="Wrap"
-                                                                             MinHeight="72"/>
-                                                                    <TextBlock x:Uid="Mcp_ServerEnvironmentHelp"
+                                                                    <TextBox x:Uid="Mcp_ServerArguments"
+                                                                             Text="{x:Bind ArgumentsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                             PlaceholderText="--root C:\repo"
+                                                                             HorizontalAlignment="Stretch"/>
+                                                                    <TextBlock x:Uid="Mcp_ServerArgumentsHelp"
                                                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                TextWrapping="Wrap"/>
                                                                 </StackPanel>
-                                                            </Expander>
-                                                        </StackPanel>
-
-                                                        <StackPanel Spacing="8"
-                                                                    HorizontalAlignment="Stretch"
-                                                                    Visibility="{x:Bind IsHttpLike, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                            <TextBox x:Uid="Mcp_ServerUrl"
-                                                                     Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                     PlaceholderText="https://example.com/mcp"
-                                                                     HorizontalAlignment="Stretch"/>
-                                                            <Expander x:Uid="Mcp_ServerAdvanced"
-                                                                      IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
-                                                                      HorizontalAlignment="Stretch"
-                                                                      HorizontalContentAlignment="Stretch">
-                                                                <StackPanel Spacing="4">
-                                                                    <TextBox x:Uid="Mcp_ServerHeaders"
-                                                                             Text="{x:Bind HeadersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                             PlaceholderText="Authorization: Bearer token"
-                                                                             AcceptsReturn="True"
-                                                                             TextWrapping="Wrap"
-                                                                             MinHeight="72"/>
-                                                                    <TextBlock x:Uid="Mcp_ServerHeadersHelp"
-                                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                                               TextWrapping="Wrap"/>
-                                                                </StackPanel>
-                                                            </Expander>
-                                                        </StackPanel>
-
-                                                        <Grid ColumnDefinitions="*,Auto"
-                                                              ColumnSpacing="12"
-                                                              HorizontalAlignment="Stretch">
-                                                            <TextBlock Text="{x:Bind StatusMessage, Mode=OneWay}"
-                                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                                       TextWrapping="Wrap"
-                                                                       VerticalAlignment="Center"/>
-                                                            <Button Grid.Column="1"
-                                                                    x:Uid="Mcp_EditorSave"
-                                                                    Command="{x:Bind SaveCommand, Mode=OneWay}"
-                                                                    AutomationProperties.AutomationId="Mcp.SaveServer"
-                                                                    Style="{StaticResource AccentButtonStyle}"/>
-                                                        </Grid>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ContentControl.ContentTemplate>
-                                        </ContentControl>
-                                    </StackPanel>
-                                </Border>
-
-                                <ItemsControl x:Name="McpServersList"
-                                              ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
-                                              MinHeight="160"
-                                              AutomationProperties.AutomationId="Mcp.Servers.List">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Spacing="8"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:McpServerRowViewModel">
-                                            <Grid Padding="16"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="16">
-                                                <StackPanel Spacing="4"
-                                                            VerticalAlignment="Center">
-                                                    <TextBlock Text="{x:Bind Name, Mode=OneWay}"
-                                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
-                                                    <TextBlock Text="{x:Bind StatusMessage, Mode=OneWay}"
-                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                               TextWrapping="Wrap"
-                                                               AutomationProperties.AutomationId="Mcp.Server.Status"/>
-                                                </StackPanel>
-
-                                                <StackPanel Grid.Column="1"
-                                                            Orientation="Horizontal"
-                                                            Spacing="8"
-                                                            VerticalAlignment="Center">
-                                                    <ToggleSwitch x:Uid="Mcp_ServerEnabled"
-                                                                  AutomationProperties.AutomationId="Mcp.Server.Enabled"
-                                                                  IsOn="{x:Bind Enabled, Mode=TwoWay}"
-                                                                 />
-                                                    <Button x:Uid="Mcp_EditServer"
-                                                            Command="{x:Bind EditCommand, Mode=OneWay}"
-                                                            AutomationProperties.AutomationId="Mcp.EditServer"/>
-                                                    <Button x:Uid="Mcp_RemoveServer"
-                                                            AutomationProperties.AutomationId="Mcp.RemoveServer">
-                                                        <Button.Content>
-                                                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                                      Glyph="&#xE74D;"/>
-                                                        </Button.Content>
-                                                        <Button.Flyout>
-                                                            <Flyout>
-                                                                <StackPanel Spacing="12"
-                                                                            MinWidth="240">
+                                                                <Expander x:Uid="Mcp_ServerAdvanced"
+                                                                          IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          HorizontalContentAlignment="Stretch">
                                                                     <StackPanel Spacing="4">
-                                                                        <TextBlock x:Uid="Mcp_RemoveServerConfirmTitle"
-                                                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
-                                                                        <TextBlock x:Uid="Mcp_RemoveServerConfirmDescription"
+                                                                        <TextBox x:Uid="Mcp_ServerEnvironment"
+                                                                                 Text="{x:Bind EnvironmentText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                 PlaceholderText="API_KEY=value"
+                                                                                 AcceptsReturn="True"
+                                                                                 TextWrapping="Wrap"
+                                                                                 MinHeight="72"/>
+                                                                        <TextBlock x:Uid="Mcp_ServerEnvironmentHelp"
                                                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                                                    TextWrapping="Wrap"/>
                                                                     </StackPanel>
-                                                                    <Button x:Uid="Mcp_RemoveServerConfirm"
-                                                                            Command="{x:Bind RemoveCommand, Mode=OneWay}"
-                                                                            AutomationProperties.AutomationId="Mcp.RemoveServer.Confirm"
-                                                                            HorizontalAlignment="Right"
-                                                                            Style="{StaticResource AccentButtonStyle}"/>
-                                                                </StackPanel>
-                                                            </Flyout>
-                                                        </Button.Flyout>
-                                                    </Button>
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                                                </Expander>
+                                                            </StackPanel>
 
-                            </StackPanel>
-                        </Border>
+                                                            <StackPanel Spacing="8"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        Visibility="{x:Bind IsHttpLike, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                                <TextBox x:Uid="Mcp_ServerUrl"
+                                                                         Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                         PlaceholderText="https://example.com/mcp"
+                                                                         HorizontalAlignment="Stretch"/>
+                                                                <Expander x:Uid="Mcp_ServerAdvanced"
+                                                                          IsExpanded="{x:Bind IsDetailsExpanded, Mode=TwoWay}"
+                                                                          HorizontalAlignment="Stretch"
+                                                                          HorizontalContentAlignment="Stretch">
+                                                                    <StackPanel Spacing="4">
+                                                                        <TextBox x:Uid="Mcp_ServerHeaders"
+                                                                                 Text="{x:Bind HeadersText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                 PlaceholderText="Authorization: Bearer token"
+                                                                                 AcceptsReturn="True"
+                                                                                 TextWrapping="Wrap"
+                                                                                 MinHeight="72"/>
+                                                                        <TextBlock x:Uid="Mcp_ServerHeadersHelp"
+                                                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                                   TextWrapping="Wrap"/>
+                                                                    </StackPanel>
+                                                                </Expander>
+                                                            </StackPanel>
 
+                                                            <Grid ColumnDefinitions="*,Auto"
+                                                                  ColumnSpacing="12"
+                                                                  HorizontalAlignment="Stretch">
+                                                                <TextBlock Text="{x:Bind StatusMessage, Mode=OneWay}"
+                                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                           TextWrapping="Wrap"
+                                                                           VerticalAlignment="Center"/>
+                                                                <Button Grid.Column="1"
+                                                                        x:Uid="Mcp_EditorSave"
+                                                                        Command="{x:Bind SaveCommand, Mode=OneWay}"
+                                                                        AutomationProperties.AutomationId="Mcp.SaveServer"
+                                                                        Style="{StaticResource AccentButtonStyle}"/>
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ContentControl.ContentTemplate>
+                                            </ContentControl>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <ItemsControl x:Name="McpServersList"
+                                                  ItemsSource="{x:Bind ViewModel.Servers, Mode=OneWay}"
+                                                  MinHeight="96"
+                                                  AutomationProperties.AutomationId="Mcp.Servers.List">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="8"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:McpServerRowViewModel">
+                                                <Grid Padding="16"
+                                                      ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="16">
+                                                    <StackPanel Spacing="4"
+                                                                VerticalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                        <TextBlock Text="{x:Bind StatusMessage, Mode=OneWay}"
+                                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                   TextWrapping="Wrap"
+                                                                   AutomationProperties.AutomationId="Mcp.Server.Status"/>
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                Spacing="8"
+                                                                VerticalAlignment="Center">
+                                                        <ToggleSwitch x:Uid="Mcp_ServerEnabled"
+                                                                      AutomationProperties.AutomationId="Mcp.Server.Enabled"
+                                                                      IsOn="{x:Bind Enabled, Mode=TwoWay}"
+                                                                     />
+                                                        <Button x:Uid="Mcp_EditServer"
+                                                                Command="{x:Bind EditCommand, Mode=OneWay}"
+                                                                AutomationProperties.AutomationId="Mcp.EditServer"/>
+                                                        <Button x:Uid="Mcp_RemoveServer"
+                                                                AutomationProperties.AutomationId="Mcp.RemoveServer">
+                                                            <Button.Content>
+                                                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                          Glyph="&#xE74D;"/>
+                                                            </Button.Content>
+                                                            <Button.Flyout>
+                                                                <Flyout>
+                                                                    <StackPanel Spacing="12"
+                                                                                MinWidth="240">
+                                                                        <StackPanel Spacing="4">
+                                                                            <TextBlock x:Uid="Mcp_RemoveServerConfirmTitle"
+                                                                                       Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                                                            <TextBlock x:Uid="Mcp_RemoveServerConfirmDescription"
+                                                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                                       TextWrapping="Wrap"/>
+                                                                        </StackPanel>
+                                                                        <Button x:Uid="Mcp_RemoveServerConfirm"
+                                                                                Command="{x:Bind RemoveCommand, Mode=OneWay}"
+                                                                                AutomationProperties.AutomationId="Mcp.RemoveServer.Confirm"
+                                                                                HorizontalAlignment="Right"
+                                                                                Style="{StaticResource AccentButtonStyle}"/>
+                                                                    </StackPanel>
+                                                                </Flyout>
+                                                            </Button.Flyout>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </controls:ResponsiveContentHost.Child>
-        </controls:ResponsiveContentHost>
-    </ScrollViewer>
+                </controls:ResponsiveContentHost.Child>
+            </controls:ResponsiveContentHost>
+        </ScrollViewer>
+    </Grid>
 </views:SettingsPageBase>
