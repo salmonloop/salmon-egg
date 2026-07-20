@@ -224,35 +224,36 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
 
+            var localizer = new TestCoreStringLocalizer();
             var startViewModel = CreateStartViewModel(
                 chat,
                 preferences,
                 nav,
                 workflow.Object,
-                localizer: new TestCoreStringLocalizer());
+                localizer: localizer);
 
             Assert.Collection(
                 startViewModel.Suggestions,
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.AnalyzeCodebase", suggestion.AutomationId);
-                    Assert.Equal("分析代码库", suggestion.Title);
-                    Assert.Equal("深入理解项目架构与逻辑", suggestion.Subtitle);
-                    Assert.Equal("请帮我分析一下当前代码库的架构和核心逻辑。", suggestion.Prompt);
+                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebaseTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebaseSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebasePrompt"], suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.RecommendTasks", suggestion.AutomationId);
-                    Assert.Equal("推荐开发任务", suggestion.Title);
-                    Assert.Equal("明确接下来该做什么", suggestion.Subtitle);
-                    Assert.Equal("根据当前进度，推荐几个接下来可以进行的开发任务或优化点。", suggestion.Prompt);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_RecommendTasksPrompt"], suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.ResolveErrors", suggestion.AutomationId);
-                    Assert.Equal("解决最近报错", suggestion.Title);
-                    Assert.Equal("提交错误日志让我看看", suggestion.Subtitle);
-                    Assert.Equal("我刚才遇到了一些报错，请帮我分析并解决它们。", suggestion.Prompt);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_ResolveErrorsPrompt"], suggestion.Prompt);
                 });
         }
         finally
