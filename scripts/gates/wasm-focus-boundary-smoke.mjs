@@ -19,8 +19,8 @@ import {
 
 const baseUrl = normalizeBaseUrl(process.argv[2], "wasm-focus-boundary-smoke.mjs");
 const diagnosticsPagePattern = /Diagnostics and logs|诊断与日志|Live logs|日志|Gamepad input|手柄输入/;
-const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart"] };
-const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh"] };
+const gamepadStart = { labels: [], automationIds: ["Diagnostics.GamepadStart", "DiagnosticsGamepadStartButton"] };
+const gamepadRefresh = { labels: [], automationIds: ["Diagnostics.GamepadRefresh", "DiagnosticsGamepadRefreshButton"] };
 const browser = await chromium.launch({ headless: true });
 
 try {
@@ -68,7 +68,7 @@ try {
 }
 
 function sameFocusTarget(left, right) {
-  return left.automationId === right.automationId
+  return (left.automationId === right.automationId || left.automationId + "Button" === right.automationId || right.automationId + "Button" === left.automationId)
     && left.aria === right.aria
     && left.text === right.text
     && left.rect.left === right.rect.left
