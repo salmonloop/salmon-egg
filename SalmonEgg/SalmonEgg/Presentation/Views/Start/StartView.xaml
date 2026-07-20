@@ -32,7 +32,7 @@
     <Grid x:Name="StartRoot"
           RowDefinitions="*,Auto"
           Background="Transparent"
-          Padding="24,8,24,12">
+          Padding="16,4,16,8">
 
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="HeroSuggestionLayoutStates">
@@ -55,18 +55,21 @@
                 </VisualState>
             </VisualStateGroup>
             <VisualStateGroup x:Name="HeroHeightStates">
-                <!-- Compact (default): shorter title/spacing so short windows keep the composer
-                     on-screen while the hero can scroll natively. Comfortable restores the
-                     full hero density once the window is tall enough. -->
+                <!-- Compact (default): short-window vertical budget. Keep composer pinned and
+                     let HeroScrollViewer own overflow; densify title/spacing so title + three
+                     suggestion cards are usable before scrolling on short heights. Comfortable
+                     restores marketing-scale hero once MinWindowHeight=760. -->
                 <VisualState x:Name="HeightCompact">
                     <VisualState.Setters>
-                        <Setter Target="StartRoot.Padding" Value="24,8,24,12" />
-                        <Setter Target="StartTitle.FontSize" Value="40" />
-                        <Setter Target="StartSubtitle.FontSize" Value="15" />
-                        <Setter Target="HeroLayer.Margin" Value="0,8,0,12" />
+                        <Setter Target="StartRoot.Padding" Value="16,4,16,8" />
+                        <Setter Target="StartTitle.FontSize" Value="28" />
+                        <Setter Target="StartTitle.MaxLines" Value="2" />
+                        <Setter Target="StartSubtitle.FontSize" Value="13" />
+                        <Setter Target="StartSubtitle.MaxLines" Value="2" />
+                        <Setter Target="HeroLayer.Margin" Value="0,4,0,8" />
                         <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
-                        <Setter Target="HeroChromeHost.Spacing" Value="6" />
-                        <Setter Target="HeroContentStack.Spacing" Value="16" />
+                        <Setter Target="HeroChromeHost.Spacing" Value="4" />
+                        <Setter Target="HeroContentStack.Spacing" Value="10" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="HeightComfortable">
@@ -76,7 +79,9 @@
                     <VisualState.Setters>
                         <Setter Target="StartRoot.Padding" Value="24,20,24,24" />
                         <Setter Target="StartTitle.FontSize" Value="64" />
+                        <Setter Target="StartTitle.MaxLines" Value="0" />
                         <Setter Target="StartSubtitle.FontSize" Value="18" />
+                        <Setter Target="StartSubtitle.MaxLines" Value="0" />
                         <Setter Target="HeroLayer.Margin" Value="0,28,0,24" />
                         <Setter Target="HeroLayer.VerticalAlignment" Value="Center" />
                         <Setter Target="HeroChromeHost.Spacing" Value="12" />
@@ -103,22 +108,24 @@
                       VerticalScrollBarVisibility="Auto"
                       ZoomMode="Disabled">
             <Grid x:Name="HeroLayer"
-                  Margin="0,8,0,12"
+                  Margin="0,4,0,8"
                   VerticalAlignment="Top">
                 <StackPanel x:Name="HeroContentStack"
                             MaxWidth="980"
                             HorizontalAlignment="Center"
-                            Spacing="16">
+                            Spacing="10">
                     <StackPanel x:Name="HeroChromeHost"
                                 HorizontalAlignment="Center"
-                                Spacing="6">
+                                Spacing="4">
                         <TextBlock x:Name="StartTitle"
                                    x:Uid="Start_Title"
-                                   FontSize="40"
+                                   FontSize="28"
                                    FontWeight="Bold"
                                    HorizontalAlignment="Center"
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="2"
                                    AutomationProperties.AutomationId="StartView.Title">
                             <TextBlock.Foreground>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -129,11 +136,13 @@
                         </TextBlock>
                         <TextBlock x:Name="StartSubtitle"
                                    x:Uid="Start_Subtitle"
-                                   FontSize="15"
+                                   FontSize="13"
                                    FontWeight="Medium"
                                    HorizontalAlignment="Center"
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxLines="2"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <ItemsControl x:Name="HeroSuggestionsHost"

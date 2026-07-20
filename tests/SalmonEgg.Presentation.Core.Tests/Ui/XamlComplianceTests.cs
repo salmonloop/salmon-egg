@@ -3037,8 +3037,14 @@ public sealed class XamlComplianceTests
         Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroScrollViewer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"HeroLayer\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Target=\"StartTitle.FontSize\" Value=\"40\"", xaml, StringComparison.Ordinal);
+        // Compact is the short-height default; title densifies further than the original 40px
+        // marketing compact so title + three cards remain usable before scrolling.
+        Assert.Contains("Target=\"StartTitle.FontSize\" Value=\"28\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"StartTitle.FontSize\" Value=\"64\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartRoot.Padding\" Value=\"16,4,16,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroContentStack.Spacing\" Value=\"10\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroLayer.VerticalAlignment\" Value=\"Top\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
     }
 
@@ -3051,8 +3057,15 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"CardHeightCompact\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"CardHeightComfortable\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", cardXaml, StringComparison.Ordinal);
-        Assert.Contains("Target=\"HeroSuggestionButton.MinHeight\" Value=\"88\"", cardXaml, StringComparison.Ordinal);
+        // Compact short-height default: icon beside copy, min-height 64, single-line subtitle,
+        // quick-launch chrome collapsed; comfortable restores marketing density.
+        Assert.Contains("Target=\"HeroSuggestionButton.MinHeight\" Value=\"64\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"HeroSuggestionButton.MinHeight\" Value=\"112\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("ColumnDefinitions=\"Auto,*\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroCardQuickLaunchLabel.Visibility\" Value=\"Collapsed\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroCardSubtitle.MaxLines\" Value=\"1\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroCardSubtitle.MaxLines\" Value=\"2\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"CharacterEllipsis\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource AccentBrush}\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorPrimaryBrush}\"", cardXaml, StringComparison.Ordinal);
