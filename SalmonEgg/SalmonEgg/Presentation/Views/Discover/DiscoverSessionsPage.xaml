@@ -65,6 +65,7 @@
                     <VisualState.Setters>
                         <Setter Target="ProfilesHeaderHost.Margin" Value="16,16,16,10" />
                         <Setter Target="ProfilesHeaderHost.Spacing" Value="4" />
+                        <Setter Target="DetailsProfileHeader.Margin" Value="0,0,0,12" />
                         <Setter Target="NoSelectionEmptyHost.Spacing" Value="12" />
                         <Setter Target="NoSelectionEmptyBadge.Width" Value="72" />
                         <Setter Target="NoSelectionEmptyBadge.Height" Value="72" />
@@ -80,6 +81,7 @@
                     <VisualState.Setters>
                         <Setter Target="ProfilesHeaderHost.Margin" Value="24,32,24,16" />
                         <Setter Target="ProfilesHeaderHost.Spacing" Value="8" />
+                        <Setter Target="DetailsProfileHeader.Margin" Value="0,0,0,24" />
                         <Setter Target="NoSelectionEmptyHost.Spacing" Value="24" />
                         <Setter Target="NoSelectionEmptyBadge.Width" Value="120" />
                         <Setter Target="NoSelectionEmptyBadge.Height" Value="120" />
@@ -249,7 +251,10 @@
                     </Grid.RowDefinitions>
 
                     <!-- Header for Selected Profile -->
-                    <Grid Grid.Row="0" Margin="0,0,0,24" ColumnSpacing="16">
+                    <Grid x:Name="DetailsProfileHeader"
+                          Grid.Row="0"
+                          Margin="0,0,0,12"
+                          ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
