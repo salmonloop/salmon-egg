@@ -3024,6 +3024,22 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void StartView_HeroHeightStates_UseAdaptiveTrigger()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+
+        Assert.Contains("x:Name=\"HeroHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeroScrollViewer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeroLayer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartTitle.FontSize\" Value=\"40\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartTitle.FontSize\" Value=\"64\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HeroSuggestionCard_AdaptsDensityByWindowHeight()
     {
         var cardXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\HeroSuggestionCard.xaml");
