@@ -253,10 +253,10 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
     private async Task ArchiveAsync()
     {
         var confirmed = await _ui.ConfirmAsync(
-            title: "归档会话",
-            message: $"确定要归档会话 \"{Title}\" 吗？",
-            primaryButtonText: "归档",
-            closeButtonText: "取消").ConfigureAwait(true);
+            title: "Archive session",
+            message: $"Archive session \"{Title}\"?",
+            primaryButtonText: "Archive",
+            closeButtonText: "Cancel").ConfigureAwait(true);
 
         if (!confirmed)
         {
@@ -266,7 +266,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         var result = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
         if (!result.Succeeded)
         {
-            await _ui.ShowInfoAsync("归档会话失败，请稍后重试。").ConfigureAwait(true);
+            await _ui.ShowInfoAsync("Failed to archive the session. Please try again later.").ConfigureAwait(true);
         }
     }
 }
