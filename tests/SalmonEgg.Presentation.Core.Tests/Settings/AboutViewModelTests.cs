@@ -71,7 +71,8 @@ public sealed class AboutViewModelTests
                 new OpenSourceAcknowledgement("Alpha.Package", "1.2.3", "MIT", "https://example.test/alpha")
             });
 
-        var viewModel = CreateViewModel(acknowledgements.Object);
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(acknowledgements.Object, localizer: localizer);
 
         Assert.Collection(
             viewModel.OpenSourceAcknowledgements,
@@ -85,9 +86,9 @@ public sealed class AboutViewModelTests
             second =>
             {
                 Assert.Equal("Beta.Package", second.Name);
-                Assert.Equal("版本未列出", second.Version);
-                Assert.Equal("许可证未列出", second.License);
-                Assert.Equal("来源未列出", second.SourceUrl);
+                Assert.Equal(localizer["About_AcknowledgementVersionFallback"], second.Version);
+                Assert.Equal(localizer["About_AcknowledgementLicenseFallback"], second.License);
+                Assert.Equal(localizer["About_AcknowledgementSourceFallback"], second.SourceUrl);
             });
     }
 

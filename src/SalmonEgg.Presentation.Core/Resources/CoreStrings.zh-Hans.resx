@@ -315,6 +315,15 @@
   <data name="About_ReportAiContentBodyPrompt" xml:space="preserve">
     <value>请在此描述 Salmon Egg 中显示的不当 AI 生成内容。</value>
   </data>
+  <data name="About_AcknowledgementVersionFallback" xml:space="preserve">
+    <value>版本未列出</value>
+  </data>
+  <data name="About_AcknowledgementLicenseFallback" xml:space="preserve">
+    <value>许可证未列出</value>
+  </data>
+  <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
+    <value>来源未列出</value>
+  </data>
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>当前平台暂不支持打开本地文件或目录。</value>
   </data>

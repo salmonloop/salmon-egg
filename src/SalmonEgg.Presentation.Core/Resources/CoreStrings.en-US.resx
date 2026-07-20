@@ -315,6 +315,15 @@
   <data name="About_ReportAiContentBodyPrompt" xml:space="preserve">
     <value>Please describe the inappropriate AI-generated content shown in Salmon Egg.</value>
   </data>
+  <data name="About_AcknowledgementVersionFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
+  <data name="About_AcknowledgementLicenseFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
+  <data name="About_AcknowledgementSourceFallback" xml:space="preserve">
+    <value>Not listed</value>
+  </data>
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>Opening local files or folders is not supported on this platform.</value>
   </data>

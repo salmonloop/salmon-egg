@@ -23,20 +23,21 @@ public sealed class ShortcutsSettingsViewModelTests
     {
         var preferences = await CreatePreferencesAsync(new AppSettings());
 
-        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer);
 
         Assert.Collection(
             viewModel.Shortcuts,
             first =>
             {
                 Assert.Equal("new_session", first.ActionId);
-                Assert.Equal("新建会话", first.Name);
+                Assert.Equal(localizer["ShortcutAction_NewSession"], first.Name);
                 Assert.Equal("Ctrl+N", first.DefaultGesture);
             },
             second =>
             {
                 Assert.Equal("search", second.ActionId);
-                Assert.Equal("搜索", second.Name);
+                Assert.Equal(localizer["ShortcutAction_Search"], second.Name);
                 Assert.Equal("Ctrl+K", second.DefaultGesture);
             });
         Assert.DoesNotContain(viewModel.Shortcuts, shortcut => shortcut.ActionId == "toggle_right_pane");
