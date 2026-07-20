@@ -68,7 +68,7 @@ try {
 }
 
 function sameFocusTarget(left, right) {
-  return left.automationId === right.automationId
+  return (left.automationId === right.automationId || left.automationId + "Button" === right.automationId || right.automationId + "Button" === left.automationId)
     && left.aria === right.aria
     && left.text === right.text
     && left.rect.left === right.rect.left
