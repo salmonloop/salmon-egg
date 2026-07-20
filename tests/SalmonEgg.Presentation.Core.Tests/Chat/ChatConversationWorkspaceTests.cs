@@ -2899,6 +2899,104 @@ public sealed class ChatConversationWorkspaceTests
             catalog.Single(item => item.ConversationId == "session-2").CatalogUpdatedAt);
     }
 
+    [Fact]
+    public async Task ArchiveConversationAsync_WhenStoreSaveFails_LeavesWorkspaceUnchangedAndReportsFailure()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new FailingConversationStore(new System.NotSupportedException("simulated persistence failure"));
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-2",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc)));
+        await workspace.CommitActivatedConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        var beforeVersion = workspace.ConversationListVersion;
+        var result = await workspace.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.FailureReason);
+
+        // In-memory catalog must still contain the conversation and its Session,
+        // and LastActiveConversationId must not have been cleared.
+        Assert.Contains("session-1", workspace.GetKnownConversationIds());
+        Assert.Contains("session-2", workspace.GetKnownConversationIds());
+        Assert.Equal("session-1", workspace.LastActiveConversationId);
+        Assert.NotNull(sessionManager.GetSession("session-1"));
+        // Deletion tombstone must not have been introduced.
+        Assert.Equal(@"C:\repo\one", sessionManager.GetSession("session-1")!.Cwd);
+        // Roll back should NOT decrement the list version below the pre-mutation snapshot.
+        Assert.True(workspace.ConversationListVersion >= beforeVersion);
+    }
+
+    [Fact]
+    public async Task DeleteConversationAsync_WhenStoreSaveFails_LeavesWorkspaceUnchangedAndReportsFailure()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new FailingConversationStore(new System.InvalidOperationException("simulated persistence failure"));
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var result = await workspace.DeleteConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("session-1", workspace.GetKnownConversationIds());
+        Assert.NotNull(sessionManager.GetSession("session-1"));
+    }
+
+    [Fact]
+    public async Task ArchiveConversationAsync_WhenStoreSaveSucceeds_CommitsTombstoneAndRemovesSession()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        await sessionManager.CreateSessionAsync("session-1");
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+
+        var result = await workspace.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.DoesNotContain("session-1", workspace.GetKnownConversationIds());
+        Assert.Null(sessionManager.GetSession("session-1"));
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        Assert.Contains("session-1", saved.DeletedConversationIds);
+        Assert.DoesNotContain(saved.Conversations, c => c.ConversationId == "session-1");
+    }
+
     private static ChatConversationWorkspace CreateWorkspace(
         IConversationStore store,
         ISessionManager sessionManager,
@@ -2983,6 +3081,24 @@ public sealed class ChatConversationWorkspaceTests
             LastSavedDocument = document;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FailingConversationStore : IConversationStore
+    {
+        private readonly Exception _exception;
+
+        public FailingConversationStore(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public ConversationDocument LoadResult { get; set; } = new();
+
+        public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(LoadResult);
+
+        public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
+            => Task.FromException(_exception);
     }
 
     private sealed class FakeSessionManager : ISessionManager

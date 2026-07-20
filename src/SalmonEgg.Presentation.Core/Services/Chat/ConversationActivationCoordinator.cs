@@ -298,28 +298,33 @@ public sealed class ConversationActivationCoordinator : IConversationActivationC
             await _chatStore.Dispatch(new SelectConversationAction(null));
         }
 
-        await ApplyConversationRemovalAsync(context.ConversationId, removalMode).ConfigureAwait(false);
+        var removalResult = await ApplyConversationRemovalAsync(context.ConversationId, removalMode).ConfigureAwait(false);
+        if (!removalResult.Succeeded)
+        {
+            // The workspace rolled back its own state; compensate the binding/selection
+            // steps this coordinator already performed so the UI stays consistent.
+            await TryCompensateMutationFailureAsync(context).ConfigureAwait(false);
+            _logger.LogWarning(
+                "Conversation removal persistence failed. ConversationId={ConversationId} Reason={Reason}",
+                context.ConversationId,
+                removalResult.FailureReason ?? "Unknown");
+            return removalResult;
+        }
+
         return new ConversationMutationResult(true, context.ClearsActiveConversation, null);
     }
 
-    private async Task ApplyConversationRemovalAsync(string conversationId, ConversationRemovalMode removalMode)
-    {
-        switch (removalMode)
+    private Task<ConversationMutationResult> ApplyConversationRemovalAsync(
+        string conversationId,
+        ConversationRemovalMode removalMode)
+        => removalMode switch
         {
-            case ConversationRemovalMode.Archive:
-                await _conversationWorkspace
-                    .ArchiveConversationAsync(conversationId)
-                    .ConfigureAwait(false);
-                break;
-            case ConversationRemovalMode.Delete:
-                await _conversationWorkspace
-                    .DeleteConversationAsync(conversationId)
-                    .ConfigureAwait(false);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(removalMode), removalMode, "Unknown removal mode.");
-        }
-    }
+            ConversationRemovalMode.Archive => _conversationWorkspace
+                .ArchiveConversationAsync(conversationId),
+            ConversationRemovalMode.Delete => _conversationWorkspace
+                .DeleteConversationAsync(conversationId),
+            _ => throw new ArgumentOutOfRangeException(nameof(removalMode), removalMode, "Unknown removal mode."),
+        };
 
     private async Task TryCompensateMutationFailureAsync(RemovalTransactionContext context)
     {

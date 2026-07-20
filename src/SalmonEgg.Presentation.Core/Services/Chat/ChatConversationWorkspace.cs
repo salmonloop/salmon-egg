@@ -169,19 +169,102 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
     }
 
-    public async Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        => RemoveConversationTransactionallyAsync(conversationId, cancellationToken);
+
+    public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+        => RemoveConversationTransactionallyAsync(conversationId, cancellationToken);
+
+    private async Task<ConversationMutationResult> RemoveConversationTransactionallyAsync(
+        string conversationId,
+        CancellationToken cancellationToken)
     {
-        RemoveConversation(conversationId);
-        await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
+        ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return new ConversationMutationResult(true, false, null);
+        }
+
+        // Stage workspace-owned state only. Leave ISessionManager intact until the
+        // recovery document is persisted successfully so a failed save never needs
+        // to reconstruct a partial Session pre-image.
+        var staged = TryStageConversationRemoval(conversationId);
+        if (staged is null)
+        {
+            return new ConversationMutationResult(true, false, null);
+        }
+
+        try
+        {
+            await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            RestoreStagedConversationRemoval(staged);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RestoreStagedConversationRemoval(staged);
+            _logger.LogWarning(
+                ex,
+                "Conversation removal persistence failed; workspace rolled back. ConversationId={ConversationId}",
+                conversationId);
+            return new ConversationMutationResult(false, false, "ConversationRemovalPersistFailed");
+        }
+
+        _sessionManager.RemoveSession(conversationId);
         return new ConversationMutationResult(true, false, null);
     }
 
-    public async Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
+    private StagedConversationRemoval? TryStageConversationRemoval(string conversationId)
     {
-        RemoveConversation(conversationId);
-        await PersistRecoveryMetadataAsync(cancellationToken).ConfigureAwait(false);
-        return new ConversationMutationResult(true, false, null);
+        StagedConversationRemoval? staged;
+        lock (_stateGate)
+        {
+            if (!_conversationBindings.TryGetValue(conversationId, out var binding))
+            {
+                return null;
+            }
+
+            var previousLastActiveConversationId = LastActiveConversationId;
+            var wasTombstoned = _deletedConversationTombstones.Contains(conversationId);
+
+            if (string.Equals(LastActiveConversationId, conversationId, StringComparison.Ordinal))
+            {
+                LastActiveConversationId = null;
+            }
+
+            _conversationBindings.Remove(conversationId);
+            _deletedConversationTombstones.Add(conversationId);
+
+            staged = new StagedConversationRemoval(binding, wasTombstoned, previousLastActiveConversationId);
+        }
+
+        NotifyConversationListChanged();
+        return staged;
     }
+
+    private void RestoreStagedConversationRemoval(StagedConversationRemoval staged)
+    {
+        lock (_stateGate)
+        {
+            _conversationBindings[staged.Binding.ConversationId] = staged.Binding;
+            if (!staged.WasTombstoned)
+            {
+                _deletedConversationTombstones.Remove(staged.Binding.ConversationId);
+            }
+
+            LastActiveConversationId = staged.PreviousLastActiveConversationId;
+        }
+
+        NotifyConversationListChanged();
+    }
+
+    private sealed record StagedConversationRemoval(
+        ConversationBinding Binding,
+        bool WasTombstoned,
+        string? PreviousLastActiveConversationId);
 
     public Task<bool> TryPrepareConversationActivationAsync(string sessionId, CancellationToken cancellationToken = default)
     {
