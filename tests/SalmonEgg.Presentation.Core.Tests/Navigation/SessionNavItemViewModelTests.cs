@@ -8,6 +8,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
@@ -63,7 +64,7 @@ public sealed class SessionNavItemViewModelTests
         await item.ArchiveCommand.ExecuteAsync(null);
 
         Assert.Single(ui.InfoMessages);
-        Assert.Contains("归档", ui.InfoMessages[0]);
+        Assert.Equal(new TestCoreStringLocalizer()["Nav_ArchiveSessionFailed"], ui.InfoMessages[0]);
     }
 
     [Fact]
@@ -92,7 +93,9 @@ public sealed class SessionNavItemViewModelTests
             ui: ui,
             shell: shell ?? new RecordingPlatformShellService(),
             chatSessionCatalog: chatSessionCatalog,
-            navigationState: new FakeNavigationPaneState(), uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: new FakeNavigationPaneState(),
+            uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
     private sealed class FakeNavigationPaneState : INavigationPaneState
     {

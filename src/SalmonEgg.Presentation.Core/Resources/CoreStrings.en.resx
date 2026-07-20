@@ -826,4 +826,16 @@ Create the corresponding Markdown file in:
   <data name="General_ClearCacheFailed" xml:space="preserve">
     <value>Failed to clear cache. Please try again later.</value>
   </data>
+  <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
+    <value>Archive session</value>
+  </data>
+  <data name="Nav_ArchiveSessionMessage" xml:space="preserve">
+    <value>Archive session "{0}"?</value>
+  </data>
+  <data name="Nav_ArchiveSessionPrimary" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="Nav_ArchiveSessionFailed" xml:space="preserve">
+    <value>Failed to archive the session. Please try again later.</value>
+  </data>
 </root>

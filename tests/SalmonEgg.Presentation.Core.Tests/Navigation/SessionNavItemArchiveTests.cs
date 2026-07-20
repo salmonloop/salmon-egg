@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Moq;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.Navigation;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -13,7 +14,7 @@ namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 public sealed class SessionNavItemArchiveTests
 {
     [Fact]
-    public async Task ArchiveAsync_WhenConfirmedAndFails_UsesEnglishDialogAndErrorCopy()
+    public async Task ArchiveAsync_WhenConfirmedAndFails_UsesLocalizedDialogAndErrorCopy()
     {
         string? title = null;
         string? message = null;
@@ -43,6 +44,7 @@ public sealed class SessionNavItemArchiveTests
         catalog.Setup(c => c.ArchiveConversationAsync("session-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ConversationMutationResult(false, false, "failed"));
 
+        var localizer = new TestCoreStringLocalizer();
         var item = new SessionNavItemViewModel(
             sessionId: "session-1",
             projectId: "project-1",
@@ -51,14 +53,20 @@ public sealed class SessionNavItemArchiveTests
             ui: ui.Object,
             chatSessionCatalog: catalog.Object,
             navigationState: Mock.Of<INavigationPaneState>(),
-            uiDispatcher: new ImmediateUiDispatcher());
+            uiDispatcher: new ImmediateUiDispatcher(),
+            localizer: localizer);
 
         await item.ArchiveCommand.ExecuteAsync(null);
 
-        Assert.Equal("Archive session", title);
-        Assert.Equal("Archive session \"Demo Session\"?", message);
-        Assert.Equal("Archive", primary);
-        Assert.Equal("Cancel", close);
-        Assert.Equal("Failed to archive the session. Please try again later.", info);
+        Assert.Equal(localizer["Nav_ArchiveSessionTitle"], title);
+        Assert.Equal(
+            string.Format(
+                System.Globalization.CultureInfo.CurrentUICulture,
+                localizer["Nav_ArchiveSessionMessage"],
+                "Demo Session"),
+            message);
+        Assert.Equal(localizer["Nav_ArchiveSessionPrimary"], primary);
+        Assert.Equal(localizer["Common_Cancel"], close);
+        Assert.Equal(localizer["Nav_ArchiveSessionFailed"], info);
     }
 }

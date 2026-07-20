@@ -832,4 +832,16 @@
   <data name="General_ClearCacheFailed" xml:space="preserve">
     <value>清除缓存失败，请稍后重试。</value>
   </data>
+  <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
+    <value>归档会话</value>
+  </data>
+  <data name="Nav_ArchiveSessionMessage" xml:space="preserve">
+    <value>要归档会话“{0}”吗？</value>
+  </data>
+  <data name="Nav_ArchiveSessionPrimary" xml:space="preserve">
+    <value>归档</value>
+  </data>
+  <data name="Nav_ArchiveSessionFailed" xml:space="preserve">
+    <value>归档会话失败，请稍后重试。</value>
+  </data>
 </root>

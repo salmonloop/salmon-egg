@@ -476,6 +476,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             chatSessionCatalog: _chatSessionCatalogActions,
             navigationState: _navigationState,
             uiDispatcher: _uiDispatcher,
+            localizer: _localizer,
             isPlaceholder: true);
     }
 
@@ -857,7 +858,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                             shell: _shell,
                             chatSessionCatalog: _chatSessionCatalogActions,
                             navigationState: _navigationState,
-                            uiDispatcher: _uiDispatcher);
+                            uiDispatcher: _uiDispatcher,
+                localizer: _localizer);
                     sessionVm.HasUnreadAttention = session.HasUnreadAttention;
                 }
                 children.Insert(childIndex, sessionVm);
@@ -1221,7 +1223,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 shell: _shell,
                 chatSessionCatalog: _chatSessionCatalogActions,
                 navigationState: _navigationState,
-                uiDispatcher: _uiDispatcher);
+                uiDispatcher: _uiDispatcher,
+                localizer: _localizer);
             vm.HasUnreadAttention = s.HasUnreadAttention;
             return vm;
         }).ToList();

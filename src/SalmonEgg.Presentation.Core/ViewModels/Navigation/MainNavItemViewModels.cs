@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Services;
@@ -123,6 +126,8 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 
 public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
 {
+    private readonly IStringLocalizer<CoreStrings> _localizer;
+
     private readonly IUiInteractionService _ui;
     private readonly IPlatformShellService _shell;
     private readonly IChatSessionCatalog _chatSessionCatalog;
@@ -190,6 +195,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         IChatSessionCatalog chatSessionCatalog,
         INavigationPaneState navigationState,
         IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer,
         bool isPlaceholder = false)
         : this(
             sessionId,
@@ -202,6 +208,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             chatSessionCatalog,
             navigationState,
             uiDispatcher,
+            localizer,
             isPlaceholder)
     {
     }
@@ -217,6 +224,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         IChatSessionCatalog chatSessionCatalog,
         INavigationPaneState navigationState,
         IUiDispatcher uiDispatcher,
+        IStringLocalizer<CoreStrings> localizer,
         bool isPlaceholder = false)
         : base(navigationState, uiDispatcher)
     {
@@ -228,6 +236,7 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         _ui = ui;
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _chatSessionCatalog = chatSessionCatalog ?? throw new ArgumentNullException(nameof(chatSessionCatalog));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         IsPlaceholder = isPlaceholder;
 
         ArchiveCommand = new AsyncRelayCommand(ArchiveAsync, CanArchive);
@@ -253,10 +262,13 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
     private async Task ArchiveAsync()
     {
         var confirmed = await _ui.ConfirmAsync(
-            title: "Archive session",
-            message: $"Archive session \"{Title}\"?",
-            primaryButtonText: "Archive",
-            closeButtonText: "Cancel").ConfigureAwait(true);
+            title: _localizer["Nav_ArchiveSessionTitle"],
+            message: string.Format(
+                CultureInfo.CurrentUICulture,
+                _localizer["Nav_ArchiveSessionMessage"],
+                Title),
+            primaryButtonText: _localizer["Nav_ArchiveSessionPrimary"],
+            closeButtonText: _localizer["Common_Cancel"]).ConfigureAwait(true);
 
         if (!confirmed)
         {
@@ -266,10 +278,36 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
         var result = await _chatSessionCatalog.ArchiveConversationAsync(SessionId).ConfigureAwait(true);
         if (!result.Succeeded)
         {
-            await _ui.ShowInfoAsync("Failed to archive the session. Please try again later.").ConfigureAwait(true);
+            await _ui.ShowInfoAsync(_localizer["Nav_ArchiveSessionFailed"]).ConfigureAwait(true);
         }
     }
+
+    private sealed class NullStringLocalizer : IStringLocalizer<CoreStrings>
+    {
+        public static readonly NullStringLocalizer Instance = new();
+
+        public LocalizedString this[string name]
+            => new(
+                name,
+                name switch
+                {
+                    "Nav_ArchiveSessionTitle" => "Archive session",
+                    "Nav_ArchiveSessionMessage" => "Archive session \"{0}\"?",
+                    "Nav_ArchiveSessionPrimary" => "Archive",
+                    "Nav_ArchiveSessionFailed" => "Failed to archive the session. Please try again later.",
+                    "Common_Cancel" => "Cancel",
+                    _ => name
+                });
+
+        public LocalizedString this[string name, params object[] arguments]
+            => new(name, string.Format(CultureInfo.InvariantCulture, this[name].Value, arguments));
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures) => [];
+
+        public IStringLocalizer WithCulture(CultureInfo culture) => this;
+    }
 }
+
 
 public sealed partial class MoreSessionsNavItemViewModel : MainNavItemViewModel
 {

@@ -278,6 +278,10 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["General_ClearCachePrimary"] = "Clear",
         ["General_ClearCacheSuccess"] = "Local cache cleared.",
         ["General_ClearCacheFailed"] = "Failed to clear cache. Please try again later.",
+        ["Nav_ArchiveSessionTitle"] = "Archive session",
+        ["Nav_ArchiveSessionMessage"] = "Archive session \"{0}\"?",
+        ["Nav_ArchiveSessionPrimary"] = "Archive",
+        ["Nav_ArchiveSessionFailed"] = "Failed to archive the session. Please try again later.",
         ["Common_Cancel"] = "Cancel",
 
     };

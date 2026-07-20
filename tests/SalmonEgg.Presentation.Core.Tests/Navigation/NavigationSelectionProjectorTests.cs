@@ -8,6 +8,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
@@ -31,7 +32,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
@@ -65,7 +67,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
@@ -93,7 +96,8 @@ public sealed class NavigationSelectionProjectorTests
             relativeTimeText: "刚刚",
             ui: new NoopUiInteractionService(),
             chatSessionCatalog: new FakeChatSessionCatalog(),
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
+            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher(),
+            localizer: new TestCoreStringLocalizer());
 
         var projector = new NavigationSelectionProjector();
         var projection = projector.Project(
