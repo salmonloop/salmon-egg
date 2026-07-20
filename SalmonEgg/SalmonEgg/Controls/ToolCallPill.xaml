@@ -13,15 +13,100 @@
     <UserControl.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <converters:PermissionOptionButtonStyleConverter x:Key="PermissionOptionButtonStyleConverter" />
-
-        <DataTemplate x:Key="ToolCallDetailItemTemplate" x:DataType="chatVm:ToolCallDetailItem">
-            <TextBlock
-                Text="{x:Bind DisplayText, Mode=OneWay}"
-                Style="{StaticResource BodyTextBlockStyle}"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                TextWrapping="Wrap"
-                IsTextSelectionEnabled="True" />
-        </DataTemplate>
+        <converters:ToolCallDetailTemplateSelector x:Key="ToolCallDetailTemplateSelector">
+            <converters:ToolCallDetailTemplateSelector.TextTemplate>
+                <DataTemplate x:DataType="chatVm:ToolCallDetailItem">
+                    <TextBlock
+                        Text="{x:Bind Text, Mode=OneWay}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        TextWrapping="Wrap"
+                        IsTextSelectionEnabled="True" />
+                </DataTemplate>
+            </converters:ToolCallDetailTemplateSelector.TextTemplate>
+            <converters:ToolCallDetailTemplateSelector.LocationTemplate>
+                <DataTemplate x:DataType="chatVm:ToolCallDetailItem">
+                    <Border
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="8,4"
+                        HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <SymbolIcon Symbol="Page" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind DisplayText, Mode=OneWay}"
+                                FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                TextTrimming="CharacterEllipsis"
+                                MaxLines="1" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </converters:ToolCallDetailTemplateSelector.LocationTemplate>
+            <converters:ToolCallDetailTemplateSelector.DiffTemplate>
+                <DataTemplate x:DataType="chatVm:ToolCallDetailItem">
+                    <Border
+                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12">
+                        <StackPanel Spacing="6">
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="6"
+                                Visibility="{x:Bind HasPath, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <SymbolIcon Symbol="Edit" Foreground="{ThemeResource SystemFillColorAttentionBrush}" />
+                                <TextBlock
+                                    Text="{x:Bind Path, Mode=OneWay}"
+                                    FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextTrimming="CharacterEllipsis"
+                                    MaxLines="1" />
+                            </StackPanel>
+                            <ScrollViewer
+                                HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Disabled"
+                                Visibility="{x:Bind HasDiffNewText, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock
+                                    Text="{x:Bind DiffNewText, Mode=OneWay}"
+                                    FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                    TextWrapping="NoWrap"
+                                    IsTextSelectionEnabled="True"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </converters:ToolCallDetailTemplateSelector.DiffTemplate>
+            <converters:ToolCallDetailTemplateSelector.TerminalTemplate>
+                <DataTemplate x:DataType="chatVm:ToolCallDetailItem">
+                    <Border
+                        Background="{ThemeResource AppTerminalSurfaceBrush}"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock
+                                x:Uid="ToolCallPillTerminalLabel"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind TerminalId, Mode=OneWay}"
+                                FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                TextWrapping="NoWrap"
+                                TextTrimming="CharacterEllipsis"
+                                IsTextSelectionEnabled="True"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </converters:ToolCallDetailTemplateSelector.TerminalTemplate>
+        </converters:ToolCallDetailTemplateSelector>
 
         <DataTemplate x:Key="PermissionOptionTemplate" x:DataType="chatVm:PermissionOptionViewModel">
             <Button
@@ -40,7 +125,6 @@
                 </StackPanel>
             </Button>
         </DataTemplate>
-
     </UserControl.Resources>
 
     <Border
@@ -100,158 +184,214 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <Expander
-            x:Name="RootExpander"
-            Padding="0"
-            IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
-            Expanding="RootExpander_Expanding"
-            Collapsed="RootExpander_Collapsed"
-            AutomationProperties.AutomationId="ToolCallPill.RootButton"
-            AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
-            <Expander.Resources>
-                <ResourceDictionary>
-                    <ResourceDictionary.ThemeDictionaries>
-                        <ResourceDictionary x:Key="Light">
-                            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
-                            <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
-                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
-                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
-                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
-                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
-                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
-                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
-                            <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="Dark">
-                            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
-                            <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
-                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
-                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
-                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
-                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
-                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
-                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
-                            <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="HighContrast">
-                            <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="SystemColorButtonFaceColorBrush" />
-                            <StaticResource x:Key="ExpanderHeaderBorderBrush" ResourceKey="SystemColorButtonTextColorBrush" />
-                            <StaticResource x:Key="ExpanderHeaderBorderPointerOverBrush" ResourceKey="SystemColorHighlightColorBrush" />
-                            <StaticResource x:Key="ExpanderHeaderBorderPressedBrush" ResourceKey="SystemColorHighlightColorBrush" />
-                            <Thickness x:Key="ExpanderHeaderBorderThickness">2</Thickness>
-                            <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
-                            <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
-                            <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
-                            <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
-                            <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
-                            <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
-                            <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
-                            <StaticResource x:Key="ExpanderContentBackground" ResourceKey="SystemColorWindowColorBrush" />
-                            <StaticResource x:Key="ExpanderContentBorderBrush" ResourceKey="SystemColorWindowTextColorBrush" />
-                        </ResourceDictionary>
-                    </ResourceDictionary.ThemeDictionaries>
-                </ResourceDictionary>
-            </Expander.Resources>
-            <Expander.Header>
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Vertical" Spacing="4">
+            <Expander
+                x:Name="RootExpander"
+                Padding="0"
+                IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                Expanding="RootExpander_Expanding"
+                Collapsed="RootExpander_Collapsed"
+                AutomationProperties.AutomationId="ToolCallPill.RootButton"
+                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
+                <Expander.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
+                                <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+                                <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                                <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                                <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                                <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                                <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                                <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
+                                <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Dark">
+                                <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="Transparent" />
+                                <Thickness x:Key="ExpanderHeaderBorderThickness">0</Thickness>
+                                <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                                <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                                <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                                <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                                <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                                <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
+                                <SolidColorBrush x:Key="ExpanderContentBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="Transparent" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <StaticResource x:Key="ExpanderHeaderBackground" ResourceKey="SystemColorButtonFaceColorBrush" />
+                                <StaticResource x:Key="ExpanderHeaderBorderBrush" ResourceKey="SystemColorButtonTextColorBrush" />
+                                <StaticResource x:Key="ExpanderHeaderBorderPointerOverBrush" ResourceKey="SystemColorHighlightColorBrush" />
+                                <StaticResource x:Key="ExpanderHeaderBorderPressedBrush" ResourceKey="SystemColorHighlightColorBrush" />
+                                <Thickness x:Key="ExpanderHeaderBorderThickness">2</Thickness>
+                                <Thickness x:Key="ExpanderHeaderPadding">0</Thickness>
+                                <x:Double x:Key="ExpanderChevronButtonSize">0</x:Double>
+                                <x:Double x:Key="ExpanderChevronGlyphSize">0</x:Double>
+                                <Thickness x:Key="ExpanderChevronMargin">0</Thickness>
+                                <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="ExpanderChevronForeground" Color="Transparent" />
+                                <Thickness x:Key="ExpanderChevronBorderThickness">0</Thickness>
+                                <StaticResource x:Key="ExpanderContentBackground" ResourceKey="SystemColorWindowColorBrush" />
+                                <StaticResource x:Key="ExpanderContentBorderBrush" ResourceKey="SystemColorWindowTextColorBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Expander.Resources>
+                <Expander.Header>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                    <Grid
-                        Grid.Column="0"
-                        Width="20"
-                        Height="20"
-                        VerticalAlignment="Top"
-                        ChildrenTransitions="{x:Bind models:UiMotionController.Current.StatusIconTransitions, Mode=OneWay}">
-                        <ProgressRing
-                            IsActive="{x:Bind IsInProgress, Mode=OneWay}"
-                            Width="14"
-                            Height="14"
-                            Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                            Visibility="{x:Bind IsInProgress, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <FontIcon
-                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                            Glyph="&#xE10B;"
-                            FontSize="12"
-                            Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                            Visibility="{x:Bind IsCompleted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <FontIcon
-                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                            Glyph="&#xE10A;"
-                            FontSize="12"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                            Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        <FontIcon
-                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                            Glyph="&#xE711;"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Visibility="{x:Bind IsCancelled, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        <Grid
+                            Grid.Column="0"
+                            Width="20"
+                            Height="20"
+                            VerticalAlignment="Top"
+                            ChildrenTransitions="{x:Bind models:UiMotionController.Current.StatusIconTransitions, Mode=OneWay}">
+                            <ProgressRing
+                                IsActive="{x:Bind IsInProgress, Mode=OneWay}"
+                                Width="14"
+                                Height="14"
+                                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                Visibility="{x:Bind IsInProgress, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Glyph="&#xE10B;"
+                                FontSize="12"
+                                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                Visibility="{x:Bind IsCompleted, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Glyph="&#xE10A;"
+                                FontSize="12"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Visibility="{x:Bind IsFailed, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                Glyph="&#xE711;"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Visibility="{x:Bind IsCancelled, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock
+                                x:Name="ToolNameTextBlock"
+                                Text="{x:Bind DisplayToolName, Mode=OneWay}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                FontWeight="Normal"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Text="{x:Bind Summary, Mode=OneWay}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextTrimming="CharacterEllipsis"
+                                MaxLines="1"
+                                Visibility="{x:Bind HasSummary, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </StackPanel>
                     </Grid>
+                </Expander.Header>
 
-                    <StackPanel Grid.Column="1" Spacing="2">
-                        <TextBlock
-                            x:Name="ToolNameTextBlock"
-                            Text="{x:Bind DisplayToolName, Mode=OneWay}"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            FontWeight="Normal"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextTrimming="CharacterEllipsis" />
-                        <TextBlock
-                            Text="{x:Bind DisplaySummary, Mode=OneWay}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextTrimming="CharacterEllipsis"
-                            MaxLines="1" />
+                <Expander.Content>
+                    <StackPanel Spacing="8" Margin="28,8,0,0">
+                        <ScrollViewer
+                            x:Name="DetailScrollViewer"
+                            MaxHeight="320"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled"
+                            Visibility="{x:Bind HasDisplayItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ItemsControl
+                                ItemsSource="{x:Bind DetailItems, Mode=OneWay}"
+                                ItemTemplateSelector="{StaticResource ToolCallDetailTemplateSelector}" />
+                        </ScrollViewer>
+
+                        <Button
+                            x:Name="ViewRawButton"
+                            HorizontalAlignment="Left"
+                            Visibility="{x:Bind HasRawPayload, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Button.Content>
+                                <TextBlock x:Uid="ToolCallPillViewRaw" Style="{StaticResource CaptionTextBlockStyle}" />
+                            </Button.Content>
+                            <Button.Flyout>
+                                <Flyout Placement="Right">
+                                    <StackPanel Spacing="8" Width="440">
+                                        <TextBlock
+                                            x:Uid="ToolCallPillRawInput"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Visibility="{x:Bind HasRawInput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12"
+                                            Visibility="{x:Bind HasRawInput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                                <TextBlock
+                                                    Text="{x:Bind RawInput, Mode=OneWay}"
+                                                    FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                                    TextWrapping="Wrap"
+                                                    IsTextSelectionEnabled="True"
+                                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </ScrollViewer>
+                                        </Border>
+                                        <TextBlock
+                                            x:Uid="ToolCallPillRawOutput"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Visibility="{x:Bind HasRawOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12"
+                                            Visibility="{x:Bind HasRawOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                                <TextBlock
+                                                    Text="{x:Bind RawOutput, Mode=OneWay}"
+                                                    FontFamily="{ThemeResource AppMonospaceFontFamily}"
+                                                    TextWrapping="Wrap"
+                                                    IsTextSelectionEnabled="True"
+                                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
-                </Grid>
-            </Expander.Header>
+                </Expander.Content>
+            </Expander>
 
-            <Expander.Content>
-                <ScrollViewer
-                    x:Name="DetailScrollViewer"
-                    Margin="28,8,0,0"
-                    MaxHeight="{x:Bind PreviewMaxHeight, Mode=OneWay}"
-                    VerticalScrollBarVisibility="Hidden"
-                    HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Spacing="8">
-                    <TextBlock
-                        Text="{x:Bind PayloadHeaderText, Mode=OneWay}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Visibility="{x:Bind HasDisplayItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-                    <StackPanel
-                        Spacing="8"
-                        Visibility="{x:Bind HasPendingPermissionRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock
-                            Text="{x:Bind PermissionHeaderText, Mode=OneWay}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <ItemsControl
-                            ItemsSource="{x:Bind PermissionOptions, Mode=OneWay}"
-                            ItemTemplate="{StaticResource PermissionOptionTemplate}" />
-                    </StackPanel>
-
+            <InfoBar
+                x:Name="PermissionInfoBar"
+                Severity="Warning"
+                IsClosable="False"
+                IsOpen="{x:Bind HasPendingPermissionRequest, Mode=OneWay}"
+                Visibility="{x:Bind HasPendingPermissionRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                x:Uid="ToolCallPillPermissionInfoBar">
+                <InfoBar.Content>
                     <ItemsControl
-                        ItemsSource="{x:Bind DetailItems, Mode=OneWay}"
-                        ItemTemplate="{StaticResource ToolCallDetailItemTemplate}"
-                        Visibility="{x:Bind HasDisplayItems, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                    </StackPanel>
-                </ScrollViewer>
-            </Expander.Content>
-        </Expander>
+                        ItemsSource="{x:Bind PermissionOptions, Mode=OneWay}"
+                        ItemTemplate="{StaticResource PermissionOptionTemplate}"
+                        Margin="0,4,0,0" />
+                </InfoBar.Content>
+            </InfoBar>
+        </StackPanel>
     </Border>
 </UserControl>

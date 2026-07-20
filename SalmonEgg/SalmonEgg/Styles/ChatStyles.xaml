@@ -152,7 +152,9 @@
                                            IsCompleted="{x:Bind IsToolCallCompleted, Mode=OneWay}"
                                            IsFailed="{x:Bind IsToolCallFailed, Mode=OneWay}"
                                            IsCancelled="{x:Bind IsToolCallCancelled, Mode=OneWay}"
-                                           RawPayload="{x:Bind ToolCallJson, Mode=OneWay}"
+                                           Summary="{x:Bind ToolCallSummary, Mode=OneWay}"
+                                           RawInput="{x:Bind ToolCallRawInputJson, Mode=OneWay}"
+                                           RawOutput="{x:Bind ToolCallRawOutputJson, Mode=OneWay}"
                                            DetailItems="{x:Bind ToolCallDetailItems, Mode=OneWay}"
                                            PendingPermissionRequest="{x:Bind PendingPermissionRequest, Mode=OneWay}" />
                 </StackPanel>

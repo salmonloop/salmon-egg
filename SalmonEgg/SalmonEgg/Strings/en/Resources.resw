@@ -684,12 +684,6 @@
   <data name="Acp_HydrationMode_LoadResponse.Description" xml:space="preserve">
     <value>Consider loading complete when session/load returns; replay continues asynchronously.</value>
   </data>
-  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
-    <value>Payload details</value>
-  </data>
-  <data name="ToolCallPillPermissionHeader" xml:space="preserve">
-    <value>Approval required</value>
-  </data>
   <data name="ToolCallPillKindRead" xml:space="preserve">
     <value>Read file</value>
   </data>
@@ -720,26 +714,20 @@
   <data name="ToolCallPillKindDefault" xml:space="preserve">
     <value>Tool call</value>
   </data>
-  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
-    <value>Path</value>
+  <data name="ToolCallPillPermissionInfoBar.Title" xml:space="preserve">
+    <value>Approval required</value>
   </data>
-  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
-    <value>Query</value>
+  <data name="ToolCallPillViewRaw.Text" xml:space="preserve">
+    <value>View raw</value>
   </data>
-  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
-    <value>Command</value>
+  <data name="ToolCallPillRawInput.Text" xml:space="preserve">
+    <value>Input</value>
   </data>
-  <data name="ToolCallPillSummaryImageLabel" xml:space="preserve">
-    <value>Image</value>
+  <data name="ToolCallPillRawOutput.Text" xml:space="preserve">
+    <value>Output</value>
   </data>
-  <data name="ToolCallPillSummaryImageContent" xml:space="preserve">
-    <value>Image content</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioLabel" xml:space="preserve">
-    <value>Audio</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioContent" xml:space="preserve">
-    <value>Audio content</value>
+  <data name="ToolCallPillTerminalLabel.Text" xml:space="preserve">
+    <value>Terminal</value>
   </data>
   <data name="Appearance_PageTitle.Text" xml:space="preserve">
     <value>Appearance</value>

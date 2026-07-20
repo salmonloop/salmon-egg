@@ -100,6 +100,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private IReadOnlyList<ToolCallDetailItem> _toolCallDetailItems = Array.Empty<ToolCallDetailItem>();
 
         [ObservableProperty]
+        private string? _toolCallSummary;
+
+        [ObservableProperty]
         private IReadOnlyList<ToolCallContent>? _toolCallContent;
 
         [ObservableProperty]
@@ -601,11 +604,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         private void RefreshToolCallDetails()
         {
-            ToolCallDetailItems = ToolCallDetailProjector.Project(
-                ToolCallRawInputJson,
-                ToolCallRawOutputJson,
-                ToolCallContent,
-                ToolCallLocations);
+            ToolCallDetailItems = ToolCallDetailProjector.Project(ToolCallContent, ToolCallLocations);
+            ToolCallSummary = ToolCallDetailProjector.ProjectSummary(
+                ToolCallKind, ToolCallRawInputJson, ToolCallContent, ToolCallLocations);
         }
 
         partial void OnToolCallRawInputJsonChanged(string? value)
@@ -659,11 +660,31 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         }
     }
 
-    public sealed record ToolCallDetailItem(string? Label, string Value, ToolCallDetailKind Kind = ToolCallDetailKind.Text)
+    public sealed record ToolCallDetailItem(ToolCallDetailKind Kind)
     {
-        public bool HasLabel => !string.IsNullOrWhiteSpace(Label);
+        public string? Text { get; init; }
 
-        public string DisplayText => HasLabel ? $"{Label}: {Value}" : Value;
+        public string? Path { get; init; }
+
+        public uint? Line { get; init; }
+
+        public string? DiffOldText { get; init; }
+
+        public string? DiffNewText { get; init; }
+
+        public string? TerminalId { get; init; }
+
+        public string DisplayText => Kind switch
+        {
+            ToolCallDetailKind.Location => Line is null ? (Path ?? string.Empty) : $"{Path}:{Line}",
+            ToolCallDetailKind.Terminal => TerminalId ?? string.Empty,
+            ToolCallDetailKind.Diff => Path ?? string.Empty,
+            _ => Text ?? string.Empty
+        };
+
+        public bool HasPath => !string.IsNullOrWhiteSpace(Path);
+
+        public bool HasDiffNewText => !string.IsNullOrWhiteSpace(DiffNewText);
     }
 
     public enum ToolCallDetailKind
@@ -676,73 +697,161 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
     internal static class ToolCallDetailProjector
     {
+        private const int SummaryMaxLength = 200;
+
         public static IReadOnlyList<ToolCallDetailItem> Project(
-            string? rawInputJson,
-            string? rawOutputJson,
             IReadOnlyList<ToolCallContent>? content,
             IReadOnlyList<ToolCallLocation>? locations)
         {
             var items = new List<ToolCallDetailItem>();
-
-            AppendJson(items, rawInputJson, prefix: null);
-            AppendJson(items, rawOutputJson, prefix: "output");
             AppendContent(items, content);
             AppendLocations(items, locations);
-
             return items;
         }
 
-        private static void AppendJson(List<ToolCallDetailItem> items, string? json, string? prefix)
+        public static string ProjectSummary(
+            ToolCallKind? kind,
+            string? rawInputJson,
+            IReadOnlyList<ToolCallContent>? content,
+            IReadOnlyList<ToolCallLocation>? locations)
         {
-            if (string.IsNullOrWhiteSpace(json))
+            var fromInput = SummarizeInput(kind, rawInputJson);
+            if (!string.IsNullOrWhiteSpace(fromInput))
             {
-                return;
+                return Cap(fromInput);
+            }
+
+            if (content is not null)
+            {
+                foreach (var item in content)
+                {
+                    if (item is DiffToolCallContent diff && !string.IsNullOrWhiteSpace(diff.Path))
+                    {
+                        return Cap(diff.Path);
+                    }
+                }
+            }
+
+            if (locations is not null)
+            {
+                foreach (var location in locations)
+                {
+                    if (!string.IsNullOrWhiteSpace(location.Path))
+                    {
+                        return Cap(location.Line is null ? location.Path : $"{location.Path}:{location.Line}");
+                    }
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string SummarizeInput(ToolCallKind? kind, string? rawInputJson)
+        {
+            if (string.IsNullOrWhiteSpace(rawInputJson))
+            {
+                return string.Empty;
             }
 
             try
             {
-                using var document = JsonDocument.Parse(json);
-                AppendJsonElement(items, document.RootElement, prefix);
+                using var document = JsonDocument.Parse(rawInputJson);
+                var root = document.RootElement;
+                return root.ValueKind switch
+                {
+                    JsonValueKind.Object => SummarizeInputObject(kind, root),
+                    JsonValueKind.Array => SummarizeInputArray(root),
+                    _ => string.Empty
+                };
             }
             catch (JsonException)
             {
-                items.Add(new ToolCallDetailItem(prefix, json.Trim()));
+                return string.Empty;
             }
         }
 
-        private static void AppendJsonElement(List<ToolCallDetailItem> items, JsonElement element, string? prefix)
-        {
-            switch (element.ValueKind)
+        private static string SummarizeInputObject(ToolCallKind? kind, JsonElement root)
+            => kind switch
             {
-                case JsonValueKind.Object:
-                    foreach (var property in element.EnumerateObject())
-                    {
-                        var label = string.IsNullOrWhiteSpace(prefix)
-                            ? property.Name
-                            : $"{prefix}.{property.Name}";
-                        AppendJsonElement(items, property.Value, label);
-                    }
+                ToolCallKind.Search => FirstNonEmpty(
+                    TryGetString(root, "query", "Query"),
+                    TryGetString(root, "path", "Path", "SearchPath", "searchPath")),
+                ToolCallKind.Execute => BuildCommand(
+                    TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
+                    TryGetString(root, "Arguments", "arguments", "Args", "args")),
+                ToolCallKind.Fetch => FirstNonEmpty(
+                    TryGetString(root, "query", "Query", "url", "Url", "uri", "Uri")),
+                _ => FirstNonEmpty(
+                    TryGetString(root, "path", "Path", "SearchPath", "searchPath", "TargetFile", "targetFile"),
+                    TryGetString(root, "query", "Query"),
+                    BuildCommand(
+                        TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
+                        TryGetString(root, "Arguments", "arguments", "Args", "args")))
+            };
 
-                    break;
-                case JsonValueKind.Array:
-                    var index = 0;
-                    foreach (var item in element.EnumerateArray())
-                    {
-                        AppendJsonElement(items, item, $"{prefix ?? "item"}[{index}]");
-                        index++;
-                    }
+        private static string SummarizeInputArray(JsonElement root)
+        {
+            foreach (var item in root.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
 
-                    break;
-                case JsonValueKind.String:
-                    items.Add(new ToolCallDetailItem(prefix, element.GetString() ?? string.Empty));
-                    break;
-                case JsonValueKind.Null:
-                case JsonValueKind.Undefined:
-                    break;
-                default:
-                    items.Add(new ToolCallDetailItem(prefix, element.GetRawText()));
-                    break;
+                if (TryGetString(item, "type") is "diff")
+                {
+                    var path = TryGetString(item, "path");
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        return path;
+                    }
+                }
             }
+
+            return string.Empty;
+        }
+
+        private static string BuildCommand(string? command, string? arguments)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return arguments ?? string.Empty;
+            }
+
+            return string.IsNullOrWhiteSpace(arguments) ? command : $"{command} {arguments}";
+        }
+
+        private static string FirstNonEmpty(params string?[] values)
+        {
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value!;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string Cap(string value)
+            => value.Length > SummaryMaxLength
+                ? string.Concat(value.AsSpan(0, SummaryMaxLength - 1), "…")
+                : value;
+
+        private static string? TryGetString(JsonElement root, params string[] propertyNames)
+        {
+            foreach (var propertyName in propertyNames)
+            {
+                if (root.TryGetProperty(propertyName, out var property))
+                {
+                    return property.ValueKind == JsonValueKind.String
+                        ? property.GetString()
+                        : property.GetRawText();
+                }
+            }
+
+            return null;
         }
 
         private static void AppendContent(List<ToolCallDetailItem> items, IReadOnlyList<ToolCallContent>? content)
@@ -757,30 +866,21 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 switch (item)
                 {
                     case ContentToolCallContent { Content: TextContentBlock textBlock } when !string.IsNullOrWhiteSpace(textBlock.Text):
-                        items.Add(new ToolCallDetailItem(null, textBlock.Text.Trim()));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Text) { Text = textBlock.Text.Trim() });
                         break;
                     case ContentToolCallContent { Content: ResourceLinkContentBlock resourceLink } when !string.IsNullOrWhiteSpace(resourceLink.Uri):
-                        items.Add(new ToolCallDetailItem("resource", resourceLink.Uri, ToolCallDetailKind.Location));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Location) { Path = resourceLink.Uri });
                         break;
                     case DiffToolCallContent diff:
-                        if (!string.IsNullOrWhiteSpace(diff.Path))
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Diff)
                         {
-                            items.Add(new ToolCallDetailItem("path", diff.Path, ToolCallDetailKind.Diff));
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(diff.OldText))
-                        {
-                            items.Add(new ToolCallDetailItem("oldText", diff.OldText, ToolCallDetailKind.Diff));
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(diff.NewText))
-                        {
-                            items.Add(new ToolCallDetailItem("newText", diff.NewText, ToolCallDetailKind.Diff));
-                        }
-
+                            Path = diff.Path,
+                            DiffOldText = diff.OldText,
+                            DiffNewText = diff.NewText
+                        });
                         break;
                     case TerminalToolCallContent terminal when !string.IsNullOrWhiteSpace(terminal.TerminalId):
-                        items.Add(new ToolCallDetailItem("terminalId", terminal.TerminalId, ToolCallDetailKind.Terminal));
+                        items.Add(new ToolCallDetailItem(ToolCallDetailKind.Terminal) { TerminalId = terminal.TerminalId });
                         break;
                 }
             }
@@ -800,8 +900,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                     continue;
                 }
 
-                var value = location.Line is null ? location.Path : $"{location.Path}:{location.Line}";
-                items.Add(new ToolCallDetailItem("location", value, ToolCallDetailKind.Location));
+                items.Add(new ToolCallDetailItem(ToolCallDetailKind.Location) { Path = location.Path, Line = location.Line });
             }
         }
     }

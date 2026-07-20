@@ -1248,12 +1248,6 @@
   <data name="Mcp_ServerHeadersHelp.Text" xml:space="preserve">
     <value>每行一个请求头，格式 Header: value。</value>
   </data>
-  <data name="ToolCallPillPayloadTitle" xml:space="preserve">
-    <value>调用参数详情</value>
-  </data>
-  <data name="ToolCallPillPermissionHeader" xml:space="preserve">
-    <value>需要审批</value>
-  </data>
   <data name="ToolCallPillKindRead" xml:space="preserve">
     <value>读取文件</value>
   </data>
@@ -1284,26 +1278,20 @@
   <data name="ToolCallPillKindDefault" xml:space="preserve">
     <value>工具调用</value>
   </data>
-  <data name="ToolCallPillSummaryPathLabel" xml:space="preserve">
-    <value>路径</value>
+  <data name="ToolCallPillPermissionInfoBar.Title" xml:space="preserve">
+    <value>需要批准</value>
   </data>
-  <data name="ToolCallPillSummaryQueryLabel" xml:space="preserve">
-    <value>查询</value>
+  <data name="ToolCallPillViewRaw.Text" xml:space="preserve">
+    <value>查看原始</value>
   </data>
-  <data name="ToolCallPillSummaryCommandLabel" xml:space="preserve">
-    <value>命令</value>
+  <data name="ToolCallPillRawInput.Text" xml:space="preserve">
+    <value>输入</value>
   </data>
-  <data name="ToolCallPillSummaryImageLabel" xml:space="preserve">
-    <value>图片</value>
+  <data name="ToolCallPillRawOutput.Text" xml:space="preserve">
+    <value>输出</value>
   </data>
-  <data name="ToolCallPillSummaryImageContent" xml:space="preserve">
-    <value>图片内容</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioLabel" xml:space="preserve">
-    <value>音频</value>
-  </data>
-  <data name="ToolCallPillSummaryAudioContent" xml:space="preserve">
-    <value>音频内容</value>
+  <data name="ToolCallPillTerminalLabel.Text" xml:space="preserve">
+    <value>终端</value>
   </data>
   <data name="TaskOverviewPanelButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>任务概览</value>
