@@ -7,8 +7,8 @@ public class SessionNamePolicyTests
     [Fact]
     public void CreateDefault_UsesShortSessionId()
     {
-        Assert.Equal("会话 12345678", SessionNamePolicy.CreateDefault("1234567890"));
-        Assert.Equal("会话 abc", SessionNamePolicy.CreateDefault("abc"));
+        Assert.Equal("Session 12345678", SessionNamePolicy.CreateDefault("1234567890"));
+        Assert.Equal("Session abc", SessionNamePolicy.CreateDefault("abc"));
     }
 
     [Fact]

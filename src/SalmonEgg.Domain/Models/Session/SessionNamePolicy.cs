@@ -13,11 +13,11 @@ namespace SalmonEgg.Domain.Models.Session
             var id = (sessionId ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(id))
             {
-                return "会话";
+                return "Session";
             }
 
             var shortId = id.Length <= 8 ? id : id.Substring(0, 8);
-            return $"会话 {shortId}";
+            return $"Session {shortId}";
         }
 
         public static string? Sanitize(string? input)

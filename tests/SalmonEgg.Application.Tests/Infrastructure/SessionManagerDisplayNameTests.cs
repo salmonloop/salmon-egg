@@ -11,8 +11,8 @@ public sealed class SessionManagerDisplayNameTests
         var manager = new SessionManager();
         var s = await manager.CreateSessionAsync("1234567890");
 
-        Assert.Equal("会话 12345678", s.DisplayName);
-        Assert.Equal("会话 12345678", manager.GetSession("1234567890")!.DisplayName);
+        Assert.Equal("Session 12345678", s.DisplayName);
+        Assert.Equal("Session 12345678", manager.GetSession("1234567890")!.DisplayName);
     }
 
     [Fact]
