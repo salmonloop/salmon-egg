@@ -110,6 +110,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatMedia_ImagePlaceholderWithMime"] = "[image: {0}]",
         ["ChatMedia_AudioPlaceholder"] = "[audio]",
         ["ChatMedia_AudioPlaceholderWithMime"] = "[audio: {0}]",
+        ["McpSettings_DefaultServerName"] = "new-mcp-server",
         ["SearchCommand_NewSessionTitle"] = "New session",
         ["SearchCommand_NewSessionSubtitle"] = "Create a new chat session",
         ["SearchCommand_NewProjectTitle"] = "New project",

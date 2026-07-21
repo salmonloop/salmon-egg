@@ -1,3 +1,5 @@
+using SalmonEgg.Presentation.Core.Resources;
+using Microsoft.Extensions.Localization;
 using System;
 using System.Linq;
 using System.Threading;
@@ -662,13 +664,27 @@ public sealed class McpSettingsViewModelTests
         Assert.Equal("MCP server saved.", viewModel.StatusMessage);
     }
 
+    [Fact]
+    public void AddServer_UsesLocalizedDefaultName()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "McpSettings_DefaultServerName", "新 MCP 服务器");
+        var viewModel = CreateViewModel(new FakeMcpSettingsService(), localizer: localizer);
+
+        viewModel.AddServerCommand.Execute(null);
+
+        Assert.NotNull(viewModel.EditingServer);
+        Assert.Equal("新 MCP 服务器", viewModel.EditingServer!.Name);
+    }
+
     private static McpSettingsViewModel CreateViewModel(
         IMcpSettingsService settingsService,
-        IPlatformShellService? platformShell = null)
+        IPlatformShellService? platformShell = null,
+        IStringLocalizer<CoreStrings>? localizer = null)
         => new(
             settingsService,
             platformShell ?? new FakePlatformShellService(),
-            new TestCoreStringLocalizer(),
+            localizer ?? new TestCoreStringLocalizer(),
             Mock.Of<ILogger<McpSettingsViewModel>>());
 
     private sealed class FakePlatformShellService : IPlatformShellService

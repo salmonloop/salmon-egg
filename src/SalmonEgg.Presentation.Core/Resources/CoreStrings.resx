@@ -1109,4 +1109,7 @@
   <data name="ChatMedia_AudioPlaceholderWithMime" xml:space="preserve">
     <value>[audio: {0}]</value>
   </data>
+  <data name="McpSettings_DefaultServerName" xml:space="preserve">
+    <value>new-mcp-server</value>
+  </data>
 </root>

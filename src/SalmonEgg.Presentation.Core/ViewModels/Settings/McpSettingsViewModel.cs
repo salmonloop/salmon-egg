@@ -130,7 +130,7 @@ public sealed partial class McpSettingsViewModel : ObservableObject, IDisposable
     {
         var row = new McpServerRowViewModel(RemoveServer, SaveServerAsync)
         {
-            Name = "new-mcp-server",
+            Name = ResolveDefaultServerName(),
             Transport = McpServerTransport.Stdio,
             IsDetailsExpanded = true
         };
@@ -530,6 +530,15 @@ public sealed partial class McpSettingsViewModel : ObservableObject, IDisposable
         var endChar = payload[start] == '{' ? '}' : ']';
         var end = payload.LastIndexOf(endChar);
         return end > start ? payload[start..(end + 1)] : payload;
+    }
+
+    private string ResolveDefaultServerName()
+    {
+        const string fallback = "new-mcp-server";
+        var localized = _localizer["McpSettings_DefaultServerName"];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private void SetImportStatus(string resourceKey)

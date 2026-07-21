@@ -139,6 +139,7 @@ public sealed class CoreStringResourceTests
     [InlineData("ChatMedia_ImagePlaceholderWithMime")]
     [InlineData("ChatMedia_AudioPlaceholder")]
     [InlineData("ChatMedia_AudioPlaceholderWithMime")]
+    [InlineData("McpSettings_DefaultServerName")]
     [InlineData("AgentProfileEditor_ValidationFailedFormat")]
     [InlineData("AgentProfileEditor_SaveFailedFormat")]
     [InlineData("AcpProfiles_RefreshFailed")]
