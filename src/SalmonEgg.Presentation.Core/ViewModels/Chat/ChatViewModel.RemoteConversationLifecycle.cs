@@ -1319,24 +1319,6 @@ public partial class ChatViewModel
             return;
         }
 
-        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
-        var contentSlice = state.ResolveContentSlice(conversationId);
-        if (contentSlice is { } projectedContent
-            && ConversationProjectionReadinessPolicy.HasProjectedConversationContent(projectedContent))
-        {
-            return;
-        }
-
-        if (string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal)
-            && ConversationProjectionReadinessPolicy.HasProjectedConversationContent(
-                new ConversationContentSlice(
-                    state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
-                    state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
-                    state.ShowPlanPanel)))
-        {
-            return;
-        }
-
         var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
         var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
         var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
@@ -1349,22 +1331,60 @@ public partial class ChatViewModel
             return;
         }
 
-        if ((snapshot.Transcript?.Count ?? 0) == 0
-            && (snapshot.Plan?.Count ?? 0) == 0
+        var snapshotTranscript = snapshot.Transcript?.ToImmutableList()
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var snapshotPlan = snapshot.Plan?.ToImmutableList()
+            ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var snapshotDurableMessageCount = ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(
+            snapshotTranscript);
+        if (snapshotDurableMessageCount == 0
+            && snapshotPlan.Count == 0
             && !snapshot.ShowPlanPanel)
         {
             return;
         }
 
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var contentSlice = state.ResolveContentSlice(conversationId);
+        if (contentSlice is null
+            && string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal))
+        {
+            contentSlice = new ConversationContentSlice(
+                state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                state.ShowPlanPanel);
+        }
+
+        var storeTranscript = contentSlice?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var storePlan = contentSlice?.PlanEntries
+            ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty;
+        var storeShowPlanPanel = contentSlice?.ShowPlanPanel ?? false;
+        var storeDurableMessageCount = ConversationProjectionReadinessPolicy.CountDurableTranscriptMessages(
+            storeTranscript);
+
+        // Hollow shells (thinking-only / ShowPlanPanel-only) count as projected for UI chrome,
+        // but they are not durable warm content. Rematerialize when RuntimeProjection still
+        // owns richer transcript/plan so A->B->A cannot land blank.
+        var needsMaterialization =
+            storeDurableMessageCount < snapshotDurableMessageCount
+            || storePlan.Count < snapshotPlan.Count
+            || (!storeShowPlanPanel && snapshot.ShowPlanPanel);
+        if (!needsMaterialization)
+        {
+            return;
+        }
+
         Logger.LogInformation(
-            "Materializing warm-reusable workspace projection before warm short-circuit. ConversationId={ConversationId} TranscriptCount={TranscriptCount}",
+            "Materializing warm-reusable workspace projection before warm short-circuit. ConversationId={ConversationId} StoreDurableCount={StoreDurableCount} SnapshotDurableCount={SnapshotDurableCount}",
             conversationId,
-            snapshot.Transcript?.Count ?? 0);
+            storeDurableMessageCount,
+            snapshotDurableMessageCount);
         await _chatStore.Dispatch(new HydrateConversationAction(
             conversationId,
-            snapshot.Transcript.ToImmutableList(),
-            snapshot.Plan.ToImmutableList(),
-            snapshot.ShowPlanPanel)).ConfigureAwait(false);
+            snapshotDurableMessageCount >= storeDurableMessageCount ? snapshotTranscript : storeTranscript,
+            snapshotPlan.Count >= storePlan.Count ? snapshotPlan : storePlan,
+            storeShowPlanPanel || snapshot.ShowPlanPanel)).ConfigureAwait(false);
     }
 
     private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(

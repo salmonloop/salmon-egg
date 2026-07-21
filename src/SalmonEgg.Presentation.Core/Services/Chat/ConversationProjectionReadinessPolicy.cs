@@ -40,6 +40,37 @@ public static class ConversationProjectionReadinessPolicy
             || content.PlanEntries.Count > 0
             || content.ShowPlanPanel;
 
+    /// <summary>
+    /// Durable content for warm materialization: non-thinking transcript rows or plan entries.
+    /// ShowPlanPanel-only and thinking-only shells are not durable and must not block
+    /// RuntimeProjection rematerialization on warm A->B->A returns.
+    /// </summary>
+    public static bool HasDurableProjectedConversationContent(ConversationContentSlice content)
+        => CountDurableTranscriptMessages(content.Transcript) > 0
+            || content.PlanEntries.Count > 0;
+
+    public static int CountDurableTranscriptMessages(IImmutableList<ConversationMessageSnapshot>? transcript)
+    {
+        if (transcript is null || transcript.Count == 0)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        for (var index = 0; index < transcript.Count; index++)
+        {
+            if (!IsThinkingPlaceholder(transcript[index]))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool IsThinkingPlaceholder(ConversationMessageSnapshot message)
+        => string.Equals(message.ContentType, "thinking", StringComparison.OrdinalIgnoreCase);
+
     public static bool HasProjectedPrimarySessionState(ConversationSessionStateSlice sessionState)
         => sessionState.AvailableModes.Count > 0
             || sessionState.ConfigOptions.Count > 0
