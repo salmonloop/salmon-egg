@@ -1025,4 +1025,28 @@
   <data name="AskUser_SingleChoice" xml:space="preserve">
     <value>单选</value>
   </data>
+  <data name="VoiceInput_PermissionCheckFailed" xml:space="preserve">
+    <value>语音输入权限检查失败。</value>
+  </data>
+  <data name="VoiceInput_Failed" xml:space="preserve">
+    <value>语音输入失败。</value>
+  </data>
+  <data name="VoiceInput_FailedWithDetail" xml:space="preserve">
+    <value>语音输入失败：{0}</value>
+  </data>
+  <data name="VoiceInput_StopFailed" xml:space="preserve">
+    <value>停止语音输入失败。</value>
+  </data>
+  <data name="VoiceInput_StopFailedWithDetail" xml:space="preserve">
+    <value>停止语音输入失败：{0}</value>
+  </data>
+  <data name="ChatAuth_Required" xml:space="preserve">
+    <value>助手需要先完成身份验证才能继续响应。</value>
+  </data>
+  <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
+    <value>身份验证失败：{0}</value>
+  </data>
+  <data name="ChatPrompt_CancelFailed" xml:space="preserve">
+    <value>取消失败。</value>
+  </data>
 </root>

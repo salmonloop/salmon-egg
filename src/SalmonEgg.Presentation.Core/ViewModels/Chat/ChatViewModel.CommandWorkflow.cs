@@ -124,7 +124,11 @@ public partial class ChatViewModel
             if (!authenticated)
             {
                 _sendPromptCts = null;
-                ShowTransientNotificationToast(AuthenticationHintMessage ?? "The agent requires authentication before it can respond.");
+                ShowTransientNotificationToast(
+                    AuthenticationHintMessage
+                    ?? Localize(
+                        "ChatAuth_Required",
+                        "The agent requires authentication before it can respond."));
                 return;
             }
 
@@ -675,9 +679,12 @@ public partial class ChatViewModel
             if (!permission.IsGranted && !permission.RequiresAuthorization)
             {
                 ClearPendingVoiceInputAuthorizationRetry();
+                var permissionFallback = Localize(
+                    "VoiceInput_PermissionCheckFailed",
+                    "Voice input permission check failed.");
                 var permissionMessage = VoiceInputErrorMessageSanitizer.Normalize(
                     permission.Message,
-                    "Voice input permission check failed.");
+                    permissionFallback);
                 VoiceInputErrorMessage = permissionMessage;
                 ShowTransientNotificationToast(permissionMessage);
                 SetVoiceInputTransportState(VoiceInputTransportState.Idle);
@@ -749,16 +756,20 @@ public partial class ChatViewModel
                 ClearPendingVoiceInputAuthorizationRetry();
             }
 
-            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Voice input failed.");
+            var failedFallback = Localize("VoiceInput_Failed", "Voice input failed.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, failedFallback);
             Logger.LogWarning(
                 ex,
                 "Voice input start failed before recognizer ready. RequestId={RequestId}",
                 requestId);
             VoiceInputErrorMessage = message;
             ShowTransientNotificationToast(
-                string.Equals(message, "Voice input failed.", StringComparison.Ordinal)
+                string.Equals(message, failedFallback, StringComparison.Ordinal)
                     ? message
-                    : $"Voice input failed: {message}");
+                    : FormatLocalize(
+                        "VoiceInput_FailedWithDetail",
+                        "Voice input failed: {0}",
+                        message));
             if (requestId is not null && IsCurrentVoiceInputRequest(requestId))
             {
                 IsVoiceInputListening = false;
@@ -962,12 +973,18 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             RestoreVoiceInputFrontSession(requestId);
-            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, "Failed to stop voice input.");
+            var stopFailedFallback = Localize(
+                "VoiceInput_StopFailed",
+                "Failed to stop voice input.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(ex.Message, stopFailedFallback);
             VoiceInputErrorMessage = message;
             ShowTransientNotificationToast(
-                string.Equals(message, "Failed to stop voice input.", StringComparison.Ordinal)
+                string.Equals(message, stopFailedFallback, StringComparison.Ordinal)
                     ? message
-                    : $"Failed to stop voice input: {message}");
+                    : FormatLocalize(
+                        "VoiceInput_StopFailedWithDetail",
+                        "Failed to stop voice input: {0}",
+                        message));
         }
     }
 
@@ -1093,7 +1110,9 @@ public partial class ChatViewModel
                 return;
             }
 
-            var message = VoiceInputErrorMessageSanitizer.Normalize(result.Message, "Voice input failed.");
+            var message = VoiceInputErrorMessageSanitizer.Normalize(
+                result.Message,
+                Localize("VoiceInput_Failed", "Voice input failed."));
             VoiceInputErrorMessage = message;
             IsVoiceInputListening = false;
             _activeVoiceInputRequestId = null;
@@ -1258,7 +1277,8 @@ public partial class ChatViewModel
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Cancel prompt failed");
-            ShowTransientNotificationToast("Cancellation failed.");
+            ShowTransientNotificationToast(
+                Localize("ChatPrompt_CancelFailed", "Cancellation failed."));
         }
     }
 

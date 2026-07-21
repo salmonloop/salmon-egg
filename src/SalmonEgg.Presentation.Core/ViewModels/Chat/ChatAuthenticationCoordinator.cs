@@ -50,7 +50,8 @@ public sealed class ChatAuthenticationCoordinator
         ILogger logger,
         Action<string> showTransientNotificationToast,
         AuthMethodDefinition? method,
-        string? messageOverride = null)
+        string? messageOverride = null,
+        string? requiredFallback = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
@@ -59,6 +60,7 @@ public sealed class ChatAuthenticationCoordinator
         var message =
             messageOverride
             ?? method?.Description
+            ?? requiredFallback
             ?? "The agent requires authentication before it can respond.";
 
         _ = coordinator.SetAuthenticationRequiredAsync(message);
@@ -85,7 +87,9 @@ public sealed class ChatAuthenticationCoordinator
         IAcpConnectionCoordinator coordinator,
         ILogger logger,
         Action<string> showTransientNotificationToast,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? requiredFallback = null,
+        Func<string, string>? formatAuthenticationFailed = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(logger);
@@ -99,11 +103,21 @@ public sealed class ChatAuthenticationCoordinator
         var method = GetPrimaryAuthMethod();
         if (method == null || string.IsNullOrWhiteSpace(method.Id))
         {
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                requiredFallback: requiredFallback);
             return false;
         }
 
-        MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+        MarkAuthenticationRequired(
+            coordinator,
+            logger,
+            showTransientNotificationToast,
+            method,
+            requiredFallback: requiredFallback);
 
         try
         {
@@ -116,13 +130,27 @@ public sealed class ChatAuthenticationCoordinator
         }
         catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.MethodNotFound)
         {
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                requiredFallback: requiredFallback);
             return false;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Authenticate failed");
-            MarkAuthenticationRequired(coordinator, logger, showTransientNotificationToast, method, $"Authentication failed: {ex.Message}");
+            var failedMessage = formatAuthenticationFailed is null
+                ? $"Authentication failed: {ex.Message}"
+                : formatAuthenticationFailed(ex.Message);
+            MarkAuthenticationRequired(
+                coordinator,
+                logger,
+                showTransientNotificationToast,
+                method,
+                messageOverride: failedMessage,
+                requiredFallback: requiredFallback);
             return false;
         }
     }

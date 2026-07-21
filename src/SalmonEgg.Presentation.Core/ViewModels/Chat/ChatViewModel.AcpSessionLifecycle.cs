@@ -2034,7 +2034,14 @@ public partial class ChatViewModel
             _acpConnectionCoordinator,
             Logger,
             message => ShowTransientNotificationToast(message),
-            cancellationToken);
+            cancellationToken,
+            requiredFallback: Localize(
+                "ChatAuth_Required",
+                "The agent requires authentication before it can respond."),
+            formatAuthenticationFailed: detail => FormatLocalize(
+                "ChatAuth_FailedWithDetail",
+                "Authentication failed: {0}",
+                detail));
 
     private Task AddMessageToHistoryAsync(string? conversationId, ContentBlock content, bool isOutgoing)
     {

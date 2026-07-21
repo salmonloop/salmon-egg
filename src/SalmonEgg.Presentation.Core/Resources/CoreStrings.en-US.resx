@@ -1019,4 +1019,28 @@ Create the corresponding Markdown file in:
   <data name="AskUser_SingleChoice" xml:space="preserve">
     <value>Single choice</value>
   </data>
+  <data name="VoiceInput_PermissionCheckFailed" xml:space="preserve">
+    <value>Voice input permission check failed.</value>
+  </data>
+  <data name="VoiceInput_Failed" xml:space="preserve">
+    <value>Voice input failed.</value>
+  </data>
+  <data name="VoiceInput_FailedWithDetail" xml:space="preserve">
+    <value>Voice input failed: {0}</value>
+  </data>
+  <data name="VoiceInput_StopFailed" xml:space="preserve">
+    <value>Failed to stop voice input.</value>
+  </data>
+  <data name="VoiceInput_StopFailedWithDetail" xml:space="preserve">
+    <value>Failed to stop voice input: {0}</value>
+  </data>
+  <data name="ChatAuth_Required" xml:space="preserve">
+    <value>The agent requires authentication before it can respond.</value>
+  </data>
+  <data name="ChatAuth_FailedWithDetail" xml:space="preserve">
+    <value>Authentication failed: {0}</value>
+  </data>
+  <data name="ChatPrompt_CancelFailed" xml:space="preserve">
+    <value>Cancellation failed.</value>
+  </data>
 </root>
