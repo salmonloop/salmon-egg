@@ -572,7 +572,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ILogger<NavigationCoordinator>>()));
         services.AddTransient<IShellStartupNavigationService>(sp =>
             new ShellStartupNavigationService(
-                sp.GetRequiredService<INavigationCoordinator>(),
+                sp.GetRequiredService<MainNavigationViewModel>(),
                 sp.GetRequiredService<ILogger<ShellStartupNavigationService>>()));
 
         // Global search

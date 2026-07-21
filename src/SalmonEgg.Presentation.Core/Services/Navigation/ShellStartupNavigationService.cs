@@ -4,21 +4,22 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Services;
 
 public sealed class ShellStartupNavigationService : IShellStartupNavigationService
 {
-    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel _navigationViewModel;
     private readonly ILogger<ShellStartupNavigationService> _logger;
     private int _activationInFlight;
     private bool _activationCompleted;
 
     public ShellStartupNavigationService(
-        INavigationCoordinator navigationCoordinator,
+        MainNavigationViewModel navigationViewModel,
         ILogger<ShellStartupNavigationService>? logger = null)
     {
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _navigationViewModel = navigationViewModel ?? throw new ArgumentNullException(nameof(navigationViewModel));
         _logger = logger ?? NullLogger<ShellStartupNavigationService>.Instance;
     }
 
@@ -36,7 +37,9 @@ public sealed class ShellStartupNavigationService : IShellStartupNavigationServi
 
         try
         {
-            var activated = await _navigationCoordinator.ActivateStartAsync().ConfigureAwait(true);
+            // Route through the navigation VM owner so cold-start Start activation
+            // failures surface the same localized ShowInfo used by later shell entry points.
+            var activated = await _navigationViewModel.ActivateStartAsync().ConfigureAwait(true);
             if (activated)
             {
                 _activationCompleted = true;
