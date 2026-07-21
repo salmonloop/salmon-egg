@@ -725,6 +725,94 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public async Task LanguageChanged_ReprojectsAffinityBadgeAndUntitledTitle()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-untitled",
+                                Title = "   ",
+                                UpdatedAt = "2026-03-28T10:00:00+08:00",
+                                Cwd = string.Empty
+                            },
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-needs-mapping",
+                                Title = "Needs Mapping",
+                                UpdatedAt = "2026-03-28T10:05:00+08:00",
+                                Cwd = "/remote/worktree/service-a"
+                            }
+                        }
+                    }
+                }
+            };
+
+            var currentLanguageTag = "zh-Hans";
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set("zh-Hans", "Discover_UntitledSession", "未命名会话");
+            localizer.Set("zh-Hans", "Discover_NoDescription", "暂无描述");
+            localizer.Set("zh-Hans", "Discover_AffinityUnclassified", "未归类");
+            localizer.Set("zh-Hans", "Discover_AffinityNeedsMapping", "需要映射");
+            localizer.Set("zh-Hans", "Discover_AffinityStatusMissingCwd", "远程元数据没有可用的 ACP 工作路径。");
+            localizer.Set("zh-Hans", "Discover_AffinityStatusNeedsMapping", "远程 ACP 工作路径需要分配项目。");
+            localizer.Set("en-US", "Discover_UntitledSession", "Untitled session");
+            localizer.Set("en-US", "Discover_NoDescription", "No description");
+            localizer.Set("en-US", "Discover_AffinityUnclassified", "Unclassified");
+            localizer.Set("en-US", "Discover_AffinityNeedsMapping", "Needs mapping");
+            localizer.Set("en-US", "Discover_AffinityStatusMissingCwd", "Remote metadata has no usable ACP working path.");
+            localizer.Set("en-US", "Discover_AffinityStatusNeedsMapping", "Remote ACP working path needs a project assignment.");
+            var languageService = new Mock<IAppLanguageService>();
+            languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new StubNavigationCoordinator(),
+                localizer: localizer,
+                languageService: languageService.Object);
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            var untitledRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-untitled");
+            var needsMappingRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-needs-mapping");
+            Assert.Equal("未命名会话", untitledRow.Title);
+            Assert.Equal("暂无描述", untitledRow.Description);
+            Assert.Equal("未归类", untitledRow.ProjectAffinityBadgeText);
+            Assert.Equal("需要映射", needsMappingRow.ProjectAffinityBadgeText);
+
+            currentLanguageTag = "en-US";
+            localizer.SetLanguageTag("en-US");
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            untitledRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-untitled");
+            needsMappingRow = Assert.Single(viewModel.AgentSessions, row => row.Id == "remote-needs-mapping");
+            Assert.Equal("Untitled session", untitledRow.Title);
+            Assert.Equal("No description", untitledRow.Description);
+            Assert.Equal("Unclassified", untitledRow.ProjectAffinityBadgeText);
+            Assert.Equal("Needs mapping", needsMappingRow.ProjectAffinityBadgeText);
+            Assert.Contains("project assignment", needsMappingRow.AffinityStatusText, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void DiscoverSessionItemViewModel_OptionalMetadata_ProjectsVisibilityBoundaries()
     {
         var withoutMetadata = new DiscoverSessionItemViewModel(
@@ -1104,7 +1192,8 @@ public sealed class DiscoverSessionsViewModelTests
         INavigationCoordinator navigationCoordinator,
         IShellLayoutStore? shellLayoutStore = null,
         IProjectAffinityResolver? projectAffinityResolver = null,
-        Microsoft.Extensions.Localization.IStringLocalizer<SalmonEgg.Presentation.Core.Resources.CoreStrings>? localizer = null)
+        Microsoft.Extensions.Localization.IStringLocalizer<SalmonEgg.Presentation.Core.Resources.CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         var projectPreferences = new NavigationProjectPreferencesAdapter(CreatePreferences());
         var uiDispatcher = SynchronizationContext.Current as IUiDispatcher ?? new ImmediateUiDispatcher();
@@ -1117,7 +1206,8 @@ public sealed class DiscoverSessionsViewModelTests
             uiDispatcher,
             shellLayoutStore,
             projectAffinityResolver,
-            localizer);
+            localizer,
+            languageService);
     }
 
     private static ShellLayoutStore CreateShellLayoutStore(ShellLayoutState initialState)

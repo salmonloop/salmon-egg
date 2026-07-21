@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
 using SalmonEgg.Presentation.Core.Resources;
@@ -31,8 +32,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private readonly IAppLanguageService? _languageService;
     private readonly IShellLayoutStore? _shellLayoutStore;
     private CancellationTokenSource? _refreshSessionsCts;
+    private string? _errorResourceKey;
+    private object[]? _errorFormatArgs;
     private readonly CancellationTokenSource _layoutProjectionCts = new();
     private int _refreshGeneration;
     private int _loadSessionGeneration;
@@ -144,7 +148,8 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         IUiDispatcher uiDispatcher,
         IShellLayoutStore? shellLayoutStore = null,
         IProjectAffinityResolver? projectAffinityResolver = null,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
@@ -154,11 +159,17 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         _projectAffinityResolver = projectAffinityResolver ?? new ProjectAffinityResolver();
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer;
+        _languageService = languageService;
         if (shellLayoutStore is not null)
         {
             _shellLayoutStore = shellLayoutStore;
             SetLayoutMode(ResolveLayoutMode(_shellLayoutStore.CurrentState.WindowMetrics));
             _shellLayoutStore.Changed += OnShellLayoutChanged;
+        }
+
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged += OnLanguageChanged;
         }
 
         _selectedProfile = ResolvePreferredSelectedProfile();
@@ -284,7 +295,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             await PostToUiAsync(() =>
             {
                 AgentSessions.Clear();
-                ErrorMessage = null;
+                ClearErrorMessage();
                 LoadPhase = DiscoverSessionsLoadPhase.Idle;
             }).ConfigureAwait(false);
             return;
@@ -300,7 +311,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         await PostToUiAsync(() =>
         {
             AgentSessions.Clear();
-            ErrorMessage = null;
+            ClearErrorMessage();
             LoadPhase = DiscoverSessionsLoadPhase.Connecting;
         }).ConfigureAwait(false);
 
@@ -351,9 +362,12 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         RemoteDirectories: remoteDirectories,
                         UnclassifiedProjectId: NavigationProjectIds.Unclassified,
                         NavigationRemoteDirectoryIds: _projectPreferences.NavigationRemoteDirectoryIds));
+                    var usesUntitledTitle = string.IsNullOrWhiteSpace(session.Title);
                     items.Add(new DiscoverSessionItemViewModel(
                         session.SessionId,
-                        string.IsNullOrWhiteSpace(session.Title) ? Localize("Discover_UntitledSession", "Untitled session") : session.Title,
+                        usesUntitledTitle
+                            ? Localize("Discover_UntitledSession", "Untitled session")
+                            : session.Title!,
                         Localize("Discover_NoDescription", "No description"),
                         AcpSessionTimestampPolicy.ParseUpdatedAtUtc(session.UpdatedAt),
                         LoadSessionCommand,
@@ -362,7 +376,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         ResolveAffinityStatusText(affinityResolution),
                         affinityResolution.Source,
                         affinityResolution.NeedsUserAttention,
-                        session.AdditionalDirectories?.ToArray() ?? Array.Empty<string>()));
+                        session.AdditionalDirectories?.ToArray() ?? Array.Empty<string>(),
+                        affinityResolution.Reason,
+                        affinityResolution.RemoteDirectoryDisplayName,
+                        affinityResolution.EffectiveProjectId,
+                        usesUntitledTitle));
                 }
             }
 
@@ -402,7 +420,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     return;
                 }
 
-                ErrorMessage = ResolveLoadErrorMessage(ex);
+                SetLoadErrorMessage(ex);
                 LoadPhase = DiscoverSessionsLoadPhase.Error;
             }).ConfigureAwait(false);
         }
@@ -428,7 +446,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     return;
                 }
 
-                ErrorMessage = null;
+                ClearErrorMessage();
                 LoadPhase = DiscoverSessionsLoadPhase.ImportingSession;
             }).ConfigureAwait(false);
 
@@ -450,9 +468,14 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                         return;
                     }
 
-                    ErrorMessage = string.IsNullOrWhiteSpace(openResult.ErrorMessage)
-                        ? Localize("Discover_ErrorImportFailed", "Session import failed.")
-                        : openResult.ErrorMessage;
+                    if (string.IsNullOrWhiteSpace(openResult.ErrorMessage))
+                    {
+                        SetLocalizedErrorMessage("Discover_ErrorImportFailed", "Session import failed.");
+                    }
+                    else
+                    {
+                        SetRawErrorMessage(openResult.ErrorMessage);
+                    }
                     LoadPhase = DiscoverSessionsLoadPhase.Error;
                 }).ConfigureAwait(false);
                 return;
@@ -485,7 +508,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     return;
                 }
 
-                ErrorMessage = FormatLocalize("Discover_ErrorImportException", "Error importing session: {0}", ex.Message);
+                SetLocalizedErrorMessage("Discover_ErrorImportException", "Error importing session: {0}", ex.Message);
                 LoadPhase = DiscoverSessionsLoadPhase.Error;
             }).ConfigureAwait(false);
         }
@@ -505,6 +528,11 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
         _disposed = true;
         _layoutProjectionCts.Cancel();
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
         if (_shellLayoutStore is not null)
         {
             _shellLayoutStore.Changed -= OnShellLayoutChanged;
@@ -542,14 +570,126 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         return AvailableProfiles.FirstOrDefault();
     }
 
-    private string ResolveLoadErrorMessage(Exception ex)
+    private void OnLanguageChanged(object? sender, EventArgs e)
+        => _ = PostToUiAsync(ReprojectLocalizedState);
+
+    private void ReprojectLocalizedState()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(LoadingStatus));
+        ReprojectErrorMessage();
+        ReprojectSessionItems();
+    }
+
+    private void ClearErrorMessage()
+    {
+        _errorResourceKey = null;
+        _errorFormatArgs = null;
+        ErrorMessage = null;
+    }
+
+    private void SetRawErrorMessage(string message)
+    {
+        _errorResourceKey = null;
+        _errorFormatArgs = null;
+        ErrorMessage = message;
+    }
+
+    private void SetLocalizedErrorMessage(string resourceKey, string fallback, params object[] arguments)
+    {
+        _errorResourceKey = resourceKey;
+        _errorFormatArgs = arguments is { Length: > 0 } ? arguments : null;
+        ErrorMessage = _errorFormatArgs is null
+            ? Localize(resourceKey, fallback)
+            : FormatLocalize(resourceKey, fallback, _errorFormatArgs);
+    }
+
+    private void SetLoadErrorMessage(Exception ex)
     {
         if (!string.IsNullOrWhiteSpace(_connectionFacade.ConnectionErrorMessage))
         {
-            return _connectionFacade.ConnectionErrorMessage!;
+            SetRawErrorMessage(_connectionFacade.ConnectionErrorMessage!);
+            return;
         }
 
-        return FormatLocalize("Discover_ErrorListFailed", "Unable to fetch sessions: {0}", ex.Message);
+        SetLocalizedErrorMessage("Discover_ErrorListFailed", "Unable to fetch sessions: {0}", ex.Message);
+    }
+
+    private void ReprojectErrorMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_errorResourceKey))
+        {
+            return;
+        }
+
+        ErrorMessage = _errorFormatArgs is null
+            ? Localize(_errorResourceKey, ErrorMessage ?? string.Empty)
+            : FormatLocalize(_errorResourceKey, ErrorMessage ?? string.Empty, _errorFormatArgs);
+    }
+
+    private void ReprojectSessionItems()
+    {
+        if (AgentSessions.Count == 0)
+        {
+            return;
+        }
+
+        var projects = _projectPreferences.Projects
+            .Where(project => project != null
+                              && !string.IsNullOrWhiteSpace(project.ProjectId)
+                              && !string.IsNullOrWhiteSpace(project.Name))
+            .ToList();
+
+        var reprojected = new List<DiscoverSessionItemViewModel>(AgentSessions.Count);
+        foreach (var item in AgentSessions)
+        {
+            reprojected.Add(ReprojectSessionItem(item, projects));
+        }
+
+        AgentSessions.Clear();
+        foreach (var item in reprojected)
+        {
+            AgentSessions.Add(item);
+        }
+    }
+
+    private DiscoverSessionItemViewModel ReprojectSessionItem(
+        DiscoverSessionItemViewModel item,
+        IReadOnlyList<ProjectDefinition> projects)
+    {
+        var resolution = new ProjectAffinityResolution(
+            item.EffectiveProjectId ?? NavigationProjectIds.Unclassified,
+            item.AffinitySource,
+            MatchedProjectId: null,
+            OverrideProjectId: null,
+            RemoteCwd: item.SessionCwd,
+            LocalResolvedPath: null,
+            item.NeedsUserAttention,
+            item.AffinityReason ?? string.Empty,
+            item.RemoteDirectoryDisplayName);
+
+        return new DiscoverSessionItemViewModel(
+            item.Id,
+            item.UsesUntitledTitle
+                ? Localize("Discover_UntitledSession", "Untitled session")
+                : item.Title,
+            Localize("Discover_NoDescription", "No description"),
+            item.LastModified,
+            item.LoadSessionCommand,
+            item.SessionCwd,
+            ResolveAffinityBadgeText(resolution, projects),
+            ResolveAffinityStatusText(resolution),
+            item.AffinitySource,
+            item.NeedsUserAttention,
+            item.AdditionalDirectories,
+            item.AffinityReason,
+            item.RemoteDirectoryDisplayName,
+            item.EffectiveProjectId,
+            item.UsesUntitledTitle);
     }
 
     private string ResolveAffinityBadgeText(
@@ -758,6 +898,14 @@ public sealed class DiscoverSessionItemViewModel
 
     public bool NeedsUserAttention { get; }
 
+    public string? AffinityReason { get; }
+
+    public string? RemoteDirectoryDisplayName { get; }
+
+    public string? EffectiveProjectId { get; }
+
+    public bool UsesUntitledTitle { get; }
+
     public string FormattedDate => LastModified?.ToString("yyyy-MM-dd HH:mm") ?? string.Empty;
 
     public bool HasFormattedDate => LastModified.HasValue;
@@ -781,7 +929,11 @@ public sealed class DiscoverSessionItemViewModel
         string? affinityStatusText = null,
         ProjectAffinitySource affinitySource = ProjectAffinitySource.Unclassified,
         bool needsUserAttention = false,
-        IReadOnlyList<string>? additionalDirectories = null)
+        IReadOnlyList<string>? additionalDirectories = null,
+        string? affinityReason = null,
+        string? remoteDirectoryDisplayName = null,
+        string? effectiveProjectId = null,
+        bool usesUntitledTitle = false)
     {
         Id = id;
         Title = title;
@@ -798,5 +950,9 @@ public sealed class DiscoverSessionItemViewModel
             : affinityStatusText;
         AffinitySource = affinitySource;
         NeedsUserAttention = needsUserAttention;
+        AffinityReason = affinityReason;
+        RemoteDirectoryDisplayName = remoteDirectoryDisplayName;
+        EffectiveProjectId = effectiveProjectId;
+        UsesUntitledTitle = usesUntitledTitle;
     }
 }

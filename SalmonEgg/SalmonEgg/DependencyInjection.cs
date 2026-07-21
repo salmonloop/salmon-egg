@@ -601,7 +601,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IUiDispatcher>(),
                 sp.GetRequiredService<IShellLayoutStore>(),
                 sp.GetRequiredService<IProjectAffinityResolver>(),
-                sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<IAppLanguageService>()));
 
         // Start page orchestrator (Start creates session and submits)
         services.AddSingleton<StartViewModel>(sp =>
