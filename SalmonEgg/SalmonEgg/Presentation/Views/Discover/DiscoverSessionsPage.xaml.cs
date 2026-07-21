@@ -9,7 +9,7 @@ using SalmonEgg.Presentation.ViewModels.Discover;
 
 namespace SalmonEgg.Presentation.Views.Discover;
 
-public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsumer
+public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsumer, IPrimaryContentFocusTarget
 {
     public DiscoverSessionsViewModel ViewModel { get; }
 
@@ -43,6 +43,38 @@ public sealed partial class DiscoverSessionsPage : Page, INavigationIntentConsum
         {
             ViewModel.OpenProfileDetailsCommand.Execute(null);
         }
+    }
+
+    public bool TryFocusPrimaryContentTarget()
+    {
+        // Prefer the active work surface so gamepad entry from main nav lands on a real list,
+        // not the page root (default FrameworkElement.Focus fallback in MainPage).
+        if (ViewModel.ShowDetailsPane
+            && ViewModel.IsListVisible
+            && ViewModel.AgentSessions.Count > 0
+            && SessionsList.Visibility == Visibility.Visible)
+        {
+            return SessionsList.Focus(FocusState.Keyboard);
+        }
+
+        if (ViewModel.ShowProfilesPane
+            && ProfilesList.Visibility == Visibility.Visible)
+        {
+            return ProfilesList.Focus(FocusState.Keyboard);
+        }
+
+        if (SessionsList.Visibility == Visibility.Visible
+            && ViewModel.AgentSessions.Count > 0)
+        {
+            return SessionsList.Focus(FocusState.Keyboard);
+        }
+
+        if (ProfilesList.Visibility == Visibility.Visible)
+        {
+            return ProfilesList.Focus(FocusState.Keyboard);
+        }
+
+        return false;
     }
 
     public bool TryConsumeNavigationIntent(GamepadNavigationIntent intent)

@@ -126,6 +126,23 @@ public sealed class DiscoverSessionsPageXamlTests
 
 
     [Fact]
+    public void DiscoverSessionsPage_ImplementsPrimaryContentFocusTargetForGamepadEntryFromMainNav()
+    {
+        var codeBehind = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml.cs");
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("IPrimaryContentFocusTarget", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("public bool TryFocusPrimaryContentTarget()", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("SessionsList.Focus(FocusState.Keyboard)", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("ProfilesList.Focus(FocusState.Keyboard)", codeBehind, StringComparison.Ordinal);
+        // Keep native list engagement; do not invent a synthetic focus host.
+        Assert.DoesNotContain("ComposerFocusHost", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("IsFocusEngagementEnabled=\"True\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"DiscoverSessions.ProfilesList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"DiscoverSessions.SessionsList\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiscoverSessionsPage_SessionRowsDensifyOnShortWindowHeights()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
