@@ -238,6 +238,27 @@
   <data name="ChatOperation_SwitchSessionFailed" xml:space="preserve">
     <value>切换会话失败：{0}</value>
   </data>
+  <data name="ChatLoading_Connecting" xml:space="preserve">
+    <value>正在连接助手...</value>
+  </data>
+  <data name="ChatLoading_InitializingProtocol" xml:space="preserve">
+    <value>正在准备聊天环境...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistory" xml:space="preserve">
+    <value>正在加载聊天记录...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistoryWithCount" xml:space="preserve">
+    <value>正在加载聊天记录（已加载 {0} 条消息）</value>
+  </data>
+  <data name="ChatLoading_PreparingSession" xml:space="preserve">
+    <value>正在切换会话...</value>
+  </data>
+  <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
+    <value>无法打开迷你窗口。请确认应用以 MSIX 包方式运行。</value>
+  </data>
+  <data name="ChatMiniWindow_ReturnFailed" xml:space="preserve">
+    <value>无法返回主窗口。</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>新建会话</value>
   </data>

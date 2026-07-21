@@ -240,6 +240,27 @@
   <data name="ChatOperation_SwitchSessionFailed" xml:space="preserve">
     <value>Failed to switch session: {0}</value>
   </data>
+  <data name="ChatLoading_Connecting" xml:space="preserve">
+    <value>Connecting to assistant...</value>
+  </data>
+  <data name="ChatLoading_InitializingProtocol" xml:space="preserve">
+    <value>Preparing chat environment...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistory" xml:space="preserve">
+    <value>Loading chat history...</value>
+  </data>
+  <data name="ChatLoading_HydratingHistoryWithCount" xml:space="preserve">
+    <value>Loading chat history ({0} messages loaded)</value>
+  </data>
+  <data name="ChatLoading_PreparingSession" xml:space="preserve">
+    <value>Switching chat...</value>
+  </data>
+  <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
+    <value>Failed to open mini window. Please ensure you are running as an MSIX package.</value>
+  </data>
+  <data name="ChatMiniWindow_ReturnFailed" xml:space="preserve">
+    <value>Failed to return to main window.</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>New session</value>
   </data>

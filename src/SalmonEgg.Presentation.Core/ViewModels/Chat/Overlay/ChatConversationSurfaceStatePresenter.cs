@@ -1,11 +1,16 @@
 using System;
+using System.Globalization;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.Overlay;
 
 internal static class ChatConversationSurfaceStatePresenter
 {
-    public static ChatConversationSurfaceState Resolve(ChatConversationSurfaceStateInput input)
+    public static ChatConversationSurfaceState Resolve(
+        ChatConversationSurfaceStateInput input,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         var hasVisibleTranscriptContent = input.MessageHistoryCount > 0;
         var isSessionSwitchOverlayVisible =
@@ -67,7 +72,7 @@ internal static class ChatConversationSurfaceStatePresenter
             isSessionSwitchOverlayVisible,
             isSessionSwitchPreviewVisible,
             isShellActivationIntentVisible);
-        var overlayStatusText = ResolveOverlayStatusText(overlayLoadingStage, input.HydrationLoadedMessageCount);
+        var overlayStatusText = ResolveOverlayStatusText(overlayLoadingStage, input.HydrationLoadedMessageCount, localizer);
         var shouldShowBlockingLoadingMask =
             (activationOverlayVisible
                 && (!hasVisibleTranscriptContent
@@ -144,21 +149,69 @@ internal static class ChatConversationSurfaceStatePresenter
         return ChatViewModel.LoadingOverlayStage.None;
     }
 
-    private static string ResolveOverlayStatusText(ChatViewModel.LoadingOverlayStage stage, long hydrationLoadedMessageCount)
+    private static string ResolveOverlayStatusText(
+        ChatViewModel.LoadingOverlayStage stage,
+        long hydrationLoadedMessageCount,
+        IStringLocalizer<CoreStrings>? localizer)
         => stage switch
         {
-            ChatViewModel.LoadingOverlayStage.Connecting => "Connecting to assistant...",
-            ChatViewModel.LoadingOverlayStage.InitializingProtocol => "Preparing chat environment...",
-            ChatViewModel.LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(hydrationLoadedMessageCount),
-            ChatViewModel.LoadingOverlayStage.PreparingSession => "Switching chat...",
+            ChatViewModel.LoadingOverlayStage.Connecting => Localize(
+                localizer,
+                "ChatLoading_Connecting",
+                "Connecting to assistant..."),
+            ChatViewModel.LoadingOverlayStage.InitializingProtocol => Localize(
+                localizer,
+                "ChatLoading_InitializingProtocol",
+                "Preparing chat environment..."),
+            ChatViewModel.LoadingOverlayStage.HydratingHistory => BuildHydrationStatusText(
+                hydrationLoadedMessageCount,
+                localizer),
+            ChatViewModel.LoadingOverlayStage.PreparingSession => Localize(
+                localizer,
+                "ChatLoading_PreparingSession",
+                "Switching chat..."),
             _ => string.Empty
         };
 
-    private static string BuildHydrationStatusText(long loadedCount)
-        => FormatHydrationStatus("Loading chat history", loadedCount);
-
-    private static string FormatHydrationStatus(string baseText, long loadedCount)
+    private static string BuildHydrationStatusText(long loadedCount, IStringLocalizer<CoreStrings>? localizer)
         => loadedCount > 0
-            ? $"{baseText} ({loadedCount} messages loaded)"
-            : $"{baseText}...";
+            ? FormatLocalize(
+                localizer,
+                "ChatLoading_HydratingHistoryWithCount",
+                "Loading chat history ({0} messages loaded)",
+                loadedCount)
+            : Localize(
+                localizer,
+                "ChatLoading_HydratingHistory",
+                "Loading chat history...");
+
+    private static string Localize(IStringLocalizer<CoreStrings>? localizer, string key, string fallback)
+    {
+        if (localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private static string FormatLocalize(
+        IStringLocalizer<CoreStrings>? localizer,
+        string key,
+        string fallback,
+        params object[] arguments)
+    {
+        if (localizer is null)
+        {
+            return string.Format(CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(CultureInfo.CurrentCulture, fallback, arguments)
+            : localized.Value;
+    }
 }

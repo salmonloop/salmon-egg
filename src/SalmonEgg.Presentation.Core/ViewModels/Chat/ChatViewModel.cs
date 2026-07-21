@@ -646,7 +646,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _connectionLifecycleOverlayConversationId,
             _historyOverlayConversationId,
             PendingShellActivationConversationId,
-            ResolveHydrationLoadedMessageCount()));
+            ResolveHydrationLoadedMessageCount()),
+            _localizer);
 
     private ChatConversationSurfaceProjection ResolveConversationSurfaceProjection()
         => _conversationSurfaceProjectionCoordinator.Project(new ChatConversationSurfaceStateInput(
@@ -1405,7 +1406,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();
         _previewSnapshotWorkQueue = new SerialAsyncWorkQueue();
         _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver());
-        _conversationSurfaceProjectionCoordinator = new ChatConversationSurfaceProjectionCoordinator();
+        _conversationSurfaceProjectionCoordinator = new ChatConversationSurfaceProjectionCoordinator(_localizer);
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();
         _planPanelStatePresenter = new ChatPlanPanelStatePresenter();
@@ -1641,7 +1642,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             // Mini window failure is usually due to missing MSIX context or Skia runtime issues.
             Logger.LogError(ex, "Failed to open mini window");
-            ShowTransientNotificationToast("Failed to open mini window. Please ensure you are running as an MSIX package.");
+            ShowTransientNotificationToast(Localize(
+                "ChatMiniWindow_OpenFailed",
+                "Failed to open mini window. Please ensure you are running as an MSIX package."));
         }
     }
 
@@ -1655,7 +1658,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to return to main window");
-            ShowTransientNotificationToast("Failed to return to main window.");
+            ShowTransientNotificationToast(Localize(
+                "ChatMiniWindow_ReturnFailed",
+                "Failed to return to main window."));
         }
     }
 
