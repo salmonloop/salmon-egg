@@ -1079,4 +1079,13 @@ Create the corresponding Markdown file in:
   <data name="ChatService_NotConnectedInitialized" xml:space="preserve">
     <value>ACP chat service is not connected and initialized.</value>
   </data>
+  <data name="ChatProjectAffinity_OverrideMessage" xml:space="preserve">
+    <value>Local project override applied. You can clear it anytime.</value>
+  </data>
+  <data name="ChatProjectAffinity_NeedsMappingMessage" xml:space="preserve">
+    <value>This remote session is not matched to a local project. Correct it manually.</value>
+  </data>
+  <data name="ChatProjectAffinity_UnclassifiedMessage" xml:space="preserve">
+    <value>This session is unclassified. You can correct it manually.</value>
+  </data>
 </root>

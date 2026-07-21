@@ -103,6 +103,66 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public async Task RefreshSessionsAsync_WhenOverrideMapsToUnclassified_ProjectsLocalizedBadge()
+    {
+        var syncContext = new CountingSynchronizationContext();
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-override-unclassified",
+                                Title = "Overridden",
+                                UpdatedAt = "2026-03-28T10:00:00+08:00",
+                                Cwd = "/remote/worktree/service-a"
+                            }
+                        }
+                    }
+                }
+            };
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set("zh-Hans", "Discover_AffinityUnclassified", "未归类");
+            var resolver = new StubProjectAffinityResolver(new ProjectAffinityResolution(
+                EffectiveProjectId: NavigationProjectIds.Unclassified,
+                Source: ProjectAffinitySource.Override,
+                MatchedProjectId: null,
+                OverrideProjectId: NavigationProjectIds.Unclassified,
+                RemoteCwd: "/remote/worktree/service-a",
+                LocalResolvedPath: null,
+                NeedsUserAttention: false,
+                Reason: "Override"));
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                new StubNavigationCoordinator(),
+                projectAffinityResolver: resolver,
+                localizer: localizer);
+
+            await viewModel.RefreshSessionsCommand.ExecuteAsync(null);
+
+            var row = Assert.Single(viewModel.AgentSessions);
+            Assert.Equal(ProjectAffinitySource.Override, row.AffinitySource);
+            Assert.Equal("未归类", row.ProjectAffinityBadgeText);
+            Assert.DoesNotContain("__unclassified__", row.ProjectAffinityBadgeText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task RefreshSessionsAsync_WhenRemoteListIsEmpty_UsesEmptyPhaseInsteadOfError()
     {
         var syncContext = new CountingSynchronizationContext();
@@ -1042,7 +1102,9 @@ public sealed class DiscoverSessionsViewModelTests
         AcpProfilesViewModel profilesViewModel,
         IDiscoverSessionsConnectionFacade connectionFacade,
         INavigationCoordinator navigationCoordinator,
-        IShellLayoutStore? shellLayoutStore = null)
+        IShellLayoutStore? shellLayoutStore = null,
+        IProjectAffinityResolver? projectAffinityResolver = null,
+        Microsoft.Extensions.Localization.IStringLocalizer<SalmonEgg.Presentation.Core.Resources.CoreStrings>? localizer = null)
     {
         var projectPreferences = new NavigationProjectPreferencesAdapter(CreatePreferences());
         var uiDispatcher = SynchronizationContext.Current as IUiDispatcher ?? new ImmediateUiDispatcher();
@@ -1053,7 +1115,9 @@ public sealed class DiscoverSessionsViewModelTests
             profilesViewModel,
             connectionFacade,
             uiDispatcher,
-            shellLayoutStore);
+            shellLayoutStore,
+            projectAffinityResolver,
+            localizer);
     }
 
     private static ShellLayoutStore CreateShellLayoutStore(ShellLayoutState initialState)
@@ -1455,7 +1519,19 @@ public sealed class DiscoverSessionsViewModelTests
 
     }
 
-    private sealed class FakeChatService : IChatService
+        private sealed class StubProjectAffinityResolver : IProjectAffinityResolver
+    {
+        private readonly ProjectAffinityResolution _resolution;
+
+        public StubProjectAffinityResolver(ProjectAffinityResolution resolution)
+        {
+            _resolution = resolution;
+        }
+
+        public ProjectAffinityResolution Resolve(ProjectAffinityRequest request) => _resolution;
+    }
+
+private sealed class FakeChatService : IChatService
     {
         public string? CurrentSessionId => null;
 

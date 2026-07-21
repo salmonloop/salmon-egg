@@ -3,6 +3,8 @@ using System.Linq;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
@@ -11,9 +13,11 @@ public sealed class ChatProjectAffinityCorrectionCoordinator
 {
     private readonly ChatProjectAffinityCorrectionPresenter _presenter;
 
-    public ChatProjectAffinityCorrectionCoordinator(IProjectAffinityResolver resolver)
+    public ChatProjectAffinityCorrectionCoordinator(
+        IProjectAffinityResolver resolver,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
-        _presenter = new ChatProjectAffinityCorrectionPresenter(resolver);
+        _presenter = new ChatProjectAffinityCorrectionPresenter(resolver, localizer);
     }
 
     public ChatProjectAffinityCorrectionState Present(

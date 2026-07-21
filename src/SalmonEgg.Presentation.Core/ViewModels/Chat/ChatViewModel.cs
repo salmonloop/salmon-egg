@@ -1405,7 +1405,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _authoritativeConnectionResolver = new AcpAuthoritativeConnectionResolver(connectionSessionRegistry);
         _sessionUpdateWorkQueue = sessionUpdateWorkQueue ?? new SerialAsyncWorkQueue();
         _previewSnapshotWorkQueue = new SerialAsyncWorkQueue();
-        _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver());
+        _projectAffinityCorrectionCoordinator = new ChatProjectAffinityCorrectionCoordinator(projectAffinityResolver ?? new ProjectAffinityResolver(), localizer);
         _conversationSurfaceProjectionCoordinator = new ChatConversationSurfaceProjectionCoordinator(_localizer);
         _inputStatePresenter = new ChatInputStatePresenter();
         _askUserStatePresenter = new ChatAskUserStatePresenter();

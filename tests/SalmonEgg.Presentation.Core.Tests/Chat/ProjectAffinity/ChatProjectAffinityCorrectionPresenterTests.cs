@@ -3,6 +3,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using Xunit;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat.ProjectAffinity;
@@ -103,5 +104,47 @@ public sealed class ChatProjectAffinityCorrectionPresenterTests
             RemoteDirectories: new List<AgentRemoteDirectory>()));
 
         Assert.Null(state.SelectedOverrideProjectId);
+    }
+
+    [Fact]
+    public void Present_WithLocalizer_ProjectsLocalizedMessages()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatProjectAffinity_NeedsMappingMessage",
+            "此远程会话尚未匹配本地项目，请手动纠正。");
+        localizer.Set(
+            "zh-Hans",
+            "ChatProjectAffinity_OverrideMessage",
+            "已应用本地项目覆盖，可随时清除。");
+        var sut = new ChatProjectAffinityCorrectionPresenter(new ProjectAffinityResolver(), localizer);
+
+        var needsMapping = sut.Present(new ChatProjectAffinityCorrectionInput(
+            ConversationId: "conv-1",
+            RemoteSessionId: "remote-1",
+            BoundProfileId: "profile-1",
+            RemoteCwd: @"C:\repo\unknown",
+            OverrideProjectId: null,
+            SelectedOverrideProjectId: null,
+            Projects: new List<ProjectDefinition>(),
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
+
+        Assert.Equal("此远程会话尚未匹配本地项目，请手动纠正。", needsMapping.Message);
+
+        var overrideState = sut.Present(new ChatProjectAffinityCorrectionInput(
+            ConversationId: "conv-1",
+            RemoteSessionId: "remote-1",
+            BoundProfileId: "profile-1",
+            RemoteCwd: @"C:\repo\unknown",
+            OverrideProjectId: "project-1",
+            SelectedOverrideProjectId: null,
+            Projects:
+            [
+                new ProjectDefinition { ProjectId = "project-1", Name = "Project 1" }
+            ],
+            RemoteDirectories: new List<AgentRemoteDirectory>()));
+
+        Assert.Equal("已应用本地项目覆盖，可随时清除。", overrideState.Message);
     }
 }

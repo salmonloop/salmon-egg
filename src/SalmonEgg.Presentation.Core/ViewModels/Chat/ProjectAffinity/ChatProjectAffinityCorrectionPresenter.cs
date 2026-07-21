@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -10,10 +12,14 @@ namespace SalmonEgg.Presentation.Core.ViewModels.Chat.ProjectAffinity;
 public sealed class ChatProjectAffinityCorrectionPresenter
 {
     private readonly IProjectAffinityResolver _resolver;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
 
-    public ChatProjectAffinityCorrectionPresenter(IProjectAffinityResolver resolver)
+    public ChatProjectAffinityCorrectionPresenter(
+        IProjectAffinityResolver resolver,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        _localizer = localizer;
     }
 
     public ChatProjectAffinityCorrectionState Present(ChatProjectAffinityCorrectionInput input)
@@ -58,13 +64,35 @@ public sealed class ChatProjectAffinityCorrectionPresenter
             HasOverride: hasOverride,
             EffectiveProjectId: resolution.EffectiveProjectId,
             EffectiveSource: resolution.Source,
-            Message: resolution.Source switch
-            {
-                ProjectAffinitySource.Override => "Local project override applied. You can clear it anytime.",
-                ProjectAffinitySource.NeedsMapping => "This remote session is not matched to a local project. Correct it manually.",
-                _ => "This session is unclassified. You can correct it manually."
-            },
+            Message: ResolveMessage(resolution.Source),
             SelectedOverrideProjectId: selectedOverrideProjectId);
+    }
+
+    private string ResolveMessage(ProjectAffinitySource source)
+        => source switch
+        {
+            ProjectAffinitySource.Override => Localize(
+                "ChatProjectAffinity_OverrideMessage",
+                "Local project override applied. You can clear it anytime."),
+            ProjectAffinitySource.NeedsMapping => Localize(
+                "ChatProjectAffinity_NeedsMappingMessage",
+                "This remote session is not matched to a local project. Correct it manually."),
+            _ => Localize(
+                "ChatProjectAffinity_UnclassifiedMessage",
+                "This session is unclassified. You can correct it manually.")
+        };
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private static IReadOnlyList<ProjectAffinityOverrideOptionViewModel> BuildOptions(

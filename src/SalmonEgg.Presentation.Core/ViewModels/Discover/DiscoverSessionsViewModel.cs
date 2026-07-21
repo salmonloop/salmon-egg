@@ -564,11 +564,6 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
             return Localize("Discover_AffinityNeedsMapping", "Needs mapping");
         }
 
-        if (resolution.Source == ProjectAffinitySource.Unclassified)
-        {
-            return Localize("Discover_AffinityUnclassified", "Unclassified");
-        }
-
         if (resolution.Source == ProjectAffinitySource.RemoteDirectory
             && !string.IsNullOrWhiteSpace(resolution.RemoteDirectoryDisplayName))
         {
@@ -576,9 +571,13 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         }
 
         var effectiveProjectId = resolution.EffectiveProjectId;
-        if (string.IsNullOrWhiteSpace(effectiveProjectId))
+        if (resolution.Source == ProjectAffinitySource.Unclassified
+            || string.IsNullOrWhiteSpace(effectiveProjectId)
+            || string.Equals(effectiveProjectId, NavigationProjectIds.Unclassified, StringComparison.Ordinal))
         {
-            return "Unclassified";
+            // Override-to-unclassified keeps Source=Override with the semantic id;
+            // never project the raw "__unclassified__" token into the Discover badge.
+            return Localize("Discover_AffinityUnclassified", "Unclassified");
         }
 
         var projectName = projects
