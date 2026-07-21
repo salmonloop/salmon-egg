@@ -76,10 +76,13 @@ public sealed class UiInteractionService : IUiInteractionService
             return null;
         }
 
+        // Stretch with the dialog content host instead of a fixed MinWidth: a 320px
+        // floor overflows narrow windows (WASM/phone/split) while ContentDialog already
+        // owns chrome sizing via DefaultContentDialogStyle.
         var input = new TextBox
         {
             Text = initialText ?? string.Empty,
-            MinWidth = 320,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             TextWrapping = TextWrapping.NoWrap
         };
 

@@ -41,7 +41,27 @@ public sealed class ContentDialogHostComplianceTests
         Assert.DoesNotContain("RequestedTheme =", code, StringComparison.Ordinal);
     }
 
-    private static int CountOccurrences(string haystack, string needle)
+    [Fact]
+    public void PromptTextAsync_TextBoxStretchesWithoutFixedMinWidth()
+    {
+        var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Presentation\Services\UiInteractionService.cs"));
+        var methodStart = code.IndexOf("public async Task<string?> PromptTextAsync", StringComparison.Ordinal);
+        Assert.True(methodStart >= 0, "PromptTextAsync must remain on UiInteractionService.");
+        var nextMethod = code.IndexOf("public async Task", methodStart + 1, StringComparison.Ordinal);
+        if (nextMethod < 0)
+        {
+            nextMethod = code.Length;
+        }
+
+        var method = code.Substring(methodStart, nextMethod - methodStart);
+        Assert.Contains("HorizontalAlignment = HorizontalAlignment.Stretch", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinWidth = 320", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinWidth =", method, StringComparison.Ordinal);
+        Assert.Contains("ContentDialogHost.AttachToXamlRoot", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme =", method, StringComparison.Ordinal);
+    }
+
+        private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;
         var index = 0;
