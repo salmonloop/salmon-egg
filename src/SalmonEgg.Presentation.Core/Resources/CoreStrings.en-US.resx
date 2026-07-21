@@ -315,6 +315,12 @@
   <data name="Discover_ErrorListCapabilityMissing" xml:space="preserve">
     <value>The current agent does not advertise session/list capability.</value>
   </data>
+  <data name="Discover_ErrorLoadSessionCapabilityMissing" xml:space="preserve">
+    <value>The current agent does not advertise ACP loadSession capability, so discovered remote sessions cannot be imported.</value>
+  </data>
+  <data name="Discover_ErrorSessionImportActivationFailed" xml:space="preserve">
+    <value>Failed to load and import the session. Check the connection status.</value>
+  </data>
   <data name="Discover_UntitledSession" xml:space="preserve">
     <value>Untitled session</value>
   </data>

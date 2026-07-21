@@ -378,6 +378,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Discover_ErrorConnectionNotInitialized"] = "The ACP connection has not finished initializing.",
         ["Discover_ErrorImportFailed"] = "Session import failed.",
         ["Discover_ErrorListCapabilityMissing"] = "The current agent does not advertise session/list capability.",
+        ["Discover_ErrorLoadSessionCapabilityMissing"] = "The current agent does not advertise ACP loadSession capability, so discovered remote sessions cannot be imported.",
+        ["Discover_ErrorSessionImportActivationFailed"] = "Failed to load and import the session. Check the connection status.",
         ["Discover_LoadingActivatingSession"] = "Opening session...",
         ["Discover_LoadingConnecting"] = "Connecting to agent...",
         ["Discover_LoadingHydratingSession"] = "Loading session history...",

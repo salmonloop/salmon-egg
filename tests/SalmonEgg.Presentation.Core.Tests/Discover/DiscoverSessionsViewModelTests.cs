@@ -555,6 +555,80 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public async Task LanguageChanged_ReprojectsMappedNavigationCoordinatorOpenError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new CountingSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var profile = CreateProfile();
+            var profilesViewModel = CreateProfilesViewModel(profile);
+            var connectionFacade = new FakeDiscoverSessionsConnectionFacade
+            {
+                CurrentChatService = new FakeChatService
+                {
+                    SessionListResponse = new SessionListResponse
+                    {
+                        Sessions =
+                        {
+                            new AgentSessionInfo
+                            {
+                                SessionId = "remote-session-1",
+                                Title = "Remote Session",
+                                UpdatedAt = "2026-03-27T12:00:00+08:00",
+                                Cwd = @"C:\repo\remote"
+                            }
+                        }
+                    }
+                }
+            };
+            var navigationCoordinator = new StubNavigationCoordinator
+            {
+                DiscoverOpenResult = new DiscoverRemoteSessionOpenResult(
+                    false,
+                    null,
+                    NavigationCoordinator.LoadSessionCapabilityMissingMessage)
+            };
+
+            var currentLanguageTag = "zh-Hans";
+            var localizer = new SalmonEgg.Presentation.Core.Tests.Localization.MutableTestCoreStringLocalizer();
+            localizer.Set(
+                "zh-Hans",
+                "Discover_ErrorLoadSessionCapabilityMissing",
+                "zh-cap-missing");
+            localizer.Set(
+                "en-US",
+                "Discover_ErrorLoadSessionCapabilityMissing",
+                "en-cap-missing");
+            var languageService = new Mock<IAppLanguageService>();
+            languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+            using var viewModel = CreateViewModel(
+                profilesViewModel,
+                connectionFacade,
+                navigationCoordinator,
+                localizer: localizer,
+                languageService: languageService.Object);
+
+            await viewModel.LoadSessionCommand.ExecuteAsync(CreateSessionItem());
+
+            Assert.Equal(DiscoverSessionsLoadPhase.Error, viewModel.LoadPhase);
+            Assert.Equal("zh-cap-missing", viewModel.ErrorMessage);
+
+            currentLanguageTag = "en-US";
+            localizer.SetLanguageTag("en-US");
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            Assert.Equal("en-cap-missing", viewModel.ErrorMessage);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_AfterAsyncImport_MarshalsActivationAndHydrationBackToUiContext()
     {
         var syncContext = new CountingSynchronizationContext();

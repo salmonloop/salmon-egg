@@ -313,6 +313,12 @@
   <data name="Discover_ErrorListCapabilityMissing" xml:space="preserve">
     <value>当前 Agent 未声明 session/list 能力。</value>
   </data>
+  <data name="Discover_ErrorLoadSessionCapabilityMissing" xml:space="preserve">
+    <value>当前 Agent 未声明 ACP loadSession 能力，无法导入已发现的远程会话。</value>
+  </data>
+  <data name="Discover_ErrorSessionImportActivationFailed" xml:space="preserve">
+    <value>加载并导入会话失败，请检查连接状态。</value>
+  </data>
   <data name="Discover_UntitledSession" xml:space="preserve">
     <value>未命名会话</value>
   </data>

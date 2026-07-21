@@ -474,7 +474,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
                     }
                     else
                     {
-                        SetRawErrorMessage(openResult.ErrorMessage);
+                        SetDiscoverOpenErrorMessage(openResult.ErrorMessage);
                     }
                     LoadPhase = DiscoverSessionsLoadPhase.Error;
                 }).ConfigureAwait(false);
@@ -597,6 +597,40 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
         _errorResourceKey = null;
         _errorFormatArgs = null;
         ErrorMessage = message;
+    }
+
+    /// <summary>
+    /// Maps known NavigationCoordinator sentinel messages to resource keys so
+    /// language reproject can refresh held Discover error banners. Unknown
+    /// messages stay raw (protocol/agent detail).
+    /// </summary>
+    private void SetDiscoverOpenErrorMessage(string message)
+    {
+        if (string.Equals(message, NavigationCoordinator.ConnectionNotInitializedMessage, StringComparison.Ordinal))
+        {
+            SetLocalizedErrorMessage(
+                "Discover_ErrorConnectionNotInitialized",
+                NavigationCoordinator.ConnectionNotInitializedMessage);
+            return;
+        }
+
+        if (string.Equals(message, NavigationCoordinator.LoadSessionCapabilityMissingMessage, StringComparison.Ordinal))
+        {
+            SetLocalizedErrorMessage(
+                "Discover_ErrorLoadSessionCapabilityMissing",
+                NavigationCoordinator.LoadSessionCapabilityMissingMessage);
+            return;
+        }
+
+        if (string.Equals(message, NavigationCoordinator.SessionImportActivationFailedMessage, StringComparison.Ordinal))
+        {
+            SetLocalizedErrorMessage(
+                "Discover_ErrorSessionImportActivationFailed",
+                NavigationCoordinator.SessionImportActivationFailedMessage);
+            return;
+        }
+
+        SetRawErrorMessage(message);
     }
 
     private void SetLocalizedErrorMessage(string resourceKey, string fallback, params object[] arguments)
