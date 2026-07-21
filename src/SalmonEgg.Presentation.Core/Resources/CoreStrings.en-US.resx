@@ -368,6 +368,15 @@ Create the corresponding Markdown file in:
   <data name="AcpProfiles_SaveFailed" xml:space="preserve">
     <value>Failed to save the agent profile. Please try again later.</value>
   </data>
+  <data name="AcpProfiles_ConnectFailed" xml:space="preserve">
+    <value>Failed to connect to the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_DisconnectFailed" xml:space="preserve">
+    <value>Failed to disconnect the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_ReconnectFailed" xml:space="preserve">
+    <value>Failed to reconnect the agent profile. Please try again later.</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>Not started</value>
   </data>

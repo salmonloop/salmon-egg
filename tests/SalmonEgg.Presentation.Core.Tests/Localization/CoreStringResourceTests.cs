@@ -87,6 +87,9 @@ public sealed class CoreStringResourceTests
     [InlineData("AcpProfiles_RefreshFailed")]
     [InlineData("AcpProfiles_DeleteFailed")]
     [InlineData("AcpProfiles_SaveFailed")]
+    [InlineData("AcpProfiles_ConnectFailed")]
+    [InlineData("AcpProfiles_DisconnectFailed")]
+    [InlineData("AcpProfiles_ReconnectFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

@@ -884,7 +884,12 @@ public sealed class AcpConnectionSettingsViewModelTests
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();
         var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -893,6 +898,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.False(item.IsConnected);
         Assert.False(item.IsConnecting);
         Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        Assert.Equal("AcpProfiles_ConnectFailed", reportedKey);
     }
 
     [Fact]
@@ -934,7 +940,12 @@ public sealed class AcpConnectionSettingsViewModelTests
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
-        using var item = CreateAgentProfileItem("profile-a", registry, commands);
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
         var changed = new List<string?>();
         item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
 
@@ -943,6 +954,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.True(item.IsConnected);
         Assert.False(item.IsConnecting);
         Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
+        Assert.Equal("AcpProfiles_DisconnectFailed", reportedKey);
     }
 
     [Fact]
@@ -1376,7 +1388,8 @@ public sealed class AcpConnectionSettingsViewModelTests
         string profileId,
         InMemoryAcpConnectionSessionRegistry registry,
         TestConnectionCommands commands,
-        TestCoreStringLocalizer? localizer = null)
+        TestCoreStringLocalizer? localizer = null,
+        Action<string, string>? operationErrorReporter = null)
         => new(
             new ServerConfiguration { Id = profileId, Name = profileId },
             registry,
@@ -1384,7 +1397,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             commands,
             NullLogger<AgentProfileItemViewModel>.Instance,
             new ImmediateUiDispatcher(),
-            localizer ?? new TestCoreStringLocalizer());
+            localizer ?? new TestCoreStringLocalizer(),
+            operationErrorReporter);
 
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
@@ -1684,6 +1698,13 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ConnectProfileAsync(ServerConfiguration profile)
         {
+            // Item commands call ConnectProfileAsync; honor the same failure/pending
+            // hooks the pool APIs use so connect failure tests drive the real item path.
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
             ProfileConnectedProfiles.Add(profile);
             ProfileOperations.Add($"connect:{profile.Id}");
             return ConnectProfileInPoolTask?.Task ?? Task.CompletedTask;
@@ -1691,6 +1712,11 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task DisconnectProfileAsync(ServerConfiguration profile)
         {
+            if (DisconnectProfileInPoolException is not null)
+            {
+                throw DisconnectProfileInPoolException;
+            }
+
             ProfileDisconnectedProfileIds.Add(profile.Id);
             ProfileOperations.Add($"disconnect:{profile.Id}");
             DisconnectProfileInPoolCallback?.Invoke();
@@ -1699,6 +1725,16 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ReconnectProfileAsync(ServerConfiguration profile)
         {
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
+            if (DisconnectProfileInPoolException is not null)
+            {
+                throw DisconnectProfileInPoolException;
+            }
+
             ProfileOperations.Add($"reconnect:{profile.Id}");
             ReconnectProfileCallback?.Invoke();
             return ReconnectProfileTask?.Task ?? Task.CompletedTask;

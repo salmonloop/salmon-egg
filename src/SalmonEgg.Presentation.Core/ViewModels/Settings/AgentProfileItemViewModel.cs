@@ -40,6 +40,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     private readonly ILogger<AgentProfileItemViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings> _localizer;
+    private readonly Action<string, string>? _operationErrorReporter;
     private ConnectionTransitionKind _transitionKind;
     private bool _disposed;
 
@@ -134,7 +135,8 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         ISettingsAcpConnectionCommands commands,
         ILogger<AgentProfileItemViewModel> logger,
         IUiDispatcher uiDispatcher,
-        IStringLocalizer<CoreStrings> localizer)
+        IStringLocalizer<CoreStrings> localizer,
+        Action<string, string>? operationErrorReporter = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(registry);
@@ -149,6 +151,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         _logger = logger;
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _operationErrorReporter = operationErrorReporter;
 
         ProfileId = profile.Id;
         _name = profile.Name;
@@ -218,6 +221,11 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         ReconnectCommand.NotifyCanExecuteChanged();
     }
 
+    private void ReportOperationError(string resourceKey, string fallback)
+    {
+        _operationErrorReporter?.Invoke(resourceKey, fallback);
+    }
+
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
         BeginPendingTransition(ConnectionTransitionKind.Connecting);
@@ -233,6 +241,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_ConnectFailed",
+                "Failed to connect to the agent profile. Please try again later.");
         }
         finally
         {
@@ -265,6 +276,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to disconnect profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_DisconnectFailed",
+                "Failed to disconnect the agent profile. Please try again later.");
         }
         finally
         {
@@ -298,6 +312,9 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to reconnect profile {ProfileId}", ProfileId);
+            ReportOperationError(
+                "AcpProfiles_ReconnectFailed",
+                "Failed to reconnect the agent profile. Please try again later.");
         }
         finally
         {

@@ -203,6 +203,13 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         });
     }
 
+    private void ReportProfileOperationError(string resourceKey, string fallback)
+    {
+        // Profile connect/disconnect failures arrive from item commands; project onto the
+        // shared Error InfoBar without requiring each item to own dialog chrome.
+        _ = ShowOperationErrorAsync(resourceKey, fallback);
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
@@ -390,7 +397,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             _connectionCommands,
             _loggerFactory.CreateLogger<AgentProfileItemViewModel>(),
             _dispatcher,
-            _localizer);
+            _localizer,
+            ReportProfileOperationError);
     }
 
     private Task SelectByIdAsync(string? id)

@@ -370,6 +370,15 @@
   <data name="AcpProfiles_SaveFailed" xml:space="preserve">
     <value>保存 Agent 配置失败，请稍后重试。</value>
   </data>
+  <data name="AcpProfiles_ConnectFailed" xml:space="preserve">
+    <value>连接 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_DisconnectFailed" xml:space="preserve">
+    <value>断开 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_ReconnectFailed" xml:space="preserve">
+    <value>重新连接 Agent 配置失败，请稍后重试。</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>未启动</value>
   </data>
