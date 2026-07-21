@@ -3202,10 +3202,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("Target=\"StartRoot.Padding\" Value=\"16,4,16,8\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"HeroContentStack.Spacing\" Value=\"10\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"HeroLayer.VerticalAlignment\" Value=\"Top\"", xaml, StringComparison.Ordinal);
+        // Never Center inside HeroScrollViewer: overflow would clip the top of the stack.
+        Assert.DoesNotContain("Target=\"HeroLayer.VerticalAlignment\" Value=\"Center\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartSubtitle.MaxLines\" Value=\"1\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
     }
-
     [Fact]
     public void HeroSuggestionCard_AdaptsDensityByWindowHeight()
     {
@@ -3463,6 +3465,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("MaxHeight=\"140\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"SlashCommandsList.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"InputBox.MaxHeight\" Value=\"240\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ComposerLayoutRoot.Padding\" Value=\"12,0,12,12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ComposerLayoutRoot.Padding\" Value=\"20,0,20,20\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
 
         // VSM must live on the single content root Grid (ComposerLayoutRoot), not a second UserControl child.
@@ -3471,8 +3475,10 @@ public sealed class XamlComplianceTests
             xaml.IndexOf("x:Name=\"ComposerLayoutRoot\"", StringComparison.Ordinal)
             < xaml.IndexOf("ComposerHeightStates", StringComparison.Ordinal));
 
-        // Touch-target MinHeights stay fixed; densify only the growth caps.
+        // Touch-target MinHeights stay fixed; densify growth caps and outer padding only.
         Assert.Contains("MinHeight=\"44\"", xaml, StringComparison.Ordinal);
+        // Outer chrome padding lives on ComposerLayoutRoot so AdaptiveTrigger can densify it.
+        Assert.DoesNotContain("Padding=\"20,0,20,20\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -58,14 +58,17 @@
                 <!-- Compact (default): short-window vertical budget. Keep composer pinned and
                      let HeroScrollViewer own overflow; densify title/spacing so title + three
                      suggestion cards are usable before scrolling on short heights. Comfortable
-                     restores marketing-scale hero once MinWindowHeight=760. -->
+                     restores marketing-scale hero once MinWindowHeight=760.
+                     HeroLayer stays Top in both states: centering ScrollViewer content clips
+                     the top when the measured stack exceeds the viewport (native WinUI/Uno
+                     behavior). Tall windows get breathing room via margin, not Center. -->
                 <VisualState x:Name="HeightCompact">
                     <VisualState.Setters>
                         <Setter Target="StartRoot.Padding" Value="16,4,16,8" />
                         <Setter Target="StartTitle.FontSize" Value="28" />
                         <Setter Target="StartTitle.MaxLines" Value="2" />
                         <Setter Target="StartSubtitle.FontSize" Value="13" />
-                        <Setter Target="StartSubtitle.MaxLines" Value="2" />
+                        <Setter Target="StartSubtitle.MaxLines" Value="1" />
                         <Setter Target="HeroLayer.Margin" Value="0,4,0,8" />
                         <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
                         <Setter Target="HeroChromeHost.Spacing" Value="4" />
@@ -83,7 +86,7 @@
                         <Setter Target="StartSubtitle.FontSize" Value="18" />
                         <Setter Target="StartSubtitle.MaxLines" Value="0" />
                         <Setter Target="HeroLayer.Margin" Value="0,28,0,24" />
-                        <Setter Target="HeroLayer.VerticalAlignment" Value="Center" />
+                        <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
                         <Setter Target="HeroChromeHost.Spacing" Value="12" />
                         <Setter Target="HeroContentStack.Spacing" Value="28" />
                     </VisualState.Setters>
@@ -142,7 +145,7 @@
                                    TextAlignment="Center"
                                    TextWrapping="WrapWholeWords"
                                    TextTrimming="CharacterEllipsis"
-                                   MaxLines="2"
+                                   MaxLines="1"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <ItemsControl x:Name="HeroSuggestionsHost"

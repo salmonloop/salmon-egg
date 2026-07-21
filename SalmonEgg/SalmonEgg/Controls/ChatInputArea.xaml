@@ -23,9 +23,9 @@
         <x:Double x:Key="ComposerModeSelectorMaxWidth">240</x:Double>
     </UserControl.Resources>
 
-    <Border Padding="20,0,20,20"
-            Background="Transparent">
+    <Border Background="Transparent">
         <Grid x:Name="ComposerLayoutRoot"
+              Padding="12,0,12,12"
               MaxWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
               XYFocusKeyboardNavigation="Enabled">
             <VisualStateManager.VisualStateGroups>
@@ -62,10 +62,16 @@
                 </VisualStateGroup>
 
                 <!-- Short windows: densify slash-menu and multi-line input MaxHeight so the
-                     pinned composer leaves more transcript room. Comfortable restores the
-                     prior 220/240 caps (MinWindowHeight=760, same threshold as Start/Diagnostics). -->
+                     pinned composer leaves more transcript/hero room. Also densify the
+                     ComposerLayoutRoot padding (compact default 12/12) so Start and Chat
+                     reclaim vertical chrome. Comfortable restores the prior 220/240 caps
+                     and roomier padding at MinWindowHeight=760. -->
                 <VisualStateGroup x:Name="ComposerHeightStates">
-                    <VisualState x:Name="ComposerHeightCompact" />
+                    <VisualState x:Name="ComposerHeightCompact">
+                        <VisualState.Setters>
+                            <Setter Target="ComposerLayoutRoot.Padding" Value="12,0,12,12" />
+                        </VisualState.Setters>
+                    </VisualState>
                     <VisualState x:Name="ComposerHeightComfortable">
                         <VisualState.StateTriggers>
                             <AdaptiveTrigger MinWindowHeight="760" />
@@ -73,6 +79,7 @@
                         <VisualState.Setters>
                             <Setter Target="SlashCommandsList.MaxHeight" Value="220" />
                             <Setter Target="InputBox.MaxHeight" Value="240" />
+                            <Setter Target="ComposerLayoutRoot.Padding" Value="20,0,20,20" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
