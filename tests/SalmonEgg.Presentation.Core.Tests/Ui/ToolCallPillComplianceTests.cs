@@ -120,6 +120,9 @@ public sealed class ToolCallPillComplianceTests
         Assert.Contains("x:Name=\"RawOutputScrollViewer\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"160\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DetailScrollViewer.MaxHeight\" Value=\"160\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RawInputScrollViewer.MaxHeight\" Value=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RawOutputScrollViewer.MaxHeight\" Value=\"140\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"DetailScrollViewer.MaxHeight\" Value=\"320\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"RawInputScrollViewer.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"RawOutputScrollViewer.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);

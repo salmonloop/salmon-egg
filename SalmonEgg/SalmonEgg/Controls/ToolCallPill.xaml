@@ -187,7 +187,13 @@
                  disclosure stays usable without reserving a large block in the transcript.
                  Comfortable restores the prior 320/220 caps (MinWindowHeight=760). -->
             <VisualStateGroup x:Name="DetailHeightStates">
-                <VisualState x:Name="DetailHeightCompact" />
+                <VisualState x:Name="DetailHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="DetailScrollViewer.MaxHeight" Value="160" />
+                        <Setter Target="RawInputScrollViewer.MaxHeight" Value="140" />
+                        <Setter Target="RawOutputScrollViewer.MaxHeight" Value="140" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="DetailHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
