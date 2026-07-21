@@ -79,6 +79,7 @@ public partial class ChatViewModelTests
         IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         IPlatformShellService? platformShell = null,
         IStringLocalizer<CoreStrings>? localizer = null,
+        IAppLanguageService? languageService = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -151,7 +152,8 @@ public partial class ChatViewModelTests
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
         var startupService = new Mock<IAppStartupService>();
         startupService.SetupGet(s => s.IsSupported).Returns(false);
-        var languageService = new Mock<IAppLanguageService>();
+        var languageServiceMock = new Mock<IAppLanguageService>();
+        languageService ??= languageServiceMock.Object;
         var capabilities = new Mock<IPlatformCapabilityService>();
         capabilities.SetupGet(c => c.SupportsStdioTransport).Returns(true);
         capabilities.SetupGet(c => c.SupportsLocalTerminal).Returns(true);
@@ -163,7 +165,7 @@ public partial class ChatViewModelTests
         var preferences = new AppPreferencesViewModel(
             appSettingsService.Object,
             startupService.Object,
-            languageService.Object,
+            languageService,
             capabilities.Object,
             uiRuntime.Object,
             Mock.Of<IUiInteractionService>(),
@@ -241,7 +243,8 @@ public partial class ChatViewModelTests
                 connectionSessionRegistry: connectionSessionRegistry,
                 localSlashCommandSource: localSlashCommandSource,
                 platformShell: platformShell,
-                localizer: localizer);
+                localizer: localizer,
+                languageService: languageService);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -18421,6 +18424,138 @@ public partial class ChatViewModelTests
 
         // Sentinel stays English so StartViewModel.IsExpectedRemoteDirectorySelectionState keeps working.
         Assert.Equal(AcpSessionNewCwdResolver.MissingRemoteCwdMessage, fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenNewSessionDraftFaultIsHeld_ReprojectsLocalizedDraftError()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        localizer.Set(
+            "en-US",
+            "NewSessionDraft_LoadConfigFailed",
+            "Unable to load session configuration. Check the connection and try again.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("无法加载会话配置。请检查连接后重试。", fixture.ViewModel.NewSessionDraftErrorMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                fixture.ViewModel.NewSessionDraftErrorMessage,
+                "Unable to load session configuration. Check the connection and try again.",
+                StringComparison.Ordinal));
+        });
+
+        Assert.Equal(
+            "Unable to load session configuration. Check the connection and try again.",
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenNewSessionDraftMissingRemoteCwd_KeepsEnglishSentinel()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        localizer.Set(
+            "en-US",
+            "NewSessionDraft_LoadConfigFailed",
+            "Unable to load session configuration. Check the connection and try again.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: string.Empty,
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal(
+            AcpSessionNewCwdResolver.MissingRemoteCwdMessage,
+            fixture.ViewModel.NewSessionDraftErrorMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+        syncContext.RunAll();
+        await Task.Delay(50);
+
+        // Identity sentinel must remain English for Start remote-directory comparison.
+        Assert.Equal(
+            AcpSessionNewCwdResolver.MissingRemoteCwdMessage,
+            fixture.ViewModel.NewSessionDraftErrorMessage);
     }
 
     private sealed class RecordingPlatformShellService : IPlatformShellService

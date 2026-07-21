@@ -1688,6 +1688,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             RaiseOverlayStateChanged();
             PendingAskUserRequest?.ReprojectLocalizedState();
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+
+            // New-session draft lives on the connection store and is not part of the chat-store
+            // projection. Re-apply it so held draft fault messages re-run NormalizeNewSessionDraftError
+            // against the current language (except English identity sentinels).
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            await ApplyNewSessionDraftProjectionAsync(connectionState).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
