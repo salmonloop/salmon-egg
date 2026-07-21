@@ -662,6 +662,18 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
+    public void ShowSessionsListDialog_DoesNotSwallowPickSessionExceptions()
+    {
+        var uiService = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Services\UiInteractionService.cs");
+        var method = ExtractSection(uiService, "public async Task ShowSessionsListDialogAsync");
+
+        Assert.Contains("onPickSession(dialog.PickedSessionId!)", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("try { onPickSession", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("catch { }", method, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
     public void MainNavigationViewAdapter_ItemInvoked_OwnsDestinationActivationPath()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Navigation\MainNavigationViewAdapter.cs");

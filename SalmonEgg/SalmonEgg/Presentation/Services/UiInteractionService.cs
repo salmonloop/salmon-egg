@@ -155,7 +155,9 @@ public sealed class UiInteractionService : IUiInteractionService
 
         if (!string.IsNullOrWhiteSpace(dialog.PickedSessionId))
         {
-            try { onPickSession(dialog.PickedSessionId!); } catch { }
+            // Let pick-session failures surface to the caller so navigation owners can
+            // log/recover; the UI shell must not silently drop activation errors.
+            onPickSession(dialog.PickedSessionId!);
         }
     }
 
