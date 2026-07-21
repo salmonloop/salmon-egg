@@ -237,6 +237,9 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("Severity=\"Informational\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOpen=\"{x:Bind ViewModel.Profiles.IsSavedCurrentConnectionNoticeOpen, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Message=\"{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("IsOpen=\"{x:Bind ViewModel.Profiles.IsOperationErrorOpen, Mode=TwoWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Message=\"{x:Bind ViewModel.Profiles.OperationErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Severity=\"Error\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.Profiles.RefreshCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"OnAddProfileClick\"", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}\"", xaml, StringComparison.Ordinal);

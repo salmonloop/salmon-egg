@@ -359,6 +359,15 @@ Create the corresponding Markdown file in:
   <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
     <value>Failed to save configuration: {0}</value>
   </data>
+  <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
+    <value>Failed to refresh agent profiles. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
+    <value>Failed to delete the agent profile. Please try again later.</value>
+  </data>
+  <data name="AcpProfiles_SaveFailed" xml:space="preserve">
+    <value>Failed to save the agent profile. Please try again later.</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>Not started</value>
   </data>

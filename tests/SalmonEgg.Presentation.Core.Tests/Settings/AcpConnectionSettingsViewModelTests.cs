@@ -1271,6 +1271,77 @@ public sealed class AcpConnectionSettingsViewModelTests
         return viewModel;
     }
 
+    [Fact]
+    public async Task ProfilesRefreshAsync_WhenListFails_OpensLocalizedErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ThrowsAsync(new InvalidOperationException("list failed"));
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+
+        await profiles.RefreshAsync();
+
+        Assert.True(profiles.IsOperationErrorOpen);
+        Assert.Equal(localizer["AcpProfiles_RefreshFailed"], profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ProfilesDeleteAsync_WhenDeleteFails_OpensLocalizedErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.DeleteConfigurationAsync(It.IsAny<string>()))
+            .ThrowsAsync(new InvalidOperationException("delete failed"));
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+        var profile = new ServerConfiguration { Id = "profile-a", Name = "Profile A" };
+
+        await profiles.DeleteAsync(profile);
+
+        Assert.True(profiles.IsOperationErrorOpen);
+        Assert.Equal(localizer["AcpProfiles_DeleteFailed"], profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ProfilesRefreshAsync_WhenSucceedsAfterError_DismissesErrorInfoBar()
+    {
+        var preferences = CreatePreferences();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .SetupSequence(service => service.ListConfigurationsAsync())
+            .ThrowsAsync(new InvalidOperationException("list failed"))
+            .ReturnsAsync(Array.Empty<ServerConfiguration>());
+        var localizer = new TestCoreStringLocalizer();
+        var profiles = new AcpProfilesViewModel(
+            configurationService.Object,
+            preferences,
+            NullLogger<AcpProfilesViewModel>.Instance,
+            new ImmediateUiDispatcher(),
+            localizer);
+
+        await profiles.RefreshAsync();
+        Assert.True(profiles.IsOperationErrorOpen);
+
+        await profiles.RefreshAsync();
+
+        Assert.False(profiles.IsOperationErrorOpen);
+        Assert.Equal(string.Empty, profiles.OperationErrorMessage);
+    }
+
     private static async Task<AcpProfilesViewModel> CreateProfilesWithItemsAsync(AppPreferencesViewModel preferences)
     {
         var configurations = new[]

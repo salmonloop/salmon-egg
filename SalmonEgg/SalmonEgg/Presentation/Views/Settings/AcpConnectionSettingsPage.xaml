@@ -119,6 +119,11 @@
                                      Message="{x:Bind ViewModel.Profiles.SavedCurrentConnectionNoticeMessage, Mode=OneWay}"
                                      IsClosable="True"/>
 
+                            <InfoBar IsOpen="{x:Bind ViewModel.Profiles.IsOperationErrorOpen, Mode=TwoWay}"
+                                     Severity="Error"
+                                     Message="{x:Bind ViewModel.Profiles.OperationErrorMessage, Mode=OneWay}"
+                                     IsClosable="True"/>
+
                             <Border Style="{StaticResource SettingsSectionContainerStyle}">
                                 <ListView x:Name="AcpProfilesList"
                                           ItemsSource="{x:Bind ViewModel.Profiles.ProfileItems, Mode=OneWay}"

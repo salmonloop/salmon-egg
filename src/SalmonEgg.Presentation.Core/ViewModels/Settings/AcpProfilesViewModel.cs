@@ -69,6 +69,14 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _savedCurrentConnectionNoticeMessage = string.Empty;
 
+    [ObservableProperty]
+    private bool _isOperationErrorOpen;
+
+    [ObservableProperty]
+    private string _operationErrorMessage = string.Empty;
+
+    private string? _operationErrorResourceKey;
+
     /// <summary>
     /// One <see cref="AgentProfileItemViewModel"/> per profile, each carrying its own
     /// connection state. Bound by <c>AcpConnectionSettingsPage</c> instead of raw
@@ -178,6 +186,23 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         SavedCurrentConnectionNoticeMessage = string.Empty;
     }
 
+    public void DismissOperationError()
+    {
+        IsOperationErrorOpen = false;
+        OperationErrorMessage = string.Empty;
+        _operationErrorResourceKey = null;
+    }
+
+    private Task ShowOperationErrorAsync(string resourceKey, string fallback)
+    {
+        return MarshalToUiAsync(() =>
+        {
+            _operationErrorResourceKey = resourceKey;
+            OperationErrorMessage = _localizer?[resourceKey] ?? fallback;
+            IsOperationErrorOpen = true;
+        });
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
@@ -194,6 +219,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
             await MarshalToUiAsync(() =>
             {
+                DismissOperationError();
                 var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
 
                 RebuildProfileItems(ordered);
@@ -214,6 +240,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to refresh server profiles");
+            await ShowOperationErrorAsync(
+                "AcpProfiles_RefreshFailed",
+                "Failed to refresh agent profiles. Please try again later.").ConfigureAwait(false);
         }
         finally
         {
@@ -255,6 +284,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete server profile {ProfileId}", profile.Id);
+            await ShowOperationErrorAsync(
+                "AcpProfiles_DeleteFailed",
+                "Failed to delete the agent profile. Please try again later.").ConfigureAwait(false);
         }
     }
 
@@ -274,6 +306,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to save server profile {ProfileId}", profile.Id);
+            await ShowOperationErrorAsync(
+                "AcpProfiles_SaveFailed",
+                "Failed to save the agent profile. Please try again later.").ConfigureAwait(false);
         }
     }
 
@@ -439,6 +474,12 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         {
             SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
                 ?? "Settings saved. The current connection still uses the old configuration until reconnect.";
+        }
+
+        if (IsOperationErrorOpen && !string.IsNullOrWhiteSpace(_operationErrorResourceKey))
+        {
+            OperationErrorMessage = _localizer?[_operationErrorResourceKey]
+                ?? OperationErrorMessage;
         }
 
         foreach (var item in ProfileItems)

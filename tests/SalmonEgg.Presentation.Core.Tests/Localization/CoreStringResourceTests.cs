@@ -84,6 +84,9 @@ public sealed class CoreStringResourceTests
     [InlineData("Diagnostics_CopyLogSnippetFailed")]
     [InlineData("AgentProfileEditor_ValidationFailedFormat")]
     [InlineData("AgentProfileEditor_SaveFailedFormat")]
+    [InlineData("AcpProfiles_RefreshFailed")]
+    [InlineData("AcpProfiles_DeleteFailed")]
+    [InlineData("AcpProfiles_SaveFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

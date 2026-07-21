@@ -361,6 +361,15 @@
   <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
     <value>保存配置失败：{0}</value>
   </data>
+  <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
+    <value>刷新 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
+    <value>删除 Agent 配置失败，请稍后重试。</value>
+  </data>
+  <data name="AcpProfiles_SaveFailed" xml:space="preserve">
+    <value>保存 Agent 配置失败，请稍后重试。</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>未启动</value>
   </data>
