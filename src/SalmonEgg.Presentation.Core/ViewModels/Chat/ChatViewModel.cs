@@ -2374,6 +2374,35 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         ConfigureMessageCommands(message);
         ApplyPendingInlinePermissionProjection(message);
+        ProjectMediaPlaceholderBody(message);
+    }
+
+    private void ProjectMediaPlaceholderBody(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        // Image/audio directional rows only render DisplayBodyText until dedicated media
+        // templates ship. Always reproject the placeholder at the UI boundary so language
+        // reloads and older empty-TextContent snapshots inherit CoreStrings.
+        if (string.Equals(message.ContentType, "image", StringComparison.Ordinal))
+        {
+            var projected = ResolveMediaPlaceholder("image", message.ImageMimeType);
+            if (!string.Equals(message.TextContent, projected, StringComparison.Ordinal))
+            {
+                message.TextContent = projected;
+            }
+
+            return;
+        }
+
+        if (string.Equals(message.ContentType, "audio", StringComparison.Ordinal))
+        {
+            var projected = ResolveMediaPlaceholder("audio", message.AudioMimeType);
+            if (!string.Equals(message.TextContent, projected, StringComparison.Ordinal))
+            {
+                message.TextContent = projected;
+            }
+        }
     }
 
     private void ConfigureMessageCommands(ChatMessageViewModel message)
