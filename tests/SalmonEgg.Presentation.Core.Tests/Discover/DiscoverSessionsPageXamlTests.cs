@@ -122,6 +122,25 @@ public sealed class DiscoverSessionsPageXamlTests
         Assert.DoesNotContain("ViewModel.SelectedProfile = profile;", codeBehind, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void DiscoverSessionsPage_SessionRowsDensifyOnShortWindowHeights()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("x:Name=\"SessionListHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionListHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionListHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionsList\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("DiscoverSessionItemStyleCompact", xaml, StringComparison.Ordinal);
+        Assert.Contains("DiscoverSessionItemStyleComfortable", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"80\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"104\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemContainerStyle=\"{StaticResource DiscoverSessionItemStyleCompact}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+    }
+
     private static string LoadFile(string relativePath)
     {
         var root = FindRepoRoot();
