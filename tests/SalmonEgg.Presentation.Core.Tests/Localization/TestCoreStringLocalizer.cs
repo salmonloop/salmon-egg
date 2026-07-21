@@ -301,6 +301,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Navigation_OpenSettingsFailed"] = "Failed to open settings. Please try again later.",
         ["Navigation_OpenStartFailed"] = "Failed to open the start page. Please try again later.",
         ["Navigation_OpenDiscoverSessionsFailed"] = "Failed to open Discover sessions. Please try again later.",
+        ["Navigation_OpenSessionFailed"] = "Failed to open this session. Please try again later.",
         ["DataStorage_ClearAllLocalDataSuccess"] = "All local data cleared.",
         ["DataStorage_ClearAllLocalDataFailed"] = "Failed to clear all local data. Please try again later.",
         ["Nav_ArchiveSessionTitle"] = "Archive session",

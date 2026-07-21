@@ -501,6 +501,64 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 "Navigation_OpenDiscoverSessionsFailed",
                 "Failed to open Discover sessions. Please try again later."));
 
+    public async Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
+    {
+        try
+        {
+            var activated = await _navigationCoordinator
+                .ActivateSessionAsync(sessionId, projectId)
+                .ConfigureAwait(true);
+            if (activated)
+            {
+                return true;
+            }
+
+            if (ShouldSurfaceSessionActivationFailureInfo(sessionId))
+            {
+                await NotifyOpenSessionFailedAsync().ConfigureAwait(true);
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to session failed. sessionId={SessionId}", sessionId);
+            await NotifyOpenSessionFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private bool ShouldSurfaceSessionActivationFailureInfo(string sessionId)
+    {
+        // Once selection commits to the target session, the chat callout owns the failure surface.
+        if (CurrentSelection is NavigationSelectionState.Session selected
+            && string.Equals(selected.SessionId, sessionId, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var activation = _shellRuntimeState.ActiveSessionActivation;
+        if (activation is { Phase: SessionActivationPhase.Faulted }
+            && activation.Matches(sessionId))
+        {
+            var reason = activation.Reason;
+            if (!string.IsNullOrWhiteSpace(reason)
+                && (reason.StartsWith("Superseded", StringComparison.Ordinal)
+                    || string.Equals(reason, "Canceled", StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Task NotifyOpenSessionFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenSessionFailed",
+                "Failed to open this session. Please try again later."));
+
     public void ClearPendingProjectForNewSession()
     {
         PendingProjectIdForNewSession = null;
@@ -585,21 +643,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void ActivateSessionFromSessionsList(string sessionId, string projectId)
     {
-        try
-        {
-            var activationTask = _navigationCoordinator.ActivateSessionAsync(sessionId, projectId);
-            if (!activationTask.IsCompletedSuccessfully)
-            {
-                _ = ObserveSessionActivationAsync(activationTask);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Session activation from sessions list failed");
-        }
+        // Fire-and-forget: dialog pick must not block the list UI thread, but activation
+        // still routes through ActivateSessionAsync so failures share the nav owner feedback path.
+        _ = ObserveSessionActivationAsync(ActivateSessionAsync(sessionId, projectId));
     }
 
-    private async Task ObserveSessionActivationAsync(Task activationTask)
+    private async Task ObserveSessionActivationAsync(Task<bool> activationTask)
     {
         try
         {
@@ -607,6 +656,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
         catch (Exception ex)
         {
+            // ActivateSessionAsync already surfaces user-visible failures; keep this as a safety net.
             _logger.LogWarning(ex, "Session activation from sessions list failed");
         }
     }

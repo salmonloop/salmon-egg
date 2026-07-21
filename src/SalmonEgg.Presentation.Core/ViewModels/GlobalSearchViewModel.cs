@@ -225,7 +225,9 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         {
             case SearchResultKind.Session:
                 var session = FindConversation(item.Id);
-                await _navigationCoordinator.ActivateSessionAsync(item.Id, GetActivationProjectId(session));
+                // Route through the navigation VM owner so pre-commit activation failures
+                // surface ShowInfo when the chat callout cannot own the fault projection.
+                await _navViewModel.ActivateSessionAsync(item.Id, GetActivationProjectId(session)).ConfigureAwait(true);
                 break;
 
             case SearchResultKind.Project:

@@ -56,7 +56,9 @@ public sealed class GlobalSearchViewModelTests
         ]);
 
         var navigationCoordinator = new Mock<INavigationCoordinator>();
-        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync(true);
+        using var navigationViewModel = CreateNavigationViewModel(preferences, presenter, navigationCoordinator.Object);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
             preferences,
@@ -388,6 +390,50 @@ public sealed class GlobalSearchViewModelTests
         Assert.Equal(GlobalSearchViewState.Results, viewModel.ViewState);
         Assert.False(viewModel.IsError);
         Assert.True(viewModel.HasResults);
+    }
+
+    [Fact]
+    public async Task SelectResultAsync_WhenSessionActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var preferences = CreatePreferencesWithProject();
+        var presenter = new ConversationCatalogPresenter();
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator.Setup(coordinator => coordinator.ActivateSessionAsync("session-1", It.IsAny<string?>()))
+            .ReturnsAsync(false);
+
+        using var navigationViewModel = CreateNavigationViewModel(
+            preferences,
+            presenter,
+            navigationCoordinator.Object,
+            ui.Object);
+        using var viewModel = new GlobalSearchViewModel(
+            navigationViewModel,
+            preferences,
+            navigationCoordinator.Object,
+            presenter,
+            new ProjectAffinityResolver(),
+            new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
+            Mock.Of<IStringLocalizer<CoreStrings>>(),
+            Mock.Of<ILogger<GlobalSearchViewModel>>());
+
+        await viewModel.SelectResultCommand.ExecuteAsync(new SearchResultItem
+        {
+            Id = "session-1",
+            Title = "Session 1",
+            Kind = SearchResultKind.Session
+        });
+
+        navigationCoordinator.Verify(
+            coordinator => coordinator.ActivateSessionAsync("session-1", It.IsAny<string?>()),
+            Times.Once);
+        Assert.Equal(
+            ["Failed to open this session. Please try again later."],
+            shownMessages);
     }
 
     [Fact]

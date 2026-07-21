@@ -85,7 +85,7 @@ public sealed class MainNavigationViewAdapter
             var sessionProjectId = (navItem.DataContext as SessionNavItemViewModel)?.ProjectId
                 ?? _viewModel.TryGetProjectIdForSession(sessionId);
 
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync(sessionId, sessionProjectId));
+            return AwaitActivationHandledAsync(_viewModel.ActivateSessionAsync(sessionId, sessionProjectId));
         }
 
         return null;

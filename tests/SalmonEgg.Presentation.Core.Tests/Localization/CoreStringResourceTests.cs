@@ -101,6 +101,7 @@ public sealed class CoreStringResourceTests
     [InlineData("Navigation_OpenSettingsFailed")]
     [InlineData("Navigation_OpenStartFailed")]
     [InlineData("Navigation_OpenDiscoverSessionsFailed")]
+    [InlineData("Navigation_OpenSessionFailed")]
     [InlineData("Nav_CopySessionIdFailed")]
     [InlineData("Nav_ShowSessionsListFailed")]
     [InlineData("Start_SessionLaunchFailed")]

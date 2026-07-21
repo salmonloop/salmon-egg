@@ -699,7 +699,8 @@ public sealed class NavigationCoreTests
         Assert.Contains("AwaitActivationHandledAsync(_viewModel.ActivateDiscoverSessionsAsync())", section, StringComparison.Ordinal);
         Assert.Contains("AwaitActivationHandledAsync(_viewModel.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))", section, StringComparison.Ordinal);
         Assert.DoesNotContain("_ = _navigationCoordinator.ActivateSessionAsync", section, StringComparison.Ordinal);
-        Assert.Contains("AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync", section, StringComparison.Ordinal);
+        Assert.Contains("AwaitActivationHandledAsync(_viewModel.ActivateSessionAsync", section, StringComparison.Ordinal);
         Assert.Contains("return await activationTask.ConfigureAwait(true);", section, StringComparison.Ordinal);
     }
 
