@@ -27,13 +27,28 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Short windows: densify section stack spacing so About remains scannable without
+                 oversized marketing gaps. Comfortable restores Spacing=24 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="AboutHeightStates">
+                <VisualState x:Name="AboutHeightCompact" />
+                <VisualState x:Name="AboutHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AboutContentStack.Spacing" Value="24" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
     <ScrollViewer Padding="0"
                   HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="24"
+                <StackPanel x:Name="AboutContentStack"
+                            Spacing="14"
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="8">
                         <TextBlock x:Uid="About_PageTitle"

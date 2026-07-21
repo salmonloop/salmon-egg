@@ -41,13 +41,28 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Short windows: densify section stack spacing so ACP settings remain scannable
+                 without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="AcpHeightStates">
+                <VisualState x:Name="AcpHeightCompact" />
+                <VisualState x:Name="AcpHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="AcpContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <ScrollViewer Padding="0"
                       HorizontalScrollBarVisibility="Disabled">
             <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
                 <controls:ResponsiveContentHost.Child>
-                    <StackPanel Spacing="28">
+                    <StackPanel x:Name="AcpContentStack"
+                                Spacing="16">
                         <StackPanel Spacing="8">
                             <TextBlock x:Uid="Acp_PageTitle"
                                        Text="ACP Agent"

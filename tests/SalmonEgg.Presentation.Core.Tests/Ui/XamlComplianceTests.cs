@@ -1038,6 +1038,39 @@ public sealed class XamlComplianceTests
         Assert.Contains("Target=\"ShortcutsContentStack.Spacing\" Value=\"24\"", shortcuts, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", shortcuts, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", shortcuts, StringComparison.Ordinal);
+
+        var diagnostics = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DiagnosticsSettingsPage.xaml");
+        var acp = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+        var mcp = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\McpSettingsPage.xaml");
+        var about = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml");
+
+        Assert.Contains("x:Name=\"DiagnosticsHeightStates\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"DiagnosticsContentStack\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Spacing=\"16\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DiagnosticsContentStack.Spacing\" Value=\"28\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", diagnostics, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", diagnostics, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"AcpHeightStates\"", acp, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AcpContentStack\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Spacing=\"16\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpContentStack.Spacing\" Value=\"28\"", acp, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", acp, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", acp, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"McpHeightStates\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"McpContentStack\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Spacing=\"16\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"McpContentStack.Spacing\" Value=\"28\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", mcp, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", mcp, StringComparison.Ordinal);
+
+        Assert.Contains("x:Name=\"AboutHeightStates\"", about, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"AboutContentStack\"", about, StringComparison.Ordinal);
+        Assert.Contains("Spacing=\"14\"", about, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AboutContentStack.Spacing\" Value=\"24\"", about, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", about, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", about, StringComparison.Ordinal);
     }
 
     [Fact]

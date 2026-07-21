@@ -32,13 +32,28 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Short windows: densify section stack spacing so diagnostics remains scannable
+                 without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
+            <VisualStateGroup x:Name="DiagnosticsHeightStates">
+                <VisualState x:Name="DiagnosticsHeightCompact" />
+                <VisualState x:Name="DiagnosticsHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="DiagnosticsContentStack.Spacing" Value="28" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <ScrollViewer Padding="0"
                       HorizontalScrollBarVisibility="Disabled">
         <controls:ResponsiveContentHost MaxContentWidth="{StaticResource SettingsContentMaxWidth}">
             <controls:ResponsiveContentHost.Child>
-                <StackPanel Spacing="28"
+                <StackPanel x:Name="DiagnosticsContentStack"
+                            Spacing="16"
                             Padding="{StaticResource SettingsPageVerticalPadding}">
                     <StackPanel Spacing="4">
                         <TextBlock x:Uid="Diagnostics_PageTitle"
