@@ -74,6 +74,11 @@
                     <VisualState x:Name="TranscriptHeightCompact">
                         <VisualState.Setters>
                             <Setter Target="MessagesList.Padding" Value="12" />
+                            <Setter Target="TurnStatusStrip.Margin" Value="12,0,12,4" />
+                            <Setter Target="SessionActivationFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="ConversationOperationFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="TurnFailureHost.Margin" Value="12,0,12,8" />
+                            <Setter Target="AskUserHost.Margin" Value="12,0,12,8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="TranscriptHeightComfortable">
@@ -82,6 +87,11 @@
                         </VisualState.StateTriggers>
                         <VisualState.Setters>
                             <Setter Target="MessagesList.Padding" Value="20" />
+                            <Setter Target="TurnStatusStrip.Margin" Value="24,0,24,8" />
+                            <Setter Target="SessionActivationFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="ConversationOperationFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="TurnFailureHost.Margin" Value="24,0,24,12" />
+                            <Setter Target="AskUserHost.Margin" Value="24,0,24,12" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
@@ -247,7 +257,10 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.IsTurnStatusVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="24,0,24,8">
+                        <StackPanel x:Name="TurnStatusStrip"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    Margin="12,0,12,4">
                             <ProgressRing IsActive="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay}"
                                           Width="16" Height="16"
                                           Visibility="{x:Bind ViewModel.IsTurnStatusRunning, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -268,8 +281,9 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}">
                     <controls:ResponsiveContentHost.Child>
                         <StackPanel>
-                            <Border Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Margin="24,0,24,12"
+                            <Border x:Name="SessionActivationFailureHost"
+                                    Visibility="{x:Bind ViewModel.HasSessionActivationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Margin="12,0,12,8"
                                     Padding="12"
                                     CornerRadius="6"
                                     Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -281,8 +295,9 @@
                                            FontSize="12"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </Border>
-                            <Border Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    Margin="24,0,24,12"
+                            <Border x:Name="ConversationOperationFailureHost"
+                                    Visibility="{x:Bind ViewModel.HasConversationOperationFailure, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    Margin="12,0,12,8"
                                     Padding="12"
                                     CornerRadius="6"
                                     Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -302,8 +317,9 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.IsTurnFailureVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border AutomationProperties.AutomationId="ChatView.TurnFailureCallout"
-                                Margin="24,0,24,12"
+                        <Border x:Name="TurnFailureHost"
+                                AutomationProperties.AutomationId="ChatView.TurnFailureCallout"
+                                Margin="12,0,12,8"
                                 Padding="12"
                                 CornerRadius="6"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -367,7 +383,8 @@
                                                 MaxContentWidth="{x:Bind models:UiLayout.ContentMaxWidth, Mode=OneTime}"
                                                 Visibility="{x:Bind ViewModel.HasPendingAskUserRequest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:ResponsiveContentHost.Child>
-                        <Border Margin="24,0,24,12"
+                        <Border x:Name="AskUserHost"
+                                Margin="12,0,12,8"
                                 Padding="16"
                                 CornerRadius="12"
                                 Background="{ThemeResource LayerFillColorDefaultBrush}"

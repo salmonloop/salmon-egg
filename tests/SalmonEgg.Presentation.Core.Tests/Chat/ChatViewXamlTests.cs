@@ -241,6 +241,12 @@ public sealed class ChatViewXamlTests
         Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"MessagesList.Padding\" Value=\"12\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"MessagesList.Padding\" Value=\"20\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnStatusStrip.Margin\" Value=\"12,0,12,4\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionActivationFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ConversationOperationFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnFailureHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AskUserHost.Margin\" Value=\"12,0,12,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TurnStatusStrip.Margin\" Value=\"24,0,24,8\"", xaml, StringComparison.Ordinal);
         // Compact short-height default in markup; comfortable restores prior transcript inset.
         Assert.Contains("Padding=\"12\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
