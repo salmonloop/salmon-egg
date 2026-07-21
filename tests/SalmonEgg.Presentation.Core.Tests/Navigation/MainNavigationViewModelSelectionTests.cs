@@ -1012,6 +1012,69 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public async Task ShowAllSessionsForProjectAsync_WhenDialogThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowSessionsListDialogAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<IReadOnlyList<SessionNavItemViewModel>>(),
+                    It.IsAny<Action<string>>()))
+                .ThrowsAsync(new InvalidOperationException("dialog host unavailable"));
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(
+            [
+                new ConversationCatalogItem(
+                    "session-1",
+                    "Session 1",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc))
+            ]);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                new StubNavigationCoordinator(),
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                presenter,
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            await navVm.ShowAllSessionsForProjectAsync("project-1");
+
+            Assert.Equal(
+                ["Failed to open the sessions list. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void ApplySelectionProjection_DoesNotOverride_InjectedProjectorOutput()
     {
         var originalContext = SynchronizationContext.Current;

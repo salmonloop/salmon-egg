@@ -460,6 +460,11 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Show sessions list failed");
+            await _ui.ShowInfoAsync(
+                    Localize(
+                        "Nav_ShowSessionsListFailed",
+                        "Failed to open the sessions list. Please try again later."))
+                .ConfigureAwait(true);
         }
     }
 
