@@ -422,6 +422,58 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 "Navigation_OpenStartFailed",
                 "Failed to open the start page. Please try again later."));
 
+    public async Task<bool> ActivateStartAsync(string? projectIdForNewSession = null)
+    {
+        try
+        {
+            var activated = await _navigationCoordinator
+                .ActivateStartAsync(projectIdForNewSession)
+                .ConfigureAwait(true);
+            if (activated)
+            {
+                return true;
+            }
+
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to start failed");
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    public async Task<bool> ActivateSettingsAsync(string sectionKey)
+    {
+        try
+        {
+            var opened = await _navigationCoordinator
+                .ActivateSettingsAsync(sectionKey)
+                .ConfigureAwait(true);
+            if (opened)
+            {
+                return true;
+            }
+
+            await NotifyOpenSettingsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to settings failed. sectionKey={SectionKey}", sectionKey);
+            await NotifyOpenSettingsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private Task NotifyOpenSettingsFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenSettingsFailed",
+                "Failed to open settings. Please try again later."));
+
     public async Task<bool> ActivateDiscoverSessionsAsync()
     {
         try
@@ -640,34 +692,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         }
     }
 
-    private async Task NavigateToRemoteProjectSettingsAsync()
-    {
-        try
-        {
-            var opened = await _navigationCoordinator
-                .ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey)
-                .ConfigureAwait(true);
-            if (opened)
-            {
-                return;
-            }
-
-            await _ui.ShowInfoAsync(
-                    Localize(
-                        "Navigation_OpenSettingsFailed",
-                        "Failed to open settings. Please try again later."))
-                .ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Navigating to remote project settings failed");
-            await _ui.ShowInfoAsync(
-                    Localize(
-                        "Navigation_OpenSettingsFailed",
-                        "Failed to open settings. Please try again later."))
-                .ConfigureAwait(true);
-        }
-    }
+    private Task NavigateToRemoteProjectSettingsAsync()
+        => ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey);
 
     public void RebuildTree()
     {

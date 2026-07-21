@@ -67,7 +67,7 @@ public sealed class MainNavigationViewAdapter
 
         if (string.Equals(tag, NavItemTag.Start, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateStartAsync());
+            return AwaitActivationHandledAsync(_viewModel.ActivateStartAsync());
         }
 
         if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
@@ -77,7 +77,7 @@ public sealed class MainNavigationViewAdapter
 
         if (string.Equals(tag, NavItemTag.Settings, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey));
+            return AwaitActivationHandledAsync(_viewModel.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey));
         }
 
         if (NavItemTag.TryParseSession(tag, out var sessionId))

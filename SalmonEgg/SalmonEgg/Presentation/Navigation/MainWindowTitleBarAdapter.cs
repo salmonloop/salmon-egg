@@ -14,6 +14,7 @@ using Windows.Graphics;
 #endif
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Input;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Views.Start;
 
@@ -36,7 +37,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
     private readonly Button _titleBarBackButton;
     private readonly Frame _contentFrame;
     private readonly DispatcherQueue _dispatcherQueue;
-    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel _navigationViewModel;
     private readonly ILogger _logger;
 
 #if WINDOWS
@@ -58,7 +59,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         Button titleBarBackButton,
         Frame contentFrame,
         DispatcherQueue dispatcherQueue,
-        INavigationCoordinator navigationCoordinator,
+        MainNavigationViewModel navigationViewModel,
         ILogger logger)
     {
         _appTitleBar = appTitleBar ?? throw new ArgumentNullException(nameof(appTitleBar));
@@ -72,7 +73,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         _titleBarBackButton = titleBarBackButton ?? throw new ArgumentNullException(nameof(titleBarBackButton));
         _contentFrame = contentFrame ?? throw new ArgumentNullException(nameof(contentFrame));
         _dispatcherQueue = dispatcherQueue ?? throw new ArgumentNullException(nameof(dispatcherQueue));
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _navigationViewModel = navigationViewModel ?? throw new ArgumentNullException(nameof(navigationViewModel));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -186,7 +187,7 @@ public sealed class MainWindowTitleBarAdapter : ITitleBarInsetProvider, IDisposa
         if (_contentFrame.Content is not null
             && _contentFrame.Content is not StartView)
         {
-            _ = _navigationCoordinator.ActivateStartAsync();
+            _ = _navigationViewModel.ActivateStartAsync();
             return true;
         }
 

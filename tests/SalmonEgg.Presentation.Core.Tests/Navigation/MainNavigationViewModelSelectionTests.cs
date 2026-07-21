@@ -1952,6 +1952,207 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+    [Fact]
+    public async Task ActivateStartAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync(null))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateStartAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateStartAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateStartAsync(null))
+                .ThrowsAsync(new InvalidOperationException("start shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateStartAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open the start page. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey);
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+                .ThrowsAsync(new InvalidOperationException("settings shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey);
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
 
     [Fact]
     public async Task PrepareStartForProjectAsync_WhenOlderRequestFailsAfterNewerSuccess_PreservesLatestPendingProject()

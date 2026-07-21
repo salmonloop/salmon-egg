@@ -3169,7 +3169,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("ReferenceEquals(current, MainNavView)", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("SyncShellSelectionFromCurrentContent", sharedPage, StringComparison.Ordinal);
         Assert.Contains("consumer.TryConsumeNavigationIntent(GamepadNavigationIntent.Back)", titleBarAdapter, StringComparison.Ordinal);
-        Assert.Contains("_ = _navigationCoordinator.ActivateStartAsync();", titleBarAdapter, StringComparison.Ordinal);
+        Assert.Contains("_ = _navigationViewModel.ActivateStartAsync();", titleBarAdapter, StringComparison.Ordinal);
     }
 
     [Fact]

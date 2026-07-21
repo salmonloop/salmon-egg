@@ -129,7 +129,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             TitleBarBackButton,
             ContentFrame,
             DispatcherQueue,
-            navigationCoordinator,
+            NavVM,
             _logger);
         BootLogDebug("MainPage: InitializeComponent done");
 
