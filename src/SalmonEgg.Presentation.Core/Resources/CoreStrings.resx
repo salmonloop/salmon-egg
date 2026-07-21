@@ -190,6 +190,21 @@
   <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
     <value>复制失败详情失败，请稍后重试。</value>
   </data>
+  <data name="ChatOperation_CreateSessionFailed" xml:space="preserve">
+    <value>创建会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModeFailed" xml:space="preserve">
+    <value>切换模式失败：{0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModelFailed" xml:space="preserve">
+    <value>切换模型失败：{0}</value>
+  </data>
+  <data name="ChatOperation_CancelSessionFailed" xml:space="preserve">
+    <value>取消会话失败：{0}</value>
+  </data>
+  <data name="ChatOperation_DisconnectFailed" xml:space="preserve">
+    <value>断开连接失败：{0}</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>新建会话</value>
   </data>

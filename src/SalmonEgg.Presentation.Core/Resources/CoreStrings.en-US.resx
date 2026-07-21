@@ -192,6 +192,21 @@
   <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
     <value>Failed to copy the failure detail. Please try again later.</value>
   </data>
+  <data name="ChatOperation_CreateSessionFailed" xml:space="preserve">
+    <value>Failed to create session: {0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModeFailed" xml:space="preserve">
+    <value>Failed to switch mode: {0}</value>
+  </data>
+  <data name="ChatOperation_SwitchModelFailed" xml:space="preserve">
+    <value>Failed to switch model: {0}</value>
+  </data>
+  <data name="ChatOperation_CancelSessionFailed" xml:space="preserve">
+    <value>Failed to cancel session: {0}</value>
+  </data>
+  <data name="ChatOperation_DisconnectFailed" xml:space="preserve">
+    <value>Failed to disconnect: {0}</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>New session</value>
   </data>

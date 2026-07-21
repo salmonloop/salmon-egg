@@ -89,7 +89,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "Failed to create session");
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    $"Failed to create session: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_CreateSessionFailed",
+                        "Failed to create session: {0}",
+                        ex.Message))
                 .ConfigureAwait(false);
         }
     }
@@ -559,6 +562,19 @@ public partial class ChatViewModel
         var localized = _localizer[key];
         return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
             ? fallback
+            : localized.Value;
+    }
+
+    private string FormatLocalize(string key, string fallback, params object[] arguments)
+    {
+        if (_localizer is null)
+        {
+            return string.Format(CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = _localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(CultureInfo.CurrentCulture, fallback, arguments)
             : localized.Value;
     }
 
@@ -1381,7 +1397,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "Failed to switch mode");
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    $"Failed to switch mode: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_SwitchModeFailed",
+                        "Failed to switch mode: {0}",
+                        ex.Message))
                 .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
@@ -1458,7 +1477,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "Failed to switch model");
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    $"Failed to switch model: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_SwitchModelFailed",
+                        "Failed to switch model: {0}",
+                        ex.Message))
                 .ConfigureAwait(true);
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(true);
         }
@@ -1515,7 +1537,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "Failed to cancel session");
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    $"Failed to cancel session: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_CancelSessionFailed",
+                        "Failed to cancel session: {0}",
+                        ex.Message))
                 .ConfigureAwait(true);
         }
         finally
@@ -1557,7 +1582,10 @@ public partial class ChatViewModel
             Logger.LogError(ex, "Failed to disconnect");
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    $"Failed to disconnect: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_DisconnectFailed",
+                        "Failed to disconnect: {0}",
+                        ex.Message))
                 .ConfigureAwait(true);
         }
         finally

@@ -481,6 +481,87 @@ public partial class ChatViewModelTests
         chatService.Verify(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ChatModeSelection_WhenRemoteSetModeFails_SurfacesLocalizedConversationOperationFailure()
+    {
+        await using var fixture = CreateViewModel(localizer: new TestCoreStringLocalizer());
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
+            .ThrowsAsync(new InvalidOperationException("mode-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList.Create(
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "code",
+                            ModeName = "Code",
+                            Description = string.Empty
+                        },
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "ask",
+                            ModeName = "Ask",
+                            Description = string.Empty
+                        }),
+                    SelectedModeId: "code",
+                    ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    ShowConfigOptionsPanel: false,
+                    AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    SessionInfo: null,
+                    Usage: null))
+        });
+        SetCurrentSessionId(viewModel, "conv-1");
+        SetCurrentRemoteSessionId(viewModel, "remote-1");
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        var ask = viewModel.ChatModeSelectorItems.Single(item => item.SemanticValue == "ask");
+        viewModel.SelectChatModeDisplayCommand.Execute(ask);
+
+        await WaitForConditionAsync(() => Task.FromResult(viewModel.HasConversationOperationFailure));
+        Assert.Equal("Failed to switch mode: mode-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task SelectChatModelDisplay_WhenRemoteSetConfigFails_SurfacesLocalizedConversationOperationFailure()
+    {
+        await using var fixture = CreateViewModel(localizer: new TestCoreStringLocalizer());
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionConfigOptionAsync(It.IsAny<SessionSetConfigOptionParams>()))
+            .ThrowsAsync(new InvalidOperationException("model-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.DispatchAsync(new SetBindingSliceAction(new ConversationBindingSlice("conv-1", "remote-1", "profile-1")));
+        await fixture.DispatchAsync(new SelectConversationAction("conv-1"));
+        await fixture.DispatchAsync(new SetConversationSessionStateAction(
+            "conv-1",
+            ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: CreateModelConfigSnapshots("claude-sonnet").ToImmutableList(),
+            ShowConfigOptionsPanel: true));
+
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+
+        var opus = viewModel.ChatModelSelectorItems.Single(item => item.SemanticValue == "claude-opus");
+        viewModel.SelectChatModelDisplayCommand.Execute(opus);
+
+        await WaitForConditionAsync(() => Task.FromResult(viewModel.HasConversationOperationFailure));
+        Assert.Equal("Failed to switch model: model-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
     private static StartViewModel CreateStartViewModelForChatFixture(
         ViewModelFixture fixture,
         MainNavigationViewModel nav,
