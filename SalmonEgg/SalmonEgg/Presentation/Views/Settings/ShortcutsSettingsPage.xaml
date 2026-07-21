@@ -18,6 +18,7 @@
             <VisualStateGroup x:Name="ShortcutsHeightStates">
                 <VisualState x:Name="ShortcutsHeightCompact">
                     <VisualState.Setters>
+                        <Setter Target="ShortcutsContentStack.Padding" Value="0,0,0,16" />
                         <Setter Target="ShortcutsContentStack.Spacing" Value="14" />
                     </VisualState.Setters>
                 </VisualState>

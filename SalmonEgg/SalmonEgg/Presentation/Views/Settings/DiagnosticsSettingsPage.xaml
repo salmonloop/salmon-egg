@@ -22,7 +22,11 @@
              the prior 320px height (MinWindowHeight=760, same threshold as Start/ACP/MCP). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="LiveLogHeightStates">
-                <VisualState x:Name="LiveLogHeightCompact" />
+                <VisualState x:Name="LiveLogHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="LiveLogTextBox.Height" Value="160" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="LiveLogHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
@@ -36,7 +40,12 @@
             <!-- Short windows: densify section stack spacing so diagnostics remains scannable
                  without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
             <VisualStateGroup x:Name="DiagnosticsHeightStates">
-                <VisualState x:Name="DiagnosticsHeightCompact" />
+                <VisualState x:Name="DiagnosticsHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="DiagnosticsContentStack.Padding" Value="0,0,0,16" />
+                        <Setter Target="DiagnosticsContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="DiagnosticsHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />

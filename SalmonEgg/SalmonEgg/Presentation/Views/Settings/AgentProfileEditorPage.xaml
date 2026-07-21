@@ -24,6 +24,7 @@
             <VisualStateGroup x:Name="AgentProfileEditorHeightStates">
                 <VisualState x:Name="AgentProfileEditorHeightCompact">
                     <VisualState.Setters>
+                        <Setter Target="AgentProfileEditorContent.Padding" Value="0,0,0,16" />
                         <Setter Target="AgentProfileEditorContent.Spacing" Value="12" />
                         <Setter Target="AgentProfileEditorBreadcrumb.Margin" Value="0,0,0,6" />
                     </VisualState.Setters>

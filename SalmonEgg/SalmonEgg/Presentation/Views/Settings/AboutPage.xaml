@@ -17,7 +17,11 @@
              the prior 360px max (MinWindowHeight=760, same threshold as Start/Diagnostics). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="OpenSourceHeightStates">
-                <VisualState x:Name="OpenSourceHeightCompact" />
+                <VisualState x:Name="OpenSourceHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="OpenSourceAcknowledgementsList.MaxHeight" Value="220" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="OpenSourceHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
@@ -31,7 +35,12 @@
             <!-- Short windows: densify section stack spacing so About remains scannable without
                  oversized marketing gaps. Comfortable restores Spacing=24 at MinWindowHeight=760. -->
             <VisualStateGroup x:Name="AboutHeightStates">
-                <VisualState x:Name="AboutHeightCompact" />
+                <VisualState x:Name="AboutHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AboutContentStack.Padding" Value="0,0,0,16" />
+                        <Setter Target="AboutContentStack.Spacing" Value="14" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="AboutHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
