@@ -2241,12 +2241,13 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
-    public void SettingsBreadcrumbBar_ActivatesThroughNavigationCoordinator()
+    public void SettingsBreadcrumbBar_ActivatesThroughNavigationViewModelOwner()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Controls\SettingsBreadcrumbBar.xaml.cs");
 
-        Assert.Contains("INavigationCoordinator", code, StringComparison.Ordinal);
+        Assert.Contains("MainNavigationViewModel", code, StringComparison.Ordinal);
         Assert.Contains("ActivateSettingsAsync", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("INavigationCoordinator", code, StringComparison.Ordinal);
         Assert.DoesNotContain("IShellNavigationService", code, StringComparison.Ordinal);
         Assert.DoesNotContain("NavigateToSettings", code, StringComparison.Ordinal);
     }
