@@ -853,6 +853,8 @@ public sealed class XamlComplianceTests
     {
         var sendButton = FindElementByName(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml", "SendButton");
         var cancelButton = FindElementByName(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml", "CancelButton");
+        var voiceStartButton = FindElementByName(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml", "VoiceInputStartButton");
+        var voiceStopButton = FindElementByName(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml", "VoiceInputStopButton");
 
         Assert.True(
             HasAttributeByLocalName(sendButton, "AutomationProperties.Name") || HasXUid(sendButton, "SendButton"),
@@ -860,10 +862,20 @@ public sealed class XamlComplianceTests
         Assert.True(
             HasAttributeByLocalName(cancelButton, "AutomationProperties.Name") || HasXUid(cancelButton, "CancelButton"),
             "CancelButton must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
+        Assert.True(
+            HasAttributeByLocalName(voiceStartButton, "AutomationProperties.Name") || HasXUid(voiceStartButton, "VoiceInputStartButton"),
+            "VoiceInputStartButton must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
+        Assert.True(
+            HasAttributeByLocalName(voiceStopButton, "AutomationProperties.Name") || HasXUid(voiceStopButton, "VoiceInputStopButton"),
+            "VoiceInputStopButton must expose an accessible name via AutomationProperties.Name or x:Uid localization.");
         Assert.Equal("44", GetAttributeByLocalName(sendButton, "MinWidth"));
         Assert.Equal("44", GetAttributeByLocalName(sendButton, "MinHeight"));
         Assert.Equal("44", GetAttributeByLocalName(cancelButton, "MinWidth"));
         Assert.Equal("44", GetAttributeByLocalName(cancelButton, "MinHeight"));
+        Assert.Equal("44", GetAttributeByLocalName(voiceStartButton, "MinWidth"));
+        Assert.Equal("44", GetAttributeByLocalName(voiceStartButton, "MinHeight"));
+        Assert.Equal("44", GetAttributeByLocalName(voiceStopButton, "MinWidth"));
+        Assert.Equal("44", GetAttributeByLocalName(voiceStopButton, "MinHeight"));
     }
 
     [Fact]
@@ -913,6 +925,9 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("AutomationProperties.Name=\"取消发送\"", xaml);
         Assert.Contains("x:Uid=\"ChatInputBox\"", xaml);
         Assert.Contains("x:Uid=\"ChatModeSelector\"", xaml);
+        Assert.Contains("x:Uid=\"ChatModelSelector\"", xaml);
+        Assert.Contains("x:Uid=\"VoiceInputStartButton\"", xaml);
+        Assert.Contains("x:Uid=\"VoiceInputStopButton\"", xaml);
         Assert.Contains("x:Uid=\"SendButton\"", xaml);
         Assert.Contains("x:Uid=\"CancelButton\"", xaml);
     }
@@ -1594,6 +1609,44 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Uid=\"MiniChatComposerVoiceListeningStatus\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatCancelButton\"", xaml);
         Assert.Contains("x:Uid=\"MiniChatSendButton\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatVoiceInputStartButton\"", xaml);
+        Assert.Contains("x:Uid=\"MiniChatVoiceInputStopButton\"", xaml);
+    }
+
+    [Fact]
+    public void ChatComposerVoiceAndModelControls_HaveLocalizedResources()
+    {
+        string[] resourceFiles =
+        [
+            @"SalmonEgg\SalmonEgg\Strings\zh-Hans\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en\Resources.resw",
+            @"SalmonEgg\SalmonEgg\Strings\en-US\Resources.resw"
+        ];
+        string[] requiredResources =
+        [
+            "ChatModelSelector.PlaceholderText",
+            "VoiceInputStartButton.AutomationProperties.Name",
+            "VoiceInputStartButton.ToolTipService.ToolTip",
+            "VoiceInputStopButton.AutomationProperties.Name",
+            "VoiceInputStopButton.ToolTipService.ToolTip",
+            "MiniChatVoiceInputStartButton.ToolTipService.ToolTip",
+            "MiniChatVoiceInputStartButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name",
+            "MiniChatVoiceInputStopButton.ToolTipService.ToolTip",
+            "MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"
+        ];
+
+        foreach (var resourceFile in resourceFiles)
+        {
+            var resources = XDocument.Parse(LoadText(resourceFile));
+
+            foreach (var resourceName in requiredResources)
+            {
+                Assert.True(
+                    resources.Descendants("data")
+                        .Any(data => string.Equals((string?)data.Attribute("name"), resourceName, StringComparison.Ordinal)),
+                    $"{resourceFile} must define {resourceName}.");
+            }
+        }
     }
 
     [Fact]

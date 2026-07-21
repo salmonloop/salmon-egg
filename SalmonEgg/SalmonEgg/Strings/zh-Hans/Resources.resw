@@ -1465,4 +1465,31 @@
   <data name="DataStorage_CloudSyncDisable.Content" xml:space="preserve"><value>关闭云同步（保留设置）</value></data>
   <data name="DataStorage_CloudSyncForget.Content" xml:space="preserve"><value>移除本机云同步设置</value></data>
   <data name="Common_Cancel.Content" xml:space="preserve"><value>取消</value></data>
+  <data name="ChatModelSelector.PlaceholderText" xml:space="preserve">
+    <value>选择模型</value>
+  </data>
+  <data name="VoiceInputStartButton.AutomationProperties.Name" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="VoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="VoiceInputStopButton.AutomationProperties.Name" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="VoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStartButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>开始语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.ToolTipService.ToolTip" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
+  <data name="MiniChatVoiceInputStopButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>停止语音输入</value>
+  </data>
 </root>
