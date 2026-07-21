@@ -101,6 +101,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Shortcuts_ConflictMessage"] = "Conflicts: {0}",
         ["Shortcuts_ConflictSeparator"] = ", ",
         ["Diagnostics_NoLogFileFound"] = "No log file found.",
+        ["Diagnostics_LogSnippetCopied"] = "Recent log snippet copied.",
+        ["Diagnostics_CopyLogSnippetFailed"] = "Failed to copy the recent log snippet. Please try again later.",
         ["LiveLog_StatusNotStarted"] = "Not started",
         ["LiveLog_StatusStreaming"] = "Viewing live",
         ["LiveLog_StatusStopped"] = "Stopped",

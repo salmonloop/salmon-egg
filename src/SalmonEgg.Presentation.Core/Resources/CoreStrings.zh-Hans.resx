@@ -349,6 +349,12 @@
   <data name="Diagnostics_NoLogFileFound" xml:space="preserve">
     <value>未找到日志文件。</value>
   </data>
+  <data name="Diagnostics_LogSnippetCopied" xml:space="preserve">
+    <value>已复制最近日志片段。</value>
+  </data>
+  <data name="Diagnostics_CopyLogSnippetFailed" xml:space="preserve">
+    <value>复制最近日志片段失败，请稍后重试。</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>未启动</value>
   </data>

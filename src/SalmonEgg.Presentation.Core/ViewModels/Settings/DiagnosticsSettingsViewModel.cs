@@ -112,26 +112,26 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
             await RefreshLatestLogFileAsync();
             if (string.IsNullOrWhiteSpace(LatestLogFilePath))
             {
-                _ = await _shell.CopyToClipboardAsync(_localizer["Diagnostics_NoLogFileFound"]);
+                await _ui.ShowInfoAsync(_localizer["Diagnostics_NoLogFileFound"]).ConfigureAwait(true);
                 return;
             }
 
             var text = await _logFileCatalog.ReadTailAsync(LatestLogFilePath, 8000);
-            if (text is null)
+            if (string.IsNullOrWhiteSpace(text))
             {
-                _ = await _shell.CopyToClipboardAsync(_localizer["Diagnostics_NoLogFileFound"]);
+                await _ui.ShowInfoAsync(_localizer["Diagnostics_NoLogFileFound"]).ConfigureAwait(true);
                 return;
             }
 
-            var copied = await _shell.CopyToClipboardAsync(text);
-            if (!copied)
-            {
-                _logger.LogWarning("Clipboard copy is not supported on the current platform.");
-            }
+            var copied = await _shell.CopyToClipboardAsync(text).ConfigureAwait(true);
+            await _ui.ShowInfoAsync(copied
+                ? _localizer["Diagnostics_LogSnippetCopied"]
+                : _localizer["About_ClipboardUnsupported"]).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CopyRecentLogSnippet failed");
+            await _ui.ShowInfoAsync(_localizer["Diagnostics_CopyLogSnippetFailed"]).ConfigureAwait(true);
         }
     }
 

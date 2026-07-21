@@ -110,10 +110,74 @@ public sealed class DiagnosticsSettingsViewModelTests
         ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_CreateDiagnosticsBundleFailed"]), Times.Once);
     }
 
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenNoLogFile_ShowsLocalizedMessage()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync((LogFileSummary?)null);
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["Diagnostics_NoLogFileFound"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenClipboardUnsupported_ShowsLocalizedMessage()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync(new LogFileSummary("C:/app/logs/app.log", DateTimeOffset.UtcNow));
+        catalog.Setup(service => service.ReadTailAsync(It.IsAny<string>(), It.IsAny<int>()))
+            .ReturnsAsync("line1\nline2");
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.CopyToClipboardAsync(It.IsAny<string>()))
+            .ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            shell: shell,
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_ClipboardUnsupported"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyRecentLogSnippetCommand_WhenCopyThrows_ShowsLocalizedFailure()
+    {
+        var catalog = new Mock<ILogFileCatalog>();
+        catalog.Setup(service => service.GetLatestAsync(It.IsAny<string>()))
+            .ReturnsAsync(new LogFileSummary("C:/app/logs/app.log", DateTimeOffset.UtcNow));
+        catalog.Setup(service => service.ReadTailAsync(It.IsAny<string>(), It.IsAny<int>()))
+            .ThrowsAsync(new IOException("read failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            logFileCatalog: catalog,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CopyRecentLogSnippetCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["Diagnostics_CopyLogSnippetFailed"]), Times.Once);
+    }
+
     private static DiagnosticsSettingsViewModel CreateViewModel(
         bool supportsExternalOpen = true,
         bool supportsLocalFileExport = true,
         Mock<IDiagnosticsBundleService>? bundle = null,
+        Mock<IPlatformShellService>? shell = null,
+        Mock<ILogFileCatalog>? logFileCatalog = null,
         Mock<IStorageLocationService>? storageLocations = null,
         Mock<IUiInteractionService>? ui = null,
         LiveLogViewerViewModel? liveLogViewer = null,
@@ -134,10 +198,10 @@ public sealed class DiagnosticsSettingsViewModelTests
             chat,
             paths.Object,
             bundle?.Object ?? Mock.Of<IDiagnosticsBundleService>(),
-            Mock.Of<IPlatformShellService>(),
+            shell?.Object ?? Mock.Of<IPlatformShellService>(),
             capabilities.Object,
             storageLocations?.Object ?? Mock.Of<IStorageLocationService>(),
-            Mock.Of<ILogFileCatalog>(),
+            logFileCatalog?.Object ?? Mock.Of<ILogFileCatalog>(),
             ui?.Object ?? Mock.Of<IUiInteractionService>(),
             liveLogViewer ?? CreateLiveLogViewer(),
             voiceInputDiagnostics ?? CreateVoiceInputDiagnostics(),
