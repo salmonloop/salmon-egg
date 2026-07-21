@@ -152,7 +152,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["McpSettings_ImportFailed"] = "Could not parse MCP JSON. Check mcpServers, service names, commands, and addresses.",
         ["McpSettings_ClipboardEmpty"] = "No readable MCP JSON was found on the clipboard.",
         ["McpSettings_ClipboardFilled"] = "Filled the current service from the clipboard.",
-        ["AcpRemoteDirectories_SaveValidationRemotePathRequired"] = "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+        ["AcpRemoteDirectories_SaveValidationRemotePathRequired"] = "Enter an absolute remote project path before saving.",
         ["Acp_RemoteDirectoryDelete.Content"] = "Delete",
         ["ShortcutAction_NewSession"] = "New session",
         ["ShortcutAction_Search"] = "Search",

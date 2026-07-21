@@ -481,7 +481,7 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         Assert.True(row.IsEditing);
         Assert.True(row.IsNew);
-        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
         Assert.Empty(preferences.AgentRemoteDirectories);
     }
 
@@ -635,8 +635,42 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         Assert.True(row.IsEditing);
         Assert.True(row.IsNew);
-        Assert.False(string.IsNullOrWhiteSpace(row.ValidationMessage));
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
         Assert.Empty(preferences.AgentRemoteDirectories);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_ReprojectsRemoteDirectoryValidationMessage()
+    {
+        var preferences = CreatePreferences();
+        var languageService = new Mock<IAppLanguageService>();
+        var currentLanguageTag = "zh-Hans";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+            "请填写远程项目的绝对路径后再保存。");
+        localizer.Set(
+            "en-US",
+            "AcpRemoteDirectories_SaveValidationRemotePathRequired",
+            "Enter an absolute remote project path before saving.");
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns(() => currentLanguageTag);
+
+        var viewModel = await CreateViewModelAsync(preferences, localizer, languageService.Object);
+        SelectProfile(viewModel, "profile-a");
+
+        viewModel.AddRemoteDirectoryCommand.Execute(null);
+        var row = Assert.Single(viewModel.RemoteDirectoryRows);
+        row.RemotePathDraft = "relative/path";
+        await row.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal("请填写远程项目的绝对路径后再保存。", row.ValidationMessage);
+
+        currentLanguageTag = "en-US";
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal("Enter an absolute remote project path before saving.", row.ValidationMessage);
     }
 
     [Fact]
@@ -1375,7 +1409,13 @@ public sealed class AcpConnectionSettingsViewModelTests
             new ImmediateUiDispatcher());
     }
 
-    private static async Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)
+    private static Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)
+        => CreateViewModelAsync(preferences, new TestCoreStringLocalizer());
+
+    private static async Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(
+        AppPreferencesViewModel preferences,
+        IStringLocalizer<CoreStrings> localizer,
+        IAppLanguageService? languageService = null)
     {
         var profiles = CreateProfiles(preferences);
         profiles.Profiles.Add(new ServerConfiguration { Id = "profile-a", Name = "Profile A" });
@@ -1390,7 +1430,9 @@ public sealed class AcpConnectionSettingsViewModelTests
             preferences,
             CreateTransportSupportPolicy(preferences),
             logger.Object,
-            new TestCoreStringLocalizer());
+            localizer,
+            new ImmediateUiDispatcher(),
+            languageService);
 
         await Task.Delay(10);
         return viewModel;

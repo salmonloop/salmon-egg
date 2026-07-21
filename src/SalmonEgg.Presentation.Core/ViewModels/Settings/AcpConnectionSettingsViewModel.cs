@@ -217,6 +217,32 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
             ?? HydrationCompletionModeOptions.FirstOrDefault();
         OnPropertyChanged(nameof(SelectedTransportName));
         OnPropertyChanged(nameof(SelectedHydrationCompletionModeDescription));
+
+        foreach (var row in RemoteDirectoryRows)
+        {
+            if (string.IsNullOrWhiteSpace(row.ValidationMessageResourceKey))
+            {
+                continue;
+            }
+
+            row.SetValidationMessage(
+                Localize(row.ValidationMessageResourceKey, row.ValidationMessage),
+                row.ValidationMessageResourceKey);
+        }
+    }
+
+    private const string RemotePathRequiredValidationKey =
+        "AcpRemoteDirectories_SaveValidationRemotePathRequired";
+
+    private const string RemotePathRequiredValidationFallback =
+        "Enter an absolute remote project path before saving.";
+
+    private string Localize(string key, string fallback)
+    {
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     private void OnAgentRemoteDirectoriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -477,7 +503,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         var remotePath = row.RemotePathDraft?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(remotePath) || !ProtocolPathRules.IsAbsolutePath(remotePath))
         {
-            row.SetValidationMessage(_localizer["AcpRemoteDirectories_SaveValidationRemotePathRequired"]);
+            row.SetValidationMessage(
+                Localize(
+                    RemotePathRequiredValidationKey,
+                    RemotePathRequiredValidationFallback),
+                RemotePathRequiredValidationKey);
             SetEditingRemoteDirectory(row);
             return Task.CompletedTask;
         }
@@ -811,7 +841,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
 
     internal void BeginEditing()
     {
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         if (!IsEditing)
         {
             DisplayNameDraft = DisplayName;
@@ -826,7 +856,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
     {
         DisplayNameDraft = DisplayName;
         RemotePathDraft = RemotePath;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
     }
 
     internal void Commit(AgentRemoteDirectory directory)
@@ -837,7 +867,7 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
         RemotePath = directory.RemotePath;
         DisplayNameDraft = directory.DisplayName;
         RemotePathDraft = directory.RemotePath;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         IsNew = false;
         IsEditing = false;
 
@@ -847,13 +877,16 @@ public sealed partial class AcpRemoteDirectoryRowViewModel : ObservableObject
     internal void CancelEditing()
     {
         IsEditing = false;
-        ValidationMessage = string.Empty;
+        SetValidationMessage(string.Empty);
         NotifyCommandStatesChanged();
     }
 
-    internal void SetValidationMessage(string message)
+    internal string? ValidationMessageResourceKey { get; private set; }
+
+    internal void SetValidationMessage(string message, string? resourceKey = null)
     {
         ValidationMessage = message ?? string.Empty;
+        ValidationMessageResourceKey = string.IsNullOrWhiteSpace(resourceKey) ? null : resourceKey;
     }
 
     internal void NotifyCommandStatesChanged()
