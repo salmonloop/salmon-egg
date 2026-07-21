@@ -5,10 +5,12 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentValidation;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.ViewModels.Chat;
 
 namespace SalmonEgg.Presentation.ViewModels;
@@ -21,11 +23,13 @@ public partial class ConfigurationEditorViewModel(
     IValidator<ServerConfiguration> validator,
     IConfigurationService configurationService,
     ITransportSupportPolicy transportSupportPolicy,
+    IStringLocalizer<CoreStrings> localizer,
     ILogger<ConfigurationEditorViewModel> logger) : ViewModelBase(logger)
 {
     private readonly IValidator<ServerConfiguration> _validator = validator ?? throw new ArgumentNullException(nameof(validator));
     private readonly IConfigurationService _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
     private readonly ITransportSupportPolicy _transportSupportPolicy = transportSupportPolicy ?? throw new ArgumentNullException(nameof(transportSupportPolicy));
+    private readonly IStringLocalizer<CoreStrings> _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
 
     [ObservableProperty]
     private string _name = string.Empty;
@@ -281,7 +285,7 @@ public partial class ConfigurationEditorViewModel(
             if (!validationResult.IsValid)
             {
                 var errors = string.Join("; ", validationResult.Errors);
-                SetError("Validation failed: " + errors);
+                SetError(_localizer["AgentProfileEditor_ValidationFailedFormat", errors]);
                 return;
             }
 
@@ -290,12 +294,12 @@ public partial class ConfigurationEditorViewModel(
         catch (ConfigurationPersistenceException ex)
         {
             Logger.LogError(ex, "Failed to save configuration: {Reason}", ex.Reason);
-            SetError("Failed to save configuration: " + ex.UserMessage);
+            SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.UserMessage]);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to save configuration");
-            SetError("Failed to save configuration: " + ex.Message);
+            SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.Message]);
         }
     }
 

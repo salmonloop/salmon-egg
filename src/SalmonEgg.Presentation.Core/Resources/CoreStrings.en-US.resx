@@ -353,6 +353,12 @@ Create the corresponding Markdown file in:
   <data name="Diagnostics_CopyLogSnippetFailed" xml:space="preserve">
     <value>Failed to copy the recent log snippet. Please try again later.</value>
   </data>
+  <data name="AgentProfileEditor_ValidationFailedFormat" xml:space="preserve">
+    <value>Validation failed: {0}</value>
+  </data>
+  <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
+    <value>Failed to save configuration: {0}</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>Not started</value>
   </data>

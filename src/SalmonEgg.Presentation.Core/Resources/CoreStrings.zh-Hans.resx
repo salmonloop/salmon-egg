@@ -355,6 +355,12 @@
   <data name="Diagnostics_CopyLogSnippetFailed" xml:space="preserve">
     <value>复制最近日志片段失败，请稍后重试。</value>
   </data>
+  <data name="AgentProfileEditor_ValidationFailedFormat" xml:space="preserve">
+    <value>验证失败：{0}</value>
+  </data>
+  <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
+    <value>保存配置失败：{0}</value>
+  </data>
   <data name="LiveLog_StatusNotStarted" xml:space="preserve">
     <value>未启动</value>
   </data>

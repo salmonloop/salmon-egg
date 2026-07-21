@@ -7,6 +7,7 @@ using Moq;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.ViewModels;
 using Xunit;
 
@@ -25,6 +26,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         Assert.Equal("Stdio (subprocess)", viewModel.TransportOptions[0].Name);
@@ -41,6 +43,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         Assert.Equal(
@@ -59,6 +62,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -84,6 +88,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         Assert.DoesNotContain(viewModel.TransportOptions, option => option.Type == TransportType.Stdio);
@@ -101,6 +106,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -121,6 +127,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadConfiguration(new ServerConfiguration
@@ -148,6 +155,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -167,6 +175,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadConfiguration(new ServerConfiguration
@@ -198,6 +207,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();
@@ -233,6 +243,7 @@ public sealed class ConfigurationEditorViewModelTests
             validator,
             configurationService.Object,
             transportSupportPolicy,
+            new TestCoreStringLocalizer(),
             logger.Object);
 
         viewModel.LoadBlankConfiguration();

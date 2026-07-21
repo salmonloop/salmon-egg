@@ -103,6 +103,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Diagnostics_NoLogFileFound"] = "No log file found.",
         ["Diagnostics_LogSnippetCopied"] = "Recent log snippet copied.",
         ["Diagnostics_CopyLogSnippetFailed"] = "Failed to copy the recent log snippet. Please try again later.",
+        ["AgentProfileEditor_ValidationFailedFormat"] = "Validation failed: {0}",
+        ["AgentProfileEditor_SaveFailedFormat"] = "Failed to save configuration: {0}",
         ["LiveLog_StatusNotStarted"] = "Not started",
         ["LiveLog_StatusStreaming"] = "Viewing live",
         ["LiveLog_StatusStopped"] = "Stopped",

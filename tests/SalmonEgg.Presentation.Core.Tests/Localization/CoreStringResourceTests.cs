@@ -82,6 +82,8 @@ public sealed class CoreStringResourceTests
     [InlineData("DataStorage_CreateDiagnosticsBundleFailed")]
     [InlineData("Diagnostics_LogSnippetCopied")]
     [InlineData("Diagnostics_CopyLogSnippetFailed")]
+    [InlineData("AgentProfileEditor_ValidationFailedFormat")]
+    [InlineData("AgentProfileEditor_SaveFailedFormat")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)
