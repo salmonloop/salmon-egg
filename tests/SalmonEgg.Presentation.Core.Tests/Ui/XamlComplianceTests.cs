@@ -1207,6 +1207,20 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void AppBootLog_IsConditionalDebugOnly()
+    {
+        var appCode = LoadText(@"SalmonEgg\SalmonEgg\App.xaml.cs");
+
+        Assert.Contains("[Conditional(\"DEBUG\")]", appCode, StringComparison.Ordinal);
+        Assert.Contains("internal static void BootLog(string message)", appCode, StringComparison.Ordinal);
+        Assert.True(
+            appCode.IndexOf("[Conditional(\"DEBUG\")]", StringComparison.Ordinal)
+            < appCode.IndexOf("internal static void BootLog(string message)", StringComparison.Ordinal));
+        Assert.Contains("#if DEBUG", appCode, StringComparison.Ordinal);
+        Assert.Contains("boot.log", appCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppMotionPreference_DoesNotOverrideNativeControlTemplateMotion()
     {
         var appCode = LoadText(@"SalmonEgg\SalmonEgg\App.xaml.cs");

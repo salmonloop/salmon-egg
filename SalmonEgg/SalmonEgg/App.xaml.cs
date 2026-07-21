@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Domain.Services;
@@ -22,6 +23,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     private readonly SalmonEgg.Domain.Services.IAppMaintenanceService? _maintenanceService;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
 
+    // Diagnostic-only boot trail. Conditional so Release does not evaluate message
+    // arguments or retain call sites; body remains DEBUG-gated for the file write.
+    [Conditional("DEBUG")]
     internal static void BootLog(string message)
     {
 #if DEBUG
@@ -33,6 +37,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         }
         catch
         {
+            // Boot diagnostics must never disrupt startup.
         }
 #endif
     }
