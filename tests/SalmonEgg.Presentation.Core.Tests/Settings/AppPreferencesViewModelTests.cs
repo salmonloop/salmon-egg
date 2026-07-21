@@ -694,4 +694,63 @@ public class AppPreferencesViewModelTests
             s => s.ShowInfoAsync("Failed to update launch on startup. Please try again later."),
             Times.Once);
     }
+
+    [Fact]
+    public async Task LanguageChanged_WhenApplyFails_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            Language = "en-US"
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync("en-US"))
+            .Returns(Task.CompletedTask);
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync("zh-Hans"))
+            .ThrowsAsync(new InvalidOperationException("apply failed"));
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLanguageOverride).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var uiRuntime = new Mock<IUiRuntimeService>();
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("en-US", vm.Language);
+        languageService.Invocations.Clear();
+        uiRuntime.Invocations.Clear();
+
+        vm.Language = "zh-Hans";
+
+        for (var i = 0; i < 50 && string.Equals(vm.Language, "zh-Hans", StringComparison.Ordinal); i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("en-US", vm.Language);
+        Assert.Equal("en-US", vm.SelectedLanguageOption?.Tag);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to change language. Please try again later."),
+            Times.Once);
+        uiRuntime.Verify(s => s.ReloadShell(), Times.Never);
+        languageService.Verify(s => s.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
+        languageService.Verify(s => s.ApplyLanguageOverrideAsync("en-US"), Times.Never);
+    }
+
 }

@@ -865,6 +865,9 @@ Create the corresponding Markdown file in:
   <data name="General_LaunchOnStartupFailed" xml:space="preserve">
     <value>Failed to update launch on startup. Please try again later.</value>
   </data>
+  <data name="General_LanguageApplyFailed" xml:space="preserve">
+    <value>Failed to change language. Please try again later.</value>
+  </data>
   <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
     <value>All local data cleared.</value>
   </data>

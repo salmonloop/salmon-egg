@@ -291,6 +291,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["General_ClearCacheSuccess"] = "Local cache cleared.",
         ["General_ClearCacheFailed"] = "Failed to clear cache. Please try again later.",
         ["General_LaunchOnStartupFailed"] = "Failed to update launch on startup. Please try again later.",
+        ["General_LanguageApplyFailed"] = "Failed to change language. Please try again later.",
         ["DataStorage_ClearAllLocalDataSuccess"] = "All local data cleared.",
         ["DataStorage_ClearAllLocalDataFailed"] = "Failed to clear all local data. Please try again later.",
         ["Nav_ArchiveSessionTitle"] = "Archive session",

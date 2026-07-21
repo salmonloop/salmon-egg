@@ -33,6 +33,7 @@ public partial class AppPreferencesViewModel : ObservableObject
     private CancellationTokenSource? _saveCts;
     private bool _isInitialized;
     private bool _suppressSave;
+    private string _appliedLanguage = "System";
 
     [ObservableProperty]
     private string _theme = "System";
@@ -233,6 +234,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
                 Language = nextLanguage;
+                _appliedLanguage = nextLanguage;
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
@@ -364,10 +366,10 @@ public partial class AppPreferencesViewModel : ObservableObject
         _ = ApplyLaunchOnStartupAsync(value);
     }
     partial void OnMinimizeToTrayChanged(bool value) => ScheduleSave();
-    partial void OnLanguageChanged(string value)
+    partial void OnLanguageChanged(string? oldValue, string newValue)
     {
-        var normalized = AppLanguageCatalog.NormalizeTag(value);
-        if (!string.Equals(value, normalized, StringComparison.Ordinal))
+        var normalized = AppLanguageCatalog.NormalizeTag(newValue);
+        if (!string.Equals(newValue, normalized, StringComparison.Ordinal))
         {
             Language = normalized;
             return;
@@ -385,7 +387,12 @@ public partial class AppPreferencesViewModel : ObservableObject
         }
 
         ScheduleSave();
-        _ = ApplyLanguageChangeAsync(normalized);
+        if (string.Equals(normalized, _appliedLanguage, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = ApplyLanguageChangeAsync(_appliedLanguage, normalized);
     }
     partial void OnSelectedLanguageOptionChanged(AppLanguageOptionViewModel? value)
     {
@@ -509,17 +516,45 @@ public partial class AppPreferencesViewModel : ObservableObject
         ShortcutConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task ApplyLanguageChangeAsync(string normalized)
+    private async Task ApplyLanguageChangeAsync(string previousLanguage, string normalized)
     {
         try
         {
             await _languageService.ApplyLanguageOverrideAsync(normalized).ConfigureAwait(false);
+            _appliedLanguage = normalized;
             _uiRuntime.ReloadShell();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to apply language override");
+            await RevertLanguageAsync(previousLanguage).ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_LanguageApplyFailed"]).ConfigureAwait(false);
         }
+    }
+
+    private Task RevertLanguageAsync(string previousLanguage)
+    {
+        var normalizedPrevious = AppLanguageCatalog.NormalizeTag(previousLanguage);
+        return _uiDispatcher.EnqueueAsync(() =>
+        {
+            if (string.Equals(Language, normalizedPrevious, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Suppress apply/save re-entry while restoring the last successful language.
+            _suppressSave = true;
+            try
+            {
+                Language = normalizedPrevious;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+
+            ScheduleSave();
+        });
     }
 
     public void SetKeyBinding(string actionId, string gesture)
@@ -569,6 +604,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             LaunchOnStartup = false;
             MinimizeToTray = true;
             Language = "System";
+            _appliedLanguage = "System";
             LastSelectedServerId = null;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
