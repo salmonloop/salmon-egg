@@ -16,6 +16,7 @@
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <converters:TransportTypeLocalizationConverter x:Key="TransportTypeLocalizationConverter"/>
 
         <!-- Compact short-height default keeps touch-friendly row height (>=44) while
              reclaiming vertical budget. Comfortable restores prior 104/10 marketing density. -->
@@ -225,7 +226,7 @@
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind Name}" Style="{ThemeResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="{x:Bind TransportDisplayName}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="{x:Bind Transport, Converter={StaticResource TransportTypeLocalizationConverter}}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
                     </DataTemplate>
@@ -310,7 +311,7 @@
                             <TextBlock Text="{x:Bind ViewModel.SelectedProfile.Name, Mode=OneWay}" Style="{ThemeResource TitleTextBlockStyle}" FontWeight="Bold" />
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2">
-                                    <TextBlock Text="{x:Bind ViewModel.SelectedProfile.TransportDisplayName, Mode=OneWay}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Text="{x:Bind ViewModel.SelectedProfile.Transport, Mode=OneWay, Converter={StaticResource TransportTypeLocalizationConverter}}" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Border>
                                 <TextBlock x:Uid="DiscoverSessionsImportableListLabel" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             </StackPanel>

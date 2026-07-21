@@ -96,7 +96,9 @@ public sealed class DiscoverSessionsPageXamlTests
 
         // Assert
         Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.Name, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.TransportDisplayName, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind ViewModel.SelectedProfile.Transport, Mode=OneWay, Converter={StaticResource TransportTypeLocalizationConverter}}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TransportTypeLocalizationConverter", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TransportDisplayName", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.ProfilesViewModel.SelectedProfile.Name", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("ViewModel.ProfilesViewModel.SelectedProfile.TransportDisplayName", xaml, StringComparison.Ordinal);
     }

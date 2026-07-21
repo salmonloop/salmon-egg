@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -273,11 +274,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         var options = new ObservableCollection<TransportOptionViewModel>();
         if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
-            options.Add(new TransportOptionViewModel(TransportType.Stdio, localizer["AcpConnection_TransportStdio"]));
+            options.Add(new TransportOptionViewModel(TransportType.Stdio, localizer[AcpTransportLocalization.StdioResourceKey]));
         }
 
-        options.Add(new TransportOptionViewModel(TransportType.WebSocket, localizer["AcpConnection_TransportWebSocket"]));
-        options.Add(new TransportOptionViewModel(TransportType.HttpSse, localizer["AcpConnection_TransportHttpSse"]));
+        options.Add(new TransportOptionViewModel(TransportType.WebSocket, localizer[AcpTransportLocalization.WebSocketResourceKey]));
+        options.Add(new TransportOptionViewModel(TransportType.HttpSse, localizer[AcpTransportLocalization.HttpSseResourceKey]));
         return options;
     }
 
