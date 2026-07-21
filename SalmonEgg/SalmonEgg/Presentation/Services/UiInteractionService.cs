@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
+using SalmonEgg.Presentation.Utilities;
 using SalmonEgg.Presentation.Views.Navigation;
 using Windows.ApplicationModel.Resources;
 
@@ -32,11 +33,11 @@ public sealed class UiInteractionService : IUiInteractionService
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
             Title = ResolveResourceString("UiInteractionInfoDialogTitle", "Notice"),
             Content = message ?? string.Empty,
             CloseButtonText = ResolveResourceString("UiInteractionConfirmButtonText", "OK")
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         await dialog.ShowAsync();
     }
@@ -51,7 +52,6 @@ public sealed class UiInteractionService : IUiInteractionService
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = message ?? string.Empty,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
@@ -62,6 +62,7 @@ public sealed class UiInteractionService : IUiInteractionService
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary;
@@ -84,7 +85,6 @@ public sealed class UiInteractionService : IUiInteractionService
 
         var dialog = new ContentDialog
         {
-            XamlRoot = xamlRoot,
             Title = title ?? string.Empty,
             Content = input,
             PrimaryButtonText = string.IsNullOrWhiteSpace(primaryButtonText)
@@ -95,6 +95,7 @@ public sealed class UiInteractionService : IUiInteractionService
                 : closeButtonText,
             DefaultButton = ContentDialogButton.Primary
         };
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         if (result != ContentDialogResult.Primary)
@@ -147,10 +148,8 @@ public sealed class UiInteractionService : IUiInteractionService
         {
             return;
         }
-        var dialog = new SessionsListDialog(string.IsNullOrWhiteSpace(title) ? string.Empty : title, sessions)
-        {
-            XamlRoot = xamlRoot
-        };
+        var dialog = new SessionsListDialog(string.IsNullOrWhiteSpace(title) ? string.Empty : title, sessions);
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         await dialog.ShowAsync();
 
@@ -170,10 +169,8 @@ public sealed class UiInteractionService : IUiInteractionService
             return RemoteProjectSelectionResult.Cancel;
         }
 
-        var dialog = new RemoteProjectSelectionDialog(viewModel)
-        {
-            XamlRoot = xamlRoot
-        };
+        var dialog = new RemoteProjectSelectionDialog(viewModel);
+        ContentDialogHost.AttachToXamlRoot(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
         dialog.ApplyResult(result);
