@@ -454,7 +454,7 @@ public sealed class ChatLaunchWorkflowTests
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
         public Task<bool> ActivateSettingsAsync(string settingsKey)
         {

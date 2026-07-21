@@ -898,6 +898,9 @@ Create the corresponding Markdown file in:
   <data name="Navigation_OpenStartFailed" xml:space="preserve">
     <value>Failed to open the start page. Please try again later.</value>
   </data>
+  <data name="Navigation_OpenDiscoverSessionsFailed" xml:space="preserve">
+    <value>Failed to open Discover sessions. Please try again later.</value>
+  </data>
   <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
     <value>All local data cleared.</value>
   </data>

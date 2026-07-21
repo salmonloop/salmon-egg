@@ -422,6 +422,33 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 "Navigation_OpenStartFailed",
                 "Failed to open the start page. Please try again later."));
 
+    public async Task<bool> ActivateDiscoverSessionsAsync()
+    {
+        try
+        {
+            var opened = await _navigationCoordinator.ActivateDiscoverSessionsAsync().ConfigureAwait(true);
+            if (opened)
+            {
+                return true;
+            }
+
+            await NotifyOpenDiscoverSessionsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Navigating to discover sessions failed");
+            await NotifyOpenDiscoverSessionsFailedAsync().ConfigureAwait(true);
+            return false;
+        }
+    }
+
+    private Task NotifyOpenDiscoverSessionsFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenDiscoverSessionsFailed",
+                "Failed to open Discover sessions. Please try again later."));
+
     public void ClearPendingProjectForNewSession()
     {
         PendingProjectIdForNewSession = null;

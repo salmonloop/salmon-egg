@@ -1851,6 +1851,108 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenCoordinatorFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateDiscoverSessionsAsync())
+                .ReturnsAsync(false);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateDiscoverSessionsAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open Discover sessions. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenCoordinatorThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog();
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+            var navigationCoordinator = new Mock<INavigationCoordinator>();
+            navigationCoordinator
+                .Setup(coordinator => coordinator.ActivateDiscoverSessionsAsync())
+                .ThrowsAsync(new InvalidOperationException("discover shell unavailable"));
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                ui.Object,
+                navigationCoordinator.Object,
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                CreatePresenter(chatCatalog),
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                new TestCoreStringLocalizer());
+
+            var opened = await navVm.ActivateDiscoverSessionsAsync();
+
+            Assert.False(opened);
+            Assert.Equal(
+                ["Failed to open Discover sessions. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
     [Fact]
     public async Task PrepareStartForProjectAsync_WhenOlderRequestFailsAfterNewerSuccess_PreservesLatestPendingProject()
     {
@@ -2550,7 +2652,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
         public Task<bool> ActivateSettingsAsync(string settingsKey)
         {
@@ -2578,7 +2680,7 @@ public sealed class MainNavigationViewModelSelectionTests
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
         public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 

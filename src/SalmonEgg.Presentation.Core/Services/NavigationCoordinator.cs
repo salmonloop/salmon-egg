@@ -100,7 +100,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         return false;
     }
 
-    public async Task ActivateDiscoverSessionsAsync()
+    public async Task<bool> ActivateDiscoverSessionsAsync()
     {
         var activationToken = BeginActivation(ShellNavigationContent.DiscoverSessions);
         try
@@ -114,7 +114,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                     ShellNavigationContent.DiscoverSessions,
                     activationToken,
                     ActivationFaultReasons.DiscoverSessionsNavigationFailed);
-                return;
+                return false;
             }
 
             if (IsLatestActivationToken(activationToken))
@@ -122,7 +122,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.DiscoverSessions;
                 _selectionSink.SetSelection(NavigationSelectionState.DiscoverSessionsSelection);
-                return;
+                return true;
             }
 
             _logger.LogInformation(
@@ -144,6 +144,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         {
             ClearPendingShellContent(activationToken);
         }
+
+        return false;
     }
 
     public async Task<bool> ActivateSettingsAsync(string settingsKey)

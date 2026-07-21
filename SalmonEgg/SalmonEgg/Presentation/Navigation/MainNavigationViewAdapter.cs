@@ -72,7 +72,7 @@ public sealed class MainNavigationViewAdapter
 
         if (string.Equals(tag, NavItemTag.DiscoverSessions, StringComparison.Ordinal))
         {
-            return AwaitActivationHandledAsync(_navigationCoordinator.ActivateDiscoverSessionsAsync());
+            return AwaitActivationHandledAsync(_viewModel.ActivateDiscoverSessionsAsync());
         }
 
         if (string.Equals(tag, NavItemTag.Settings, StringComparison.Ordinal))

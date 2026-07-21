@@ -233,6 +233,47 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenShellNavigationFails_ReturnsFalse()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Setup(s => s.NavigateToDiscoverSessions(It.IsAny<long>()))
+            .Returns(ValueTask.FromResult(ShellNavigationResult.Failed("discover-nav-failed")));
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object);
+
+        var activated = await coordinator.ActivateDiscoverSessionsAsync();
+
+        Assert.False(activated);
+        Assert.IsNotType<NavigationSelectionState.DiscoverSessions>(selectionStore.CurrentSelection);
+    }
+
+    [Fact]
+    public async Task ActivateDiscoverSessionsAsync_WhenShellNavigationSucceeds_ReturnsTrueAndSelectsDiscover()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object);
+
+        var activated = await coordinator.ActivateDiscoverSessionsAsync();
+
+        Assert.True(activated);
+        Assert.IsType<NavigationSelectionState.DiscoverSessions>(selectionStore.CurrentSelection);
+    }
+
+    [Fact]
     public async Task ActivateDiscoveredRemoteSessionAsync_WhenRecoveryCapabilityIsMissing_DoesNotImportOrSwitch()
     {
         var selectionStore = new ShellSelectionStateStore();
@@ -2087,7 +2128,7 @@ public sealed class NavigationCoordinatorTests
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
-        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+        public Task<bool> ActivateDiscoverSessionsAsync() => Task.FromResult(true);
 
         public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
