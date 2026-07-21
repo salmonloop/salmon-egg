@@ -3506,6 +3506,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"SlashCommandsList\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"InputBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SlashCommandsList.MaxHeight\" Value=\"140\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"InputBox.MaxHeight\" Value=\"140\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"SlashCommandsList.MaxHeight\" Value=\"220\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"InputBox.MaxHeight\" Value=\"240\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"ComposerLayoutRoot.Padding\" Value=\"12,0,12,12\"", xaml, StringComparison.Ordinal);
@@ -3535,6 +3537,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"MiniChatInputBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"120\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MiniChatInputBox.MaxHeight\" Value=\"120\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"MiniChatInputBox.MaxHeight\" Value=\"180\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
 

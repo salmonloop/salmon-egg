@@ -69,6 +69,8 @@
                 <VisualStateGroup x:Name="ComposerHeightStates">
                     <VisualState x:Name="ComposerHeightCompact">
                         <VisualState.Setters>
+                            <Setter Target="SlashCommandsList.MaxHeight" Value="140" />
+                            <Setter Target="InputBox.MaxHeight" Value="140" />
                             <Setter Target="ComposerLayoutRoot.Padding" Value="12,0,12,12" />
                         </VisualState.Setters>
                     </VisualState>
