@@ -91,6 +91,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatAuth_FailedWithDetail"] = "Authentication failed: {0}",
         ["ChatPrompt_CancelFailed"] = "Cancellation failed.",
         ["VoiceDiagnostics_SignalMonitoringFailed"] = "Signal monitoring failed.",
+        ["NewSessionDraft_LoadConfigFailed"] = "Unable to load session configuration. Check the connection and try again.",
+        ["NewSessionDraft_InvalidRemoteCwd"] = "The remote working directory must be an absolute path.",
         ["SearchCommand_NewSessionTitle"] = "New session",
         ["SearchCommand_NewSessionSubtitle"] = "Create a new chat session",
         ["SearchCommand_NewProjectTitle"] = "New project",

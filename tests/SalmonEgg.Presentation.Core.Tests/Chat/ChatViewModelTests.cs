@@ -18296,6 +18296,133 @@ public partial class ChatViewModelTests
         Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
     }
 
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithEmptyError_LocalizesLoadConfigFallback()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: @"C:\Repo\App",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: null);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("无法加载会话配置。请检查连接后重试。", fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftReady);
+        Assert.False(fixture.ViewModel.IsNewSessionDraftLoading);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithInvalidRemoteCwd_LocalizesDisplayMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_InvalidRemoteCwd",
+            "远程工作目录必须是绝对路径。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: "relative/path",
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.InvalidRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        Assert.Equal("远程工作目录必须是绝对路径。", fixture.ViewModel.NewSessionDraftErrorMessage);
+        Assert.Equal(AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, draft.Error);
+    }
+
+    [Fact]
+    public async Task ConnectionStoreProjection_WhenNewSessionDraftFaultsWithMissingRemoteCwd_KeepsEnglishSentinel()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "NewSessionDraft_LoadConfigFailed",
+            "无法加载会话配置。请检查连接后重试。");
+        await using var fixture = CreateViewModel(syncContext, localizer: localizer);
+        var draft = new NewSessionDraftState(
+            ProfileId: "profile-1",
+            Cwd: string.Empty,
+            RemoteSessionId: null,
+            ConnectionInstanceId: "conn-1",
+            Phase: NewSessionDraftPhase.Faulted,
+            Version: 1,
+            AvailableModes: ImmutableList<ConversationModeOptionSnapshot>.Empty,
+            SelectedModeId: null,
+            ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+            ShowConfigOptionsPanel: false,
+            AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+            SessionInfo: null,
+            Error: AcpSessionNewCwdResolver.MissingRemoteCwdMessage);
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1")).AsTask());
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected)).AsTask());
+
+        await fixture.DispatchConnectionAsync(new SetNewSessionDraftAction(draft));
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.ViewModel.HasNewSessionDraftError);
+        });
+
+        // Sentinel stays English so StartViewModel.IsExpectedRemoteDirectorySelectionState keeps working.
+        Assert.Equal(AcpSessionNewCwdResolver.MissingRemoteCwdMessage, fixture.ViewModel.NewSessionDraftErrorMessage);
+    }
+
     private sealed class RecordingPlatformShellService : IPlatformShellService
     {
         public string? LastCopiedText { get; private set; }

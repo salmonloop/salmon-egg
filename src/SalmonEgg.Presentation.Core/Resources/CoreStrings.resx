@@ -1052,4 +1052,10 @@
   <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
     <value>Signal monitoring failed.</value>
   </data>
+  <data name="NewSessionDraft_LoadConfigFailed" xml:space="preserve">
+    <value>Unable to load session configuration. Check the connection and try again.</value>
+  </data>
+  <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
+    <value>The remote working directory must be an absolute path.</value>
+  </data>
 </root>

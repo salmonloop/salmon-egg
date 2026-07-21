@@ -1052,4 +1052,10 @@
   <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
     <value>信号监测失败。</value>
   </data>
+  <data name="NewSessionDraft_LoadConfigFailed" xml:space="preserve">
+    <value>无法加载会话配置。请检查连接后重试。</value>
+  </data>
+  <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
+    <value>远程工作目录必须是绝对路径。</value>
+  </data>
 </root>

@@ -954,15 +954,26 @@ public partial class ChatViewModel
             ? null
             : profileId.Trim();
 
-    private static string NormalizeNewSessionDraftError(string? error)
+    private string NormalizeNewSessionDraftError(string? error)
     {
+        // Keep the missing-remote-cwd English sentinel so StartViewModel can compare
+        // expected remote-directory selection against NewSessionDraftErrorMessage.
         if (string.Equals(error, AcpSessionNewCwdResolver.MissingRemoteCwdMessage, StringComparison.Ordinal))
         {
             return AcpSessionNewCwdResolver.MissingRemoteCwdMessage;
         }
 
+        if (string.Equals(error, AcpSessionNewCwdResolver.InvalidRemoteCwdMessage, StringComparison.Ordinal))
+        {
+            return Localize(
+                "NewSessionDraft_InvalidRemoteCwd",
+                AcpSessionNewCwdResolver.InvalidRemoteCwdMessage);
+        }
+
         return string.IsNullOrWhiteSpace(error)
-            ? "Unable to load session configuration. Check the connection and try again."
+            ? Localize(
+                "NewSessionDraft_LoadConfigFailed",
+                "Unable to load session configuration. Check the connection and try again.")
             : error.Trim();
     }
 
