@@ -102,13 +102,8 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         RefreshLayoutLoadingState();
         ApplyCurrentViewportStateIfAttached();
         UpdateTranscriptViewportAutomationState();
-        try
-        {
-            await ViewModel.EnsureAcpProfilesLoadedAsync();
-        }
-        catch
-        {
-        }
+        // ViewModel logs ACP profile load failures; shell must not silence them.
+        await ViewModel.EnsureAcpProfilesLoadedAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

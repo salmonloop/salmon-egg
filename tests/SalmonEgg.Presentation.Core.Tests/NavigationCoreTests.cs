@@ -673,6 +673,18 @@ public sealed class NavigationCoreTests
     }
 
 
+
+    [Fact]
+    public void StartViewLoaded_DoesNotSwallowProfileOrRestoreFailures()
+    {
+        var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
+        var method = ExtractSection(code, "private async void OnLoaded", "private void OnUnloaded");
+
+        Assert.Contains("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
+        Assert.Contains("RestoreConversationsAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("catch", method, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MainNavigationViewAdapter_ItemInvoked_OwnsDestinationActivationPath()
     {

@@ -109,13 +109,8 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         EnsureViewModelTracking();
         ApplyCurrentViewportStateIfAttached();
 
-        try
-        {
-            await ViewModel.RestoreConversationsAsync();
-        }
-        catch
-        {
-        }
+        // ViewModel logs conversation restore failures; shell must not silence them.
+        await ViewModel.RestoreConversationsAsync();
 
         ApplyCurrentViewportState();
     }
