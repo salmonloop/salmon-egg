@@ -3407,6 +3407,30 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void MiniChatView_ComposerHeightsDensifyOnShortWindowHeights()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml");
+
+        Assert.Contains("x:Name=\"ComposerHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ComposerHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ComposerHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"MiniChatInputBox\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MaxHeight=\"120\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MiniChatInputBox.MaxHeight\" Value=\"180\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+
+        // VSM must live on the single content root Grid (RootGrid).
+        Assert.Contains("x:Name=\"RootGrid\"", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"RootGrid\"", StringComparison.Ordinal)
+            < xaml.IndexOf("ComposerHeightStates", StringComparison.Ordinal));
+
+        // Keep the mini composer touch MinHeight; densify only the multi-line growth cap.
+        Assert.Contains("MinHeight=\"36\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ResizeGrip_KeepsPlatformCursorImplementationOutOfSharedControl()
     {
         var sharedControl = LoadText(@"SalmonEgg\SalmonEgg\Controls\ResizeGrip.cs");

@@ -39,6 +39,20 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Short mini windows: cap multi-line composer growth so the message list keeps
+                 room. Comfortable restores a taller input when height >= 760. -->
+            <VisualStateGroup x:Name="ComposerHeightStates">
+                <VisualState x:Name="ComposerHeightCompact" />
+                <VisualState x:Name="ComposerHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MiniChatInputBox.MaxHeight" Value="180" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <Border x:Name="MiniTitleBar"
@@ -203,6 +217,7 @@
                                  AutomationProperties.AutomationId="MiniChatInputBox"
                                  Text="{x:Bind ViewModel.CurrentPrompt, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  MinHeight="36"
+                                 MaxHeight="120"
                                  Style="{StaticResource ComposerTextBoxStyle}"
                                  IsEnabled="{x:Bind ViewModel.IsTextInputEnabled, Mode=OneWay}"
                                  AcceptsReturn="True"
