@@ -397,19 +397,30 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             if (!activated)
             {
                 PendingProjectIdForNewSession = null;
+                await NotifyOpenStartFailedAsync().ConfigureAwait(true);
                 return;
             }
 
             PendingProjectIdForNewSession = requestedProjectId;
         }
-        catch
+        catch (Exception ex)
         {
-            if (IsLatestPendingProjectIntent(intentVersion))
+            _logger.LogWarning(ex, "Prepare start for project failed. projectId={ProjectId}", requestedProjectId);
+            if (!IsLatestPendingProjectIntent(intentVersion))
             {
-                PendingProjectIdForNewSession = null;
+                return;
             }
+
+            PendingProjectIdForNewSession = null;
+            await NotifyOpenStartFailedAsync().ConfigureAwait(true);
         }
     }
+
+    private Task NotifyOpenStartFailedAsync()
+        => _ui.ShowInfoAsync(
+            Localize(
+                "Navigation_OpenStartFailed",
+                "Failed to open the start page. Please try again later."));
 
     public void ClearPendingProjectForNewSession()
     {

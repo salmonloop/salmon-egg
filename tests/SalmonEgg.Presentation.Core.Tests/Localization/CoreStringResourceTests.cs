@@ -99,6 +99,7 @@ public sealed class CoreStringResourceTests
     [InlineData("SessionActivation_ConversationSelectionFailed")]
     [InlineData("SessionActivation_ChatShellNavigationFailed")]
     [InlineData("Navigation_OpenSettingsFailed")]
+    [InlineData("Navigation_OpenStartFailed")]
     [InlineData("Nav_CopySessionIdFailed")]
     [InlineData("Nav_ShowSessionsListFailed")]
     [InlineData("Start_SessionLaunchFailed")]
