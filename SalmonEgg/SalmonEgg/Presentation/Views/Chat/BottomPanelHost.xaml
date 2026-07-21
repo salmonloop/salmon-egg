@@ -7,9 +7,32 @@
     xmlns:controls="using:SalmonEgg.Controls"
     mc:Ignorable="d">
 
-    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}"
+    <Grid x:Name="BottomPanelRoot"
+          Background="{ThemeResource LayerFillColorDefaultBrush}"
           BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
           BorderThickness="0,1,0,0">
+        <!-- Short windows: densify terminal host inset so the docked bottom panel
+             keeps more terminal content area. Comfortable restores 12,0,12,12 at
+             MinWindowHeight=760. Keep TabView MinHeight=48 for touch targets.
+             Theme via ThemeResource only. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="BottomPanelHeightStates">
+                <VisualState x:Name="BottomPanelHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="TerminalHostBorder.Margin" Value="8,0,8,8" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="BottomPanelHeightComfortable">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowHeight="760" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="TerminalHostBorder.Margin" Value="12,0,12,12" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <TabView HorizontalAlignment="Stretch"
                  VerticalAlignment="Stretch"
                  IsAddTabButtonVisible="False"
@@ -27,7 +50,8 @@
                              AutomationProperties.AutomationId="BottomPanelTab.terminal"
                              AutomationProperties.Name="{x:Bind TerminalTabTitle, Mode=OneWay}">
                     <TabViewItem.Content>
-                        <Border Margin="12,0,12,12"
+                        <Border x:Name="TerminalHostBorder"
+                                Margin="8,0,8,8"
                                 CornerRadius="12"
                                 Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"

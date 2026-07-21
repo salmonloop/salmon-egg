@@ -3531,6 +3531,28 @@ public sealed class XamlComplianceTests
         Assert.Contains("MinHeight=\"36\"", xaml, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void BottomPanelHost_DensifiesTerminalInsetOnShortWindowHeights()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\BottomPanelHost.xaml");
+
+        Assert.Contains("x:Name=\"BottomPanelHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BottomPanelHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BottomPanelHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TerminalHostBorder\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TerminalHostBorder.Margin\" Value=\"8,0,8,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"TerminalHostBorder.Margin\" Value=\"12,0,12,12\"", xaml, StringComparison.Ordinal);
+        // Compact short-height default; keep TabView MinHeight for touch targets.
+        Assert.Contains("Margin=\"8,0,8,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinHeight=\"48\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"BottomPanelRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("BottomPanelHeightStates", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ResizeGrip_KeepsPlatformCursorImplementationOutOfSharedControl()
     {
