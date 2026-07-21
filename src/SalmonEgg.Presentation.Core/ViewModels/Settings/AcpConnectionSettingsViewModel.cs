@@ -346,6 +346,9 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to profile {ProfileId}", profile.Id);
+            Profiles.ReportOperationError(
+                "AcpProfiles_ConnectFailed",
+                "Failed to connect to the agent profile. Please try again later.");
         }
     }
 
@@ -370,6 +373,11 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to handle ACP connection toggle (ShouldConnect={ShouldConnect})", shouldConnect);
+            Profiles.ReportOperationError(
+                shouldConnect ? "AcpProfiles_ConnectFailed" : "AcpProfiles_DisconnectFailed",
+                shouldConnect
+                    ? "Failed to connect to the agent profile. Please try again later."
+                    : "Failed to disconnect the agent profile. Please try again later.");
         }
     }
 

@@ -307,6 +307,93 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public async Task HandleConnectionToggleAsync_WhenConnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1" };
+        profiles.Profiles.Add(profile);
+        profiles.SelectedProfile = profile;
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.HandleConnectionToggleAsync(true);
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to connect to the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task HandleConnectionToggleAsync_WhenDisconnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var profile = new ServerConfiguration { Id = "profile-1", Name = "Profile 1" };
+        profiles.Profiles.Add(profile);
+        profiles.SelectedProfile = profile;
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.HandleConnectionToggleAsync(false);
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to disconnect the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
+    public async Task ConnectToProfileAsync_WhenConnectFails_SurfacesOperationError()
+    {
+        var preferences = await CreatePreferencesAsync();
+        var profiles = CreateProfiles(preferences);
+        var state = new TestConnectionState();
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("connect failed") };
+        var logger = new Mock<ILogger<AcpConnectionSettingsViewModel>>();
+
+        using var viewModel = new AcpConnectionSettingsViewModel(
+            state,
+            commands,
+            new TestTransportConfiguration(),
+            profiles,
+            preferences,
+            CreateTransportSupportPolicy(preferences),
+            logger.Object,
+            new TestCoreStringLocalizer());
+
+        await viewModel.ConnectToProfileAsync(new ServerConfiguration { Id = "profile-42", Name = "Selected Profile" });
+
+        Assert.True(viewModel.Profiles.IsOperationErrorOpen);
+        Assert.Equal(
+            "Failed to connect to the agent profile. Please try again later.",
+            viewModel.Profiles.OperationErrorMessage);
+    }
+
+    [Fact]
     public async Task RemoteDirectoryRows_ExposeSharedDirectoriesRegardlessOfSelectedProfile()
     {
         var preferences = CreatePreferences();
@@ -955,6 +1042,28 @@ public sealed class AcpConnectionSettingsViewModelTests
         Assert.False(item.IsConnecting);
         Assert.Contains(nameof(AgentProfileItemViewModel.IsConnected), changed);
         Assert.Equal("AcpProfiles_DisconnectFailed", reportedKey);
+    }
+
+    [Fact]
+    public async Task ReconnectCommand_WhenReconnectFails_ReportsOperationError()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        registry.Upsert(new AcpConnectionSession(
+            "profile-a",
+            "session-a",
+            new InitializeResponse(),
+            default));
+        var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("reconnect failed") };
+        string? reportedKey = null;
+        using var item = CreateAgentProfileItem(
+            "profile-a",
+            registry,
+            commands,
+            operationErrorReporter: (key, _) => reportedKey = key);
+
+        await item.ReconnectCommand.ExecuteAsync(null);
+
+        Assert.Equal("AcpProfiles_ReconnectFailed", reportedKey);
     }
 
     [Fact]
@@ -1667,6 +1776,11 @@ public sealed class AcpConnectionSettingsViewModelTests
 
         public Task ConnectToAcpProfileAsync(ServerConfiguration profile)
         {
+            if (ConnectProfileInPoolException is not null)
+            {
+                throw ConnectProfileInPoolException;
+            }
+
             ConnectedProfiles.Add(profile);
             return Task.CompletedTask;
         }

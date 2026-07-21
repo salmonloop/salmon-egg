@@ -203,10 +203,10 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         });
     }
 
-    private void ReportProfileOperationError(string resourceKey, string fallback)
+    public void ReportOperationError(string resourceKey, string fallback)
     {
-        // Profile connect/disconnect failures arrive from item commands; project onto the
-        // shared Error InfoBar without requiring each item to own dialog chrome.
+        // Shared Error InfoBar entry point for profile/connection failures that do not own
+        // their own dialog chrome (item commands and legacy settings connection helpers).
         _ = ShowOperationErrorAsync(resourceKey, fallback);
     }
 
@@ -398,7 +398,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             _loggerFactory.CreateLogger<AgentProfileItemViewModel>(),
             _dispatcher,
             _localizer,
-            ReportProfileOperationError);
+            ReportOperationError);
     }
 
     private Task SelectByIdAsync(string? id)
