@@ -880,6 +880,15 @@
   <data name="General_AppSettingsLoadFailed" xml:space="preserve">
     <value>加载应用设置失败，请稍后重试。</value>
   </data>
+  <data name="SessionActivation_FailedGeneric" xml:space="preserve">
+    <value>无法打开该会话，请稍后重试。</value>
+  </data>
+  <data name="SessionActivation_ConversationSelectionFailed" xml:space="preserve">
+    <value>无法打开该会话，请稍后重试。</value>
+  </data>
+  <data name="SessionActivation_ChatShellNavigationFailed" xml:space="preserve">
+    <value>无法打开会话聊天页，请稍后重试。</value>
+  </data>
   <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
     <value>已清除全部本地数据。</value>
   </data>

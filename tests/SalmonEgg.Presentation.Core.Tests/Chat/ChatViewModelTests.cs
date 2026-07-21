@@ -12854,6 +12854,37 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SessionActivationFailure_WhenOnlyReasonIsSet_ProjectsLocalizedFallback()
+    {
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(shellNavigationRuntimeState: runtimeState);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "ConversationSelectionFailed");
+
+        Assert.True(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Equal(
+            "Failed to open this session. Please try again.",
+            fixture.ViewModel.SessionActivationFailureMessage);
+
+        runtimeState.ActiveSessionActivation = runtimeState.ActiveSessionActivation with
+        {
+            Reason = "SupersededBeforeChatShell",
+            FailureMessage = null
+        };
+
+        Assert.False(fixture.ViewModel.HasSessionActivationFailure);
+        Assert.Null(fixture.ViewModel.SessionActivationFailureMessage);
+    }
+
+    [Fact]
     public async Task SessionActivationFailure_WhenSnapshotOrCurrentConversationChanges_RaisesDerivedNotifications()
     {
         var runtimeState = new ShellNavigationRuntimeStateStore();

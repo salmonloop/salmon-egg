@@ -94,6 +94,9 @@ public sealed class CoreStringResourceTests
     [InlineData("General_LanguageApplyFailed")]
     [InlineData("General_AppSettingsSaveFailed")]
     [InlineData("General_AppSettingsLoadFailed")]
+    [InlineData("SessionActivation_FailedGeneric")]
+    [InlineData("SessionActivation_ConversationSelectionFailed")]
+    [InlineData("SessionActivation_ChatShellNavigationFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

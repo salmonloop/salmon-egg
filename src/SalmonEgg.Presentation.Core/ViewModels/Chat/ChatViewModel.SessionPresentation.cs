@@ -71,15 +71,51 @@ public partial class ChatViewModel
         get
         {
             var activation = _shellNavigationRuntimeState?.ActiveSessionActivation;
-            return activation is
-                {
-                    Phase: SessionActivationPhase.Faulted,
-                    FailureMessage: not null and not ""
-                }
-                && string.Equals(activation.SessionId, CurrentSessionId, StringComparison.Ordinal)
-                    ? activation.FailureMessage
-                    : null;
+            if (activation is not { Phase: SessionActivationPhase.Faulted }
+                || !string.Equals(activation.SessionId, CurrentSessionId, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            // Hydration failures publish FailureMessage; navigation-level faults often only
+            // set Reason. Prefer the explicit message, then a localized reason fallback.
+            if (!string.IsNullOrWhiteSpace(activation.FailureMessage))
+            {
+                return activation.FailureMessage;
+            }
+
+            return ResolveSessionActivationFailureReasonMessage(activation.Reason);
         }
+    }
+
+    private string? ResolveSessionActivationFailureReasonMessage(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return Localize(
+                "SessionActivation_FailedGeneric",
+                "Failed to open this session. Please try again.");
+        }
+
+        // Superseded/canceled are expected races, not user-facing faults.
+        if (reason.StartsWith("Superseded", StringComparison.Ordinal)
+            || string.Equals(reason, "Canceled", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return reason switch
+        {
+            "ConversationSelectionFailed" => Localize(
+                "SessionActivation_ConversationSelectionFailed",
+                "Failed to open this session. Please try again."),
+            "ChatShellNavigationFailed" => Localize(
+                "SessionActivation_ChatShellNavigationFailed",
+                "Failed to open the chat view for this session. Please try again."),
+            _ => Localize(
+                "SessionActivation_FailedGeneric",
+                "Failed to open this session. Please try again.")
+        };
     }
 
     public bool HasSessionActivationFailure

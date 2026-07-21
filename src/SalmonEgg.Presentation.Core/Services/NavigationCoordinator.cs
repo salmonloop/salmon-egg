@@ -735,6 +735,9 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 return;
             }
 
+            // Terminal fault: drop the desired-session intent so surface projection and
+            // affinity helpers no longer treat the failed target as in-flight intent.
+            _runtimeState.DesiredSessionId = null;
             _runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 request.SessionId,
                 request.ProjectId,

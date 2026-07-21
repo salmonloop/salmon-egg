@@ -133,8 +133,10 @@ public sealed class NavigationCoordinatorTests
             Assert.Null(preferences.LastSelectedProjectId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", runtimeState.DesiredSessionId);
+            Assert.Null(runtimeState.DesiredSessionId);
             Assert.False(runtimeState.IsSessionActivationInProgress);
+            Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
+            Assert.Equal("ConversationSelectionFailed", runtimeState.ActiveSessionActivation?.Reason);
         }
         finally
         {
@@ -183,8 +185,10 @@ public sealed class NavigationCoordinatorTests
             Assert.Equal("project-existing", preferences.LastSelectedProjectId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal("session-1", runtimeState.DesiredSessionId);
+            Assert.Null(runtimeState.DesiredSessionId);
             Assert.False(runtimeState.IsSessionActivationInProgress);
+            Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
+            Assert.Equal("InvalidOperationException", runtimeState.ActiveSessionActivation?.Reason);
         }
         finally
         {
