@@ -229,6 +229,26 @@ public sealed class ChatViewXamlTests
             < xaml.IndexOf("SessionHeaderHeightStates", StringComparison.Ordinal));
     }
 
+
+    [Fact]
+    public void ChatViewTranscript_DensifiesListPaddingOnShortWindowHeights()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("x:Name=\"TranscriptHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TranscriptHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TranscriptHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MessagesList.Padding\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"MessagesList.Padding\" Value=\"20\"", xaml, StringComparison.Ordinal);
+        // Compact short-height default in markup; comfortable restores prior transcript inset.
+        Assert.Contains("Padding=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"ActiveConversationRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("TranscriptHeightStates", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ChatViewSessionHeader_NarrowLayout_KeepsAgentRowRightAligned()
     {
