@@ -134,6 +134,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateDiagnosticsBundle failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_CreateDiagnosticsBundleFailed"]).ConfigureAwait(true);
         }
     }
 
@@ -197,6 +198,7 @@ public partial class DataStorageSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "ExportCurrentSession failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ExportSessionFailed"]).ConfigureAwait(true);
         }
     }
 

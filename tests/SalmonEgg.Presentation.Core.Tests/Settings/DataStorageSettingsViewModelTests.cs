@@ -108,6 +108,44 @@ public sealed class DataStorageSettingsViewModelTests
         ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_ClearAllLocalDataFailed"]), Times.Once);
     }
 
+    [Fact]
+    public async Task ExportCurrentSessionJsonCommand_WhenExportThrows_ShowsLocalizedFailure()
+    {
+        var sessionExport = new Mock<ISessionExportService>();
+        sessionExport.Setup(service => service.ExportAsync(It.IsAny<SessionExportRequest>(), default))
+            .ThrowsAsync(new IOException("disk full"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            sessionExport: sessionExport,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.ExportCurrentSessionJsonCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_ExportSessionFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDiagnosticsBundleCommand_WhenBundleThrows_ShowsLocalizedFailure()
+    {
+        var diagnostics = new Mock<IDiagnosticsBundleService>();
+        diagnostics.Setup(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()))
+            .ThrowsAsync(new IOException("zip failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            diagnostics: diagnostics,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_CreateDiagnosticsBundleFailed"]), Times.Once);
+    }
+
     private static DataStorageSettingsViewModel CreateViewModel(
         bool supportsLocalFileExport,
         Mock<IDiagnosticsBundleService>? diagnostics = null,

@@ -330,6 +330,12 @@
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>当前平台暂不支持导出本地文件。</value>
   </data>
+  <data name="DataStorage_ExportSessionFailed" xml:space="preserve">
+    <value>导出当前会话失败，请稍后重试。</value>
+  </data>
+  <data name="DataStorage_CreateDiagnosticsBundleFailed" xml:space="preserve">
+    <value>创建诊断包失败，请稍后重试。</value>
+  </data>
   <data name="About_MissingDocumentMessage" xml:space="preserve">
     <value>未找到{0}文件。</value>
   </data>

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -88,6 +89,25 @@ public sealed class DiagnosticsSettingsViewModelTests
 
         bundle.Verify(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()), Times.Never);
         ui.Verify(service => service.ShowInfoAsync(localizer["Platform_LocalFileExportUnsupported"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDiagnosticsBundleCommand_WhenBundleThrows_ShowsLocalizedFailure()
+    {
+        var bundle = new Mock<IDiagnosticsBundleService>();
+        bundle.Setup(service => service.CreateBundleAsync(It.IsAny<DiagnosticsSnapshot>()))
+            .ThrowsAsync(new IOException("zip failed"));
+        var ui = new Mock<IUiInteractionService>();
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(
+            supportsLocalFileExport: true,
+            bundle: bundle,
+            ui: ui,
+            localizer: localizer);
+
+        await viewModel.CreateDiagnosticsBundleCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["DataStorage_CreateDiagnosticsBundleFailed"]), Times.Once);
     }
 
     private static DiagnosticsSettingsViewModel CreateViewModel(

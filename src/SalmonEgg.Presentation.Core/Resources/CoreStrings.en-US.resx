@@ -330,6 +330,12 @@
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>Exporting local files is not supported on this platform.</value>
   </data>
+  <data name="DataStorage_ExportSessionFailed" xml:space="preserve">
+    <value>Failed to export the current session. Please try again later.</value>
+  </data>
+  <data name="DataStorage_CreateDiagnosticsBundleFailed" xml:space="preserve">
+    <value>Failed to create the diagnostics package. Please try again later.</value>
+  </data>
   <data name="About_MissingDocumentMessage" xml:space="preserve">
     <value>The {0} file was not found.</value>
   </data>

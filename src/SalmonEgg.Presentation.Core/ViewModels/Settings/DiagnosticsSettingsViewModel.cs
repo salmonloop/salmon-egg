@@ -176,6 +176,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateDiagnosticsBundle failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_CreateDiagnosticsBundleFailed"]).ConfigureAwait(true);
         }
     }
 

@@ -181,6 +181,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["About_AcknowledgementSourceFallback"] = "Not listed",
         ["Platform_ExternalOpenUnsupported"] = "Opening local files or folders is not supported on this platform.",
         ["Platform_LocalFileExportUnsupported"] = "Exporting local files is not supported on this platform.",
+        ["DataStorage_ExportSessionFailed"] = "Failed to export the current session. Please try again later.",
+        ["DataStorage_CreateDiagnosticsBundleFailed"] = "Failed to create the diagnostics package. Please try again later.",
         ["DataStorage_CloudSyncStatusEnabled"] = "Configuration cloud sync is enabled.",
         ["DataStorage_CloudSyncStatusDisabled"] = "Configuration cloud sync is not enabled.",
         ["DataStorage_CloudSyncStatusUploaded"] = "Local configuration was uploaded to the cloud.",
