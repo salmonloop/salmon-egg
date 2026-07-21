@@ -256,7 +256,20 @@ public sealed partial class SessionNavItemViewModel : MainNavItemViewModel
             return;
         }
 
-        _ = await _shell.CopyToClipboardAsync(RemoteSessionId!).ConfigureAwait(true);
+        try
+        {
+            var copied = await _shell.CopyToClipboardAsync(RemoteSessionId!).ConfigureAwait(true);
+            if (copied)
+            {
+                return;
+            }
+
+            await _ui.ShowInfoAsync(_localizer["About_ClipboardUnsupported"]).ConfigureAwait(true);
+        }
+        catch
+        {
+            await _ui.ShowInfoAsync(_localizer["Nav_CopySessionIdFailed"]).ConfigureAwait(true);
+        }
     }
 
     private async Task ArchiveAsync()

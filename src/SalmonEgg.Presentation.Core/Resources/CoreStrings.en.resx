@@ -907,4 +907,7 @@ Create the corresponding Markdown file in:
   <data name="Nav_ArchiveSessionFailed" xml:space="preserve">
     <value>Failed to archive the session. Please try again later.</value>
   </data>
+  <data name="Nav_CopySessionIdFailed" xml:space="preserve">
+    <value>Failed to copy the session ID. Please try again later.</value>
+  </data>
 </root>

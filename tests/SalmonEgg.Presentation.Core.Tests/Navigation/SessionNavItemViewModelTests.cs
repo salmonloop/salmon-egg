@@ -19,8 +19,9 @@ public sealed class SessionNavItemViewModelTests
     public async Task CopySessionIdCommand_CopiesAcpSessionId_NotLocalConversationId()
     {
         var shell = new RecordingPlatformShellService();
+        var ui = new RecordingUiInteractionService();
         var item = CreateItem(
-            new RecordingUiInteractionService(),
+            ui,
             new RecordingChatSessionCatalog(),
             remoteSessionId: "remote-session-42",
             shell: shell);
@@ -28,6 +29,48 @@ public sealed class SessionNavItemViewModelTests
         await item.CopySessionIdCommand.ExecuteAsync(null);
 
         Assert.Equal("remote-session-42", shell.LastCopiedText);
+        Assert.Empty(ui.InfoMessages);
+    }
+
+    [Fact]
+    public async Task CopySessionIdCommand_WhenClipboardUnsupported_ShowsUserFeedback()
+    {
+        var shell = new RecordingPlatformShellService { CopyResult = false };
+        var ui = new RecordingUiInteractionService();
+        var item = CreateItem(
+            ui,
+            new RecordingChatSessionCatalog(),
+            remoteSessionId: "remote-session-42",
+            shell: shell);
+
+        await item.CopySessionIdCommand.ExecuteAsync(null);
+
+        Assert.Equal("remote-session-42", shell.LastCopiedText);
+        Assert.Equal(
+            [new TestCoreStringLocalizer()["About_ClipboardUnsupported"]],
+            ui.InfoMessages);
+    }
+
+    [Fact]
+    public async Task CopySessionIdCommand_WhenClipboardThrows_ShowsUserFeedback()
+    {
+        var shell = new RecordingPlatformShellService
+        {
+            CopyException = new InvalidOperationException("clipboard denied"),
+        };
+        var ui = new RecordingUiInteractionService();
+        var item = CreateItem(
+            ui,
+            new RecordingChatSessionCatalog(),
+            remoteSessionId: "remote-session-42",
+            shell: shell);
+
+        await item.CopySessionIdCommand.ExecuteAsync(null);
+
+        Assert.Null(shell.LastCopiedText);
+        Assert.Equal(
+            [new TestCoreStringLocalizer()["Nav_CopySessionIdFailed"]],
+            ui.InfoMessages);
     }
 
     [Fact]
@@ -167,6 +210,10 @@ public sealed class SessionNavItemViewModelTests
     {
         public string? LastCopiedText { get; private set; }
 
+        public bool CopyResult { get; set; } = true;
+
+        public Exception? CopyException { get; set; }
+
         public Task<bool> OpenFolderAsync(string path) => Task.FromResult(false);
 
         public Task<bool> OpenFileAsync(string path) => Task.FromResult(false);
@@ -175,8 +222,13 @@ public sealed class SessionNavItemViewModelTests
 
         public Task<bool> CopyToClipboardAsync(string text)
         {
+            if (CopyException is not null)
+            {
+                throw CopyException;
+            }
+
             LastCopiedText = text;
-            return Task.FromResult(true);
+            return Task.FromResult(CopyResult);
         }
 
         public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);
