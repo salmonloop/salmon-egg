@@ -1686,6 +1686,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         {
             NotifyComposerProjectionChanged();
             RaiseOverlayStateChanged();
+            PendingAskUserRequest?.ReprojectLocalizedState();
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException)

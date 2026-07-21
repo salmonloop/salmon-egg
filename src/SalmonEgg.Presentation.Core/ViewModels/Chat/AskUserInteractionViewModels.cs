@@ -13,6 +13,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 public sealed partial class AskUserRequestViewModel : ObservableObject
 {
     private readonly IStringLocalizer<CoreStrings>? _localizer;
+    private string? _errorResourceKey;
 
     public AskUserRequestViewModel(
         object messageId,
@@ -60,18 +61,18 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
     {
         if (OnSubmit is null)
         {
-            ErrorMessage = Localize("AskUser_SubmitUnavailable", "Answers cannot be submitted right now.");
+            SetLocalizedError("AskUser_SubmitUnavailable", "Answers cannot be submitted right now.");
             return;
         }
 
         var answers = BuildAnswers();
         if (answers.Count == 0 || !AreAllQuestionsAnswered())
         {
-            ErrorMessage = Localize("AskUser_AnswerAllRequired", "Answer all questions before submitting.");
+            SetLocalizedError("AskUser_AnswerAllRequired", "Answer all questions before submitting.");
             return;
         }
 
-        ErrorMessage = string.Empty;
+        ClearError();
         IsSubmitting = true;
 
         try
@@ -79,14 +80,19 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
             var succeeded = await OnSubmit(answers).ConfigureAwait(true);
             if (!succeeded)
             {
-                ErrorMessage = Localize("AskUser_SubmitFailed", "Failed to submit answers. Please try again.");
+                SetLocalizedError("AskUser_SubmitFailed", "Failed to submit answers. Please try again.");
             }
         }
         catch (Exception ex)
         {
-            ErrorMessage = string.IsNullOrWhiteSpace(ex.Message)
-                ? Localize("AskUser_SubmitFailed", "Failed to submit answers. Please try again.")
-                : ex.Message;
+            if (string.IsNullOrWhiteSpace(ex.Message))
+            {
+                SetLocalizedError("AskUser_SubmitFailed", "Failed to submit answers. Please try again.");
+            }
+            else
+            {
+                SetRawError(ex.Message);
+            }
         }
         finally
         {
@@ -101,7 +107,7 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
 
     private void OnQuestionSelectionChanged(object? sender, EventArgs e)
     {
-        ErrorMessage = string.Empty;
+        ClearError();
         OnPropertyChanged(nameof(CanSubmit));
         SubmitCommand.NotifyCanExecuteChanged();
     }
@@ -140,6 +146,39 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
         return answers;
     }
 
+    public void ReprojectLocalizedState()
+    {
+        for (var index = 0; index < Questions.Count; index++)
+        {
+            Questions[index].ReprojectLocalizedState();
+        }
+
+        if (string.IsNullOrWhiteSpace(_errorResourceKey))
+        {
+            return;
+        }
+
+        ErrorMessage = Localize(_errorResourceKey, ErrorMessage);
+    }
+
+    private void SetLocalizedError(string resourceKey, string fallback)
+    {
+        _errorResourceKey = resourceKey;
+        ErrorMessage = Localize(resourceKey, fallback);
+    }
+
+    private void SetRawError(string message)
+    {
+        _errorResourceKey = null;
+        ErrorMessage = message;
+    }
+
+    private void ClearError()
+    {
+        _errorResourceKey = null;
+        ErrorMessage = string.Empty;
+    }
+
     private string Localize(string key, string fallback)
     {
         if (_localizer is null)
@@ -155,8 +194,10 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
 
 }
 
-public sealed class AskUserQuestionViewModel
+public sealed partial class AskUserQuestionViewModel : ObservableObject
 {
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
+
     public AskUserQuestionViewModel(
         string header,
         string questionText,
@@ -167,9 +208,8 @@ public sealed class AskUserQuestionViewModel
         Header = header ?? string.Empty;
         QuestionText = questionText ?? string.Empty;
         IsMultiSelect = isMultiSelect;
-        SelectionHint = isMultiSelect
-            ? Localize(localizer, "AskUser_MultipleChoice", "Multiple choice")
-            : Localize(localizer, "AskUser_SingleChoice", "Single choice");
+        _localizer = localizer;
+        SelectionHint = ResolveSelectionHint();
 
         foreach (var option in options ?? Array.Empty<AskUserOptionViewModel>())
         {
@@ -184,7 +224,8 @@ public sealed class AskUserQuestionViewModel
 
     public bool IsMultiSelect { get; }
 
-    public string SelectionHint { get; }
+    [ObservableProperty]
+    private string _selectionHint = string.Empty;
 
     public ObservableCollection<AskUserOptionViewModel> Options { get; } = new();
 
@@ -236,6 +277,20 @@ public sealed class AskUserQuestionViewModel
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    public void ReprojectLocalizedState()
+    {
+        var next = ResolveSelectionHint();
+        if (!string.Equals(SelectionHint, next, StringComparison.Ordinal))
+        {
+            SelectionHint = next;
+        }
+    }
+
+    private string ResolveSelectionHint()
+        => IsMultiSelect
+            ? Localize(_localizer, "AskUser_MultipleChoice", "Multiple choice")
+            : Localize(_localizer, "AskUser_SingleChoice", "Single choice");
 
     private static string Localize(IStringLocalizer<CoreStrings>? localizer, string key, string fallback)
     {

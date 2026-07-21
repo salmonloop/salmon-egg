@@ -409,7 +409,7 @@
                                                     <TextBlock Text="{x:Bind Header}"
                                                                FontWeight="SemiBold"
                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                                                    <TextBlock Text="{x:Bind SelectionHint}"
+                                                    <TextBlock Text="{x:Bind SelectionHint, Mode=OneWay}"
                                                                FontSize="12"
                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                 </StackPanel>
