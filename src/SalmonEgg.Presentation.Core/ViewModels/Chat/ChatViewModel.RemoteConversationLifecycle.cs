@@ -248,9 +248,8 @@ public partial class ChatViewModel
         {
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    Localize(
-                        "ChatOperation_LoadSessionNoActiveConversation",
-                        "Failed to load session: no active conversation is selected."))
+                    "ChatOperation_LoadSessionNoActiveConversation",
+                    "Failed to load session: no active conversation is selected.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -260,9 +259,8 @@ public partial class ChatViewModel
         {
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    Localize(
-                        "ChatOperation_LoadSessionMissingActiveBinding",
-                        "Failed to load session: no remote session binding is available for the active conversation."))
+                    "ChatOperation_LoadSessionMissingActiveBinding",
+                    "Failed to load session: no remote session binding is available for the active conversation.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -1811,10 +1809,9 @@ public partial class ChatViewModel
                 conversationId);
             await PublishConversationOperationFailureAsync(
                     conversationId,
-                    FormatLocalize(
-                        "ChatOperation_ReconnectSessionFailed",
-                        "Failed to reconnect session: {0}",
-                        ex.Message))
+                    "ChatOperation_ReconnectSessionFailed",
+                    "Failed to reconnect session: {0}",
+                    ex.Message)
                 .ConfigureAwait(false);
         }
     }

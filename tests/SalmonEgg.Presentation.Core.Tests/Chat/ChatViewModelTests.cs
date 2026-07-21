@@ -536,6 +536,92 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task LanguageChanged_WhenConversationOperationFailureIsHeld_ReprojectsLocalizedMessage()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatOperation_SwitchModeFailed",
+            "切换模式失败：{0}");
+        localizer.Set(
+            "en-US",
+            "ChatOperation_SwitchModeFailed",
+            "Failed to switch mode: {0}");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object);
+        var viewModel = fixture.ViewModel;
+        var chatService = CreateConnectedChatService();
+        chatService
+            .Setup(service => service.SetSessionModeAsync(It.IsAny<SessionSetModeParams>()))
+            .ThrowsAsync(new InvalidOperationException("mode-denied"));
+        viewModel.ReplaceChatService(chatService.Object);
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1")),
+            ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty
+                .Add("conv-1", new ConversationSessionStateSlice(
+                    ImmutableList.Create(
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "code",
+                            ModeName = "Code",
+                            Description = string.Empty
+                        },
+                        new ConversationModeOptionSnapshot
+                        {
+                            ModeId = "ask",
+                            ModeName = "Ask",
+                            Description = string.Empty
+                        }),
+                    SelectedModeId: "code",
+                    ConfigOptions: ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    ShowConfigOptionsPanel: false,
+                    AvailableCommands: ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    SessionInfo: null,
+                    Usage: null))
+        });
+        SetCurrentSessionId(viewModel, "conv-1");
+        SetCurrentRemoteSessionId(viewModel, "remote-1");
+        viewModel.IsConnected = true;
+        viewModel.IsSessionActive = true;
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        syncContext.RunAll();
+
+        var ask = viewModel.ChatModeSelectorItems.Single(item => item.SemanticValue == "ask");
+        viewModel.SelectChatModeDisplayCommand.Execute(ask);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(viewModel.HasConversationOperationFailure);
+        });
+        Assert.Equal("切换模式失败：mode-denied", viewModel.ConversationOperationFailureMessage);
+
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                viewModel.ConversationOperationFailureMessage,
+                "Failed to switch mode: mode-denied",
+                StringComparison.Ordinal));
+        });
+        Assert.Equal("Failed to switch mode: mode-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
     public async Task SelectChatModelDisplay_WhenRemoteSetConfigFails_SurfacesLocalizedConversationOperationFailure()
     {
         await using var fixture = CreateViewModel(localizer: new TestCoreStringLocalizer());
@@ -18550,7 +18636,7 @@ public partial class ChatViewModelTests
         localizer.SetLanguageTag("en-US");
         languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
         syncContext.RunAll();
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         // Identity sentinel must remain English for Start remote-directory comparison.
         Assert.Equal(

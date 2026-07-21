@@ -54,4 +54,37 @@ public sealed class ConversationOperationFailureStateTests
         Assert.Equal("B failed", state.ResolveVisibleMessage("conv-b"));
         Assert.Null(state.ResolveVisibleMessage("conv-a"));
     }
+
+    [Fact]
+    public void Publish_PreservesLocalizationIdentityForReproject()
+    {
+        var state = new ConversationOperationFailureState();
+
+        Assert.True(state.Publish(
+            "conv-a",
+            "Failed to switch mode: boom",
+            "conv-a",
+            resourceKey: "ChatOperation_SwitchModeFailed",
+            fallback: "Failed to switch mode: {0}",
+            formatArgs: ["boom"]));
+
+        Assert.True(state.TryGetHeldFailure(out var failure));
+        Assert.Equal("conv-a", failure.ConversationId);
+        Assert.Equal("ChatOperation_SwitchModeFailed", failure.ResourceKey);
+        Assert.Equal("Failed to switch mode: {0}", failure.Fallback);
+        Assert.Equal(["boom"], failure.FormatArgs);
+        Assert.Equal("Failed to switch mode: boom", state.ResolveVisibleMessage("conv-a"));
+    }
+
+    [Fact]
+    public void Publish_RawMessageHasNoResourceKey()
+    {
+        var state = new ConversationOperationFailureState();
+        Assert.True(state.Publish("conv-a", "Transport failed", "conv-a"));
+
+        Assert.True(state.TryGetHeldFailure(out var failure));
+        Assert.Null(failure.ResourceKey);
+        Assert.Null(failure.Fallback);
+        Assert.Null(failure.FormatArgs);
+    }
 }

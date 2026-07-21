@@ -1687,6 +1687,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             NotifyComposerProjectionChanged();
             RaiseOverlayStateChanged();
             PendingAskUserRequest?.ReprojectLocalizedState();
+            ReprojectConversationOperationFailureMessage();
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // New-session draft lives on the connection store and is not part of the chat-store
