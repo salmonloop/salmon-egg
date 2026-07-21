@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -13,18 +12,15 @@ namespace SalmonEgg.Presentation.Navigation;
 /// <summary>
 /// UI-only adapter that maps NavigationView UI events to semantic navigation intents.
 /// It must not own a secondary visual selection or pane state machine.
+/// Destination activation is owned by <see cref="MainNavigationViewModel"/>.
 /// </summary>
 public sealed class MainNavigationViewAdapter
 {
     private readonly MainNavigationViewModel _viewModel;
-    private readonly INavigationCoordinator _navigationCoordinator;
 
-    public MainNavigationViewAdapter(
-        MainNavigationViewModel viewModel,
-        INavigationCoordinator navigationCoordinator)
+    public MainNavigationViewAdapter(MainNavigationViewModel viewModel)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
     }
 
     public Task<bool> HandleItemInvokedAsync(NavigationViewItemInvokedEventArgs args)
@@ -101,5 +97,4 @@ public sealed class MainNavigationViewAdapter
     {
         return await activationTask.ConfigureAwait(true);
     }
-
 }

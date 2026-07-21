@@ -702,6 +702,8 @@ public sealed class NavigationCoreTests
         Assert.DoesNotContain("AwaitActivationHandledAsync(_navigationCoordinator.ActivateSessionAsync", section, StringComparison.Ordinal);
         Assert.Contains("AwaitActivationHandledAsync(_viewModel.ActivateSessionAsync", section, StringComparison.Ordinal);
         Assert.Contains("return await activationTask.ConfigureAwait(true);", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("INavigationCoordinator", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_navigationCoordinator", code, StringComparison.Ordinal);
     }
 
     [Fact]

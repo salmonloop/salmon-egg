@@ -100,7 +100,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _metricsProvider = App.ServiceProvider.GetRequiredService<WindowMetricsProvider>();
         _appActivationSignalSource = App.ServiceProvider.GetRequiredService<AppActivationSignalSource>();
         _metricsSink = App.ServiceProvider.GetRequiredService<IShellLayoutMetricsSink>();
-        var navigationCoordinator = App.ServiceProvider.GetRequiredService<INavigationCoordinator>();
         _logger = App.ServiceProvider.GetRequiredService<ILogger<MainPage>>();
         _windowBackdropService = App.ServiceProvider.GetRequiredService<WindowBackdropService>();
         _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
@@ -114,9 +113,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         this.InitializeComponent();
         _contentNavigation = new ContentFrameNavigationAdapter(ContentFrame);
-        _mainNavigationViewAdapter = new MainNavigationViewAdapter(
-            NavVM,
-            navigationCoordinator);
+        _mainNavigationViewAdapter = new MainNavigationViewAdapter(NavVM);
         _titleBarAdapter = new MainWindowTitleBarAdapter(
             AppTitleBar,
             AppTitleBarLayoutRoot,
