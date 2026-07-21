@@ -938,6 +938,135 @@ public sealed class WorkspaceWriterTests
         Assert.Equal(9UL, snapshot.Usage!.Used);
     }
 
+
+    [Fact]
+    public async Task FlushAsync_WarmConversationWithThinkingOnlyContent_DoesNotWipeExistingTranscript()
+    {
+        // Evidence: thinking placeholders make content look projected, but CreateSnapshot filters them out
+        // and would write an empty RuntimeProjection transcript over an existing authoritative transcript.
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        var realMessage = CreateTextMessage("m-1", "authoritative transcript");
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [realMessage],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            SessionInfo: new ConversationSessionInfoSnapshot { Title = "Warm", Cwd = @"C:\repo" },
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        var thinkingOnly = new ConversationMessageSnapshot
+        {
+            Id = "think-1",
+            Timestamp = new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
+            IsOutgoing = false,
+            ContentType = "thinking",
+            TextContent = "..."
+        };
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList.Create(thinkingOnly),
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    false)),
+            ConversationSessionStates: ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
+                "session-1",
+                new ConversationSessionStateSlice(
+                    ImmutableList<ConversationModeOptionSnapshot>.Empty,
+                    null,
+                    ImmutableList<ConversationConfigOptionSnapshot>.Empty,
+                    false,
+                    ImmutableList<ConversationAvailableCommandSnapshot>.Empty,
+                    new ConversationSessionInfoSnapshot { Title = "Warm", Cwd = @"C:\repo" },
+                    null)),
+            RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Bindings: ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-1")),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Contains(snapshot!.Transcript, message => message.TextContent == "authoritative transcript");
+        Assert.DoesNotContain(
+            snapshot.Transcript,
+            message => string.Equals(message.ContentType, "thinking", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task FlushAsync_WarmConversationWithShowPlanPanelOnly_DoesNotWipeExistingTranscript()
+    {
+        // Evidence: ShowPlanPanel-only content counts as projected content, so CreateSnapshot takes the empty
+        // slice transcript instead of reusing the existing RuntimeProjection transcript.
+        var dispatcher = new ImmediateUiDispatcher();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(dispatcher);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, dispatcher);
+        using var writer = new WorkspaceWriter(workspace, dispatcher, TimeSpan.Zero);
+
+        var realMessage = CreateTextMessage("m-1", "authoritative transcript");
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [realMessage],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        writer.Enqueue(new ChatState(
+            HydratedConversationId: "session-active",
+            ConversationContents: ImmutableDictionary<string, ConversationContentSlice>.Empty.Add(
+                "session-1",
+                new ConversationContentSlice(
+                    ImmutableList<ConversationMessageSnapshot>.Empty,
+                    ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    true)),
+            Bindings: ImmutableDictionary<string, ConversationBindingSlice>.Empty.Add(
+                "session-1",
+                new ConversationBindingSlice("session-1", "remote-1", "profile-1")),
+            RuntimeStates: ImmutableDictionary<string, ConversationRuntimeSlice>.Empty.Add(
+                "session-1",
+                new ConversationRuntimeSlice(
+                    "session-1",
+                    ConversationRuntimePhase.Warm,
+                    "conn-1",
+                    "remote-1",
+                    "profile-1",
+                    "SessionLoadCompleted",
+                    DateTime.UtcNow)),
+            Generation: 1), scheduleSave: false);
+        await writer.FlushAsync(TestContext.Current.CancellationToken);
+
+        var snapshot = workspace.GetConversationSnapshot("session-1");
+        Assert.NotNull(snapshot);
+        Assert.Contains(snapshot!.Transcript, message => message.TextContent == "authoritative transcript");
+        Assert.True(snapshot.ShowPlanPanel);
+    }
+
     private static ChatConversationWorkspace CreateWorkspace(
         IConversationStore store,
         ISessionManager sessionManager,

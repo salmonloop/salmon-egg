@@ -222,6 +222,31 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             .Select(ClonePlanEntrySnapshot)
             .OfType<ConversationPlanEntrySnapshot>()
             .ToArray();
+
+        // Projected content can look non-empty while durable RuntimeProjection content is empty:
+        // thinking-only rows are filtered out, and ShowPlanPanel-only slices carry no transcript/plan.
+        // Never let those shells overwrite an authoritative RuntimeProjection transcript/plan; warm
+        // return materializes from that snapshot and would otherwise land blank.
+        if (canReuseExistingSnapshotRuntimeContent && existingSnapshot is not null)
+        {
+            var existingTranscript = existingSnapshot.Transcript ?? Array.Empty<ConversationMessageSnapshot>();
+            if (transcript.Length == 0 && existingTranscript.Count > 0)
+            {
+                transcript = existingTranscript
+                    .Where(static message => !IsThinkingPlaceholder(message))
+                    .Select(CloneMessageSnapshot)
+                    .ToArray();
+            }
+
+            var existingPlan = existingSnapshot.Plan ?? Array.Empty<ConversationPlanEntrySnapshot>();
+            if (planEntries.Length == 0 && existingPlan.Count > 0)
+            {
+                planEntries = existingPlan
+                    .Select(ClonePlanEntrySnapshot)
+                    .OfType<ConversationPlanEntrySnapshot>()
+                    .ToArray();
+            }
+        }
         var hasProjectedPrimarySessionState = false;
         if (sessionStateSlice is ConversationSessionStateSlice primarySessionState)
         {
