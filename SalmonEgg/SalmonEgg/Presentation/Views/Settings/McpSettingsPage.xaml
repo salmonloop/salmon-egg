@@ -21,11 +21,15 @@
     </Page.Resources>
 
     <Grid>
-        <!-- Short windows: denser MCP server list reservation. Comfortable restores prior
-             MinHeight at MinWindowHeight=760 (mirrors Start/Discover height density). -->
+        <!-- Short windows: denser MCP server list reservation and row chrome. Compact keeps
+             list MinHeight=96; comfortable restores 160 at MinWindowHeight=760. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ListHeightStates">
-                <VisualState x:Name="ListHeightCompact" />
+                <VisualState x:Name="ListHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="McpServersList.MinHeight" Value="96" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="ListHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
@@ -254,9 +258,9 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:McpServerRowViewModel">
-                                                <Grid Padding="16"
+                                                <Grid Padding="12"
                                                       ColumnDefinitions="*,Auto"
-                                                      ColumnSpacing="16">
+                                                      ColumnSpacing="12">
                                                     <StackPanel Spacing="4"
                                                                 VerticalAlignment="Center">
                                                         <TextBlock Text="{x:Bind Name, Mode=OneWay}"

@@ -3455,8 +3455,11 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("x:Name=\"ListHeightStates\"", mcp, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"McpServersList.MinHeight\" Value=\"96\"", mcp, StringComparison.Ordinal);
         Assert.Contains("Target=\"McpServersList.MinHeight\" Value=\"160\"", mcp, StringComparison.Ordinal);
         Assert.Contains("MinHeight=\"96\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"12\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("ColumnSpacing=\"12\"", mcp, StringComparison.Ordinal);
 
         // VSM must live on a single content root (Grid), not as a second Page child.
         Assert.Contains("<Grid>", acp, StringComparison.Ordinal);
