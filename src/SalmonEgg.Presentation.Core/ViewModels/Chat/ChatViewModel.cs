@@ -1421,7 +1421,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         NewSessionDraftModeOptions = new ReadOnlyObservableCollection<SessionModeViewModel>(_newSessionDraftModeOptions);
         NewSessionDraftModelOptions = new ReadOnlyObservableCollection<OptionValueViewModel>(_newSessionDraftModelOptions);
         _terminalProjectionCoordinator = new ChatTerminalProjectionCoordinator();
-        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator);
+        _interactionEventBridge = new ChatInteractionEventBridge(_authoritativeRemoteSessionRouter, _terminalProjectionCoordinator, _localizer);
         _authenticationCoordinator = new ChatAuthenticationCoordinator();
         _sessionHeaderActionCoordinator = new ChatSessionHeaderActionCoordinator();
         _localSlashCommandSource = localSlashCommandSource ?? StaticSlashCommandSource.Empty;

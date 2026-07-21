@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
@@ -14,13 +16,16 @@ public sealed class ChatInteractionEventBridge
 {
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
     private readonly ChatTerminalProjectionCoordinator _terminalProjectionCoordinator;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
 
     public ChatInteractionEventBridge(
         IAuthoritativeRemoteSessionRouter authoritativeRemoteSessionRouter,
-        ChatTerminalProjectionCoordinator terminalProjectionCoordinator)
+        ChatTerminalProjectionCoordinator terminalProjectionCoordinator,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? throw new ArgumentNullException(nameof(authoritativeRemoteSessionRouter));
         _terminalProjectionCoordinator = terminalProjectionCoordinator ?? throw new ArgumentNullException(nameof(terminalProjectionCoordinator));
+        _localizer = localizer;
     }
 
     public PermissionRequestViewModel CreatePermissionRequestViewModel(
@@ -65,7 +70,8 @@ public sealed class ChatInteractionEventBridge
 
                 await clearPendingRequestAsync(conversationId).ConfigureAwait(true);
                 return true;
-            });
+            },
+            _localizer);
 
         return (conversationId, requestViewModel);
     }

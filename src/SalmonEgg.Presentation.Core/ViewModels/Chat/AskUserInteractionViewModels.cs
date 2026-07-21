@@ -4,21 +4,27 @@ using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 public sealed partial class AskUserRequestViewModel : ObservableObject
 {
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
+
     public AskUserRequestViewModel(
         object messageId,
         string sessionId,
         string prompt,
-        IEnumerable<AskUserQuestionViewModel> questions)
+        IEnumerable<AskUserQuestionViewModel> questions,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         MessageId = messageId ?? throw new ArgumentNullException(nameof(messageId));
         SessionId = sessionId ?? throw new ArgumentNullException(nameof(sessionId));
         Prompt = prompt ?? string.Empty;
+        _localizer = localizer;
 
         foreach (var question in questions ?? Array.Empty<AskUserQuestionViewModel>())
         {
@@ -54,14 +60,14 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
     {
         if (OnSubmit is null)
         {
-            ErrorMessage = "Answers cannot be submitted right now.";
+            ErrorMessage = Localize("AskUser_SubmitUnavailable", "Answers cannot be submitted right now.");
             return;
         }
 
         var answers = BuildAnswers();
         if (answers.Count == 0 || !AreAllQuestionsAnswered())
         {
-            ErrorMessage = "Answer all questions before submitting.";
+            ErrorMessage = Localize("AskUser_AnswerAllRequired", "Answer all questions before submitting.");
             return;
         }
 
@@ -73,13 +79,13 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
             var succeeded = await OnSubmit(answers).ConfigureAwait(true);
             if (!succeeded)
             {
-                ErrorMessage = "Failed to submit answers. Please try again.";
+                ErrorMessage = Localize("AskUser_SubmitFailed", "Failed to submit answers. Please try again.");
             }
         }
         catch (Exception ex)
         {
             ErrorMessage = string.IsNullOrWhiteSpace(ex.Message)
-                ? "Failed to submit answers. Please try again."
+                ? Localize("AskUser_SubmitFailed", "Failed to submit answers. Please try again.")
                 : ex.Message;
         }
         finally
@@ -133,16 +139,37 @@ public sealed partial class AskUserRequestViewModel : ObservableObject
 
         return answers;
     }
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
 }
 
 public sealed class AskUserQuestionViewModel
 {
-    public AskUserQuestionViewModel(string header, string questionText, bool isMultiSelect, IEnumerable<AskUserOptionViewModel> options)
+    public AskUserQuestionViewModel(
+        string header,
+        string questionText,
+        bool isMultiSelect,
+        IEnumerable<AskUserOptionViewModel> options,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         Header = header ?? string.Empty;
         QuestionText = questionText ?? string.Empty;
         IsMultiSelect = isMultiSelect;
-        SelectionHint = isMultiSelect ? "Multiple choice" : "Single choice";
+        SelectionHint = isMultiSelect
+            ? Localize(localizer, "AskUser_MultipleChoice", "Multiple choice")
+            : Localize(localizer, "AskUser_SingleChoice", "Single choice");
 
         foreach (var option in options ?? Array.Empty<AskUserOptionViewModel>())
         {
@@ -209,6 +236,19 @@ public sealed class AskUserQuestionViewModel
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    private static string Localize(IStringLocalizer<CoreStrings>? localizer, string key, string fallback)
+    {
+        if (localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
 }
 
 public sealed partial class AskUserOptionViewModel : ObservableObject
@@ -240,7 +280,8 @@ public static class AskUserInteractionViewModelFactory
     public static AskUserRequestViewModel Create(
         AskUserRequest request,
         object messageId,
-        Func<IReadOnlyDictionary<string, string>, Task<bool>> onSubmit)
+        Func<IReadOnlyDictionary<string, string>, Task<bool>> onSubmit,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(onSubmit);
@@ -261,14 +302,16 @@ public static class AskUserInteractionViewModelFactory
                     question.Header,
                     question.Question,
                     question.MultiSelect,
-                    optionViewModels));
+                    optionViewModels,
+                    localizer));
         }
 
         return new AskUserRequestViewModel(
-        messageId,
-        request.SessionId,
-        AskUserContract.BuildPrompt(request.Questions),
-        questionViewModels)
+            messageId,
+            request.SessionId,
+            AskUserContract.BuildPrompt(request.Questions),
+            questionViewModels,
+            localizer)
         {
             OnSubmit = onSubmit
         };

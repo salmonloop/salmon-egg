@@ -1010,4 +1010,19 @@
   <data name="Nav_CopySessionIdFailed" xml:space="preserve">
     <value>复制会话 ID 失败，请稍后重试。</value>
   </data>
+  <data name="AskUser_SubmitUnavailable" xml:space="preserve">
+    <value>当前无法提交回答。</value>
+  </data>
+  <data name="AskUser_AnswerAllRequired" xml:space="preserve">
+    <value>请先回答所有问题再提交。</value>
+  </data>
+  <data name="AskUser_SubmitFailed" xml:space="preserve">
+    <value>提交回答失败，请重试。</value>
+  </data>
+  <data name="AskUser_MultipleChoice" xml:space="preserve">
+    <value>多选</value>
+  </data>
+  <data name="AskUser_SingleChoice" xml:space="preserve">
+    <value>单选</value>
+  </data>
 </root>
