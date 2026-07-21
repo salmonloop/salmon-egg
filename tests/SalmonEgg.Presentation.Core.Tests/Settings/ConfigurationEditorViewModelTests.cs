@@ -16,38 +16,53 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class ConfigurationEditorViewModelTests
 {
     [Fact]
-    public void TransportOptions_Should_PresentStdioAsSubprocessTransport()
+    public void TransportOptions_Should_UseLocalizedTransportLabels()
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
         var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
             transportSupportPolicy,
-            new TestCoreStringLocalizer(),
+            localizer,
             logger.Object);
 
-        Assert.Equal("Stdio (subprocess)", viewModel.TransportOptions[0].Name);
+        Assert.Equal(localizer["AcpConnection_TransportStdio"].Value, viewModel.TransportOptions[0].Name);
+        Assert.Equal(
+            new[]
+            {
+                localizer["AcpConnection_TransportStdio"].Value,
+                localizer["AcpConnection_TransportWebSocket"].Value,
+                localizer["AcpConnection_TransportHttpSse"].Value
+            },
+            viewModel.TransportOptions.Select(option => option.Name).ToArray());
     }
 
     [Fact]
-    public void ProxyModeOptions_Should_UseStableEnglishLabels()
+    public void ProxyModeOptions_Should_UseLocalizedProxyModeLabels()
     {
         var validator = new ServerConfigurationValidator();
         var configurationService = new Mock<IConfigurationService>();
         var transportSupportPolicy = CreateTransportSupportPolicy(supportsStdioTransport: true);
         var logger = new Mock<ILogger<ConfigurationEditorViewModel>>();
+        var localizer = new TestCoreStringLocalizer();
         var viewModel = new ConfigurationEditorViewModel(
             validator,
             configurationService.Object,
             transportSupportPolicy,
-            new TestCoreStringLocalizer(),
+            localizer,
             logger.Object);
 
         Assert.Equal(
-            new[] { "Use system proxy", "No proxy", "Custom proxy" },
+            new[]
+            {
+                localizer["AgentProfileEditor_ProxyModeSystem"].Value,
+                localizer["AgentProfileEditor_ProxyModeNone"].Value,
+                localizer["AgentProfileEditor_ProxyModeCustom"].Value
+            },
             viewModel.ProxyModeOptions.Select(option => option.Name).ToArray());
     }
 

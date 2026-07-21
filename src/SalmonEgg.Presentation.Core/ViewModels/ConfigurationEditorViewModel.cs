@@ -49,7 +49,7 @@ public partial class ConfigurationEditorViewModel(
     private TransportType _transport;
 
     public ObservableCollection<TransportOption> TransportOptions { get; } =
-        CreateTransportOptions(transportSupportPolicy);
+        CreateTransportOptions(transportSupportPolicy, localizer);
 
     [ObservableProperty]
     private TransportOption? _selectedTransportOption;
@@ -60,7 +60,7 @@ public partial class ConfigurationEditorViewModel(
 
     public bool IsCustomProxy => ProxyMode == ProxyMode.Custom;
 
-    public ObservableCollection<ProxyModeOption> ProxyModeOptions { get; } = CreateProxyModeOptions();
+    public ObservableCollection<ProxyModeOption> ProxyModeOptions { get; } = CreateProxyModeOptions(localizer);
 
     [ObservableProperty]
     private string _token = string.Empty;
@@ -308,28 +308,36 @@ public partial class ConfigurationEditorViewModel(
     {
     }
 
-    private static ObservableCollection<TransportOption> CreateTransportOptions(ITransportSupportPolicy transportSupportPolicy)
+    private static ObservableCollection<TransportOption> CreateTransportOptions(
+        ITransportSupportPolicy transportSupportPolicy,
+        IStringLocalizer<CoreStrings> localizer)
     {
         ArgumentNullException.ThrowIfNull(transportSupportPolicy);
+        ArgumentNullException.ThrowIfNull(localizer);
 
         var options = new ObservableCollection<TransportOption>();
         if (transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
-            options.Add(new TransportOption(TransportType.Stdio, "Stdio (subprocess)"));
+            options.Add(new TransportOption(TransportType.Stdio, localizer["AcpConnection_TransportStdio"]));
         }
 
-        options.Add(new TransportOption(TransportType.WebSocket, "WebSocket"));
-        options.Add(new TransportOption(TransportType.HttpSse, "HTTP SSE"));
+        options.Add(new TransportOption(TransportType.WebSocket, localizer["AcpConnection_TransportWebSocket"]));
+        options.Add(new TransportOption(TransportType.HttpSse, localizer["AcpConnection_TransportHttpSse"]));
         return options;
     }
 
-    private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions()
-        => new()
+    private static ObservableCollection<ProxyModeOption> CreateProxyModeOptions(
+        IStringLocalizer<CoreStrings> localizer)
+    {
+        ArgumentNullException.ThrowIfNull(localizer);
+
+        return new ObservableCollection<ProxyModeOption>
         {
-            new ProxyModeOption(ProxyMode.System, "Use system proxy"),
-            new ProxyModeOption(ProxyMode.None, "No proxy"),
-            new ProxyModeOption(ProxyMode.Custom, "Custom proxy")
+            new(ProxyMode.System, localizer["AgentProfileEditor_ProxyModeSystem"]),
+            new(ProxyMode.None, localizer["AgentProfileEditor_ProxyModeNone"]),
+            new(ProxyMode.Custom, localizer["AgentProfileEditor_ProxyModeCustom"])
         };
+    }
 
     private TransportType ResolveDefaultTransportType()
         => _transportSupportPolicy.DefaultTransport;

@@ -370,6 +370,15 @@
   <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
     <value>保存配置失败：{0}</value>
   </data>
+  <data name="AgentProfileEditor_ProxyModeSystem" xml:space="preserve">
+    <value>使用系统代理</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeNone" xml:space="preserve">
+    <value>不使用代理</value>
+  </data>
+  <data name="AgentProfileEditor_ProxyModeCustom" xml:space="preserve">
+    <value>自定义代理</value>
+  </data>
   <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
     <value>刷新 Agent 配置失败，请稍后重试。</value>
   </data>

@@ -107,6 +107,12 @@ public sealed class CoreStringResourceTests
     [InlineData("Start_SessionLaunchFailed")]
     [InlineData("AddProject_RemoteProjectMissing")]
     [InlineData("AddProject_InvalidSelection")]
+    [InlineData("AgentProfileEditor_ProxyModeSystem")]
+    [InlineData("AgentProfileEditor_ProxyModeNone")]
+    [InlineData("AgentProfileEditor_ProxyModeCustom")]
+    [InlineData("AcpConnection_TransportStdio")]
+    [InlineData("AcpConnection_TransportWebSocket")]
+    [InlineData("AcpConnection_TransportHttpSse")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)
