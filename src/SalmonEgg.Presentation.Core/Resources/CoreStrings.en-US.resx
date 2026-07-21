@@ -39,6 +39,18 @@
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>Unclassified</value>
   </data>
+  <data name="Nav_RelativeJustNow" xml:space="preserve">
+    <value>Just now</value>
+  </data>
+  <data name="Nav_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} min</value>
+  </data>
+  <data name="Nav_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} hr</value>
+  </data>
+  <data name="Nav_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} d</value>
+  </data>
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>Mode is not ready</value>
   </data>

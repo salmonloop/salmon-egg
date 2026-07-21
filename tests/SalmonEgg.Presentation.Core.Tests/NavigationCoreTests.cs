@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Core.Services.Navigation;
 using SalmonEgg.Presentation.Services;
@@ -19,6 +22,43 @@ public sealed class NavigationCoreTests
         Assert.Equal("2 min", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromMinutes(2)));
         Assert.Equal("3 hr", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromHours(3)));
         Assert.Equal("2 d", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromDays(2)));
+    }
+
+    [Fact]
+    public void NavTimeFormatter_ToRelativeText_UsesLocalizerWhenProvided()
+    {
+        var now = DateTime.UtcNow;
+        var localizer = new PrefixLocalizer("zh");
+
+        Assert.Equal("zh:Nav_RelativeJustNow", NavTimeFormatter.ToRelativeText(now - TimeSpan.FromSeconds(30), localizer));
+        Assert.Equal(
+            string.Format(CultureInfo.CurrentCulture, "zh:Nav_RelativeMinutesFormat", 2),
+            NavTimeFormatter.ToRelativeText(now - TimeSpan.FromMinutes(2), localizer));
+        Assert.Equal(
+            string.Format(CultureInfo.CurrentCulture, "zh:Nav_RelativeHoursFormat", 3),
+            NavTimeFormatter.ToRelativeText(now - TimeSpan.FromHours(3), localizer));
+        Assert.Equal(
+            string.Format(CultureInfo.CurrentCulture, "zh:Nav_RelativeDaysFormat", 2),
+            NavTimeFormatter.ToRelativeText(now - TimeSpan.FromDays(2), localizer));
+    }
+
+    private sealed class PrefixLocalizer : IStringLocalizer<CoreStrings>
+    {
+        private readonly string _prefix;
+
+        public PrefixLocalizer(string prefix)
+        {
+            _prefix = prefix;
+        }
+
+        public LocalizedString this[string name]
+            => new(name, $"{_prefix}:{name}");
+
+        public LocalizedString this[string name, params object[] arguments]
+            => new(name, string.Format(CultureInfo.InvariantCulture, $"{_prefix}:{name}", arguments));
+
+        public IEnumerable<LocalizedString> GetAllStrings(bool includeParentCultures)
+            => Array.Empty<LocalizedString>();
     }
 
     [Fact]

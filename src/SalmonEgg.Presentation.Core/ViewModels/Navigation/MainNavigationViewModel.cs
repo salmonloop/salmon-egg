@@ -283,6 +283,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             placeholder.Title = loadingTitle;
         }
+
+        RefreshRelativeTimes();
     }
 
     public void Dispose()
@@ -957,7 +959,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             var title = string.IsNullOrWhiteSpace(session.DisplayName)
                 ? SessionNamePolicy.CreateDefault(session.ConversationId)
                 : session.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt);
+            var relative = NavTimeFormatter.ToRelativeText(session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt, _localizer);
 
             SessionNavItemViewModel? sessionVm = null;
 
@@ -1303,7 +1305,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             }
 
             var timestamp = session.CatalogUpdatedAt == default ? session.CreatedAt : session.CatalogUpdatedAt;
-            var relative = NavTimeFormatter.ToRelativeText(timestamp);
+            var relative = NavTimeFormatter.ToRelativeText(timestamp, _localizer);
             if (!string.Equals(sessionItem.RelativeTimeText, relative, StringComparison.Ordinal))
             {
                 sessionItem.RelativeTimeText = relative;
@@ -1352,7 +1354,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return sessions.Select(s =>
         {
             var title = string.IsNullOrWhiteSpace(s.DisplayName) ? SessionNamePolicy.CreateDefault(s.ConversationId) : s.DisplayName.Trim();
-            var relative = NavTimeFormatter.ToRelativeText(s.CatalogUpdatedAt == default ? s.CreatedAt : s.CatalogUpdatedAt);
+            var relative = NavTimeFormatter.ToRelativeText(s.CatalogUpdatedAt == default ? s.CreatedAt : s.CatalogUpdatedAt, _localizer);
             var vm = new SessionNavItemViewModel(
                 sessionId: s.ConversationId,
                 remoteSessionId: s.RemoteSessionId,

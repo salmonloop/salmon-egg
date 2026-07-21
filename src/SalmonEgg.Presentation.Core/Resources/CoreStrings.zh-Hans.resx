@@ -33,6 +33,18 @@
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>未归类</value>
   </data>
+  <data name="Nav_RelativeJustNow" xml:space="preserve">
+    <value>刚刚</value>
+  </data>
+  <data name="Nav_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} 分钟</value>
+  </data>
+  <data name="Nav_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} 小时</value>
+  </data>
+  <data name="Nav_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} 天</value>
+  </data>
   <data name="Selector_Mode_Unresolved" xml:space="preserve">
     <value>模式尚未就绪</value>
   </data>
