@@ -306,6 +306,57 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task LanguageChanged_ReprojectsOpenStartLaunchFailureMessage()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var languageService = new Mock<IAppLanguageService>();
+            var languagePrefix = "zh";
+            var localizer = new Mock<IStringLocalizer<CoreStrings>>();
+            localizer
+                .Setup(service => service[It.IsAny<string>()])
+                .Returns((string key) => new LocalizedString(key, $"{languagePrefix}:{key}"));
+
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Failed);
+
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: localizer.Object,
+                languageService: languageService.Object);
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+
+            startViewModel.StartPrompt = "hello";
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("zh:Start_SessionLaunchFailed", startViewModel.StartSessionDraftErrorMessage);
+
+            languagePrefix = "en";
+            languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("en:Start_SessionLaunchFailed", startViewModel.StartSessionDraftErrorMessage);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
+    [Fact]
     public void QuickSuggestion_AllowsRuntimeProjectionUpdates()
     {
         var suggestion = new QuickSuggestionViewModel(

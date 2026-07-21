@@ -58,6 +58,7 @@ public sealed partial class StartViewModel : ObservableObject
     private bool _isComposerLoaded;
 
     private string? _startLaunchFailureMessage;
+    private string? _startLaunchFailureResourceKey;
 
     public ChatViewModel Chat { get; }
 
@@ -341,6 +342,7 @@ public sealed partial class StartViewModel : ObservableObject
         Suggestions.Clear();
         InitializeSuggestions();
         RefreshStartProjectOptions();
+        ReprojectStartLaunchFailureMessage();
         RefreshStartSessionDraftErrorProjection();
         RefreshVoiceProjection();
     }
@@ -520,9 +522,8 @@ public sealed partial class StartViewModel : ObservableObject
 
                 case ChatLaunchCompletion.Failed:
                     SetStartLaunchFailure(
-                        Localize(
-                            "Start_SessionLaunchFailed",
-                            "Failed to start the session. Please try again."));
+                        "Start_SessionLaunchFailed",
+                        "Failed to start the session. Please try again.");
                     break;
 
                 case ChatLaunchCompletion.Incomplete:
@@ -536,9 +537,8 @@ public sealed partial class StartViewModel : ObservableObject
         {
             _logger.LogWarning(ex, "Start session failed");
             SetStartLaunchFailure(
-                Localize(
-                    "Start_SessionLaunchFailed",
-                    "Failed to start the session. Please try again."));
+                "Start_SessionLaunchFailed",
+                "Failed to start the session. Please try again.");
         }
         finally
         {
@@ -553,9 +553,21 @@ public sealed partial class StartViewModel : ObservableObject
         }
     }
 
-    private void SetStartLaunchFailure(string message)
+    private void SetStartLaunchFailure(string resourceKey, string fallback)
     {
-        var normalized = string.IsNullOrWhiteSpace(message) ? null : message.Trim();
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+
+        _startLaunchFailureResourceKey = resourceKey.Trim();
+        var normalized = Localize(_startLaunchFailureResourceKey, fallback);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            normalized = string.IsNullOrWhiteSpace(fallback) ? null : fallback.Trim();
+        }
+        else
+        {
+            normalized = normalized.Trim();
+        }
+
         if (string.Equals(_startLaunchFailureMessage, normalized, StringComparison.Ordinal))
         {
             return;
@@ -568,14 +580,39 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void ClearStartLaunchFailure()
     {
-        if (_startLaunchFailureMessage is null)
+        if (_startLaunchFailureMessage is null && _startLaunchFailureResourceKey is null)
         {
             return;
         }
 
         _startLaunchFailureMessage = null;
+        _startLaunchFailureResourceKey = null;
         OnPropertyChanged(nameof(HasStartSessionDraftError));
         OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
+    }
+
+    private void ReprojectStartLaunchFailureMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_startLaunchFailureResourceKey))
+        {
+            return;
+        }
+
+        var reprojected = Localize(
+            _startLaunchFailureResourceKey,
+            _startLaunchFailureMessage ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(reprojected))
+        {
+            return;
+        }
+
+        reprojected = reprojected.Trim();
+        if (string.Equals(_startLaunchFailureMessage, reprojected, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = reprojected;
     }
 
     private void RefreshStartPromptProjection(string value)
