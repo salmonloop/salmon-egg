@@ -66,6 +66,37 @@ public sealed class AcpConnectionCoordinatorTests
     }
 
     [Fact]
+    public async Task SetAuthenticationRequiredAsync_PreservesPresentationIdentity()
+    {
+        // Arrange
+        await using var connectionState = State.Value(new object(), () => ChatConnectionState.Empty);
+        var store = new RecordingConnectionStore(connectionState);
+        var coordinator = new AcpConnectionCoordinator(
+            store,
+            Mock.Of<ILogger<AcpConnectionCoordinator>>(),
+            new StaticMcpResolver([]),
+            new AcpRemoteSessionRecoveryContextResolver(
+                NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
+        var formatArgs = new object[] { "denied" };
+
+        // Act
+        await coordinator.SetAuthenticationRequiredAsync(
+            "认证失败：denied",
+            "ChatAuth_FailedWithDetail",
+            "Authentication failed: {0}",
+            formatArgs,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var snapshot = Assert.Single(store.Snapshots);
+        Assert.True(snapshot.IsAuthenticationRequired);
+        Assert.Equal("认证失败：denied", snapshot.AuthenticationHintMessage);
+        Assert.Equal("ChatAuth_FailedWithDetail", snapshot.AuthenticationHintResourceKey);
+        Assert.Equal("Authentication failed: {0}", snapshot.AuthenticationHintFallback);
+        Assert.Same(formatArgs, snapshot.AuthenticationHintFormatArgs);
+    }
+
+    [Fact]
     public async Task ResyncAsync_ReplaysBufferedUpdatesOnlyAfterSinkReset()
     {
         var uiDispatcher = new ImmediateUiDispatcher();

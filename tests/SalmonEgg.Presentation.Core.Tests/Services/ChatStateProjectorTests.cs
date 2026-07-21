@@ -58,6 +58,55 @@ public sealed class ChatStateProjectorTests
     }
 
     [Fact]
+    public void Apply_AuthenticationHintWithResourceIdentity_UsesCurrentLanguage()
+    {
+        // Arrange
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_FailedWithDetail", "认证失败：{0}");
+        localizer.Set("en-US", "ChatAuth_FailedWithDetail", "Authentication failed: {0}");
+        var projector = new ChatStateProjector(localizer);
+        var connectionState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "认证失败：denied",
+            AuthenticationHintResourceKey = "ChatAuth_FailedWithDetail",
+            AuthenticationHintFallback = "Authentication failed: {0}",
+            AuthenticationHintFormatArgs = ["denied"]
+        };
+
+        // Act
+        var zhProjection = projector.Apply(ChatState.Empty, connectionState, null, null);
+        localizer.SetLanguageTag("en-US");
+        var enProjection = projector.Apply(ChatState.Empty, connectionState, null, null);
+
+        // Assert
+        Assert.Equal("认证失败：denied", zhProjection.AuthenticationHintMessage);
+        Assert.Equal("Authentication failed: denied", enProjection.AuthenticationHintMessage);
+    }
+
+    [Fact]
+    public void Apply_AuthenticationHintWithoutResourceIdentity_PreservesProtocolText()
+    {
+        // Arrange
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_Required", "需要认证");
+        localizer.Set("en-US", "ChatAuth_Required", "Authentication required");
+        var projector = new ChatStateProjector(localizer);
+        var connectionState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "Open the agent sign-in page."
+        };
+
+        // Act
+        localizer.SetLanguageTag("en-US");
+        var projection = projector.Apply(ChatState.Empty, connectionState, null, null);
+
+        // Assert
+        Assert.Equal("Open the agent sign-in page.", projection.AuthenticationHintMessage);
+    }
+
+    [Fact]
     public void Apply_ProjectsTailStatusFromActiveTurn()
     {
         var projector = new ChatStateProjector();

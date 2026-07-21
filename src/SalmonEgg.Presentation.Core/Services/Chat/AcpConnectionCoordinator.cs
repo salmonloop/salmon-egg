@@ -19,7 +19,12 @@ public interface IAcpConnectionCoordinator
 
     Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default);
 
-    Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default);
+    Task SetAuthenticationRequiredAsync(
+        string? hintMessage,
+        string? hintResourceKey = null,
+        string? hintFallback = null,
+        object[]? hintFormatArgs = null,
+        CancellationToken cancellationToken = default);
 
     Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default);
 
@@ -94,10 +99,18 @@ public sealed class AcpConnectionCoordinator : IAcpConnectionCoordinator, IAcpCo
 
     public async Task SetAuthenticationRequiredAsync(
         string? hintMessage,
+        string? hintResourceKey = null,
+        string? hintFallback = null,
+        object[]? hintFormatArgs = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await _store.Dispatch(new SetConnectionAuthenticationStateAction(true, hintMessage))
+        await _store.Dispatch(new SetConnectionAuthenticationStateAction(
+                true,
+                hintMessage,
+                hintResourceKey,
+                hintFallback,
+                hintFormatArgs))
             .ConfigureAwait(false);
     }
 

@@ -80,6 +80,7 @@ public partial class ChatViewModelTests
         IPlatformShellService? platformShell = null,
         IStringLocalizer<CoreStrings>? localizer = null,
         IAppLanguageService? languageService = null,
+        IChatStateProjector? chatStateProjector = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -211,7 +212,7 @@ public partial class ChatViewModelTests
         try
         {
             SynchronizationContext.SetSynchronizationContext(syncContext ?? new SynchronizationContext());
-            var chatStateProjector = new ChatStateProjector();
+            chatStateProjector ??= new ChatStateProjector();
 
             var viewModel = new ChatViewModel(
                 chatStore,
@@ -619,6 +620,47 @@ public partial class ChatViewModelTests
                 StringComparison.Ordinal));
         });
         Assert.Equal("Failed to switch mode: mode-denied", viewModel.ConversationOperationFailureMessage);
+    }
+
+    [Fact]
+    public async Task LanguageChanged_WhenAuthenticationHintIsHeld_ReprojectsLocalizedMessage()
+    {
+        // Arrange
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "ChatAuth_FailedWithDetail", "认证失败：{0}");
+        localizer.Set("en-US", "ChatAuth_FailedWithDetail", "Authentication failed: {0}");
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            languageService: languageService.Object,
+            chatStateProjector: new ChatStateProjector(localizer));
+        await fixture.DispatchConnectionAsync(new SetConnectionAuthenticationStateAction(
+            IsRequired: true,
+            HintMessage: "认证失败：denied",
+            HintResourceKey: "ChatAuth_FailedWithDetail",
+            HintFallback: "Authentication failed: {0}",
+            HintFormatArgs: ["denied"]));
+        await fixture.ApplyCurrentStoreProjectionAsync();
+        syncContext.RunAll();
+        Assert.Equal("认证失败：denied", fixture.ViewModel.AuthenticationHintMessage);
+
+        // Act
+        localizer.SetLanguageTag("en-US");
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        // Assert
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(string.Equals(
+                fixture.ViewModel.AuthenticationHintMessage,
+                "Authentication failed: denied",
+                StringComparison.Ordinal));
+        });
+        Assert.Equal("Authentication failed: denied", fixture.ViewModel.AuthenticationHintMessage);
     }
 
     [Fact]

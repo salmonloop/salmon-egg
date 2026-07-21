@@ -2033,13 +2033,20 @@ public partial class ChatViewModel
             Logger,
             message => ShowTransientNotificationToast(message),
             cancellationToken,
-            requiredFallback: Localize(
-                "ChatAuth_Required",
-                "The agent requires authentication before it can respond."),
-            formatAuthenticationFailed: detail => FormatLocalize(
-                "ChatAuth_FailedWithDetail",
-                "Authentication failed: {0}",
-                detail));
+            requiredFallback: new AuthenticationHintPresentation(
+                Localize(
+                    "ChatAuth_Required",
+                    "The agent requires authentication before it can respond."),
+                ResourceKey: "ChatAuth_Required",
+                Fallback: "The agent requires authentication before it can respond."),
+            formatAuthenticationFailed: detail => new AuthenticationHintPresentation(
+                FormatLocalize(
+                    "ChatAuth_FailedWithDetail",
+                    "Authentication failed: {0}",
+                    detail),
+                ResourceKey: "ChatAuth_FailedWithDetail",
+                Fallback: "Authentication failed: {0}",
+                FormatArgs: [detail]));
 
     private Task AddMessageToHistoryAsync(string? conversationId, ContentBlock content, bool isOutgoing)
     {

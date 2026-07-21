@@ -51,7 +51,10 @@ public static class ChatConnectionReducer
             SetConnectionAuthenticationStateAction setAuth => current with
             {
                 IsAuthenticationRequired = setAuth.IsRequired,
-                AuthenticationHintMessage = setAuth.HintMessage,
+                AuthenticationHintMessage = setAuth.IsRequired ? setAuth.HintMessage : null,
+                AuthenticationHintResourceKey = setAuth.IsRequired ? setAuth.HintResourceKey : null,
+                AuthenticationHintFallback = setAuth.IsRequired ? setAuth.HintFallback : null,
+                AuthenticationHintFormatArgs = setAuth.IsRequired ? setAuth.HintFormatArgs : null,
                 Generation = nextGeneration
             },
             SetNewSessionDraftAction setDraft => current with

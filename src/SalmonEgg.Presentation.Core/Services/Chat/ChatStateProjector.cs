@@ -71,7 +71,7 @@ public sealed class ChatStateProjector : IChatStateProjector
         };
         var connectionError = connectionState.Error;
         var isAuthenticationRequired = connectionState.IsAuthenticationRequired;
-        var authenticationHintMessage = connectionState.AuthenticationHintMessage;
+        var authenticationHintMessage = ResolveAuthenticationHintMessage(connectionState);
 
         var activeTurn = GetVisibleActiveTurn(storeState.ActiveTurn, hydratedConversationId);
         var turnStatus = ChatTurnStatusPresentationPolicy.Resolve(activeTurn);
@@ -159,6 +159,24 @@ public sealed class ChatStateProjector : IChatStateProjector
         return presentation.FormatArgument is null
             ? Localize(presentation.ResourceKey, presentation.FallbackText)
             : FormatLocalize(presentation.ResourceKey, presentation.FallbackText, presentation.FormatArgument);
+    }
+
+    private string? ResolveAuthenticationHintMessage(ChatConnectionState connectionState)
+    {
+        if (string.IsNullOrWhiteSpace(connectionState.AuthenticationHintResourceKey))
+        {
+            return connectionState.AuthenticationHintMessage;
+        }
+
+        var fallback = connectionState.AuthenticationHintFallback
+            ?? connectionState.AuthenticationHintMessage
+            ?? string.Empty;
+        return connectionState.AuthenticationHintFormatArgs is { Length: > 0 }
+            ? FormatLocalize(
+                connectionState.AuthenticationHintResourceKey,
+                fallback,
+                connectionState.AuthenticationHintFormatArgs)
+            : Localize(connectionState.AuthenticationHintResourceKey, fallback);
     }
 
     private string Localize(string key, string fallback)

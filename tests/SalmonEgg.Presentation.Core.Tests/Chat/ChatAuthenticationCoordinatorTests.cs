@@ -110,4 +110,110 @@ public sealed class ChatAuthenticationCoordinatorTests
         connectionCoordinator.Verify(x => x.ClearAuthenticationRequiredAsync(It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEmpty(notifications);
     }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenNoUsableMethod_StoresRequiredFallbackIdentity()
+    {
+        // Arrange
+        var sut = new ChatAuthenticationCoordinator();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        connectionCoordinator
+            .Setup(coordinator => coordinator.SetAuthenticationRequiredAsync(
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<object[]?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var service = new Mock<IChatService>();
+        var notifications = new List<string>();
+        var required = new AuthenticationHintPresentation(
+            "需要认证",
+            ResourceKey: "ChatAuth_Required",
+            Fallback: "Authentication required");
+
+        // Act
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            requiredFallback: required);
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(["需要认证"], notifications);
+        connectionCoordinator.Verify(coordinator => coordinator.SetAuthenticationRequiredAsync(
+            "需要认证",
+            "ChatAuth_Required",
+            "Authentication required",
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TryAuthenticateAsync_WhenAuthenticationFails_StoresFailureResourceIdentity()
+    {
+        // Arrange
+        var sut = new ChatAuthenticationCoordinator();
+        sut.CacheAuthMethods(new InitializeResponse
+        {
+            ProtocolVersion = 1,
+            AgentInfo = new AgentInfo("agent", "1.0.0"),
+            AgentCapabilities = new AgentCapabilities(),
+            AuthMethods =
+            [
+                new AuthMethodDefinition
+                {
+                    Id = "auth-1",
+                    Name = "Auth",
+                    Description = "Open the agent sign-in page."
+                }
+            ]
+        });
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        connectionCoordinator
+            .Setup(coordinator => coordinator.SetAuthenticationRequiredAsync(
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<object[]?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var service = new Mock<IChatService>();
+        service
+            .Setup(chatService => chatService.AuthenticateAsync(
+                It.IsAny<AuthenticateParams>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("denied"));
+        var notifications = new List<string>();
+
+        // Act
+        var result = await sut.TryAuthenticateAsync(
+            service.Object,
+            true,
+            connectionCoordinator.Object,
+            NullLogger.Instance,
+            notifications.Add,
+            CancellationToken.None,
+            formatAuthenticationFailed: detail => new AuthenticationHintPresentation(
+                $"认证失败：{detail}",
+                ResourceKey: "ChatAuth_FailedWithDetail",
+                Fallback: "Authentication failed: {0}",
+                FormatArgs: [detail]));
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal("认证失败：denied", notifications[^1]);
+        connectionCoordinator.Verify(coordinator => coordinator.SetAuthenticationRequiredAsync(
+            "认证失败：denied",
+            "ChatAuth_FailedWithDetail",
+            "Authentication failed: {0}",
+            It.Is<object[]?>(arguments => arguments != null
+                && arguments.Length == 1
+                && string.Equals(arguments[0] as string, "denied", StringComparison.Ordinal)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

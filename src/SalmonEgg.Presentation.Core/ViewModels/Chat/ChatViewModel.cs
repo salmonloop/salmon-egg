@@ -3438,7 +3438,12 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         public Task SetConnectedAsync(string? profileId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetConnectionInstanceIdAsync(string? connectionInstanceId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SetAuthenticationRequiredAsync(
+            string? hintMessage,
+            string? hintResourceKey = null,
+            string? hintFallback = null,
+            object[]? hintFormatArgs = null,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ResyncAsync(IAcpChatCoordinatorSink sink, CancellationToken cancellationToken = default) => Task.CompletedTask;

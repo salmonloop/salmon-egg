@@ -160,6 +160,55 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void Reduce_SetAuthenticationRequired_StoresPresentationIdentity()
+    {
+        // Arrange
+        var formatArgs = new object[] { "denied" };
+        var action = new SetConnectionAuthenticationStateAction(
+            IsRequired: true,
+            HintMessage: "认证失败：denied",
+            HintResourceKey: "ChatAuth_FailedWithDetail",
+            HintFallback: "Authentication failed: {0}",
+            HintFormatArgs: formatArgs);
+
+        // Act
+        var next = ChatConnectionReducer.Reduce(ChatConnectionState.Empty, action);
+
+        // Assert
+        Assert.True(next.IsAuthenticationRequired);
+        Assert.Equal("认证失败：denied", next.AuthenticationHintMessage);
+        Assert.Equal("ChatAuth_FailedWithDetail", next.AuthenticationHintResourceKey);
+        Assert.Equal("Authentication failed: {0}", next.AuthenticationHintFallback);
+        Assert.Same(formatArgs, next.AuthenticationHintFormatArgs);
+    }
+
+    [Fact]
+    public void Reduce_ClearAuthenticationRequired_ClearsPresentationIdentity()
+    {
+        // Arrange
+        var initialState = ChatConnectionState.Empty with
+        {
+            IsAuthenticationRequired = true,
+            AuthenticationHintMessage = "认证失败：denied",
+            AuthenticationHintResourceKey = "ChatAuth_FailedWithDetail",
+            AuthenticationHintFallback = "Authentication failed: {0}",
+            AuthenticationHintFormatArgs = ["denied"]
+        };
+
+        // Act
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new SetConnectionAuthenticationStateAction(false, HintMessage: "ignored"));
+
+        // Assert
+        Assert.False(next.IsAuthenticationRequired);
+        Assert.Null(next.AuthenticationHintMessage);
+        Assert.Null(next.AuthenticationHintResourceKey);
+        Assert.Null(next.AuthenticationHintFallback);
+        Assert.Null(next.AuthenticationHintFormatArgs);
+    }
+
+    [Fact]
     public void GivenConnectionStateWithNewSessionDraft_WhenConnectionIdentityChanges_ThenDraftIsCleared()
     {
         var draft = new NewSessionDraftState(

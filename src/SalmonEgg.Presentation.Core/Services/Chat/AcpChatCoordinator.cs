@@ -1251,7 +1251,12 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         public Task SetDisconnectedAsync(string? errorMessage = null, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
-        public Task SetAuthenticationRequiredAsync(string? hintMessage, CancellationToken cancellationToken = default)
+        public Task SetAuthenticationRequiredAsync(
+            string? hintMessage,
+            string? hintResourceKey = null,
+            string? hintFallback = null,
+            object[]? hintFormatArgs = null,
+            CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
         public Task ClearAuthenticationRequiredAsync(CancellationToken cancellationToken = default)

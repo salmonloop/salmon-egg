@@ -46,7 +46,10 @@ public sealed record ChatConnectionState(
     long Generation,
     string? ConnectionInstanceId = null,
     string? ForegroundTransportProfileId = null,
-    NewSessionDraftState? NewSessionDraft = null)
+    NewSessionDraftState? NewSessionDraft = null,
+    string? AuthenticationHintResourceKey = null,
+    string? AuthenticationHintFallback = null,
+    object[]? AuthenticationHintFormatArgs = null)
 {
     public static ChatConnectionState Empty { get; } = new(
         ConnectionPhase.Disconnected,
@@ -57,5 +60,8 @@ public sealed record ChatConnectionState(
         Generation: 0,
         ConnectionInstanceId: null,
         ForegroundTransportProfileId: null,
-        NewSessionDraft: null);
+        NewSessionDraft: null,
+        AuthenticationHintResourceKey: null,
+        AuthenticationHintFallback: null,
+        AuthenticationHintFormatArgs: null);
 }
