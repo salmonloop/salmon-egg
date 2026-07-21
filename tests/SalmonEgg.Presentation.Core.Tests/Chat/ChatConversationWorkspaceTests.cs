@@ -20,6 +20,10 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
+using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.ViewModels.Navigation;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -2748,6 +2752,68 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task ConversationCatalogFacade_ArchiveCurrentConversation_WhenStartActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .Setup(a => a.ArchiveConversationAsync("session-1", "session-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationMutationResult(true, true, null));
+
+        var selection = new Mock<IShellSelectionReadModel>();
+        selection.SetupGet(s => s.CurrentSelection)
+            .Returns(new NavigationSelectionState.Session("session-1"));
+
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator.Setup(n => n.ActivateStartAsync(null)).ReturnsAsync(false);
+
+        using var navigationViewModel = new MainNavigationViewModel(
+            Mock.Of<IConversationCatalog>(),
+            new NavigationProjectPreferencesAdapter(preferences),
+            ui.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<MainNavigationViewModel>>(),
+            new FakeNavigationPaneState(),
+            Mock.Of<IShellLayoutMetricsSink>(),
+            new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
+            new ShellNavigationRuntimeStateStore(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        var facade = new ConversationCatalogFacade(
+            workspace,
+            activationCoordinator.Object,
+            selection.Object,
+            new Lazy<INavigationCoordinator>(() => navigationCoordinator.Object),
+            new ConversationCatalogPresenter(),
+            NullLogger<ConversationCatalogFacade>.Instance,
+            navigationViewModel: new Lazy<MainNavigationViewModel>(() => navigationViewModel));
+
+        var result = await facade.ArchiveConversationAsync("session-1", TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.ClearedActiveConversation);
+        navigationCoordinator.Verify(n => n.ActivateStartAsync(null), Times.Once);
+        Assert.Equal(
+            ["Failed to open the start page. Please try again later."],
+            shownMessages);
+    }
+
+    [Fact]
     public async Task UpsertConversationSnapshot_NewConversation_BumpsConversationListVersion()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -3018,6 +3084,18 @@ public sealed class ChatConversationWorkspaceTests
         finally
         {
             SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+
+    private sealed class FakeNavigationPaneState : INavigationPaneState
+    {
+        public bool IsPaneOpen => true;
+
+        public event EventHandler? PaneStateChanged
+        {
+            add { }
+            remove { }
         }
     }
 

@@ -465,6 +465,7 @@ public static class DependencyInjection
         services.AddSingleton(sp =>
         {
             var lazyNav = new Lazy<INavigationCoordinator>(() => sp.GetRequiredService<INavigationCoordinator>());
+            var lazyMainNav = new Lazy<MainNavigationViewModel>(() => sp.GetRequiredService<MainNavigationViewModel>());
             return new ConversationCatalogFacade(
                 sp.GetRequiredService<ChatConversationWorkspace>(),
                 sp.GetRequiredService<IConversationActivationCoordinator>(),
@@ -473,7 +474,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<ConversationCatalogPresenter>(),
                 sp.GetRequiredService<ILogger<ConversationCatalogFacade>>(),
                 sp.GetService<IConversationAttentionStore>(),
-                sp.GetService<IConversationPanelCleanup>());
+                sp.GetService<IConversationPanelCleanup>(),
+                lazyMainNav);
         });
         services.AddSingleton<IConversationCatalog>(sp => sp.GetRequiredService<ConversationCatalogFacade>());
         services.AddSingleton<ChatViewModel>(sp =>

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -15,6 +16,7 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
     private readonly IConversationActivationCoordinator _activationCoordinator;
     private readonly IShellSelectionReadModel _shellSelection;
     private readonly Lazy<INavigationCoordinator> _navigationCoordinator;
+    private readonly Lazy<MainNavigationViewModel>? _navigationViewModel;
     private readonly ConversationCatalogPresenter _catalogPresenter;
     private readonly IConversationAttentionStore? _attentionStore;
     private IConversationPanelCleanup? _panelCleanup;
@@ -29,7 +31,8 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
         ConversationCatalogPresenter catalogPresenter,
         ILogger<ConversationCatalogFacade> logger,
         IConversationAttentionStore? attentionStore = null,
-        IConversationPanelCleanup? panelCleanup = null)
+        IConversationPanelCleanup? panelCleanup = null,
+        Lazy<MainNavigationViewModel>? navigationViewModel = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _activationCoordinator = activationCoordinator ?? throw new ArgumentNullException(nameof(activationCoordinator));
@@ -39,6 +42,7 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _attentionStore = attentionStore;
         _panelCleanup = panelCleanup;
+        _navigationViewModel = navigationViewModel;
 
         _workspace.PropertyChanged += OnWorkspacePropertyChanged;
     }
@@ -176,7 +180,16 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
 
             if (result.ClearedActiveConversation)
             {
-                await _navigationCoordinator.Value.ActivateStartAsync().ConfigureAwait(true);
+                // Prefer the navigation VM owner so Start activation failures surface ShowInfo.
+                // Fall back to the coordinator only for lean unit fixtures that omit the VM.
+                if (_navigationViewModel is not null)
+                {
+                    await _navigationViewModel.Value.ActivateStartAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    await _navigationCoordinator.Value.ActivateStartAsync().ConfigureAwait(true);
+                }
             }
 
             return result;
