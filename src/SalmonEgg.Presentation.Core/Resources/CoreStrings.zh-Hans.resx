@@ -862,6 +862,7 @@
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>移除本机设置</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>已保存的云同步配置无效。请编辑连接并检查必填项。</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>该远程项目已不存在。</value></data>
+  <data name="AddProject_InvalidSelection" xml:space="preserve"><value>所选项目无效，请重新选择文件夹或远程目录。</value></data>
   <data name="General_ClearCacheTitle" xml:space="preserve">
     <value>清除缓存</value>
   </data>

@@ -104,6 +104,8 @@ public sealed class CoreStringResourceTests
     [InlineData("Nav_CopySessionIdFailed")]
     [InlineData("Nav_ShowSessionsListFailed")]
     [InlineData("Start_SessionLaunchFailed")]
+    [InlineData("AddProject_RemoteProjectMissing")]
+    [InlineData("AddProject_InvalidSelection")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

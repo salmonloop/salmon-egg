@@ -312,6 +312,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Start_SessionLaunchFailed"] = "Failed to start the session. Please try again.",
         ["Common_Cancel"] = "Cancel",
         ["AddProject_RemoteProjectMissing"] = "That remote project no longer exists.",
+        ["AddProject_InvalidSelection"] = "That project selection is not valid. Please choose another folder or remote directory.",
         ["Discover_ErrorConnectionNotInitialized"] = "The ACP connection has not finished initializing.",
         ["Discover_ErrorImportFailed"] = "Session import failed.",
         ["Discover_ErrorListCapabilityMissing"] = "The current agent does not advertise session/list capability.",

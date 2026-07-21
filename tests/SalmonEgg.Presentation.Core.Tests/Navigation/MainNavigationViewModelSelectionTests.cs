@@ -2441,6 +2441,61 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+
+    [Fact]
+    public async Task AddLocalProjectCommand_WhenSelectionIsInvalid_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.PickFolderAsync())
+                .ReturnsAsync(@"C:\repo\invalid-empty");
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var addProjectCoordinator = new Mock<IAddProjectCoordinator>();
+            addProjectCoordinator
+                .Setup(coordinator => coordinator.AddProject(It.IsAny<ProjectSourceSelection>()))
+                .Returns(AddProjectOutcome.Invalid);
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                addProjectCoordinatorOverride: addProjectCoordinator.Object);
+
+            await navVm.AddLocalProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(
+                ["That project selection is not valid. Please choose another folder or remote directory."],
+                shownMessages);
+            addProjectCoordinator.Verify(
+                coordinator => coordinator.AddProject(It.IsAny<ProjectSourceSelection.LocalFolder>()),
+                Times.Once);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
     private static MainNavigationViewModel CreateNavigationViewModel(
         IConversationCatalog chatCatalog,
         ISessionManager sessionManager,
@@ -2468,7 +2523,8 @@ public sealed class MainNavigationViewModelSelectionTests
         IUiInteractionService? uiOverride = null,
         IStringLocalizer<CoreStrings>? localizerOverride = null,
         IAppLanguageService? languageServiceOverride = null,
-        INavigationCoordinator? navigationCoordinatorOverride = null)
+        INavigationCoordinator? navigationCoordinatorOverride = null,
+        IAddProjectCoordinator? addProjectCoordinatorOverride = null)
     {
         var ui = new Mock<IUiInteractionService>();
         ui.SetupGet(service => service.CanPickFolder).Returns(true);
@@ -2495,7 +2551,8 @@ public sealed class MainNavigationViewModelSelectionTests
             new ProjectAffinityResolver(),
             uiDispatcher,
             localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>(),
-            languageService: languageServiceOverride);
+            languageService: languageServiceOverride,
+            addProjectCoordinator: addProjectCoordinatorOverride);
     }
 
     private static MutableConversationCatalogDisplayReadModel CreatePresenter(IConversationCatalog chatCatalog)

@@ -856,6 +856,7 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncForgetPrimary" xml:space="preserve"><value>Remove local setup</value></data>
   <data name="DataStorage_CloudSyncValidationFailed" xml:space="preserve"><value>The saved cloud sync configuration is invalid. Edit the connection and check the required fields.</value></data>
   <data name="AddProject_RemoteProjectMissing" xml:space="preserve"><value>That remote project no longer exists.</value></data>
+  <data name="AddProject_InvalidSelection" xml:space="preserve"><value>That project selection is not valid. Please choose another folder or remote directory.</value></data>
   <data name="General_ClearCacheTitle" xml:space="preserve">
     <value>Clear cache</value>
   </data>

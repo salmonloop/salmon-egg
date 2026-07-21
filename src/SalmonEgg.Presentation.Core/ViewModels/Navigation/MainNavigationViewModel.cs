@@ -687,6 +687,12 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 break;
 
             case AddProjectStatus.Invalid:
+                await _ui.ShowInfoAsync(Localize(
+                        "AddProject_InvalidSelection",
+                        "That project selection is not valid. Please choose another folder or remote directory."))
+                    .ConfigureAwait(true);
+                break;
+
             default:
                 break;
         }
