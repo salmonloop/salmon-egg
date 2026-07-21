@@ -16,6 +16,7 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -964,6 +965,8 @@ public sealed class WorkspaceWriterTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             uiDispatcher);
     }

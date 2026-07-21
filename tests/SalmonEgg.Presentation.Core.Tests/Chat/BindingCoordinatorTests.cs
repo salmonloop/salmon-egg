@@ -18,6 +18,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Uno.Extensions.Reactive;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -651,13 +652,15 @@ private static ChatConversationWorkspace CreateWorkspace(
             var prefsLogger = new Mock<ILogger<AppPreferencesViewModel>>();
 
             return new AppPreferencesViewModel(
-                appSettingsService.Object,
-                startupService.Object,
-                languageService.Object,
-                capabilities.Object,
-                uiRuntime.Object,
-                prefsLogger.Object,
-                new ImmediateUiDispatcher());
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
+            prefsLogger.Object,
+            new ImmediateUiDispatcher());
         }
         finally
         {

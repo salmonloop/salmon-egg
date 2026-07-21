@@ -1050,7 +1050,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            "session-a",
+            null!,
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("reconnect failed") };
@@ -1334,6 +1334,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
 
@@ -1367,6 +1369,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
     }

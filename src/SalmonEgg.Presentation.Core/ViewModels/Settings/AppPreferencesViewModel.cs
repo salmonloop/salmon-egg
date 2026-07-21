@@ -7,10 +7,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Services;
 
@@ -23,6 +25,8 @@ public partial class AppPreferencesViewModel : ObservableObject
     private readonly IAppLanguageService _languageService;
     private readonly IPlatformCapabilityService _capabilities;
     private readonly IUiRuntimeService _uiRuntime;
+    private readonly IUiInteractionService _ui;
+    private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<AppPreferencesViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
@@ -131,6 +135,8 @@ public partial class AppPreferencesViewModel : ObservableObject
         IAppLanguageService languageService,
         IPlatformCapabilityService capabilities,
         IUiRuntimeService uiRuntime,
+        IUiInteractionService ui,
+        IStringLocalizer<CoreStrings> localizer,
         ILogger<AppPreferencesViewModel> logger,
         IUiDispatcher uiDispatcher)
     {
@@ -139,6 +145,8 @@ public partial class AppPreferencesViewModel : ObservableObject
         _languageService = languageService ?? throw new ArgumentNullException(nameof(languageService));
         _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
         _uiRuntime = uiRuntime ?? throw new ArgumentNullException(nameof(uiRuntime));
+        _ui = ui ?? throw new ArgumentNullException(nameof(ui));
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
@@ -347,6 +355,11 @@ public partial class AppPreferencesViewModel : ObservableObject
     }
     partial void OnLaunchOnStartupChanged(bool value)
     {
+        if (_suppressSave)
+        {
+            return;
+        }
+
         ScheduleSave();
         _ = ApplyLaunchOnStartupAsync(value);
     }
@@ -679,12 +692,38 @@ public partial class AppPreferencesViewModel : ObservableObject
             if (!ok)
             {
                 _logger.LogWarning("LaunchOnStartup request failed or was denied.");
+                await RevertLaunchOnStartupAsync(enabled).ConfigureAwait(false);
+                await _ui.ShowInfoAsync(_localizer["General_LaunchOnStartupFailed"]).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to apply launch-on-startup setting");
+            await RevertLaunchOnStartupAsync(enabled).ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_LaunchOnStartupFailed"]).ConfigureAwait(false);
         }
+    }
+
+    private Task RevertLaunchOnStartupAsync(bool attemptedEnabled)
+    {
+        return _uiDispatcher.EnqueueAsync(() =>
+        {
+            if (LaunchOnStartup == !attemptedEnabled)
+            {
+                return;
+            }
+
+            // Suppress ScheduleSave/Apply while restoring authoritative OS state.
+            _suppressSave = true;
+            try
+            {
+                LaunchOnStartup = !attemptedEnabled;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+        });
     }
 
     private static CloudConfigSyncSettings CloneCloudConfigSyncSettings(CloudConfigSyncSettings? settings)

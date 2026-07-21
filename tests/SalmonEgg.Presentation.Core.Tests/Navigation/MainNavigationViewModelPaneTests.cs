@@ -16,6 +16,7 @@ using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 
@@ -134,6 +135,8 @@ public sealed class MainNavigationViewModelPaneTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             new ImmediateUiDispatcher());
     }

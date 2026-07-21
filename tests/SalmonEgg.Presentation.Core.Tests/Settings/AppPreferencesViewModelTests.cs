@@ -9,6 +9,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Threading;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
 
@@ -27,6 +28,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
@@ -69,6 +72,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
 
@@ -116,6 +121,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
 
@@ -146,6 +153,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
@@ -170,6 +179,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
@@ -193,6 +204,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
@@ -215,6 +228,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
@@ -239,6 +254,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
@@ -270,6 +287,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
@@ -375,6 +394,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
     }
@@ -460,6 +481,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
 
@@ -501,6 +524,8 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             logger.Object,
             new ImmediateUiDispatcher());
 
@@ -530,6 +555,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
@@ -554,6 +581,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 
@@ -566,5 +595,103 @@ public class AppPreferencesViewModelTests
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.KeyboardShortcutsEnabled == false)),
             Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task LaunchOnStartup_WhenOsApplyDenied_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            LaunchOnStartup = false
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(true);
+        startupService.Setup(s => s.GetLaunchOnStartupAsync()).ReturnsAsync(false);
+        startupService.Setup(s => s.SetLaunchOnStartupAsync(true)).ReturnsAsync(false);
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            Mock.Of<IAppLanguageService>(),
+            capabilities.Object,
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        Assert.False(vm.LaunchOnStartup);
+
+        vm.LaunchOnStartup = true;
+
+        // ApplyLaunchOnStartupAsync is fire-and-forget; wait for revert + dialog.
+        for (var i = 0; i < 50 && vm.LaunchOnStartup; i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(vm.LaunchOnStartup);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to update launch on startup. Please try again later."),
+            Times.Once);
+        startupService.Verify(s => s.SetLaunchOnStartupAsync(true), Times.Once);
+        startupService.Verify(s => s.SetLaunchOnStartupAsync(false), Times.Never);
+    }
+
+    [Fact]
+    public async Task LaunchOnStartup_WhenOsApplyThrows_RevertsAndSurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings
+        {
+            LaunchOnStartup = false
+        });
+        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+
+        var startupService = new Mock<IAppStartupService>();
+        startupService.SetupGet(s => s.IsSupported).Returns(true);
+        startupService.Setup(s => s.GetLaunchOnStartupAsync()).ReturnsAsync(false);
+        startupService.Setup(s => s.SetLaunchOnStartupAsync(true))
+            .ThrowsAsync(new InvalidOperationException("denied"));
+
+        var capabilities = new Mock<IPlatformCapabilityService>();
+        capabilities.SetupGet(c => c.SupportsLaunchOnStartup).Returns(true);
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            startupService.Object,
+            Mock.Of<IAppLanguageService>(),
+            capabilities.Object,
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.LaunchOnStartup = true;
+
+        for (var i = 0; i < 50 && vm.LaunchOnStartup; i++)
+        {
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(vm.LaunchOnStartup);
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to update launch on startup. Please try again later."),
+            Times.Once);
     }
 }

@@ -22,6 +22,7 @@ using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -3034,13 +3035,15 @@ public sealed class ChatConversationWorkspaceTests
             var capabilities = new Mock<IPlatformCapabilityService>();
             var uiRuntime = new Mock<IUiRuntimeService>();
             return new AppPreferencesViewModel(
-                appSettingsService.Object,
-                startupService.Object,
-                languageService.Object,
-                capabilities.Object,
-                uiRuntime.Object,
-                Mock.Of<ILogger<AppPreferencesViewModel>>(),
-                new ImmediateUiDispatcher());
+            appSettingsService.Object,
+            startupService.Object,
+            languageService.Object,
+            capabilities.Object,
+            uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
         }
         finally
         {

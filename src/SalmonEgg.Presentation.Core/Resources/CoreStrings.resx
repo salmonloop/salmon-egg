@@ -868,6 +868,9 @@
   <data name="General_ClearCacheFailed" xml:space="preserve">
     <value>清除缓存失败，请稍后重试。</value>
   </data>
+  <data name="General_LaunchOnStartupFailed" xml:space="preserve">
+    <value>无法更新开机启动设置，请稍后重试。</value>
+  </data>
   <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
     <value>已清除全部本地数据。</value>
   </data>

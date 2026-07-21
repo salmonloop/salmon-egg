@@ -20,6 +20,7 @@ using SalmonEgg.Presentation.ViewModels;
 using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.GlobalSearch;
 
@@ -439,6 +440,8 @@ public sealed class GlobalSearchViewModelTests
             Mock.Of<IAppLanguageService>(),
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 

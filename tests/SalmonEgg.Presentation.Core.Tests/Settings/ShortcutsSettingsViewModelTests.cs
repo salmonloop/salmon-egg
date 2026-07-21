@@ -162,6 +162,8 @@ public sealed class ShortcutsSettingsViewModelTests
             Mock.Of<IAppLanguageService>(),
             capabilities.Object,
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
 

@@ -52,6 +52,7 @@ using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Presentation.Core.Tests.Localization;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -164,6 +165,8 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             uiDispatcher);
         _ = preferences.InitializeAsync();
@@ -3907,6 +3910,8 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             uiDispatcher);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
@@ -4011,6 +4016,8 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             uiDispatcher);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
@@ -4139,6 +4146,8 @@ public partial class ChatViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             uiDispatcher);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);

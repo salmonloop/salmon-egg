@@ -142,6 +142,8 @@ public sealed class ConfigProjectionReloadCoordinatorTests
             languageService.Object,
             Mock.Of<IPlatformCapabilityService>(),
             Mock.Of<IUiRuntimeService>(),
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
             new ImmediateUiDispatcher());
     }

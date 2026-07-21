@@ -3045,6 +3045,8 @@ public sealed class StartViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
+            Mock.Of<IUiInteractionService>(),
+            new TestCoreStringLocalizer(),
             prefsLogger.Object,
             new ImmediateUiDispatcher());
     }
