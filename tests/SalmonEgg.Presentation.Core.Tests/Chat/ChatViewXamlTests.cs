@@ -207,6 +207,28 @@ public sealed class ChatViewXamlTests
         Assert.DoesNotContain("ApplyWideSessionHeaderLayout", codeBehind, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void ChatViewSessionHeader_DensifiesPaddingOnShortWindowHeights()
+    {
+        var xaml = LoadChatViewXaml();
+
+        Assert.Contains("x:Name=\"SessionHeaderHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SessionHeaderChrome\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionHeaderChrome.Padding\" Value=\"12,6\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionHeaderChrome.Padding\" Value=\"16,8\"", xaml, StringComparison.Ordinal);
+        // Compact is the short-height default in markup; comfortable restores prior chrome.
+        Assert.Contains("Padding=\"12,6\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        // Height VSM lives on ActiveConversationRoot so it can target the chrome Border.
+        Assert.True(
+            xaml.IndexOf("x:Name=\"ActiveConversationRoot\"", StringComparison.Ordinal)
+            < xaml.IndexOf("SessionHeaderHeightStates", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ChatViewSessionHeader_NarrowLayout_KeepsAgentRowRightAligned()
     {

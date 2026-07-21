@@ -50,15 +50,36 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <!-- Short windows: densify session-header chrome padding so the transcript keeps
+                 vertical budget. Comfortable restores 16,8 at MinWindowHeight=760 (same
+                 threshold as Start/Diagnostics densify). Theme via ThemeResource only. -->
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="SessionHeaderHeightStates">
+                    <VisualState x:Name="SessionHeaderHeightCompact">
+                        <VisualState.Setters>
+                            <Setter Target="SessionHeaderChrome.Padding" Value="12,6" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="SessionHeaderHeightComfortable">
+                        <VisualState.StateTriggers>
+                            <AdaptiveTrigger MinWindowHeight="760" />
+                        </VisualState.StateTriggers>
+                        <VisualState.Setters>
+                            <Setter Target="SessionHeaderChrome.Padding" Value="16,8" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+
             <!-- 顶部状态条 -->
-            <Border Grid.Row="0"
+            <Border x:Name="SessionHeaderChrome"
+                    Grid.Row="0"
                     Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1"
-                    Padding="16,8"
+                    Padding="12,6"
                     Visibility="{x:Bind ViewModel.ShouldShowSessionHeader, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Grid x:Name="SessionHeaderRoot"
-                      >
+                <Grid x:Name="SessionHeaderRoot">
                     <VisualStateManager.VisualStateGroups>
                         <VisualStateGroup x:Name="SessionHeaderWidthStates">
                             <VisualState x:Name="SessionHeaderNarrow">
