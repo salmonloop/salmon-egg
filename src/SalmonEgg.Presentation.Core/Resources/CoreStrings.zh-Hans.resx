@@ -832,6 +832,12 @@
   <data name="General_ClearCacheFailed" xml:space="preserve">
     <value>清除缓存失败，请稍后重试。</value>
   </data>
+  <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
+    <value>已清除全部本地数据。</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataFailed" xml:space="preserve">
+    <value>清除全部本地数据失败，请稍后重试。</value>
+  </data>
   <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
     <value>归档会话</value>
   </data>

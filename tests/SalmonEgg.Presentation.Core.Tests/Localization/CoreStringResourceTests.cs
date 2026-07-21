@@ -76,6 +76,8 @@ public sealed class CoreStringResourceTests
     [InlineData("GamepadDiagnostics_RawControllersNone")]
     [InlineData("GamepadDiagnostics_ConnectionWired")]
     [InlineData("GamepadDiagnostics_ConnectionWireless")]
+    [InlineData("DataStorage_ClearAllLocalDataSuccess")]
+    [InlineData("DataStorage_ClearAllLocalDataFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

@@ -138,10 +138,34 @@ public partial class DataStorageSettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task ClearCacheAsync() => _maintenance.ClearCacheAsync();
+    private async Task ClearCacheAsync()
+    {
+        try
+        {
+            await _maintenance.ClearCacheAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_ClearCacheSuccess"]).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ClearCache failed");
+            await _ui.ShowInfoAsync(_localizer["General_ClearCacheFailed"]).ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
-    private Task ClearAllLocalDataAsync() => _maintenance.ClearAllLocalDataAsync();
+    private async Task ClearAllLocalDataAsync()
+    {
+        try
+        {
+            await _maintenance.ClearAllLocalDataAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ClearAllLocalDataSuccess"]).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ClearAllLocalData failed");
+            await _ui.ShowInfoAsync(_localizer["DataStorage_ClearAllLocalDataFailed"]).ConfigureAwait(true);
+        }
+    }
 
     private async Task ExportCurrentSessionAsync(string format)
     {

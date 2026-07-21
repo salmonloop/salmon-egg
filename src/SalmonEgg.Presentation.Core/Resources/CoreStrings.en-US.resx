@@ -826,6 +826,12 @@ Create the corresponding Markdown file in:
   <data name="General_ClearCacheFailed" xml:space="preserve">
     <value>Failed to clear cache. Please try again later.</value>
   </data>
+  <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
+    <value>All local data cleared.</value>
+  </data>
+  <data name="DataStorage_ClearAllLocalDataFailed" xml:space="preserve">
+    <value>Failed to clear all local data. Please try again later.</value>
+  </data>
   <data name="Nav_ArchiveSessionTitle" xml:space="preserve">
     <value>Archive session</value>
   </data>
