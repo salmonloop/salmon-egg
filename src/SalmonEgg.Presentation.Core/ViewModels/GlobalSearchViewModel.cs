@@ -240,7 +240,9 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
                 break;
 
             case SearchResultKind.Setting:
-                await _navigationCoordinator.ActivateSettingsAsync(item.Id);
+                // Route through the navigation VM owner so settings activation failures
+                // surface the same localized ShowInfo used by the nav shell entry.
+                await _navViewModel.ActivateSettingsAsync(item.Id).ConfigureAwait(true);
                 break;
 
             case SearchResultKind.Command:
