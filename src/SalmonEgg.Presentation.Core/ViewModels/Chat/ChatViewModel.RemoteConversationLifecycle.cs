@@ -1293,6 +1293,64 @@ public partial class ChatViewModel
         return false;
     }
 
+    private async Task MaterializeWarmReusableProjectionFromWorkspaceIfNeededAsync(
+        string conversationId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var state = await _chatStore.GetCurrentStateAsync().ConfigureAwait(false);
+        var contentSlice = state.ResolveContentSlice(conversationId);
+        if (contentSlice is { } projectedContent
+            && ConversationProjectionReadinessPolicy.HasProjectedConversationContent(projectedContent))
+        {
+            return;
+        }
+
+        if (string.Equals(state.HydratedConversationId, conversationId, StringComparison.Ordinal)
+            && ConversationProjectionReadinessPolicy.HasProjectedConversationContent(
+                new ConversationContentSlice(
+                    state.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
+                    state.PlanEntries ?? ImmutableList<ConversationPlanEntrySnapshot>.Empty,
+                    state.ShowPlanPanel)))
+        {
+            return;
+        }
+
+        var binding = await ResolveConversationBindingAsync(conversationId, cancellationToken).ConfigureAwait(false);
+        var snapshot = _conversationWorkspace.GetConversationSnapshot(conversationId);
+        var snapshotOrigin = _conversationWorkspace.GetConversationSnapshotOrigin(conversationId);
+        if (!RemoteConversationWorkspaceSnapshotPolicy.CanReuseWarmProjectionSnapshot(
+                binding,
+                snapshot,
+                snapshotOrigin)
+            || snapshot is null)
+        {
+            return;
+        }
+
+        if ((snapshot.Transcript?.Count ?? 0) == 0
+            && (snapshot.Plan?.Count ?? 0) == 0
+            && !snapshot.ShowPlanPanel)
+        {
+            return;
+        }
+
+        Logger.LogInformation(
+            "Materializing warm-reusable workspace projection before warm short-circuit. ConversationId={ConversationId} TranscriptCount={TranscriptCount}",
+            conversationId,
+            snapshot.Transcript?.Count ?? 0);
+        await _chatStore.Dispatch(new HydrateConversationAction(
+            conversationId,
+            snapshot.Transcript.ToImmutableList(),
+            snapshot.Plan.ToImmutableList(),
+            snapshot.ShowPlanPanel)).ConfigureAwait(false);
+    }
+
     private async Task RestoreCachedConversationProjectionIfReplayIsEmptyAsync(
         string conversationId)
     {

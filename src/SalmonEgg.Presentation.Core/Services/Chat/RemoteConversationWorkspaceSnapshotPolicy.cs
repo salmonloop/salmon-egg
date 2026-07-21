@@ -25,7 +25,10 @@ internal static class RemoteConversationWorkspaceSnapshotPolicy
         ConversationWorkspaceSnapshotOrigin? origin)
         => snapshot is not null
             && RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId, binding?.ProfileId)
-            && origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection;
+            && origin is ConversationWorkspaceSnapshotOrigin.RuntimeProjection
+            // An empty RuntimeProjection shell is not reusable warm content. Without projected
+            // transcript/plan/session chrome, warm short-circuit would leave the chat blank.
+            && HasProjectedWarmSnapshotState(snapshot);
 
     public static bool CanRestoreCachedTranscriptAfterInterruptedHydration(
         ConversationBindingSlice? binding,
@@ -59,6 +62,29 @@ internal static class RemoteConversationWorkspaceSnapshotPolicy
 
         return !RemoteConversationPersistencePolicy.IsRemoteBacked(binding?.RemoteSessionId, binding?.ProfileId)
             || HasMatchingRuntimeProjectionConnection(snapshot, origin, currentConnectionInstanceId);
+    }
+
+
+    private static bool HasProjectedWarmSnapshotState(ConversationWorkspaceSnapshot snapshot)
+    {
+        if ((snapshot.Transcript?.Count ?? 0) > 0
+            || (snapshot.Plan?.Count ?? 0) > 0
+            || snapshot.ShowPlanPanel)
+        {
+            return true;
+        }
+
+        if ((snapshot.AvailableModes?.Count ?? 0) > 0
+            || (snapshot.ConfigOptions?.Count ?? 0) > 0
+            || snapshot.ShowConfigOptionsPanel
+            || !string.IsNullOrWhiteSpace(snapshot.SelectedModeId))
+        {
+            return true;
+        }
+
+        return (snapshot.AvailableCommands?.Count ?? 0) > 0
+            || snapshot.SessionInfo is not null
+            || snapshot.Usage is not null;
     }
 
     private static bool HasMatchingRuntimeProjectionConnection(

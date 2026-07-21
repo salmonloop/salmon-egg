@@ -698,6 +698,15 @@ public partial class ChatViewModel
         var runtimeState = ResolveWarmReuseRuntimeState(
             warmRuntimeSnapshot,
             state.ResolveRuntimeState(sessionId));
+        await MaterializeWarmReusableProjectionFromWorkspaceIfNeededAsync(
+                sessionId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        state = await _chatStore.GetCurrentStateAsync();
+        binding = await ResolveConversationBindingAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        runtimeState = ResolveWarmReuseRuntimeState(
+            warmRuntimeSnapshot,
+            state.ResolveRuntimeState(sessionId));
         var hasReusableProjection = HasReusableWarmProjection(state, sessionId);
         if (string.IsNullOrWhiteSpace(binding?.RemoteSessionId))
         {
@@ -1449,6 +1458,15 @@ public partial class ChatViewModel
         {
             return ConversationActivationOrchestratorResult.Superseded();
         }
+
+        // Warm short-circuit reuses store/workspace projection and skips session/load. If a
+        // prior SelectionOnly clear left the store empty while the RuntimeProjection snapshot
+        // still holds the authoritative transcript, materialize that snapshot before the warm
+        // decision and UI projection so A->B->A never lands on a blank chat.
+        await MaterializeWarmReusableProjectionFromWorkspaceIfNeededAsync(
+                sessionId,
+                context.CancellationToken)
+            .ConfigureAwait(false);
 
         var warmReuseBinding = await ResolveConversationBindingAsync(sessionId, context.CancellationToken).ConfigureAwait(false);
         var warmReuseConnection = await ResolveWarmReuseConnectionIdentityAsync(warmReuseBinding, context.CancellationToken).ConfigureAwait(false);

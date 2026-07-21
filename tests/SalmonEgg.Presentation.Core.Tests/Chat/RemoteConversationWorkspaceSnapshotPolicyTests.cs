@@ -39,7 +39,7 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
     public void HasAuthoritativeRemoteRuntimeProjection_WhenRemoteSnapshotCameFromRuntimeProjection_ReturnsTrue()
     {
         var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
-        var snapshot = CreateSnapshot();
+        var snapshot = CreateSnapshot(withTranscript: true);
 
         var result = RemoteConversationWorkspaceSnapshotPolicy.HasAuthoritativeRemoteRuntimeProjection(
             binding,
@@ -47,6 +47,20 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
             ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public void HasAuthoritativeRemoteRuntimeProjection_WhenRuntimeProjectionShellIsEmpty_ReturnsFalse()
+    {
+        var binding = new ConversationBindingSlice("conv-1", "remote-1", "profile-1");
+        var snapshot = CreateSnapshot(withTranscript: false);
+
+        var result = RemoteConversationWorkspaceSnapshotPolicy.HasAuthoritativeRemoteRuntimeProjection(
+            binding,
+            snapshot,
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        Assert.False(result);
     }
 
     [Theory]
@@ -186,10 +200,22 @@ public sealed class RemoteConversationWorkspaceSnapshotPolicyTests
         Assert.Null(result);
     }
 
-    private static ConversationWorkspaceSnapshot CreateSnapshot()
+    private static ConversationWorkspaceSnapshot CreateSnapshot(bool withTranscript = true)
         => new(
             ConversationId: "conv-1",
-            Transcript: [],
+            Transcript: withTranscript
+                ?
+                [
+                    new ConversationMessageSnapshot
+                    {
+                        Id = "m-1",
+                        Timestamp = new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
+                        IsOutgoing = false,
+                        ContentType = "text",
+                        TextContent = "runtime projection transcript"
+                    }
+                ]
+                : [],
             Plan: [],
             ShowPlanPanel: false,
             CreatedAt: new DateTime(2026, 5, 4, 0, 0, 0, DateTimeKind.Utc),
