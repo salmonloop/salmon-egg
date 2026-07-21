@@ -329,6 +329,10 @@
                 <VisualState x:Name="TaskOverviewHeightCompact">
                     <VisualState.Setters>
                         <Setter Target="TaskOverviewEmptyHost.Margin" Value="0,12" />
+                        <Setter Target="RightPanelHeader.MinHeight" Value="48" />
+                        <Setter Target="RightPanelHeader.Padding" Value="12,6,8,6" />
+                        <Setter Target="RightPanelContentStack.Padding" Value="12" />
+                        <Setter Target="RightPanelContentStack.Spacing" Value="12" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="TaskOverviewHeightComfortable">
@@ -337,6 +341,10 @@
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="TaskOverviewEmptyHost.Margin" Value="0,40" />
+                        <Setter Target="RightPanelHeader.MinHeight" Value="64" />
+                        <Setter Target="RightPanelHeader.Padding" Value="16,8,8,8" />
+                        <Setter Target="RightPanelContentStack.Padding" Value="16" />
+                        <Setter Target="RightPanelContentStack.Spacing" Value="16" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -602,7 +610,10 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <Grid Grid.Row="0" MinHeight="64" Padding="16,8,8,8">
+                                <Grid x:Name="RightPanelHeader"
+                                      Grid.Row="0"
+                                      MinHeight="48"
+                                      Padding="12,6,8,6">
                                     <StackPanel VerticalAlignment="Center"
                                                 Spacing="2">
                                         <TextBlock x:Name="RightPanelTitle"
@@ -619,7 +630,9 @@
 
                                 <ScrollViewer Grid.Row="1"
                                               AutomationProperties.AutomationId="RightPanel.TaskOverviewRoot">
-                                    <StackPanel Padding="16" Spacing="16">
+                                    <StackPanel x:Name="RightPanelContentStack"
+                                                Padding="12"
+                                                Spacing="12">
                                         <StackPanel AutomationProperties.AutomationId="RightPanel.TaskOverview.CurrentPlan"
                                                     AutomationProperties.Name="{x:Bind GetTaskOverviewCurrentPlanAutomationName(ChatVM.TaskOverviewCurrentPlanContent, ChatVM.TaskOverviewCurrentPlanStatus, ChatVM.TaskOverviewCurrentPlanPriority), Mode=OneWay}"
                                                     Spacing="8"

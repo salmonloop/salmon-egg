@@ -3249,9 +3249,21 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"TaskOverviewHeightCompact\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TaskOverviewHeightComfortable\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"TaskOverviewEmptyHost\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RightPanelHeader\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RightPanelContentStack\"", xaml, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"TaskOverviewEmptyHost.Margin\" Value=\"0,12\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"TaskOverviewEmptyHost.Margin\" Value=\"0,40\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelHeader.MinHeight\" Value=\"48\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelHeader.MinHeight\" Value=\"64\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelHeader.Padding\" Value=\"12,6,8,6\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelHeader.Padding\" Value=\"16,8,8,8\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelContentStack.Padding\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelContentStack.Padding\" Value=\"16\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelContentStack.Spacing\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RightPanelContentStack.Spacing\" Value=\"16\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinHeight=\"48\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
