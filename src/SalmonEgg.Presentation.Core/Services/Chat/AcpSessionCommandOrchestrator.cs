@@ -87,7 +87,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var chatService = RequireReadyChatService(sink);
         if (!sink.IsSessionActive || string.IsNullOrWhiteSpace(sink.CurrentSessionId))
         {
-            throw new InvalidOperationException("No active local conversation is available for ACP session creation.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatSession_NoActiveLocalConversation",
+                    "No active local conversation is available for ACP session creation."));
         }
 
         var conversationId = sink.CurrentSessionId!;
@@ -340,7 +343,10 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
         if (string.IsNullOrWhiteSpace(conversationId))
         {
-            throw new InvalidOperationException("Cannot update remote binding without an active local conversation.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatBinding_NoActiveLocalConversation",
+                    "Cannot update remote binding without an active local conversation."));
         }
 
         var result = await sink.ConversationBindingCommands
@@ -361,11 +367,14 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         }
     }
 
-    private static IChatService RequireReadyChatService(IAcpChatCoordinatorSink sink)
+    private IChatService RequireReadyChatService(IAcpChatCoordinatorSink sink)
     {
         if (sink.CurrentChatService is not { IsConnected: true, IsInitialized: true } chatService)
         {
-            throw new InvalidOperationException("ACP chat service is not connected and initialized.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatService_NotConnectedInitialized",
+                    "ACP chat service is not connected and initialized."));
         }
 
         return chatService;

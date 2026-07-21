@@ -142,4 +142,69 @@ public sealed class AcpSessionCommandOrchestratorBindingLocalizationTests
 
         Assert.Equal("Failed to update conversation binding (Error): store fault", exception.Message);
     }
+
+    [Fact]
+    public async Task EnsureRemoteSessionAsync_WhenNoActiveLocalConversation_LocalizesExceptionMessage()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatSession_NoActiveLocalConversation",
+            "没有可用于创建 ACP 会话的活动本地会话。");
+
+        var chatService = new Mock<IChatService>(MockBehavior.Strict);
+        chatService.SetupGet(service => service.IsConnected).Returns(true);
+        chatService.SetupGet(service => service.IsInitialized).Returns(true);
+
+        var sink = new Mock<IAcpChatCoordinatorSink>(MockBehavior.Strict);
+        sink.SetupGet(s => s.CurrentChatService).Returns(chatService.Object);
+        sink.SetupGet(s => s.IsSessionActive).Returns(false);
+        sink.SetupGet(s => s.CurrentSessionId).Returns((string?)null);
+
+        var orchestrator = new AcpSessionCommandOrchestrator(
+            Mock.Of<ILogger<AcpSessionCommandOrchestrator>>(),
+            Mock.Of<IAcpMcpServerResolver>(),
+            localizer);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            orchestrator.EnsureRemoteSessionAsync(
+                sink.Object,
+                authenticateAsync: _ => Task.FromResult(true),
+                markHydrated: () => { },
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal("没有可用于创建 ACP 会话的活动本地会话。", exception.Message);
+    }
+
+    [Fact]
+    public async Task EnsureRemoteSessionAsync_WhenServiceNotReady_LocalizesExceptionMessage()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatService_NotConnectedInitialized",
+            "ACP 聊天服务未连接或未完成初始化。");
+
+        var chatService = new Mock<IChatService>(MockBehavior.Strict);
+        chatService.SetupGet(service => service.IsConnected).Returns(false);
+        chatService.SetupGet(service => service.IsInitialized).Returns(false);
+
+        var sink = new Mock<IAcpChatCoordinatorSink>(MockBehavior.Strict);
+        sink.SetupGet(s => s.CurrentChatService).Returns(chatService.Object);
+
+        var orchestrator = new AcpSessionCommandOrchestrator(
+            Mock.Of<ILogger<AcpSessionCommandOrchestrator>>(),
+            Mock.Of<IAcpMcpServerResolver>(),
+            localizer);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            orchestrator.EnsureRemoteSessionAsync(
+                sink.Object,
+                authenticateAsync: _ => Task.FromResult(true),
+                markHydrated: () => { },
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal("ACP 聊天服务未连接或未完成初始化。", exception.Message);
+    }
 }
+

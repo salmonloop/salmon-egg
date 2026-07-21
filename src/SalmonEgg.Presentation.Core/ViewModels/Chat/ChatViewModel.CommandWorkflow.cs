@@ -239,7 +239,8 @@ public partial class ChatViewModel
 
         if (_chatService == null)
         {
-            throw new InvalidOperationException("Chat service is not initialized");
+            throw new InvalidOperationException(
+                Localize("ChatService_NotInitialized", "Chat service is not initialized"));
         }
 
         try
@@ -270,7 +271,10 @@ public partial class ChatViewModel
         var switched = await ActivateConversationAsync(localConversationId).ConfigureAwait(false);
         if (!switched)
         {
-            throw new InvalidOperationException("Failed to activate local conversation before applying session response.");
+            throw new InvalidOperationException(
+                Localize(
+                    "ChatConversation_ActivateLocalFailed",
+                    "Failed to activate local conversation before applying session response."));
         }
 
         return localConversationId;

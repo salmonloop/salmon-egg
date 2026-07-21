@@ -1070,4 +1070,19 @@
   <data name="ChatBinding_UnknownError" xml:space="preserve">
     <value>未知错误</value>
   </data>
+  <data name="ChatService_NotInitialized" xml:space="preserve">
+    <value>聊天服务尚未初始化</value>
+  </data>
+  <data name="ChatConversation_ActivateLocalFailed" xml:space="preserve">
+    <value>在应用会话响应之前激活本地会话失败。</value>
+  </data>
+  <data name="ChatSession_NoActiveLocalConversation" xml:space="preserve">
+    <value>没有可用于创建 ACP 会话的活动本地会话。</value>
+  </data>
+  <data name="ChatBinding_NoActiveLocalConversation" xml:space="preserve">
+    <value>没有活动的本地会话，无法更新远程绑定。</value>
+  </data>
+  <data name="ChatService_NotConnectedInitialized" xml:space="preserve">
+    <value>ACP 聊天服务未连接或未完成初始化。</value>
+  </data>
 </root>

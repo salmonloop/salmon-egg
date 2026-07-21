@@ -1070,4 +1070,19 @@
   <data name="ChatBinding_UnknownError" xml:space="preserve">
     <value>UnknownError</value>
   </data>
+  <data name="ChatService_NotInitialized" xml:space="preserve">
+    <value>Chat service is not initialized</value>
+  </data>
+  <data name="ChatConversation_ActivateLocalFailed" xml:space="preserve">
+    <value>Failed to activate local conversation before applying session response.</value>
+  </data>
+  <data name="ChatSession_NoActiveLocalConversation" xml:space="preserve">
+    <value>No active local conversation is available for ACP session creation.</value>
+  </data>
+  <data name="ChatBinding_NoActiveLocalConversation" xml:space="preserve">
+    <value>Cannot update remote binding without an active local conversation.</value>
+  </data>
+  <data name="ChatService_NotConnectedInitialized" xml:space="preserve">
+    <value>ACP chat service is not connected and initialized.</value>
+  </data>
 </root>
