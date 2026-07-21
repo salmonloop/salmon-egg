@@ -1036,6 +1036,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"ShortcutsContentStack\"", shortcuts, StringComparison.Ordinal);
         Assert.Contains("Target=\"ShortcutsContentStack.Spacing\" Value=\"14\"", shortcuts, StringComparison.Ordinal);
         Assert.Contains("Target=\"ShortcutsContentStack.Spacing\" Value=\"24\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ShortcutsContentStack.Padding\" Value=\"0,0,0,32\"", shortcuts, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource SettingsPageVerticalPadding}\"", shortcuts, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", shortcuts, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", shortcuts, StringComparison.Ordinal);
 
@@ -1048,6 +1050,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"DiagnosticsContentStack\"", diagnostics, StringComparison.Ordinal);
         Assert.Contains("Spacing=\"16\"", diagnostics, StringComparison.Ordinal);
         Assert.Contains("Target=\"DiagnosticsContentStack.Spacing\" Value=\"28\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Target=\"DiagnosticsContentStack.Padding\" Value=\"0,0,0,32\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource SettingsPageVerticalPadding}\"", diagnostics, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", diagnostics, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", diagnostics, StringComparison.Ordinal);
 
@@ -1069,8 +1073,13 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"AboutContentStack\"", about, StringComparison.Ordinal);
         Assert.Contains("Spacing=\"14\"", about, StringComparison.Ordinal);
         Assert.Contains("Target=\"AboutContentStack.Spacing\" Value=\"24\"", about, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AboutContentStack.Padding\" Value=\"0,0,0,32\"", about, StringComparison.Ordinal);
+        Assert.Contains("Padding=\"{StaticResource SettingsPageVerticalPadding}\"", about, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", about, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", about, StringComparison.Ordinal);
+
+        var appResources = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");
+        Assert.Contains("<Thickness x:Key=\"SettingsPageVerticalPadding\">0,0,0,16</Thickness>", appResources, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1083,6 +1092,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"AgentProfileEditorContent\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"AgentProfileEditorContent.Spacing\" Value=\"12\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"AgentProfileEditorContent.Spacing\" Value=\"18\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AgentProfileEditorContent.Padding\" Value=\"0,0,0,32\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Padding=\"{StaticResource SettingsPageVerticalPadding}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Padding=\"40,24\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);

@@ -50,7 +50,7 @@
 
             <!-- Settings layout (Win11-like): fixed content column on wide windows, fluid on narrow ones -->
             <x:Double x:Key="SettingsContentMaxWidth">780</x:Double>
-            <Thickness x:Key="SettingsPageVerticalPadding">0,0,0,32</Thickness>
+            <Thickness x:Key="SettingsPageVerticalPadding">0,0,0,16</Thickness>
             <Thickness x:Key="SettingsSectionContainerPadding">0</Thickness>
             <Thickness x:Key="SettingsRowPadding">16,14</Thickness>
             <x:Double x:Key="SettingsRowControlMinWidth">220</x:Double>
