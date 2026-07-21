@@ -190,7 +190,7 @@ public partial class ConfigurationEditorViewModel(
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
-            Name = "New Configuration",
+            Name = ResolveNewConfigurationName(),
             ServerUrl = "ws://localhost:8080",
             Transport = _transportSupportPolicy.DefaultTransport,
             ConnectionTimeout = AcpConnectionTimeoutPolicy.DefaultSeconds
@@ -221,7 +221,7 @@ public partial class ConfigurationEditorViewModel(
         Configuration = new ServerConfiguration
         {
             Id = Guid.NewGuid().ToString(),
-            Name = string.IsNullOrWhiteSpace(name) ? "New Configuration" : name.Trim(),
+            Name = string.IsNullOrWhiteSpace(name) ? ResolveNewConfigurationName() : name.Trim(),
             Transport = transport,
             ServerUrl = transport == TransportType.Stdio ? string.Empty : (transportConfig.RemoteUrl ?? string.Empty),
             StdioCommand = transport == TransportType.Stdio ? (transportConfig.StdioCommand ?? string.Empty) : string.Empty,
@@ -302,6 +302,15 @@ public partial class ConfigurationEditorViewModel(
             Logger.LogError(ex, "Failed to save configuration");
             SetError(_localizer["AgentProfileEditor_SaveFailedFormat", ex.Message]);
         }
+    }
+
+    private string ResolveNewConfigurationName()
+    {
+        const string fallback = "New Configuration";
+        var localized = _localizer["AgentProfileEditor_NewConfigurationName"];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
     }
 
     [RelayCommand]

@@ -285,4 +285,22 @@ public sealed class ConfigurationEditorViewModelTests
 
     private static ITransportSupportPolicy CreateTransportSupportPolicy(bool supportsStdioTransport)
         => new TransportSupportPolicy(CreateCapabilities(supportsStdioTransport).Object);
+
+    [Fact]
+    public void LoadNewConfiguration_UsesLocalizedDefaultName()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "AgentProfileEditor_NewConfigurationName", "新配置");
+        var viewModel = new ConfigurationEditorViewModel(
+            new ServerConfigurationValidator(),
+            Mock.Of<IConfigurationService>(),
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            localizer,
+            Mock.Of<ILogger<ConfigurationEditorViewModel>>());
+
+        viewModel.LoadNewConfiguration();
+
+        Assert.Equal("新配置", viewModel.Name);
+        Assert.Equal("新配置", viewModel.Configuration.Name);
+    }
 }

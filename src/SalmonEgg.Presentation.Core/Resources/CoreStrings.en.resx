@@ -1088,4 +1088,19 @@ Create the corresponding Markdown file in:
   <data name="ChatProjectAffinity_UnclassifiedMessage" xml:space="preserve">
     <value>This session is unclassified. You can correct it manually.</value>
   </data>
+  <data name="AgentProfileEditor_NewConfigurationName" xml:space="preserve">
+    <value>New Configuration</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholder" xml:space="preserve">
+    <value>[image]</value>
+  </data>
+  <data name="ChatMedia_ImagePlaceholderWithMime" xml:space="preserve">
+    <value>[image: {0}]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholder" xml:space="preserve">
+    <value>[audio]</value>
+  </data>
+  <data name="ChatMedia_AudioPlaceholderWithMime" xml:space="preserve">
+    <value>[audio: {0}]</value>
+  </data>
 </root>
