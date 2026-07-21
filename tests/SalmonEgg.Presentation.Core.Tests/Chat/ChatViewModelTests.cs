@@ -78,6 +78,7 @@ public partial class ChatViewModelTests
         IAcpMcpServerResolver? mcpServerResolver = null,
         IConversationActivationOrchestrator? conversationActivationOrchestrator = null,
         IPlatformShellService? platformShell = null,
+        IStringLocalizer<CoreStrings>? localizer = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -239,7 +240,8 @@ public partial class ChatViewModelTests
                 conversationCatalogFacade: conversationCatalogFacade,
                 connectionSessionRegistry: connectionSessionRegistry,
                 localSlashCommandSource: localSlashCommandSource,
-                platformShell: platformShell);
+                platformShell: platformShell,
+                localizer: localizer);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -7001,6 +7003,65 @@ public partial class ChatViewModelTests
         Assert.True(fixture.ViewModel.IsTurnFailureVisible);
         Assert.True(string.IsNullOrWhiteSpace(fixture.ViewModel.ErrorMessage));
         Assert.False(fixture.ViewModel.ShowTransientNotification);
+    }
+
+    [Fact]
+    public async Task CopyTurnFailureCommand_WhenClipboardUnsupported_SurfacesLocalizedToast()
+    {
+        var shell = new RecordingPlatformShellService { CopyResult = false };
+        await using var fixture = CreateViewModel(platformShell: shell, localizer: new TestCoreStringLocalizer());
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        await fixture.ViewModel.CopyTurnFailureCommand.ExecuteAsync(null);
+
+        Assert.Equal("provider failed", shell.LastCopiedText);
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(fixture.ViewModel.ShowTransientNotification);
+        Assert.Equal(
+            "Clipboard copy is not supported on this platform.",
+            fixture.ViewModel.TransientNotificationMessage);
+    }
+
+    [Fact]
+    public async Task CopyTurnFailureCommand_WhenClipboardThrows_SurfacesLocalizedToast()
+    {
+        var shell = new RecordingPlatformShellService
+        {
+            CopyException = new InvalidOperationException("clipboard denied"),
+        };
+        await using var fixture = CreateViewModel(platformShell: shell, localizer: new TestCoreStringLocalizer());
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            ActiveTurn = new ActiveTurnState(
+                "conv-1",
+                "turn-1",
+                ChatTurnPhase.Failed,
+                DateTime.UtcNow,
+                DateTime.UtcNow,
+                FailureMessage: "provider failed")
+        });
+        await fixture.ApplyCurrentStoreProjectionAsync();
+
+        await fixture.ViewModel.CopyTurnFailureCommand.ExecuteAsync(null);
+
+        Assert.Null(shell.LastCopiedText);
+        Assert.True(fixture.ViewModel.IsTurnFailureVisible);
+        Assert.True(fixture.ViewModel.ShowTransientNotification);
+        Assert.Equal(
+            "Failed to copy the failure detail. Please try again later.",
+            fixture.ViewModel.TransientNotificationMessage);
     }
 
     [Fact]
@@ -18146,6 +18207,10 @@ public partial class ChatViewModelTests
     {
         public string? LastCopiedText { get; private set; }
 
+        public bool CopyResult { get; set; } = true;
+
+        public Exception? CopyException { get; set; }
+
         public Task<bool> OpenFolderAsync(string path) => Task.FromResult(false);
 
         public Task<bool> OpenFileAsync(string path) => Task.FromResult(false);
@@ -18154,8 +18219,13 @@ public partial class ChatViewModelTests
 
         public Task<bool> CopyToClipboardAsync(string text)
         {
+            if (CopyException is not null)
+            {
+                throw CopyException;
+            }
+
             LastCopiedText = text;
-            return Task.FromResult(true);
+            return Task.FromResult(CopyResult);
         }
 
         public Task<string?> ReadClipboardTextAsync() => Task.FromResult<string?>(null);

@@ -82,6 +82,7 @@ public sealed class CoreStringResourceTests
     [InlineData("DataStorage_CreateDiagnosticsBundleFailed")]
     [InlineData("Diagnostics_LogSnippetCopied")]
     [InlineData("Diagnostics_CopyLogSnippetFailed")]
+    [InlineData("ChatTurnFailure_CopyFailed")]
     [InlineData("AgentProfileEditor_ValidationFailedFormat")]
     [InlineData("AgentProfileEditor_SaveFailedFormat")]
     [InlineData("AcpProfiles_RefreshFailed")]

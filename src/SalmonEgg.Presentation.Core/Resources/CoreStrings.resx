@@ -181,6 +181,9 @@
   <data name="ChatTurnFailure_DismissAction" xml:space="preserve">
     <value>关闭失败详情</value>
   </data>
+  <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
+    <value>复制失败详情失败，请稍后重试。</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>新建会话</value>
   </data>

@@ -183,6 +183,9 @@
   <data name="ChatTurnFailure_DismissAction" xml:space="preserve">
     <value>Dismiss failure detail</value>
   </data>
+  <data name="ChatTurnFailure_CopyFailed" xml:space="preserve">
+    <value>Failed to copy the failure detail. Please try again later.</value>
+  </data>
   <data name="SearchCommand_NewSessionTitle" xml:space="preserve">
     <value>New session</value>
   </data>

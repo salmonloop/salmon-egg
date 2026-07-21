@@ -182,14 +182,20 @@ public partial class ChatViewModel
         try
         {
             var copied = await _platformShell.CopyToClipboardAsync(message).ConfigureAwait(true);
-            if (!copied)
+            if (copied)
             {
-                Logger.LogWarning("Failed to copy turn failure detail to clipboard");
+                return;
             }
+
+            Logger.LogWarning("Failed to copy turn failure detail to clipboard");
+            ShowTransientNotificationToast(
+                Localize("About_ClipboardUnsupported", "Clipboard copy is not supported on this platform."));
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to copy turn failure detail to clipboard");
+            ShowTransientNotificationToast(
+                Localize("ChatTurnFailure_CopyFailed", "Failed to copy the failure detail. Please try again later."));
         }
     }
 

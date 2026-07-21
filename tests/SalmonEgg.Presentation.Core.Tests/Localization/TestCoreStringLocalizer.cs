@@ -53,6 +53,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatTurnFailure_Title"] = "Turn failed",
         ["ChatTurnFailure_CopyAction"] = "Copy failure detail",
         ["ChatTurnFailure_DismissAction"] = "Dismiss failure detail",
+        ["ChatTurnFailure_CopyFailed"] = "Failed to copy the failure detail. Please try again later.",
         ["SearchCommand_NewSessionTitle"] = "New session",
         ["SearchCommand_NewSessionSubtitle"] = "Create a new chat session",
         ["SearchCommand_NewProjectTitle"] = "New project",
