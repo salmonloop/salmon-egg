@@ -3444,6 +3444,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"AcpProfilesList\"", acp, StringComparison.Ordinal);
         Assert.Contains("Target=\"AcpProfilesList.MinHeight\" Value=\"140\"", acp, StringComparison.Ordinal);
         Assert.Contains("Target=\"AcpRemoteDirectoriesList.MinHeight\" Value=\"120\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpProfilesList.MinHeight\" Value=\"88\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpRemoteDirectoriesList.MinHeight\" Value=\"72\"", acp, StringComparison.Ordinal);
+        Assert.Contains("AgentListItemStyleCompact", acp, StringComparison.Ordinal);
+        Assert.Contains("AgentListItemStyleComfortable", acp, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"48\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MinHeight\" Value=\"64\"", acp, StringComparison.Ordinal);
         Assert.Contains("MinHeight=\"88\"", acp, StringComparison.Ordinal);
         Assert.Contains("MinHeight=\"72\"", acp, StringComparison.Ordinal);
 

@@ -18,7 +18,14 @@
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:HydrationCompletionModeLocalizationConverter x:Key="HydrationCompletionModeLocalizationConverter"/>
 
-        <Style x:Key="AgentListItemStyle" TargetType="ListViewItem">
+        <!-- Compact short-height default keeps touch-friendly row floors (>=44) while
+             reclaiming reserved list space. Comfortable restores prior 64 MinHeight. -->
+        <Style x:Key="AgentListItemStyleCompact" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MinHeight" Value="48"/>
+        </Style>
+        <Style x:Key="AgentListItemStyleComfortable" TargetType="ListViewItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="MinHeight" Value="64"/>
@@ -30,12 +37,21 @@
              scrollable settings surface. Comfortable restores prior reservation (MinWindowHeight=760). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ListHeightStates">
-                <VisualState x:Name="ListHeightCompact" />
+                <VisualState x:Name="ListHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AcpProfilesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleCompact}" />
+                        <Setter Target="AcpRemoteDirectoriesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleCompact}" />
+                        <Setter Target="AcpProfilesList.MinHeight" Value="88" />
+                        <Setter Target="AcpRemoteDirectoriesList.MinHeight" Value="72" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="ListHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
+                        <Setter Target="AcpProfilesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleComfortable}" />
+                        <Setter Target="AcpRemoteDirectoriesList.ItemContainerStyle" Value="{StaticResource AgentListItemStyleComfortable}" />
                         <Setter Target="AcpProfilesList.MinHeight" Value="140" />
                         <Setter Target="AcpRemoteDirectoriesList.MinHeight" Value="120" />
                     </VisualState.Setters>
@@ -106,14 +122,14 @@
                                           SelectionMode="Single"
                                           MinHeight="88"
                                           Background="Transparent"
-                                          ItemContainerStyle="{StaticResource AgentListItemStyle}">
+                                          ItemContainerStyle="{StaticResource AgentListItemStyleCompact}">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="vm:AgentProfileItemViewModel">
-                                            <Grid Padding="16,14"
+                                            <Grid Padding="12,10"
                                                   ColumnDefinitions="Auto,*,Auto"
-                                                  ColumnSpacing="16"
+                                                  ColumnSpacing="12"
                                                   RowDefinitions="Auto,Auto"
-                                                  RowSpacing="4">
+                                                  RowSpacing="2">
                                                 <Border Grid.RowSpan="2"
                                                         Width="36"
                                                         Height="36"
@@ -260,7 +276,7 @@
                                           SelectionMode="None"
                                           MinHeight="72"
                                           Background="Transparent"
-                                          ItemContainerStyle="{StaticResource AgentListItemStyle}"
+                                          ItemContainerStyle="{StaticResource AgentListItemStyleCompact}"
                                           AutomationProperties.AutomationId="Acp.RemoteDirectories.List">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="vm:AcpRemoteDirectoryRowViewModel">
