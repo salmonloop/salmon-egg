@@ -15,6 +15,10 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
 using SalmonEgg.Presentation.Core.Tests.Localization;
@@ -169,6 +173,74 @@ public sealed class ChatLaunchWorkflowTests
         Assert.Equal(SettingsSectionCatalog.GeneralKey, navigation.LastSettingsKey);
         Assert.True(chat.ShowTransportConfigPanel);
         Assert.Equal(0, chat.SendPromptCount);
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_WhenRequiresConfigurationAndSettingsActivationFails_SurfacesLocalizedInfoViaNavOwner()
+    {
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+
+        var chat = new FakeChatLaunchWorkflowChatFacade
+        {
+            IsConnected = false,
+            AutoConnectAction = facade =>
+            {
+                facade.IsConnected = false;
+                facade.IsConnecting = false;
+                facade.IsInitializing = false;
+            }
+        };
+
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
+
+        var navigationCoordinator = new Mock<INavigationCoordinator>();
+        navigationCoordinator
+            .Setup(coordinator => coordinator.ActivateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync(true);
+        navigationCoordinator
+            .Setup(coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey))
+            .ReturnsAsync(false);
+
+        using var navigationViewModel = new MainNavigationViewModel(
+            Mock.Of<IConversationCatalog>(),
+            new NavigationProjectPreferencesAdapter(CreatePreferences()),
+            ui.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<MainNavigationViewModel>>(),
+            new FakeNavigationPaneState(),
+            Mock.Of<IShellLayoutMetricsSink>(),
+            new NavigationSelectionProjector(),
+            new ShellSelectionStateStore(),
+            new ShellNavigationRuntimeStateStore(),
+            new ConversationCatalogPresenter(),
+            new ProjectAffinityResolver(),
+            new ImmediateUiDispatcher(),
+            new TestCoreStringLocalizer());
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            navigationCoordinator.Object,
+            Mock.Of<ILogger<ChatLaunchWorkflow>>(),
+            catalogFacade: null,
+            navigationViewModel: navigationViewModel);
+
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
+        Assert.True(chat.ShowTransportConfigPanel);
+        navigationCoordinator.Verify(
+            coordinator => coordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey),
+            Times.Once);
+        Assert.Equal(
+            ["Failed to open settings. Please try again later."],
+            shownMessages);
     }
 
     [Fact]
@@ -498,6 +570,18 @@ public sealed class ChatLaunchWorkflowTests
     private sealed class ImmediateSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) => d(state);
+    }
+
+
+    private sealed class FakeNavigationPaneState : INavigationPaneState
+    {
+        public bool IsPaneOpen => true;
+
+        public event EventHandler? PaneStateChanged
+        {
+            add { }
+            remove { }
+        }
     }
 
     private sealed class CapturingConversationStore : IConversationStore

@@ -622,7 +622,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<ISessionManager>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<ILogger<ChatLaunchWorkflow>>(),
-                sp.GetRequiredService<ConversationCatalogFacade>()));
+                sp.GetRequiredService<ConversationCatalogFacade>(),
+                sp.GetRequiredService<MainNavigationViewModel>()));
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();

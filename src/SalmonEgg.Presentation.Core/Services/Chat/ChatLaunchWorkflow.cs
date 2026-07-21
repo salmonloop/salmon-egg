@@ -7,6 +7,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Chat;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
@@ -39,6 +40,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
     private readonly IChatLaunchWorkflowChatFacade _chat;
     private readonly ISessionManager _sessionManager;
     private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel? _navigationViewModel;
     private readonly ConversationCatalogFacade? _catalogFacade;
     private readonly ILogger<ChatLaunchWorkflow> _logger;
 
@@ -47,13 +49,15 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         ISessionManager sessionManager,
         INavigationCoordinator navigationCoordinator,
         ILogger<ChatLaunchWorkflow>? logger = null,
-        ConversationCatalogFacade? catalogFacade = null)
+        ConversationCatalogFacade? catalogFacade = null,
+        MainNavigationViewModel? navigationViewModel = null)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _sessionManager = sessionManager ?? throw new ArgumentNullException(nameof(sessionManager));
         _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
         _logger = logger ?? NullLogger<ChatLaunchWorkflow>.Instance;
         _catalogFacade = catalogFacade;
+        _navigationViewModel = navigationViewModel;
     }
 
     public async Task<ChatLaunchCompletion> StartSessionAndSendAsync(
@@ -108,7 +112,21 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
                 return ChatLaunchCompletion.Incomplete;
 
             case ChatLaunchConnectionOutcome.RequiresConfiguration:
-                await _navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey).ConfigureAwait(true);
+                // Prefer the navigation VM owner so settings activation failures surface ShowInfo.
+                // Fall back to the coordinator only for lean unit fixtures that omit the VM.
+                if (_navigationViewModel is not null)
+                {
+                    await _navigationViewModel
+                        .ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey)
+                        .ConfigureAwait(true);
+                }
+                else
+                {
+                    await _navigationCoordinator
+                        .ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey)
+                        .ConfigureAwait(true);
+                }
+
                 _chat.ShowTransportConfigPanel = true;
                 return ChatLaunchCompletion.Incomplete;
 
