@@ -33,6 +33,31 @@ public sealed class ConversationActivationOutcomePublisherTests
     }
 
     [Fact]
+    public async Task TryPublishFailureAsync_StoresLocalizationIdentityWithFailureMessage()
+    {
+        var runtimeState = CreateRuntimeState("conv-1", version: 7);
+        var publisher = CreatePublisher(runtimeState);
+
+        await publisher.TryPublishFailureAsync(
+            "conv-1",
+            7,
+            expectedSnapshotVersion: 7,
+            "MissingRemoteSessionId",
+            "Failed to load session: no remote binding.",
+            failureResourceKey: "ChatOperation_LoadSessionMissingActiveBinding",
+            failureFallback: "Failed to load session: no remote session binding is available for the active conversation.");
+
+        var snapshot = Assert.IsType<SessionActivationSnapshot>(runtimeState.ActiveSessionActivation);
+        Assert.Equal(SessionActivationPhase.Faulted, snapshot.Phase);
+        Assert.Equal("Failed to load session: no remote binding.", snapshot.FailureMessage);
+        Assert.Equal("ChatOperation_LoadSessionMissingActiveBinding", snapshot.FailureResourceKey);
+        Assert.Equal(
+            "Failed to load session: no remote session binding is available for the active conversation.",
+            snapshot.FailureFallback);
+        Assert.Null(snapshot.FailureFormatArgs);
+    }
+
+    [Fact]
     public async Task TryPublishFailureAsync_WhenSnapshotOwnerMismatches_DoesNotMutate()
     {
         var runtimeState = CreateRuntimeState("conv-1", version: 7);

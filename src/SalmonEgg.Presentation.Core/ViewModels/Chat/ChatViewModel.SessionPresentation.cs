@@ -77,8 +77,21 @@ public partial class ChatViewModel
                 return null;
             }
 
-            // Hydration failures publish FailureMessage; navigation-level faults often only
-            // set Reason. Prefer the explicit message, then a localized reason fallback.
+            // Hydration failures publish FailureMessage (+ optional CoreStrings identity).
+            // Navigation-level faults often only set Reason. Prefer keyed reproject, then the
+            // held message, then a localized reason fallback.
+            if (!string.IsNullOrWhiteSpace(activation.FailureResourceKey))
+            {
+                return activation.FailureFormatArgs is { Length: > 0 }
+                    ? FormatLocalize(
+                        activation.FailureResourceKey,
+                        activation.FailureFallback ?? activation.FailureMessage ?? string.Empty,
+                        activation.FailureFormatArgs)
+                    : Localize(
+                        activation.FailureResourceKey,
+                        activation.FailureFallback ?? activation.FailureMessage ?? string.Empty);
+            }
+
             if (!string.IsNullOrWhiteSpace(activation.FailureMessage))
             {
                 return activation.FailureMessage;
@@ -279,6 +292,40 @@ public partial class ChatViewModel
         }
 
         return PublishConversationOperationFailureAsync(context.OperationOwner, message);
+    }
+
+    private Task PublishConversationFailureAsync(
+        ConversationFailurePublicationContext context,
+        string reason,
+        string resourceKey,
+        string fallback,
+        params object[] formatArgs)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallback);
+
+        var message = formatArgs is { Length: > 0 }
+            ? FormatLocalize(resourceKey, fallback, formatArgs)
+            : Localize(resourceKey, fallback);
+
+        if (context.ExpectedShellSnapshotVersion.HasValue)
+        {
+            return _conversationActivationOutcomePublisher.TryPublishFailureAsync(
+                context.ConversationId,
+                context.ActivationVersion,
+                context.ExpectedShellSnapshotVersion.Value,
+                reason,
+                message,
+                failureResourceKey: resourceKey.Trim(),
+                failureFallback: fallback,
+                failureFormatArgs: formatArgs is { Length: > 0 } ? formatArgs : null);
+        }
+
+        return PublishConversationOperationFailureAsync(
+            context.OperationOwner,
+            resourceKey,
+            fallback,
+            formatArgs);
     }
 
     private Task PublishConversationActivationPhaseAsync(

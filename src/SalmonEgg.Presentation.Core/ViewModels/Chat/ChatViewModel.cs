@@ -1688,6 +1688,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             RaiseOverlayStateChanged();
             PendingAskUserRequest?.ReprojectLocalizedState();
             ReprojectConversationOperationFailureMessage();
+            // SessionActivationFailureMessage re-localizes from snapshot resource identity on get.
+            NotifySessionActivationFailureProjectionChanged();
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
 
             // New-session draft lives on the connection store and is not part of the chat-store

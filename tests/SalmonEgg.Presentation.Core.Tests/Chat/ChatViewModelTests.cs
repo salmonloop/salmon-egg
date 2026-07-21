@@ -13127,6 +13127,54 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task LanguageChanged_WhenSessionActivationFailureHasResourceKey_ReprojectsVisibleMessage()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set(
+            "zh-Hans",
+            "ChatOperation_LoadSessionMissingActiveBinding",
+            "无法加载会话：当前会话没有可用的远程绑定。");
+        localizer.Set(
+            "en-US",
+            "ChatOperation_LoadSessionMissingActiveBinding",
+            "Failed to load session: no remote session binding is available for the active conversation.");
+
+        var languageService = new Mock<IAppLanguageService>();
+        languageService.SetupGet(service => service.CurrentLanguageTag).Returns("zh-Hans");
+
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        await using var fixture = CreateViewModel(
+            shellNavigationRuntimeState: runtimeState,
+            localizer: localizer,
+            languageService: languageService.Object);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-a" });
+        await WaitForConditionAsync(() => Task.FromResult(fixture.ViewModel.CurrentSessionId == "conv-a"));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-a",
+            null,
+            7,
+            SessionActivationPhase.Faulted,
+            "MissingRemoteSessionId",
+            FailureMessage: "无法加载会话：当前会话没有可用的远程绑定。",
+            FailureResourceKey: "ChatOperation_LoadSessionMissingActiveBinding",
+            FailureFallback: "Failed to load session: no remote session binding is available for the active conversation.");
+
+        Assert.Equal(
+            "无法加载会话：当前会话没有可用的远程绑定。",
+            fixture.ViewModel.SessionActivationFailureMessage);
+
+        localizer.SetLanguageTag("en-US");
+        // Getter re-localizes from resource identity; LanguageChanged also notifies bindings.
+        languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
+
+        Assert.Equal(
+            "Failed to load session: no remote session binding is available for the active conversation.",
+            fixture.ViewModel.SessionActivationFailureMessage);
+    }
+
+    [Fact]
     public async Task SessionActivationFailure_WhenSnapshotOrCurrentConversationChanges_RaisesDerivedNotifications()
     {
         var runtimeState = new ShellNavigationRuntimeStateStore();

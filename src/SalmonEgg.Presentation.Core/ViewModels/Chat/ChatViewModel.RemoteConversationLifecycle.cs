@@ -307,9 +307,8 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "ChatServiceNotReady",
-                    Localize(
-                        "ChatOperation_LoadSessionChatServiceNotReady",
-                        "Failed to load session: ACP chat service is not connected and initialized."))
+                    "ChatOperation_LoadSessionChatServiceNotReady",
+                    "Failed to load session: ACP chat service is not connected and initialized.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -321,9 +320,8 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "RecoveryCapabilityMissing",
-                    Localize(
-                        "ChatOperation_LoadSessionRecoveryCapabilityMissing",
-                        "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities."))
+                    "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -333,9 +331,8 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "MissingRemoteSessionId",
-                    Localize(
-                        "ChatOperation_LoadSessionMissingActiveBinding",
-                        "Failed to load session: no remote session binding is available for the active conversation."))
+                    "ChatOperation_LoadSessionMissingActiveBinding",
+                    "Failed to load session: no remote session binding is available for the active conversation.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -681,10 +678,9 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         ex.Message,
-                        FormatLocalize(
-                            "ChatOperation_LoadSessionFailed",
-                            "Failed to load session: {0}",
-                            ex.Message))
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        ex.Message)
                     .ConfigureAwait(false);
                 return false;
             }
@@ -706,13 +702,12 @@ public partial class ChatViewModel
                 binding.RemoteSessionId,
                 hydrationStopwatch.ElapsedMilliseconds);
             await PublishConversationFailureAsync(
-                    failureContext,
-                    ex.Message,
-                    FormatLocalize(
+                        failureContext,
+                        ex.Message,
                         "ChatOperation_LoadSessionFailed",
                         "Failed to load session: {0}",
-                        ex.Message))
-                .ConfigureAwait(false);
+                        ex.Message)
+                    .ConfigureAwait(false);
             return false;
         }
         finally
@@ -1553,13 +1548,12 @@ public partial class ChatViewModel
                 {
                     await ApplyCurrentStoreProjectionAsync(activationVersion).ConfigureAwait(false);
                     await PublishConversationFailureAsync(
-                            failureContext,
-                            finalConnectionState.Error,
-                            FormatLocalize(
-                                "ChatOperation_LoadSessionFailed",
-                                "Failed to load session: {0}",
-                                finalConnectionState.Error))
-                        .ConfigureAwait(false);
+                        failureContext,
+                        finalConnectionState.Error,
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        finalConnectionState.Error)
+                    .ConfigureAwait(false);
                     return false;
                 }
             }
@@ -1569,9 +1563,8 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "MissingBoundProfile",
-                        Localize(
-                            "ChatOperation_LoadSessionMissingBoundProfile",
-                            "Failed to load session: no ACP profile is bound to the remote conversation."))
+                        "ChatOperation_LoadSessionMissingBoundProfile",
+                        "Failed to load session: no ACP profile is bound to the remote conversation.")
                     .ConfigureAwait(false);
                 return false;
             }
@@ -1586,9 +1579,8 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "ProfileNotResolved",
-                        Localize(
-                            "ChatOperation_LoadSessionProfileNotResolved",
-                            "Failed to load session: the bound ACP profile could not be resolved."))
+                        "ChatOperation_LoadSessionProfileNotResolved",
+                        "Failed to load session: the bound ACP profile could not be resolved.")
                     .ConfigureAwait(false);
                 return false;
             }
@@ -1609,9 +1601,8 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "RemoteConnectionNotReady",
-                        Localize(
-                            "ChatOperation_LoadSessionRemoteConnectionNotReady",
-                            "Failed to load session: ACP profile connection did not become ready."))
+                        "ChatOperation_LoadSessionRemoteConnectionNotReady",
+                        "Failed to load session: ACP profile connection did not become ready.")
                     .ConfigureAwait(false);
             }
 
@@ -1896,9 +1887,6 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (authoritativeConnection is not { } resolvedConnection)
         {
-            var message = Localize(
-                "ChatOperation_LoadSessionChatServiceNotReady",
-                "Failed to load session: ACP chat service is not connected and initialized.");
             await SetConversationRuntimeStateAsync(
                     conversationId,
                     ConversationRuntimePhase.Faulted,
@@ -1908,7 +1896,8 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "ChatServiceNotReady",
-                    message)
+                    "ChatOperation_LoadSessionChatServiceNotReady",
+                    "Failed to load session: ACP chat service is not connected and initialized.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -1919,9 +1908,8 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "RecoveryCapabilityMissing",
-                    Localize(
-                        "ChatOperation_LoadSessionRecoveryCapabilityMissing",
-                        "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities."))
+                    "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
                 .ConfigureAwait(false);
             return false;
         }

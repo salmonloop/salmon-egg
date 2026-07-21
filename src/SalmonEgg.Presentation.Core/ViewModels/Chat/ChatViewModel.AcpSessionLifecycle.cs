@@ -722,9 +722,8 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "MissingRemoteSessionId",
-                        Localize(
-                            "ChatOperation_LoadSessionMissingProfileBinding",
-                            "Failed to load session: no remote session binding is available for the profile-bound conversation."))
+                        "ChatOperation_LoadSessionMissingProfileBinding",
+                        "Failed to load session: no remote session binding is available for the profile-bound conversation.")
                     .ConfigureAwait(false);
                 return false;
             }
@@ -917,10 +916,9 @@ public partial class ChatViewModel
         await PublishConversationFailureAsync(
                 failureContext,
                 ex.GetType().Name,
-                FormatLocalize(
-                    "ChatOperation_SwitchSessionFailed",
-                    "Failed to switch session: {0}",
-                    ex.Message))
+                "ChatOperation_SwitchSessionFailed",
+                "Failed to switch session: {0}",
+                ex.Message)
             .ConfigureAwait(false);
         await PostToUiAsync(() => IsSessionActive = !string.IsNullOrWhiteSpace(CurrentSessionId)).ConfigureAwait(false);
     }

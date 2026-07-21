@@ -45,7 +45,10 @@ internal sealed class ConversationActivationOutcomePublisher
         long? activationVersion,
         long expectedSnapshotVersion,
         string reason,
-        string message)
+        string message,
+        string? failureResourceKey = null,
+        string? failureFallback = null,
+        object[]? failureFormatArgs = null)
     {
         if (_runtimeState is null || !CanPublish(activationVersion))
         {
@@ -79,7 +82,10 @@ internal sealed class ConversationActivationOutcomePublisher
             {
                 Phase = SessionActivationPhase.Faulted,
                 Reason = reason,
-                FailureMessage = message
+                FailureMessage = message,
+                FailureResourceKey = failureResourceKey,
+                FailureFallback = failureFallback,
+                FailureFormatArgs = failureFormatArgs
             };
             _runtimeState.IsSessionActivationInProgress = false;
             _runtimeState.ActiveSessionActivationVersion = 0;
