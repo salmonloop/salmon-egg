@@ -309,6 +309,14 @@ public partial class AppPreferencesViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load app settings");
+            try
+            {
+                await _ui.ShowInfoAsync(_localizer["General_AppSettingsLoadFailed"]).ConfigureAwait(false);
+            }
+            catch (Exception showEx)
+            {
+                _logger.LogWarning(showEx, "Failed to surface app settings load failure");
+            }
         }
         finally
         {
@@ -650,12 +658,20 @@ public partial class AppPreferencesViewModel : ObservableObject
                     await _appSettingsService.SaveAsync(snapshot).ConfigureAwait(false);
                 }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to save app settings");
+                try
+                {
+                    await _ui.ShowInfoAsync(_localizer["General_AppSettingsSaveFailed"]).ConfigureAwait(false);
+                }
+                catch (Exception showEx)
+                {
+                    _logger.LogWarning(showEx, "Failed to surface app settings save failure");
+                }
             }
         }, token);
     }

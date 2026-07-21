@@ -92,6 +92,8 @@ public sealed class CoreStringResourceTests
     [InlineData("AcpProfiles_ReconnectFailed")]
     [InlineData("General_LaunchOnStartupFailed")]
     [InlineData("General_LanguageApplyFailed")]
+    [InlineData("General_AppSettingsSaveFailed")]
+    [InlineData("General_AppSettingsLoadFailed")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

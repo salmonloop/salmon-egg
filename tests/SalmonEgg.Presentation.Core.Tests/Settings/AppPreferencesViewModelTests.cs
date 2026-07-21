@@ -753,4 +753,77 @@ public class AppPreferencesViewModelTests
         languageService.Verify(s => s.ApplyLanguageOverrideAsync("en-US"), Times.Never);
     }
 
+    [Fact]
+    public async Task ScheduleSave_WhenSaveFails_SurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .ThrowsAsync(new InvalidOperationException("disk full"));
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        ui.Invocations.Clear();
+
+        vm.IsAnimationEnabled = !vm.IsAnimationEnabled;
+
+        for (var i = 0; i < 80; i++)
+        {
+            if (ui.Invocations.Count > 0)
+            {
+                break;
+            }
+
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to save app settings. Please try again later."),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WhenLoadFails_SurfacesInfo()
+    {
+        var appSettingsService = new Mock<IAppSettingsService>();
+        appSettingsService
+            .Setup(s => s.LoadAsync())
+            .ThrowsAsync(new InvalidOperationException("corrupt settings"));
+
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(s => s.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+
+        var vm = new AppPreferencesViewModel(
+            appSettingsService.Object,
+            Mock.Of<IAppStartupService>(),
+            Mock.Of<IAppLanguageService>(),
+            Mock.Of<IPlatformCapabilityService>(),
+            Mock.Of<IUiRuntimeService>(),
+            ui.Object,
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<AppPreferencesViewModel>>(),
+            new ImmediateUiDispatcher());
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        ui.Verify(
+            s => s.ShowInfoAsync("Failed to load app settings. Please try again later."),
+            Times.Once);
+        Assert.True(vm.IsLoaded);
+    }
+
 }

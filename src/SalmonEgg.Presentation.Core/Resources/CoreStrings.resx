@@ -874,6 +874,12 @@
   <data name="General_LanguageApplyFailed" xml:space="preserve">
     <value>无法切换语言，请稍后重试。</value>
   </data>
+  <data name="General_AppSettingsSaveFailed" xml:space="preserve">
+    <value>保存应用设置失败，请稍后重试。</value>
+  </data>
+  <data name="General_AppSettingsLoadFailed" xml:space="preserve">
+    <value>加载应用设置失败，请稍后重试。</value>
+  </data>
   <data name="DataStorage_ClearAllLocalDataSuccess" xml:space="preserve">
     <value>已清除全部本地数据。</value>
   </data>
