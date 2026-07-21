@@ -286,7 +286,13 @@ public partial class ChatViewModel
         if (bindingResult.Status is not BindingUpdateStatus.Success)
         {
             throw new InvalidOperationException(
-                $"Failed to bind new conversation ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
+                FormatLocalize(
+                    "ChatBinding_BindNewFailedWithStatus",
+                    "Failed to bind new conversation ({0}): {1}",
+                    bindingResult.Status,
+                    string.IsNullOrWhiteSpace(bindingResult.ErrorMessage)
+                        ? Localize("ChatBinding_UnknownError", "UnknownError")
+                        : bindingResult.ErrorMessage.Trim()));
         }
     }
 

@@ -413,7 +413,13 @@ public partial class ChatViewModel
             if (bindingResult.Status is not BindingUpdateStatus.Success)
             {
                 throw new InvalidOperationException(
-                    $"Failed to promote ACP new-session draft ({bindingResult.Status}): {bindingResult.ErrorMessage ?? "UnknownError"}");
+                    FormatLocalize(
+                        "ChatBinding_PromoteDraftFailedWithStatus",
+                        "Failed to promote ACP new-session draft ({0}): {1}",
+                        bindingResult.Status,
+                        string.IsNullOrWhiteSpace(bindingResult.ErrorMessage)
+                            ? Localize("ChatBinding_UnknownError", "UnknownError")
+                            : bindingResult.ErrorMessage.Trim()));
             }
 
             SetConversationConfigAuthority(CurrentSessionId!, draft.IsConfigAuthoritative);

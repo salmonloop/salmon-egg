@@ -1058,4 +1058,16 @@
   <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
     <value>远程工作目录必须是绝对路径。</value>
   </data>
+  <data name="ChatBinding_UpdateFailedWithStatus" xml:space="preserve">
+    <value>更新会话绑定失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_BindNewFailedWithStatus" xml:space="preserve">
+    <value>绑定新会话失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_PromoteDraftFailedWithStatus" xml:space="preserve">
+    <value>提升新建会话草稿失败（{0}）：{1}</value>
+  </data>
+  <data name="ChatBinding_UnknownError" xml:space="preserve">
+    <value>未知错误</value>
+  </data>
 </root>

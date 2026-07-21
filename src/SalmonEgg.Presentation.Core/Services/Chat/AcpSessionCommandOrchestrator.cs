@@ -327,7 +327,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             new SessionCancelParams(currentBinding.RemoteSessionId!)).ConfigureAwait(false);
     }
 
-    private static async Task UpdateBindingForConversationAsync(
+    private async Task UpdateBindingForConversationAsync(
         IAcpChatCoordinatorSink sink,
         string conversationId,
         string remoteSessionId,
@@ -353,7 +353,11 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         if (result.Status is not BindingUpdateStatus.Success)
         {
             throw new InvalidOperationException(
-                $"Failed to update conversation binding ({result.Status}): {result.ErrorMessage ?? "UnknownError"}");
+                FormatLocalize(
+                    "ChatBinding_UpdateFailedWithStatus",
+                    "Failed to update conversation binding ({0}): {1}",
+                    result.Status,
+                    ResolveBindingErrorDetail(result.ErrorMessage)));
         }
     }
 
@@ -367,6 +371,38 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         return chatService;
     }
 
+
+
+    private string ResolveBindingErrorDetail(string? errorMessage)
+        => string.IsNullOrWhiteSpace(errorMessage)
+            ? Localize("ChatBinding_UnknownError", "UnknownError")
+            : errorMessage.Trim();
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private string FormatLocalize(string key, string fallback, params object[] arguments)
+    {
+        if (_localizer is null)
+        {
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = _localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments)
+            : localized.Value;
+    }
 
     private string ResolveAuthenticationRequiredMessage()
     {

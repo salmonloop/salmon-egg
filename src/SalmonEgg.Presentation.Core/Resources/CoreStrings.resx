@@ -1058,4 +1058,16 @@
   <data name="NewSessionDraft_InvalidRemoteCwd" xml:space="preserve">
     <value>The remote working directory must be an absolute path.</value>
   </data>
+  <data name="ChatBinding_UpdateFailedWithStatus" xml:space="preserve">
+    <value>Failed to update conversation binding ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_BindNewFailedWithStatus" xml:space="preserve">
+    <value>Failed to bind new conversation ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_PromoteDraftFailedWithStatus" xml:space="preserve">
+    <value>Failed to promote ACP new-session draft ({0}): {1}</value>
+  </data>
+  <data name="ChatBinding_UnknownError" xml:space="preserve">
+    <value>UnknownError</value>
+  </data>
 </root>
