@@ -10,6 +10,7 @@ using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using SalmonEgg.Presentation.ViewModels.Navigation;
 using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
@@ -17,7 +18,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 public sealed partial class ChatShellViewModel : ObservableObject
 {
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
-    private readonly INavigationCoordinator _navigationCoordinator;
+    private readonly MainNavigationViewModel _navigationViewModel;
     private readonly IConversationCatalogDisplayReadModel _conversationCatalog;
     private readonly IProjectAffinityResolver _projectAffinityResolver;
     private readonly AppPreferencesViewModel _preferences;
@@ -28,7 +29,7 @@ public sealed partial class ChatShellViewModel : ObservableObject
     public ChatShellViewModel(
         ChatViewModel chat,
         ShellLayoutViewModel shellLayout,
-        INavigationCoordinator navigationCoordinator,
+        MainNavigationViewModel navigationViewModel,
         IConversationCatalogDisplayReadModel conversationCatalog,
         IProjectAffinityResolver projectAffinityResolver,
         AppPreferencesViewModel preferences,
@@ -36,7 +37,7 @@ public sealed partial class ChatShellViewModel : ObservableObject
     {
         Chat = chat ?? throw new ArgumentNullException(nameof(chat));
         ShellLayout = shellLayout ?? throw new ArgumentNullException(nameof(shellLayout));
-        _navigationCoordinator = navigationCoordinator ?? throw new ArgumentNullException(nameof(navigationCoordinator));
+        _navigationViewModel = navigationViewModel ?? throw new ArgumentNullException(nameof(navigationViewModel));
         _conversationCatalog = conversationCatalog ?? throw new ArgumentNullException(nameof(conversationCatalog));
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
@@ -75,7 +76,9 @@ public sealed partial class ChatShellViewModel : ObservableObject
         try
         {
             // Stay on the UI-friendly context so selection resync can update the bound picker.
-            var activated = await _navigationCoordinator
+            // Route through the navigation VM owner so pre-commit activation failures
+            // surface ShowInfo when the chat callout cannot own the fault projection.
+            var activated = await _navigationViewModel
                 .ActivateSessionAsync(conversationId, GetActivationProjectId(FindConversation(conversationId)))
                 .ConfigureAwait(true);
             if (activated)

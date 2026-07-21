@@ -281,9 +281,9 @@ public partial class ChatViewModelTests
 
     private static MainNavigationViewModel CreateStartNavigationViewModel(
         ViewModelFixture fixture,
-        INavigationCoordinator? navigationCoordinator = null)
+        INavigationCoordinator? navigationCoordinator = null,
+        IUiInteractionService? ui = null)
     {
-        var ui = new Mock<IUiInteractionService>();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var navState = new FakeNavigationPaneState();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
@@ -300,7 +300,7 @@ public partial class ChatViewModelTests
         return new MainNavigationViewModel(
             conversationCatalog,
             new NavigationProjectPreferencesAdapter(fixture.Preferences),
-            ui.Object,
+            ui ?? Mock.Of<IUiInteractionService>(),
             effectiveNavigationCoordinator,
             navLogger.Object,
             navState,
@@ -311,7 +311,7 @@ public partial class ChatViewModelTests
             catalogPresenter,
             new ProjectAffinityResolver(),
             new ImmediateUiDispatcher(),
-            Mock.Of<IStringLocalizer<CoreStrings>>());
+            new TestCoreStringLocalizer());
     }
 
     [Fact]
@@ -660,10 +660,11 @@ public partial class ChatViewModelTests
 
         using var shellLayout = CreateShellLayoutViewModel();
         await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
         var shellViewModel = new ChatShellViewModel(
             fixture.ViewModel,
             shellLayout,
-            navigationCoordinator.Object,
+            navigationViewModel,
             displayCatalog.Presenter,
             resolver.Object,
             fixture.Preferences,
@@ -734,6 +735,11 @@ public partial class ChatViewModelTests
                 "matched"));
 
         var completed = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var shownMessages = new List<string>();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+            .Callback<string>(shownMessages.Add)
+            .Returns(Task.CompletedTask);
         var navigationCoordinator = new Mock<INavigationCoordinator>(MockBehavior.Strict);
         navigationCoordinator.Setup(x => x.ActivateSessionAsync("conv-remote", "project-remote"))
             .Returns(() =>
@@ -744,10 +750,11 @@ public partial class ChatViewModelTests
 
         using var shellLayout = CreateShellLayoutViewModel();
         await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object, ui.Object);
         var shellViewModel = new ChatShellViewModel(
             fixture.ViewModel,
             shellLayout,
-            navigationCoordinator.Object,
+            navigationViewModel,
             displayCatalog.Presenter,
             resolver.Object,
             fixture.Preferences,
@@ -770,6 +777,9 @@ public partial class ChatViewModelTests
 
         Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
         navigationCoordinator.Verify(x => x.ActivateSessionAsync("conv-remote", "project-remote"), Times.Once);
+        Assert.Equal(
+            ["Failed to open this session. Please try again later."],
+            shownMessages);
     }
 
     [Fact]
@@ -804,10 +814,11 @@ public partial class ChatViewModelTests
 
         using var shellLayout = CreateShellLayoutViewModel();
         await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
         var shellViewModel = new ChatShellViewModel(
             fixture.ViewModel,
             shellLayout,
-            navigationCoordinator.Object,
+            navigationViewModel,
             displayCatalog.Presenter,
             resolver.Object,
             fixture.Preferences,
@@ -14959,10 +14970,11 @@ public partial class ChatViewModelTests
 
             using var shellLayout = CreateShellLayoutViewModel();
             await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+            using var navigationViewModel = CreateStartNavigationViewModel(fixture, navigationCoordinator.Object);
             var shellViewModel = new ChatShellViewModel(
                 fixture.ViewModel,
                 shellLayout,
-                navigationCoordinator.Object,
+                navigationViewModel,
                 displayCatalog.Presenter,
                 resolver.Object,
                 fixture.Preferences,
