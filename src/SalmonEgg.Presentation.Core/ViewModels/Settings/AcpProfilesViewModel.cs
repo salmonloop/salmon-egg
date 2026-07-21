@@ -175,8 +175,9 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
             return;
         }
 
-        SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-            ?? "Settings saved. The current connection still uses the old configuration until reconnect.";
+        SavedCurrentConnectionNoticeMessage = Localize(
+            CurrentConnectionSavedNoticeMessageKey,
+            CurrentConnectionSavedNoticeMessageFallback);
         IsSavedCurrentConnectionNoticeOpen = true;
     }
 
@@ -198,7 +199,7 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         return MarshalToUiAsync(() =>
         {
             _operationErrorResourceKey = resourceKey;
-            OperationErrorMessage = _localizer?[resourceKey] ?? fallback;
+            OperationErrorMessage = Localize(resourceKey, fallback);
             IsOperationErrorOpen = true;
         });
     }
@@ -473,6 +474,25 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SelectedProfileItem));
     }
 
+    private const string CurrentConnectionSavedNoticeMessageKey =
+        "AgentProfileEditor_CurrentConnectionSavedNoticeMessage";
+
+    private const string CurrentConnectionSavedNoticeMessageFallback =
+        "Settings saved. The current connection still uses the old configuration until reconnect.";
+
+    private string Localize(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
     private void OnLanguageChanged(object? sender, EventArgs e)
         => _ = MarshalToUiAsync(ReprojectLocalizedState);
 
@@ -480,14 +500,14 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     {
         if (IsSavedCurrentConnectionNoticeOpen)
         {
-            SavedCurrentConnectionNoticeMessage = _localizer?["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"]
-                ?? "Settings saved. The current connection still uses the old configuration until reconnect.";
+            SavedCurrentConnectionNoticeMessage = Localize(
+                CurrentConnectionSavedNoticeMessageKey,
+                CurrentConnectionSavedNoticeMessageFallback);
         }
 
         if (IsOperationErrorOpen && !string.IsNullOrWhiteSpace(_operationErrorResourceKey))
         {
-            OperationErrorMessage = _localizer?[_operationErrorResourceKey]
-                ?? OperationErrorMessage;
+            OperationErrorMessage = Localize(_operationErrorResourceKey, OperationErrorMessage);
         }
 
         foreach (var item in ProfileItems)

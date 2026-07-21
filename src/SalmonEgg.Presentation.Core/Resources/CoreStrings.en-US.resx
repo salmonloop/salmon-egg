@@ -446,6 +446,9 @@ Create the corresponding Markdown file in:
   <data name="AgentProfileEditor_ProxyModeCustom" xml:space="preserve">
     <value>Custom proxy</value>
   </data>
+  <data name="AgentProfileEditor_CurrentConnectionSavedNoticeMessage" xml:space="preserve">
+    <value>Settings saved. The current connection still uses the old configuration until reconnect.</value>
+  </data>
   <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
     <value>Failed to refresh agent profiles. Please try again later.</value>
   </data>

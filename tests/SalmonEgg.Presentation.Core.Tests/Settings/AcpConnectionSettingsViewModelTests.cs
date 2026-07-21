@@ -858,7 +858,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         profiles.ShowSavedCurrentConnectionNoticeIfNeeded("profile-a");
 
         Assert.True(profiles.IsSavedCurrentConnectionNoticeOpen);
-        Assert.Equal("AgentProfileEditor_CurrentConnectionSavedNoticeMessage", profiles.SavedCurrentConnectionNoticeMessage);
+        Assert.Equal("Settings saved. The current connection still uses the old configuration until reconnect.", profiles.SavedCurrentConnectionNoticeMessage);
     }
 
     [Fact]

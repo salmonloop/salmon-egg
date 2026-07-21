@@ -106,6 +106,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatProjectAffinity_NeedsMappingMessage"] = "This remote session is not matched to a local project. Correct it manually.",
         ["ChatProjectAffinity_UnclassifiedMessage"] = "This session is unclassified. You can correct it manually.",
         ["AgentProfileEditor_NewConfigurationName"] = "New Configuration",
+        ["AgentProfileEditor_CurrentConnectionSavedNoticeMessage"] = "Settings saved. The current connection still uses the old configuration until reconnect.",
         ["ChatMedia_ImagePlaceholder"] = "[image]",
         ["ChatMedia_ImagePlaceholderWithMime"] = "[image: {0}]",
         ["ChatMedia_AudioPlaceholder"] = "[audio]",

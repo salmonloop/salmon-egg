@@ -135,6 +135,7 @@ public sealed class CoreStringResourceTests
     [InlineData("ChatProjectAffinity_NeedsMappingMessage")]
     [InlineData("ChatProjectAffinity_UnclassifiedMessage")]
     [InlineData("AgentProfileEditor_NewConfigurationName")]
+    [InlineData("AgentProfileEditor_CurrentConnectionSavedNoticeMessage")]
     [InlineData("ChatMedia_ImagePlaceholder")]
     [InlineData("ChatMedia_ImagePlaceholderWithMime")]
     [InlineData("ChatMedia_AudioPlaceholder")]
