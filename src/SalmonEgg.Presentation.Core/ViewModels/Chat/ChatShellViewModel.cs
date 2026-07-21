@@ -74,13 +74,27 @@ public sealed partial class ChatShellViewModel : ObservableObject
     {
         try
         {
-            await _navigationCoordinator
+            // Stay on the UI-friendly context so selection resync can update the bound picker.
+            var activated = await _navigationCoordinator
                 .ActivateSessionAsync(conversationId, GetActivationProjectId(FindConversation(conversationId)))
-                .ConfigureAwait(false);
+                .ConfigureAwait(true);
+            if (activated)
+            {
+                return;
+            }
+
+            // Activation can return false without throwing (faulted/superseded/canceled).
+            // Resync the picker to the authoritative CurrentSessionId so it does not stick
+            // on the failed intent while the callout shows SessionActivationFailureMessage.
+            _logger.LogWarning(
+                "Mini window conversation activation did not complete. ConversationId={ConversationId}",
+                conversationId);
+            SyncSelectedMiniWindowSession();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to activate mini window conversation {ConversationId}", conversationId);
+            SyncSelectedMiniWindowSession();
         }
     }
 

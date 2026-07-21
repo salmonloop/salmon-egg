@@ -677,6 +677,100 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task ChatShellViewModel_SelectedMiniWindowSession_WhenActivationFails_ResyncsToCurrentSession()
+    {
+        await using var fixture = CreateViewModel();
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-local",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc)));
+        await fixture.UpdateStateAsync(state => state with { HydratedConversationId = "conv-local" });
+
+        var catalog = new ConversationCatalogPresenter();
+        catalog.Refresh(
+        [
+            new ConversationCatalogItem(
+                "conv-local",
+                "Local Conversation",
+                @"C:\repo\local",
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)),
+            new ConversationCatalogItem(
+                "conv-remote",
+                "Remote Conversation",
+                @"C:\repo\remote",
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc),
+                RemoteSessionId: "remote-1",
+                BoundProfileId: "profile-1")
+        ]);
+
+        var resolver = new Mock<IProjectAffinityResolver>(MockBehavior.Strict);
+        resolver.Setup(x => x.Resolve(It.IsAny<ProjectAffinityRequest>()))
+            .Returns(new ProjectAffinityResolution(
+                "project-remote",
+                ProjectAffinitySource.DirectMatch,
+                "project-remote",
+                null,
+                @"C:\repo\remote",
+                @"C:\repo\remote",
+                false,
+                "matched"));
+
+        var completed = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var navigationCoordinator = new Mock<INavigationCoordinator>(MockBehavior.Strict);
+        navigationCoordinator.Setup(x => x.ActivateSessionAsync("conv-remote", "project-remote"))
+            .Returns(() =>
+            {
+                completed.TrySetResult(null);
+                return Task.FromResult(false);
+            });
+
+        using var shellLayout = CreateShellLayoutViewModel();
+        await using var displayCatalog = CreateDisplayCatalogPresenter(catalog, fixture.ViewModel.Dispatcher);
+        var shellViewModel = new ChatShellViewModel(
+            fixture.ViewModel,
+            shellLayout,
+            navigationCoordinator.Object,
+            displayCatalog.Presenter,
+            resolver.Object,
+            fixture.Preferences,
+            Mock.Of<ILogger<ChatShellViewModel>>());
+
+        Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
+
+        var remoteItem = shellViewModel.MiniWindowSessions.Single(item =>
+            string.Equals(item.ConversationId, "conv-remote", StringComparison.Ordinal));
+        shellViewModel.SelectedMiniWindowSession = remoteItem;
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+
+        // Allow async void completion to resync selection.
+        for (var i = 0; i < 40
+             && string.Equals(shellViewModel.SelectedMiniWindowSession?.ConversationId, "conv-remote", StringComparison.Ordinal);
+             i++)
+        {
+            await Task.Delay(25, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
+        navigationCoordinator.Verify(x => x.ActivateSessionAsync("conv-remote", "project-remote"), Times.Once);
+    }
+
+    [Fact]
     public async Task ChatShellViewModel_SelectedMiniWindowSession_WhenCurrentConversationAlreadySelected_IgnoresDuplicateIntent()
     {
         await using var fixture = CreateViewModel();
