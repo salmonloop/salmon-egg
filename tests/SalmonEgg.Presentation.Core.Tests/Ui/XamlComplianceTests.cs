@@ -624,6 +624,28 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain(".Stop()", code, StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public void ChatSkeleton_DensifiesPaddingOnShortWindowHeights()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatSkeleton.xaml");
+
+        Assert.Contains("x:Name=\"SkeletonHeightStates\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SkeletonHeightCompact\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"SkeletonHeightComfortable\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"RootGrid\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowHeight=\"760\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RootGrid.Padding\" Value=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RootGrid.Padding\" Value=\"20\"", xaml, StringComparison.Ordinal);
+        // Compact is the short-height default (matches ChatView MessagesList inset).
+        Assert.Contains("Padding=\"12\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Storyboard", xaml, StringComparison.Ordinal);
+        Assert.True(
+            xaml.IndexOf("x:Name=\"RootGrid\"", StringComparison.Ordinal)
+            < xaml.IndexOf("SkeletonHeightStates", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void TitleBarButtons_UseSharedIconTemplates()
     {
