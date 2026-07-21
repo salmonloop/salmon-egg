@@ -248,7 +248,9 @@ public partial class ChatViewModel
         {
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    "Failed to load session: no active conversation is selected.")
+                    Localize(
+                        "ChatOperation_LoadSessionNoActiveConversation",
+                        "Failed to load session: no active conversation is selected."))
                 .ConfigureAwait(false);
             return false;
         }
@@ -258,7 +260,9 @@ public partial class ChatViewModel
         {
             await PublishConversationOperationFailureAsync(
                     operationOwner,
-                    "Failed to load session: no remote session binding is available for the active conversation.")
+                    Localize(
+                        "ChatOperation_LoadSessionMissingActiveBinding",
+                        "Failed to load session: no remote session binding is available for the active conversation."))
                 .ConfigureAwait(false);
             return false;
         }
@@ -305,7 +309,9 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "ChatServiceNotReady",
-                    "Failed to load session: ACP chat service is not connected and initialized.")
+                    Localize(
+                        "ChatOperation_LoadSessionChatServiceNotReady",
+                        "Failed to load session: ACP chat service is not connected and initialized."))
                 .ConfigureAwait(false);
             return false;
         }
@@ -317,7 +323,9 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "RecoveryCapabilityMissing",
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+                    Localize(
+                        "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                        "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities."))
                 .ConfigureAwait(false);
             return false;
         }
@@ -327,7 +335,9 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "MissingRemoteSessionId",
-                    "Failed to load session: no remote session binding is available for the active conversation.")
+                    Localize(
+                        "ChatOperation_LoadSessionMissingActiveBinding",
+                        "Failed to load session: no remote session binding is available for the active conversation."))
                 .ConfigureAwait(false);
             return false;
         }
@@ -673,7 +683,10 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         ex.Message,
-                        $"Failed to load session: {ex.Message}")
+                        FormatLocalize(
+                            "ChatOperation_LoadSessionFailed",
+                            "Failed to load session: {0}",
+                            ex.Message))
                     .ConfigureAwait(false);
                 return false;
             }
@@ -697,7 +710,10 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     ex.Message,
-                    $"Failed to load session: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_LoadSessionFailed",
+                        "Failed to load session: {0}",
+                        ex.Message))
                 .ConfigureAwait(false);
             return false;
         }
@@ -1521,7 +1537,10 @@ public partial class ChatViewModel
                     await PublishConversationFailureAsync(
                             failureContext,
                             finalConnectionState.Error,
-                            $"Failed to load session: {finalConnectionState.Error}")
+                            FormatLocalize(
+                                "ChatOperation_LoadSessionFailed",
+                                "Failed to load session: {0}",
+                                finalConnectionState.Error))
                         .ConfigureAwait(false);
                     return false;
                 }
@@ -1532,7 +1551,9 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "MissingBoundProfile",
-                        "Failed to load session: no ACP profile is bound to the remote conversation.")
+                        Localize(
+                            "ChatOperation_LoadSessionMissingBoundProfile",
+                            "Failed to load session: no ACP profile is bound to the remote conversation."))
                     .ConfigureAwait(false);
                 return false;
             }
@@ -1547,7 +1568,9 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "ProfileNotResolved",
-                        "Failed to load session: the bound ACP profile could not be resolved.")
+                        Localize(
+                            "ChatOperation_LoadSessionProfileNotResolved",
+                            "Failed to load session: the bound ACP profile could not be resolved."))
                     .ConfigureAwait(false);
                 return false;
             }
@@ -1568,7 +1591,9 @@ public partial class ChatViewModel
                 await PublishConversationFailureAsync(
                         failureContext,
                         "RemoteConnectionNotReady",
-                        "Failed to load session: ACP profile connection did not become ready.")
+                        Localize(
+                            "ChatOperation_LoadSessionRemoteConnectionNotReady",
+                            "Failed to load session: ACP profile connection did not become ready."))
                     .ConfigureAwait(false);
             }
 
@@ -1766,7 +1791,10 @@ public partial class ChatViewModel
                 conversationId);
             await PublishConversationOperationFailureAsync(
                     conversationId,
-                    $"Failed to reconnect session: {ex.Message}")
+                    FormatLocalize(
+                        "ChatOperation_ReconnectSessionFailed",
+                        "Failed to reconnect session: {0}",
+                        ex.Message))
                 .ConfigureAwait(false);
         }
     }
@@ -1851,7 +1879,9 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
         if (authoritativeConnection is not { } resolvedConnection)
         {
-            const string message = "Failed to load session: ACP chat service is not connected and initialized.";
+            var message = Localize(
+                "ChatOperation_LoadSessionChatServiceNotReady",
+                "Failed to load session: ACP chat service is not connected and initialized.");
             await SetConversationRuntimeStateAsync(
                     conversationId,
                     ConversationRuntimePhase.Faulted,
@@ -1872,7 +1902,9 @@ public partial class ChatViewModel
             await PublishConversationFailureAsync(
                     failureContext,
                     "RecoveryCapabilityMissing",
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+                    Localize(
+                        "ChatOperation_LoadSessionRecoveryCapabilityMissing",
+                        "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities."))
                 .ConfigureAwait(false);
             return false;
         }
