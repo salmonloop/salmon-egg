@@ -43,7 +43,11 @@
             <!-- Short windows: densify section stack spacing so MCP settings remain scannable
                  without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
             <VisualStateGroup x:Name="McpHeightStates">
-                <VisualState x:Name="McpHeightCompact" />
+                <VisualState x:Name="McpHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="McpContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="McpHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />

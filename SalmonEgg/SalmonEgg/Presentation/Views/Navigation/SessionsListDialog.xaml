@@ -27,7 +27,11 @@
              560px max at MinWindowHeight=760 (same threshold as Start/Settings densify). -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="SessionsDialogHeightStates">
-                <VisualState x:Name="SessionsDialogHeightCompact" />
+                <VisualState x:Name="SessionsDialogHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="SessionsDialogRoot.MaxHeight" Value="360" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="SessionsDialogHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />

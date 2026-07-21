@@ -1083,6 +1083,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"AcpHeightStates\"", acp, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AcpContentStack\"", acp, StringComparison.Ordinal);
         Assert.Contains("Spacing=\"16\"", acp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"AcpContentStack.Spacing\" Value=\"16\"", acp, StringComparison.Ordinal);
         Assert.Contains("Target=\"AcpContentStack.Spacing\" Value=\"28\"", acp, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", acp, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", acp, StringComparison.Ordinal);
@@ -1090,6 +1091,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"McpHeightStates\"", mcp, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"McpContentStack\"", mcp, StringComparison.Ordinal);
         Assert.Contains("Spacing=\"16\"", mcp, StringComparison.Ordinal);
+        Assert.Contains("Target=\"McpContentStack.Spacing\" Value=\"16\"", mcp, StringComparison.Ordinal);
         Assert.Contains("Target=\"McpContentStack.Spacing\" Value=\"28\"", mcp, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", mcp, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", mcp, StringComparison.Ordinal);
@@ -1491,6 +1493,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"SessionsDialogHeightStates\"", sessions, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"SessionsDialogRoot\"", sessions, StringComparison.Ordinal);
         Assert.Contains("MaxHeight=\"360\"", sessions, StringComparison.Ordinal);
+        Assert.Contains("Target=\"SessionsDialogRoot.MaxHeight\" Value=\"360\"", sessions, StringComparison.Ordinal);
         Assert.Contains("Target=\"SessionsDialogRoot.MaxHeight\" Value=\"560\"", sessions, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", sessions, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", sessions, StringComparison.Ordinal);
@@ -1498,6 +1501,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("x:Name=\"RemoteProjectSelectionHeightStates\"", remote, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"RemoteProjectSelectionRoot\"", remote, StringComparison.Ordinal);
         Assert.Contains("RemoteProjectSelectionDialogMaxHeight\">360<", remote, StringComparison.Ordinal);
+        Assert.Contains("Target=\"RemoteProjectSelectionRoot.MaxHeight\" Value=\"360\"", remote, StringComparison.Ordinal);
         Assert.Contains("Target=\"RemoteProjectSelectionRoot.MaxHeight\" Value=\"560\"", remote, StringComparison.Ordinal);
         Assert.Contains("MinWindowHeight=\"760\"", remote, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", remote, StringComparison.Ordinal);

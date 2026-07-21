@@ -29,7 +29,11 @@
              Comfortable restores 560 at MinWindowHeight=760. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="RemoteProjectSelectionHeightStates">
-                <VisualState x:Name="RemoteProjectSelectionHeightCompact" />
+                <VisualState x:Name="RemoteProjectSelectionHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="RemoteProjectSelectionRoot.MaxHeight" Value="360" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="RemoteProjectSelectionHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />

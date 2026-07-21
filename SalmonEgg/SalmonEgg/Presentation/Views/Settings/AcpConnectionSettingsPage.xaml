@@ -61,7 +61,11 @@
             <!-- Short windows: densify section stack spacing so ACP settings remain scannable
                  without oversized marketing gaps. Comfortable restores Spacing=28 at MinWindowHeight=760. -->
             <VisualStateGroup x:Name="AcpHeightStates">
-                <VisualState x:Name="AcpHeightCompact" />
+                <VisualState x:Name="AcpHeightCompact">
+                    <VisualState.Setters>
+                        <Setter Target="AcpContentStack.Spacing" Value="16" />
+                    </VisualState.Setters>
+                </VisualState>
                 <VisualState x:Name="AcpHeightComfortable">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowHeight="760" />
