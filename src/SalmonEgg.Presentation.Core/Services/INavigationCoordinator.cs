@@ -10,7 +10,7 @@ public interface INavigationCoordinator
 
     Task ActivateDiscoverSessionsAsync();
 
-    Task ActivateSettingsAsync(string settingsKey);
+    Task<bool> ActivateSettingsAsync(string settingsKey);
 
     Task<bool> ActivateSessionAsync(string sessionId, string? projectId);
 

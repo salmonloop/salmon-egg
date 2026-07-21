@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
 using Moq;
@@ -11,6 +12,7 @@ using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -1904,6 +1906,110 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+    [Fact]
+    public async Task SelectRemoteProjectCommand_WhenManageRequestedAndSettingsActivationFails_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.ShowRemoteProjectSelectionAsync(It.IsAny<RemoteProjectSelectionViewModel>()))
+                .ReturnsAsync(RemoteProjectSelectionResult.Manage);
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var navigationCoordinator = new ControllableNavigationCoordinator
+            {
+                SettingsActivationResult = false,
+            };
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                navigationCoordinatorOverride: navigationCoordinator);
+
+            await navVm.SelectRemoteProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(SettingsSectionCatalog.AgentAcpKey, navigationCoordinator.LastSettingsKey);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task SelectRemoteProjectCommand_WhenManageRequestedAndSettingsActivationThrows_SurfacesLocalizedInfo()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+
+            var shownMessages = new List<string>();
+            var ui = new Mock<IUiInteractionService>();
+            ui.SetupGet(service => service.CanPickFolder).Returns(true);
+            ui.Setup(service => service.ShowRemoteProjectSelectionAsync(It.IsAny<RemoteProjectSelectionViewModel>()))
+                .ReturnsAsync(RemoteProjectSelectionResult.Manage);
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>()))
+                .Callback<string>(shownMessages.Add)
+                .Returns(Task.CompletedTask);
+
+            var navigationCoordinator = new ControllableNavigationCoordinator
+            {
+                SettingsActivationException = new InvalidOperationException("settings shell unavailable"),
+            };
+
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = new FakeChatSessionCatalog();
+            var sessionManager = CreateSessionManager().Object;
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager,
+                preferences,
+                navState,
+                out _,
+                out _,
+                uiOverride: ui.Object,
+                localizerOverride: new TestCoreStringLocalizer(),
+                navigationCoordinatorOverride: navigationCoordinator);
+
+            await navVm.SelectRemoteProjectCommand.ExecuteAsync(null);
+
+            Assert.Equal(SettingsSectionCatalog.AgentAcpKey, navigationCoordinator.LastSettingsKey);
+            Assert.Equal(
+                ["Failed to open settings. Please try again later."],
+                shownMessages);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
     private static MainNavigationViewModel CreateNavigationViewModel(
         IConversationCatalog chatCatalog,
         ISessionManager sessionManager,
@@ -1930,11 +2036,12 @@ public sealed class MainNavigationViewModelSelectionTests
         IConversationCatalogDisplayReadModel? presenterOverride = null,
         IUiInteractionService? uiOverride = null,
         IStringLocalizer<CoreStrings>? localizerOverride = null,
-        IAppLanguageService? languageServiceOverride = null)
+        IAppLanguageService? languageServiceOverride = null,
+        INavigationCoordinator? navigationCoordinatorOverride = null)
     {
         var ui = new Mock<IUiInteractionService>();
         ui.SetupGet(service => service.CanPickFolder).Returns(true);
-        var navigationCoordinator = new StubNavigationCoordinator();
+        var navigationCoordinator = navigationCoordinatorOverride ?? new StubNavigationCoordinator();
         var navLogger = new Mock<ILogger<MainNavigationViewModel>>();
         var metricsSink = new Mock<IShellLayoutMetricsSink>();
         var presenter = presenterOverride ?? CreatePresenter(chatCatalog);
@@ -2305,13 +2412,47 @@ public sealed class MainNavigationViewModelSelectionTests
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
+    private sealed class ControllableNavigationCoordinator : INavigationCoordinator
+    {
+        public bool SettingsActivationResult { get; set; } = true;
+
+        public Exception? SettingsActivationException { get; set; }
+
+        public string? LastSettingsKey { get; private set; }
+
+        public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
+
+        public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
+
+        public Task<bool> ActivateSettingsAsync(string settingsKey)
+        {
+            LastSettingsKey = settingsKey;
+            if (SettingsActivationException is not null)
+            {
+                throw SettingsActivationException;
+            }
+
+            return Task.FromResult(SettingsActivationResult);
+        }
+
+        public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
+
+        public Task<DiscoverRemoteSessionOpenResult> ActivateDiscoveredRemoteSessionAsync(
+            DiscoverRemoteSessionOpenRequest request)
+            => Task.FromResult(new DiscoverRemoteSessionOpenResult(false, null, null));
+
+        public void SyncSelectionFromShellContent(ShellNavigationContent content)
+        {
+        }
+    }
+
     private sealed class StubNavigationCoordinator : INavigationCoordinator
     {
         public Task<bool> ActivateStartAsync(string? projectIdForNewSession = null) => Task.FromResult(true);
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 

@@ -446,11 +446,11 @@ public sealed class ChatLaunchWorkflowTests
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey)
+        public Task<bool> ActivateSettingsAsync(string settingsKey)
         {
             ActivateSettingsCount++;
             LastSettingsKey = settingsKey;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)

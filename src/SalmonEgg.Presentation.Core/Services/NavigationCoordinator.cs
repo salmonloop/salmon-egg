@@ -146,7 +146,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
-    public async Task ActivateSettingsAsync(string settingsKey)
+    public async Task<bool> ActivateSettingsAsync(string settingsKey)
     {
         var activationToken = BeginActivation(ShellNavigationContent.Settings);
         var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey)
@@ -167,7 +167,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                     normalizedSettingsKey,
                     activationToken,
                     ActivationFaultReasons.SettingsNavigationFailed);
-                return;
+                return false;
             }
 
             if (IsLatestActivationToken(activationToken))
@@ -175,7 +175,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                 ClearPendingSessionPreviewState(activationToken);
                 _runtimeState.CurrentShellContent = ShellNavigationContent.Settings;
                 _selectionSink.SetSelection(NavigationSelectionState.SettingsSelection);
-                return;
+                return true;
             }
 
             _logger.LogInformation(
@@ -199,6 +199,8 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         {
             ClearPendingShellContent(activationToken);
         }
+
+        return false;
     }
 
     public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)

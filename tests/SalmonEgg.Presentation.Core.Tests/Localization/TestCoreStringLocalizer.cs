@@ -298,6 +298,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["SessionActivation_FailedGeneric"] = "Failed to open this session. Please try again.",
         ["SessionActivation_ConversationSelectionFailed"] = "Failed to open this session. Please try again.",
         ["SessionActivation_ChatShellNavigationFailed"] = "Failed to open the chat view for this session. Please try again.",
+        ["Navigation_OpenSettingsFailed"] = "Failed to open settings. Please try again later.",
         ["DataStorage_ClearAllLocalDataSuccess"] = "All local data cleared.",
         ["DataStorage_ClearAllLocalDataFailed"] = "Failed to clear all local data. Please try again later.",
         ["Nav_ArchiveSessionTitle"] = "Archive session",

@@ -1356,7 +1356,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
         {
@@ -1397,7 +1397,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => _activation();
 
@@ -1429,7 +1429,7 @@ public sealed class DiscoverSessionsViewModelTests
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId)
         {

@@ -601,13 +601,28 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     {
         try
         {
-            await _navigationCoordinator
+            var opened = await _navigationCoordinator
                 .ActivateSettingsAsync(SettingsSectionCatalog.AgentAcpKey)
+                .ConfigureAwait(true);
+            if (opened)
+            {
+                return;
+            }
+
+            await _ui.ShowInfoAsync(
+                    Localize(
+                        "Navigation_OpenSettingsFailed",
+                        "Failed to open settings. Please try again later."))
                 .ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Navigating to remote project settings failed");
+            await _ui.ShowInfoAsync(
+                    Localize(
+                        "Navigation_OpenSettingsFailed",
+                        "Failed to open settings. Please try again later."))
+                .ConfigureAwait(true);
         }
     }
 

@@ -137,7 +137,7 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
         using var viewModel = new GlobalSearchViewModel(
@@ -167,7 +167,7 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
         using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
@@ -195,7 +195,7 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
         using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,
@@ -226,7 +226,7 @@ public sealed class GlobalSearchViewModelTests
         var presenter = new ConversationCatalogPresenter();
         var navigationCoordinator = new Mock<INavigationCoordinator>();
         navigationCoordinator.Setup(coordinator => coordinator.ActivateSettingsAsync(It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
         using var navigationViewModel = CreateNavigationViewModel(preferences, presenter);
         using var viewModel = new GlobalSearchViewModel(
             navigationViewModel,

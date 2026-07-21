@@ -2089,7 +2089,7 @@ public sealed class NavigationCoordinatorTests
 
         public Task ActivateDiscoverSessionsAsync() => Task.CompletedTask;
 
-        public Task ActivateSettingsAsync(string settingsKey) => Task.CompletedTask;
+        public Task<bool> ActivateSettingsAsync(string settingsKey) => Task.FromResult(true);
 
         public Task<bool> ActivateSessionAsync(string sessionId, string? projectId) => Task.FromResult(false);
 
