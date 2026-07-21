@@ -90,6 +90,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatAuth_Required"] = "The agent requires authentication before it can respond.",
         ["ChatAuth_FailedWithDetail"] = "Authentication failed: {0}",
         ["ChatPrompt_CancelFailed"] = "Cancellation failed.",
+        ["VoiceDiagnostics_SignalMonitoringFailed"] = "Signal monitoring failed.",
         ["SearchCommand_NewSessionTitle"] = "New session",
         ["SearchCommand_NewSessionSubtitle"] = "Create a new chat session",
         ["SearchCommand_NewProjectTitle"] = "New project",

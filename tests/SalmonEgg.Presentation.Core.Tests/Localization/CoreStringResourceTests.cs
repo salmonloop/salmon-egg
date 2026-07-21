@@ -119,6 +119,7 @@ public sealed class CoreStringResourceTests
     [InlineData("ChatAuth_Required")]
     [InlineData("ChatAuth_FailedWithDetail")]
     [InlineData("ChatPrompt_CancelFailed")]
+    [InlineData("VoiceDiagnostics_SignalMonitoringFailed")]
     [InlineData("AgentProfileEditor_ValidationFailedFormat")]
     [InlineData("AgentProfileEditor_SaveFailedFormat")]
     [InlineData("AcpProfiles_RefreshFailed")]

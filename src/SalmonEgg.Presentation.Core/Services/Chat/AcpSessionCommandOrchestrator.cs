@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Mcp;
@@ -59,14 +61,17 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 {
     private readonly IAcpMcpServerResolver _mcpServerResolver;
     private readonly ILogger<AcpSessionCommandOrchestrator> _logger;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
 
     public AcpSessionCommandOrchestrator(
         ILogger<AcpSessionCommandOrchestrator> logger,
-        IAcpMcpServerResolver mcpServerResolver)
+        IAcpMcpServerResolver mcpServerResolver,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
         _mcpServerResolver = mcpServerResolver ?? throw new ArgumentNullException(nameof(mcpServerResolver));
+        _localizer = localizer;
     }
 
     public async Task<AcpRemoteSessionResult> EnsureRemoteSessionAsync(
@@ -115,7 +120,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.",
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage(),
                     ex);
             }
 
@@ -191,7 +196,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.");
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage());
             }
         }
 
@@ -267,7 +272,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
             if (!authenticated)
             {
                 throw new InvalidOperationException(
-                    sink.AuthenticationHintMessage ?? "The agent requires authentication before it can respond.",
+                    sink.AuthenticationHintMessage ?? ResolveAuthenticationRequiredMessage(),
                     ex);
             }
 
@@ -362,4 +367,18 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         return chatService;
     }
 
+
+    private string ResolveAuthenticationRequiredMessage()
+    {
+        const string fallback = "The agent requires authentication before it can respond.";
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer["ChatAuth_Required"];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
 }

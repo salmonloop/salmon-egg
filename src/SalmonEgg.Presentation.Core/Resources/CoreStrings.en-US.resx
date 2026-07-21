@@ -1043,4 +1043,7 @@ Create the corresponding Markdown file in:
   <data name="ChatPrompt_CancelFailed" xml:space="preserve">
     <value>Cancellation failed.</value>
   </data>
+  <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
+    <value>Signal monitoring failed.</value>
+  </data>
 </root>

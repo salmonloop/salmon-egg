@@ -370,7 +370,8 @@ public static class DependencyInjection
         services.AddSingleton<IAcpSessionCommandOrchestrator>(sp =>
             new AcpSessionCommandOrchestrator(
                 sp.GetRequiredService<ILogger<AcpSessionCommandOrchestrator>>(),
-                sp.GetRequiredService<IAcpMcpServerResolver>()));
+                sp.GetRequiredService<IAcpMcpServerResolver>(),
+                sp.GetService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
             new SettingsAcpMcpServerProvider(sp.GetRequiredService<IMcpSettingsService>()));
         services.AddSingleton<IAcpMcpServerResolver>(sp =>

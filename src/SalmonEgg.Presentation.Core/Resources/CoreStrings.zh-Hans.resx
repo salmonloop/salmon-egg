@@ -1049,4 +1049,7 @@
   <data name="ChatPrompt_CancelFailed" xml:space="preserve">
     <value>取消失败。</value>
   </data>
+  <data name="VoiceDiagnostics_SignalMonitoringFailed" xml:space="preserve">
+    <value>信号监测失败。</value>
+  </data>
 </root>
