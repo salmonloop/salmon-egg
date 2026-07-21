@@ -3270,6 +3270,30 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void HeroSuggestionCard_AdaptsWidthByWindowWidth()
+    {
+        var cardXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\HeroSuggestionCard.xaml");
+        var startXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
+
+        Assert.Contains("x:Name=\"HeroCardWidthStates\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CardWidthNarrow\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"CardWidthWide\"", cardXaml, StringComparison.Ordinal);
+        // Same breakpoint as StartView panel swap so width density and orientation stay in lockstep.
+        Assert.Contains("MinWindowWidth=\"1060\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("MinWindowWidth=\"1060\"", startXaml, StringComparison.Ordinal);
+        // Sticky VSM: both states set MinWidth + MaxWidth so AdaptiveTrigger retreat resets.
+        Assert.Contains("Target=\"HeroSuggestionButton.MinWidth\" Value=\"0\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroSuggestionButton.MaxWidth\" Value=\"980\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroSuggestionButton.MinWidth\" Value=\"216\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"HeroSuggestionButton.MaxWidth\" Value=\"216\"", cardXaml, StringComparison.Ordinal);
+        // Style defaults match the narrow/short path; never hard-code a 216 min in markup default.
+        Assert.Contains("Property=\"MinWidth\" Value=\"0\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"MaxWidth\" Value=\"980\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"HorizontalAlignment\" Value=\"Stretch\"", cardXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("RequestedTheme=", cardXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StartView_SecondaryTextUsesThemeBrushWithoutStackedOpacity()
     {
         var document = XDocument.Parse(LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml"));

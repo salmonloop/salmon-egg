@@ -38,8 +38,10 @@
             <VisualStateGroup x:Name="HeroSuggestionLayoutStates">
                 <!-- Narrow (default): cards stack vertically so they never overflow at any
                      window width or nav-pane state. Wide: single centered row when the window
-                     is wide enough to fit three cards even with the pane expanded
-                     (3 * (216 MinWidth + 14 margin) + edges + 300 open pane + page padding). -->
+                     is wide enough for three equal 216px tiles even with the pane expanded
+                     (3 * (216 tile + horizontal margin) + edges + ~300 open pane + padding).
+                     HeroSuggestionCard width VSM uses the same MinWindowWidth so stacked cards
+                     drop hard MinWidth and stretch/shrink with the host instead of overflowing. -->
                 <VisualState x:Name="Narrow">
                     <VisualState.Setters>
                         <Setter Target="HeroSuggestionsHost.ItemsPanel" Value="{StaticResource HeroSuggestionPanelVertical}" />
