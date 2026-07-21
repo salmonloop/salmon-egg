@@ -33,6 +33,9 @@
   <data name="Nav_ShowSessionsListFailed" xml:space="preserve">
     <value>Failed to open the sessions list. Please try again later.</value>
   </data>
+  <data name="Start_SessionLaunchFailed" xml:space="preserve">
+    <value>Failed to start the session. Please try again.</value>
+  </data>
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>Unclassified</value>
   </data>

@@ -56,7 +56,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         _catalogFacade = catalogFacade;
     }
 
-    public async Task StartSessionAndSendAsync(
+    public async Task<ChatLaunchCompletion> StartSessionAndSendAsync(
         ChatLaunchRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -65,7 +65,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         var normalizedPrompt = (request.PromptText ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedPrompt))
         {
-            return;
+            return ChatLaunchCompletion.Incomplete;
         }
 
         var sessionId = Guid.NewGuid().ToString("N");
@@ -94,7 +94,7 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
         if (!activated)
         {
             _logger.LogWarning("Start workflow stopped: navigation activation failed (SessionId={SessionId})", sessionId);
-            return;
+            return ChatLaunchCompletion.Failed;
         }
 
         var connectionOutcome = await _chat.EnsureConnectedForLaunchAsync(cancellationToken).ConfigureAwait(true);
@@ -105,23 +105,22 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
 
             case ChatLaunchConnectionOutcome.InProgress:
                 _logger.LogInformation("Start workflow paused: connection is still in progress.");
-                return;
+                return ChatLaunchCompletion.Incomplete;
 
             case ChatLaunchConnectionOutcome.RequiresConfiguration:
                 await _navigationCoordinator.ActivateSettingsAsync(SettingsSectionCatalog.GeneralKey).ConfigureAwait(true);
                 _chat.ShowTransportConfigPanel = true;
-                return;
+                return ChatLaunchCompletion.Incomplete;
 
             default:
-                return;
+                return ChatLaunchCompletion.Failed;
         }
 
         _chat.PrepareDraftForLaunch(normalizedPrompt);
         await _chat.PromoteNewSessionDraftForLaunchAsync(cancellationToken).ConfigureAwait(true);
-        if (_chat.TrySendPromptForLaunch())
-        {
-            return;
-        }
+        return _chat.TrySendPromptForLaunch()
+            ? ChatLaunchCompletion.PromptDispatched
+            : ChatLaunchCompletion.Failed;
     }
 }
 

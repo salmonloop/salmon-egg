@@ -47,7 +47,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest("project-1"), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest("project-1"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.PromptDispatched, completion);
 
         sessionManager.Verify(s => s.CreateSessionAsync(It.IsAny<string>(), @"C:\repo\demo"), Times.Once);
         Assert.Equal(1, navigation.ActivateSessionCount);
@@ -80,7 +82,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Failed, completion);
 
         Assert.Equal(1, navigation.ActivateSessionCount);
         Assert.Equal(0, chat.AutoConnectCallCount);
@@ -117,7 +121,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(0, navigation.ActivateSettingsCount);
@@ -154,7 +160,9 @@ public sealed class ChatLaunchWorkflowTests
             navigation,
             logger.Object);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Incomplete, completion);
 
         Assert.Equal(1, chat.AutoConnectCallCount);
         Assert.Equal(1, navigation.ActivateSettingsCount);
@@ -201,7 +209,9 @@ public sealed class ChatLaunchWorkflowTests
             logger.Object,
             catalogFacade);
 
-        await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+        var completion = await workflow.StartSessionAndSendAsync(CreateRequest(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.PromptDispatched, completion);
 
         Assert.Single(workspace.GetKnownConversationIds());
         Assert.Equal(1, workspace.ConversationListVersion);

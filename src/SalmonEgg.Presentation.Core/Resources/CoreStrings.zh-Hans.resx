@@ -27,6 +27,9 @@
   <data name="Nav_ShowSessionsListFailed" xml:space="preserve">
     <value>无法打开会话列表，请稍后重试。</value>
   </data>
+  <data name="Start_SessionLaunchFailed" xml:space="preserve">
+    <value>无法启动会话，请稍后重试。</value>
+  </data>
   <data name="Nav_Unclassified" xml:space="preserve">
     <value>未归类</value>
   </data>

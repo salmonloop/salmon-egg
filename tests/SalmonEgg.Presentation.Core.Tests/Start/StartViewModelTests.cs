@@ -86,6 +86,9 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow
+                .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -129,7 +132,7 @@ public sealed class StartViewModelTests
             workflow
                 .Setup(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()))
                 .Callback<ChatLaunchRequest, CancellationToken>((request, _) => capturedRequest = request)
-                .Returns(Task.CompletedTask);
+                .ReturnsAsync(ChatLaunchCompletion.PromptDispatched);
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
@@ -2696,7 +2699,7 @@ public sealed class StartViewModelTests
             var preferences = CreatePreferences();
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
             var workflowStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var workflowCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var workflowCompletion = new TaskCompletionSource<ChatLaunchCompletion>(TaskCreationOptions.RunContinuationsAsynchronously);
             var workflow = new Mock<IChatLaunchWorkflow>();
             workflow.Setup(w => w.StartSessionAndSendAsync(
                     It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
@@ -2718,7 +2721,7 @@ public sealed class StartViewModelTests
             Assert.True(startViewModel.IsStarting);
             Assert.False(startViewModel.StartSessionAndSendCommand.CanExecute(null));
 
-            workflowCompletion.TrySetResult(null);
+            workflowCompletion.TrySetResult(ChatLaunchCompletion.PromptDispatched);
             await executeTask;
 
             Assert.False(startViewModel.IsStarting);
@@ -2750,7 +2753,13 @@ public sealed class StartViewModelTests
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
             var loggerMock = new Mock<ILogger<StartViewModel>>();
-            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object, loggerMock.Object);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                loggerMock.Object,
+                localizer: new TestCoreStringLocalizer());
             await MakeStartDraftReadyAsync(chat, startViewModel);
             startViewModel.StartPrompt = "launch";
 
@@ -2767,6 +2776,87 @@ public sealed class StartViewModelTests
 
             Assert.False(startViewModel.IsStarting);
             Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("Failed to start the session. Please try again.", startViewModel.StartSessionDraftErrorMessage);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_WhenWorkflowFails_PreservesDraftAndSurfacesError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Failed);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+            startViewModel.StartPrompt = "launch";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.True(startViewModel.HasStartSessionDraftError);
+            Assert.Equal("Failed to start the session. Please try again.", startViewModel.StartSessionDraftErrorMessage);
+            Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task StartSessionAndSendAsync_WhenWorkflowIncomplete_PreservesDraftWithoutError()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            workflow.Setup(w => w.StartSessionAndSendAsync(
+                    It.Is<ChatLaunchRequest>(request => request.PromptText == "launch"),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ChatLaunchCompletion.Incomplete);
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: new TestCoreStringLocalizer());
+            await MakeStartDraftReadyAsync(chat, startViewModel);
+            startViewModel.StartPrompt = "launch";
+
+            await startViewModel.StartSessionAndSendCommand.ExecuteAsync(null);
+
+            Assert.False(startViewModel.IsStarting);
+            Assert.Equal("launch", startViewModel.StartPrompt);
+            Assert.False(startViewModel.HasStartSessionDraftError);
             Assert.True(startViewModel.StartSessionAndSendCommand.CanExecute(null));
         }
         finally

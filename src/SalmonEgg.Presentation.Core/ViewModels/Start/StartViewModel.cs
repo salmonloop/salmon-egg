@@ -57,6 +57,8 @@ public sealed partial class StartViewModel : ObservableObject
     private bool _isNewSessionDraftRefreshPending;
     private bool _isComposerLoaded;
 
+    private string? _startLaunchFailureMessage;
+
     public ChatViewModel Chat { get; }
 
     internal Task ComposerUnloadCleanupTask => _composerUnloadCleanupTask;
@@ -92,6 +94,7 @@ public sealed partial class StartViewModel : ObservableObject
             }
 
             Chat.CurrentPrompt = next;
+            ClearStartLaunchFailure();
             RefreshStartPromptProjection(next);
         }
     }
@@ -496,34 +499,83 @@ public sealed partial class StartViewModel : ObservableObject
             return;
         }
 
+        ClearStartLaunchFailure();
         IsStarting = true;
         StartSessionAndSendCommand.NotifyCanExecuteChanged();
-        var submitSucceeded = false;
+        var promptDispatched = false;
         try
         {
-            await _chatLaunchWorkflow
+            var completion = await _chatLaunchWorkflow
                 .StartSessionAndSendAsync(
                     new ChatLaunchRequest(
                         promptText,
                         NormalizeProjectSelectionValue(SelectedStartProjectId),
                         ResolveDefaultCwd()))
                 .ConfigureAwait(true);
-            submitSucceeded = true;
+            switch (completion)
+            {
+                case ChatLaunchCompletion.PromptDispatched:
+                    promptDispatched = true;
+                    break;
+
+                case ChatLaunchCompletion.Failed:
+                    SetStartLaunchFailure(
+                        Localize(
+                            "Start_SessionLaunchFailed",
+                            "Failed to start the session. Please try again."));
+                    break;
+
+                case ChatLaunchCompletion.Incomplete:
+                default:
+                    // Intentional pause (connection in progress / needs configuration).
+                    // Keep the draft so the user can continue without retyping.
+                    break;
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Start session failed");
+            SetStartLaunchFailure(
+                Localize(
+                    "Start_SessionLaunchFailed",
+                    "Failed to start the session. Please try again."));
         }
         finally
         {
-            if (submitSucceeded)
+            if (promptDispatched)
             {
+                ClearStartLaunchFailure();
                 StartPrompt = string.Empty;
             }
 
             IsStarting = false;
             StartSessionAndSendCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private void SetStartLaunchFailure(string message)
+    {
+        var normalized = string.IsNullOrWhiteSpace(message) ? null : message.Trim();
+        if (string.Equals(_startLaunchFailureMessage, normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = normalized;
+        OnPropertyChanged(nameof(HasStartSessionDraftError));
+        OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
+    }
+
+    private void ClearStartLaunchFailure()
+    {
+        if (_startLaunchFailureMessage is null)
+        {
+            return;
+        }
+
+        _startLaunchFailureMessage = null;
+        OnPropertyChanged(nameof(HasStartSessionDraftError));
+        OnPropertyChanged(nameof(StartSessionDraftErrorMessage));
     }
 
     private void RefreshStartPromptProjection(string value)
@@ -936,6 +988,11 @@ public sealed partial class StartViewModel : ObservableObject
 
     private string ResolveStartSessionDraftErrorMessage()
     {
+        if (!string.IsNullOrWhiteSpace(_startLaunchFailureMessage))
+        {
+            return _startLaunchFailureMessage!;
+        }
+
         if (IsExpectedRemoteDirectorySelectionState())
         {
             return string.Empty;

@@ -307,6 +307,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Nav_ArchiveSessionFailed"] = "Failed to archive the session. Please try again later.",
         ["Nav_CopySessionIdFailed"] = "Failed to copy the session ID. Please try again later.",
         ["Nav_ShowSessionsListFailed"] = "Failed to open the sessions list. Please try again later.",
+        ["Start_SessionLaunchFailed"] = "Failed to start the session. Please try again.",
         ["Common_Cancel"] = "Cancel",
         ["AddProject_RemoteProjectMissing"] = "That remote project no longer exists.",
         ["Discover_ErrorConnectionNotInitialized"] = "The ACP connection has not finished initializing.",
