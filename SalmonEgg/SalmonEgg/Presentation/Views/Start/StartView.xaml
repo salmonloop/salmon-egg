@@ -73,6 +73,8 @@
                         <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
                         <Setter Target="HeroChromeHost.Spacing" Value="4" />
                         <Setter Target="HeroContentStack.Spacing" Value="10" />
+                        <Setter Target="ComposerHost.RowSpacing" Value="4" />
+                        <Setter Target="StartDraftErrorInfoBar.Margin" Value="12,0,12,0" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="HeightComfortable">
@@ -89,6 +91,8 @@
                         <Setter Target="HeroLayer.VerticalAlignment" Value="Top" />
                         <Setter Target="HeroChromeHost.Spacing" Value="12" />
                         <Setter Target="HeroContentStack.Spacing" Value="28" />
+                        <Setter Target="ComposerHost.RowSpacing" Value="8" />
+                        <Setter Target="StartDraftErrorInfoBar.Margin" Value="24,0,24,0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -159,15 +163,17 @@
             </Grid>
         </ScrollViewer>
 
-        <Grid Grid.Row="1"
-              RowSpacing="8">
+        <Grid x:Name="ComposerHost"
+              Grid.Row="1"
+              RowSpacing="4">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <InfoBar Grid.Row="0"
-                     Margin="24,0,24,0"
+            <InfoBar x:Name="StartDraftErrorInfoBar"
+                     Grid.Row="0"
+                     Margin="12,0,12,0"
                      Severity="Error"
                      IsOpen="{x:Bind ViewModel.HasStartSessionDraftError, Mode=OneWay}"
                      Message="{x:Bind ViewModel.StartSessionDraftErrorMessage, Mode=OneWay}" />

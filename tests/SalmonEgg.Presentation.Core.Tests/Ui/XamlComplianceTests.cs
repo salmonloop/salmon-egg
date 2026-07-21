@@ -1336,7 +1336,8 @@ public sealed class XamlComplianceTests
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml");
 
-        Assert.Contains("<InfoBar Grid.Row=\"0\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"StartDraftErrorInfoBar\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Grid.Row=\"0\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsOpen=\"{x:Bind ViewModel.HasStartSessionDraftError, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Message=\"{x:Bind ViewModel.StartSessionDraftErrorMessage, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Margin=\"24,0,24,112\"", xaml, StringComparison.Ordinal);
@@ -3205,6 +3206,9 @@ public sealed class XamlComplianceTests
         // Never Center inside HeroScrollViewer: overflow would clip the top of the stack.
         Assert.DoesNotContain("Target=\"HeroLayer.VerticalAlignment\" Value=\"Center\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Target=\"StartSubtitle.MaxLines\" Value=\"1\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"ComposerHost.RowSpacing\" Value=\"4\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartDraftErrorInfoBar.Margin\" Value=\"12,0,12,0\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Target=\"StartDraftErrorInfoBar.Margin\" Value=\"24,0,24,0\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextTrimming=\"CharacterEllipsis\"", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme=", xaml, StringComparison.Ordinal);
     }
