@@ -93,4 +93,48 @@ public static class GamepadHidMaestroProfileCatalog
             GamepadControllerFamily.Xbox => "Xbox",
             _ => "Unknown"
         };
+
+    /// <summary>
+    /// Ordered physical HMButton field-name candidates for an app face semantic.
+    /// Confirmed Sony profiles prefer PS glyph keys with Xbox-letter fallbacks;
+    /// Nintendo uses physical letter positions; Xbox and unconfirmed profiles use
+    /// Xbox-letter inject keys only (unconfirmed still reports family Unknown via
+    /// <see cref="FormatFamilyToken"/> so Diagnostics evidence is not claimed).
+    /// </summary>
+    public static IReadOnlyList<string> GetPhysicalButtonNameCandidates(
+        string? profileId,
+        GamepadFaceSemantic semantic)
+    {
+        return ResolveFamily(profileId) switch
+        {
+            GamepadControllerFamily.Nintendo => semantic switch
+            {
+                // Physical Switch Pro face: B bottom / A east / Y west / X north.
+                GamepadFaceSemantic.Activate => ["B"],
+                GamepadFaceSemantic.Back => ["A"],
+                GamepadFaceSemantic.West => ["Y"],
+                GamepadFaceSemantic.Voice => ["X"],
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            },
+            GamepadControllerFamily.Sony => semantic switch
+            {
+                // DualSense / DualShock: prefer PS glyph keys, fall back to A/B/X/Y
+                // when a HIDMaestro build only exposes Xbox-style field names.
+                GamepadFaceSemantic.Activate => ["Cross", "A"],
+                GamepadFaceSemantic.Back => ["Circle", "B"],
+                GamepadFaceSemantic.West => ["Square", "X"],
+                GamepadFaceSemantic.Voice => ["Triangle", "Y"],
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            },
+            // Xbox (confirmed) and Unknown inject fallback share A/B/X/Y field names.
+            _ => semantic switch
+            {
+                GamepadFaceSemantic.Activate => ["A"],
+                GamepadFaceSemantic.Back => ["B"],
+                GamepadFaceSemantic.West => ["X"],
+                GamepadFaceSemantic.Voice => ["Y"],
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            }
+        };
+    }
 }

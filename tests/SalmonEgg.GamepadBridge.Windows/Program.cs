@@ -268,20 +268,20 @@ internal sealed class HidMaestroBridge : IDisposable
             // App-semantic face presses: map physical face by confirmed HIDMaestro profile family.
             case "activate":
             case "activate-face":
-                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Activate));
+                SubmitState(buttonName: ResolveSemanticFaceButton(GamepadFaceSemantic.Activate));
                 break;
             case "back":
             case "back-face":
-                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Back));
+                SubmitState(buttonName: ResolveSemanticFaceButton(GamepadFaceSemantic.Back));
                 break;
             case "west":
             case "west-face":
-                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.West));
+                SubmitState(buttonName: ResolveSemanticFaceButton(GamepadFaceSemantic.West));
                 break;
             case "voice":
             case "voice-toggle":
             case "shortcut-voice":
-                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Voice));
+                SubmitState(buttonName: ResolveSemanticFaceButton(GamepadFaceSemantic.Voice));
                 break;
             case "lt":
             case "left-trigger":
@@ -305,68 +305,43 @@ internal sealed class HidMaestroBridge : IDisposable
         }
     }
 
-    private enum FaceSemantic
+    private string ResolveSemanticFaceButton(GamepadFaceSemantic semantic)
     {
-        Activate,
-        Back,
-        West,
-        Voice
-    }
-
-    private string ResolveSemanticFaceButton(FaceSemantic semantic)
-    {
-        // Profile family comes from Core catalog. Confirmed Sony/Nintendo ids map
-        // to physical face keys; confirmed Xbox and unconfirmed/Unknown profiles use
-        // Xbox-layout field keys only as a physical inject fallback (info still reports
-        // family=Unknown for unconfirmed ids so Diagnostics evidence is not claimed).
-        return GamepadHidMaestroProfileCatalog.ResolveFamily(_profileId) switch
-        {
-            // Nintendo physical face: B bottom / A east / Y west / X north.
-            GamepadControllerFamily.Nintendo => semantic switch
-            {
-                FaceSemantic.Activate => "B",
-                FaceSemantic.Back => "A",
-                FaceSemantic.West => "Y",
-                FaceSemantic.Voice => "X",
-                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
-            },
-            // DualSense / DualShock: prefer PS glyph HMButton names; fall back to A/B/X/Y
-            // when a HIDMaestro build only exposes Xbox-style field keys for the profile.
-            GamepadControllerFamily.Sony => semantic switch
-            {
-                FaceSemantic.Activate => ResolveButtonName("Cross", fallback: "A"),
-                FaceSemantic.Back => ResolveButtonName("Circle", fallback: "B"),
-                FaceSemantic.West => ResolveButtonName("Square", fallback: "X"),
-                FaceSemantic.Voice => ResolveButtonName("Triangle", fallback: "Y"),
-                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
-            },
-            // Xbox face (confirmed) or unknown profile inject fallback:
-            // A bottom / B east / X west / Y north.
-            _ => semantic switch
-            {
-                FaceSemantic.Activate => "A",
-                FaceSemantic.Back => "B",
-                FaceSemantic.West => "X",
-                FaceSemantic.Voice => "Y",
-                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
-            }
-        };
+        // Core owns family → ordered physical HMButton candidates. Bridge only picks
+        // the first name that exists on the installed HIDMaestro HMButton enum.
+        var candidates = GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(
+            _profileId,
+            semantic);
+        return ResolveButtonName(candidates);
     }
 
     private string ResolveButtonName(string preferred, string fallback)
+        => ResolveButtonName([preferred, fallback]);
+
+    private string ResolveButtonName(IReadOnlyList<string> candidates)
     {
-        if (Enum.TryParse(_hmButtonType, preferred, ignoreCase: true, out _))
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (candidates.Count == 0)
         {
-            return preferred;
+            throw new InvalidOperationException(
+                $"No physical button candidates for profile '{_profileId}'.");
         }
 
-        if (Enum.TryParse(_hmButtonType, fallback, ignoreCase: true, out _))
+        foreach (var candidate in candidates)
         {
-            return fallback;
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            if (Enum.TryParse(_hmButtonType, candidate, ignoreCase: true, out _))
+            {
+                return candidate;
+            }
         }
 
         throw new InvalidOperationException(
-            $"HIDMaestro HMButton does not define '{preferred}' or fallback '{fallback}' for profile '{_profileId}'.");
+            $"HIDMaestro HMButton does not define any of [{string.Join(", ", candidates)}] for profile '{_profileId}'.");
     }
 
     public void Dispose()
