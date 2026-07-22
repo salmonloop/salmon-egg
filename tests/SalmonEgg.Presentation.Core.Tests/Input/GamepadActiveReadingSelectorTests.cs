@@ -336,4 +336,43 @@ public sealed class GamepadActiveReadingSelectorTests
         Assert.Equal(1, selection.Reading.LeftTrigger);
         Assert.False(selection.Reading.Activate);
     }
+
+    [Fact]
+    public void TrySelectActiveReading_PrefersStandard_WhenStandardVoiceShortcutOnlyAndRawFaceBothActive()
+    {
+        // Dual-path: standard voice-shortcut-only is an active projection and must stay
+        // authoritative over concurrent raw face Activate (Xbox dual-enumeration hosts).
+        var gamepadReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: false,
+                Back: false,
+                ShortcutVoiceToggle: true)
+        };
+        var rawReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            gamepadReadings,
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
+        Assert.True(selection.Reading.ShortcutVoiceToggle);
+        Assert.False(selection.Reading.Activate);
+    }
+
 }
