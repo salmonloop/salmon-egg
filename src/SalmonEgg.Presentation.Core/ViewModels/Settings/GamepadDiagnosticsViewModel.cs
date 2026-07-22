@@ -331,8 +331,10 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
             var gamepad = gamepads[i];
             lines.Add(string.Format(
                 CultureInfo.InvariantCulture,
-                "#{0} layout {1}; labels {2}; pressed {3}",
+                "#{0} {1}{2}; layout {3}; labels {4}; pressed {5}",
                 i,
+                FormatStandardDisplayName(gamepad.DisplayName),
+                FormatOptionalHardwareIds(gamepad.HardwareVendorId, gamepad.HardwareProductId),
                 FormatFaceButtonLayout(gamepad.FaceButtonLayout),
                 FormatStringList(gamepad.ButtonLabels),
                 FormatStringList(gamepad.PressedButtons))
@@ -389,6 +391,25 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatStandardDisplayName(string? displayName)
+        => string.IsNullOrWhiteSpace(displayName) ? "Gamepad" : displayName;
+
+    private static string FormatOptionalHardwareIds(ushort? vendorId, ushort? productId)
+    {
+        if (vendorId is null && productId is null)
+        {
+            return string.Empty;
+        }
+
+        var vendor = vendorId is ushort vid
+            ? vid.ToString("X4", CultureInfo.InvariantCulture)
+            : "----";
+        var product = productId is ushort pid
+            ? pid.ToString("X4", CultureInfo.InvariantCulture)
+            : "----";
+        return string.Format(CultureInfo.InvariantCulture, " VID {0} PID {1}", vendor, product);
     }
 
     private string FormatFaceButtonLayout(RawGameControllerFaceButtonLayout layout)

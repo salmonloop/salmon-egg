@@ -56,6 +56,9 @@ internal static partial class WasmGamepadSnapshotReader
         foreach (var reading in readings)
         {
             diagnostics.Add(new StandardGamepadDiagnostics(
+                DisplayName: string.Empty,
+                HardwareVendorId: null,
+                HardwareProductId: null,
                 FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
                 ButtonLabels: [],
                 PressedButtons: [],

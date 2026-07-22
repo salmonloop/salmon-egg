@@ -38,6 +38,26 @@ public static class RawGameControllerFaceButtonLayoutResolver
     }
 
     public static RawGameControllerFaceButtonLayout Resolve(
+        string? displayName,
+        ushort? hardwareVendorId,
+        StandardGamepadFaceButtonLabels labels)
+    {
+        if (hardwareVendorId is ushort vendorId)
+        {
+            if (Resolve(displayName, vendorId) == RawGameControllerFaceButtonLayout.Nintendo)
+            {
+                return RawGameControllerFaceButtonLayout.Nintendo;
+            }
+        }
+        else if (Resolve(displayName, hardwareVendorId: 0) == RawGameControllerFaceButtonLayout.Nintendo)
+        {
+            return RawGameControllerFaceButtonLayout.Nintendo;
+        }
+
+        return Resolve(labels);
+    }
+
+    public static RawGameControllerFaceButtonLayout Resolve(
         RawGameControllerFaceButtonLayout identityLayout,
         IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels)
     {

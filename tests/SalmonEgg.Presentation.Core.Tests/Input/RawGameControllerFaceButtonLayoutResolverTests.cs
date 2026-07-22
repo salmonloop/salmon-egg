@@ -83,4 +83,55 @@ public sealed class RawGameControllerFaceButtonLayoutResolverTests
 
         Assert.Equal(RawGameControllerFaceButtonLayout.Nintendo, layout);
     }
+
+    [Fact]
+    public void Resolve_WithIdentityAndLabels_PrefersNintendoIdentityEvenWithoutLetterLabels()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.None,
+            B: RawGameControllerButtonLabel.None,
+            X: RawGameControllerButtonLabel.None,
+            Y: RawGameControllerButtonLabel.None);
+
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            "Nintendo Switch Pro Controller",
+            0x057E,
+            labels);
+
+        Assert.Equal(RawGameControllerFaceButtonLayout.Nintendo, layout);
+    }
+
+    [Fact]
+    public void Resolve_WithIdentityAndLabels_UsesLetterLabelsWhenIdentityIsNonNintendo()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.LetterB,
+            B: RawGameControllerButtonLabel.LetterA,
+            X: RawGameControllerButtonLabel.LetterY,
+            Y: RawGameControllerButtonLabel.LetterX);
+
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            "Wireless Controller",
+            0x054C,
+            labels);
+
+        Assert.Equal(RawGameControllerFaceButtonLayout.Nintendo, layout);
+    }
+
+    [Fact]
+    public void Resolve_WithIdentityAndLabels_UsesStandardWhenNeitherIdentityNorLettersIndicateNintendo()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.Cross,
+            B: RawGameControllerButtonLabel.Circle,
+            X: RawGameControllerButtonLabel.Square,
+            Y: RawGameControllerButtonLabel.Triangle);
+
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            "Wireless Controller",
+            0x054C,
+            labels);
+
+        Assert.Equal(RawGameControllerFaceButtonLayout.Standard, layout);
+    }
 }

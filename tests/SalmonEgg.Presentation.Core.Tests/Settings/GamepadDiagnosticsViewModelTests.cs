@@ -191,6 +191,9 @@ public sealed class GamepadDiagnosticsViewModelTests
             StandardGamepads:
             [
                 new StandardGamepadDiagnostics(
+                    DisplayName: "Xbox Wireless Controller",
+                    HardwareVendorId: 0x045E,
+                    HardwareProductId: 0x0B13,
                     FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
                     ButtonLabels: ["A:XboxA", "B:XboxB", "X:XboxX", "Y:XboxY"],
                     PressedButtons: ["A", "Y"],
@@ -208,6 +211,49 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Contains("labels A:XboxA, B:XboxB, X:XboxX, Y:XboxY", viewModel.StandardGamepadsText);
         Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
         Assert.Contains("semantic Activate, ToggleVoiceInput", viewModel.StandardGamepadsText);
+    }
+
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_WhenStandardNintendoIdentityPresent_ProjectsNintendoLayoutAndIds()
+    {
+        var reading = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: true,
+            Back: false);
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 1,
+            ConnectedRawControllerCount: 0,
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
+            Reading: reading,
+            ActiveIntents: [GamepadNavigationIntent.Activate],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [],
+            StandardGamepads:
+            [
+                new StandardGamepadDiagnostics(
+                    DisplayName: "Nintendo Switch Pro Controller",
+                    HardwareVendorId: 0x057E,
+                    HardwareProductId: 0x2009,
+                    FaceButtonLayout: RawGameControllerFaceButtonLayout.Nintendo,
+                    ButtonLabels: ["A:LetterB", "B:LetterA", "X:LetterY", "Y:LetterX"],
+                    PressedButtons: ["A"],
+                    Reading: reading)
+            ],
+            RawControllers: []));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Contains("Nintendo Switch Pro Controller", viewModel.StandardGamepadsText);
+        Assert.Contains("VID 057E PID 2009", viewModel.StandardGamepadsText);
+        Assert.Contains("layout Nintendo", viewModel.StandardGamepadsText);
+        Assert.Contains("labels A:LetterB, B:LetterA, X:LetterY, Y:LetterX", viewModel.StandardGamepadsText);
+        Assert.Contains("semantic Activate", viewModel.StandardGamepadsText);
     }
 
     [Fact]
