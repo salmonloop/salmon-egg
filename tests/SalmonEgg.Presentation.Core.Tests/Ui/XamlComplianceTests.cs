@@ -2959,6 +2959,18 @@ public sealed class XamlComplianceTests
         Assert.Contains("HoldThenAutoRelease(\"voice\")", nativeInput, StringComparison.Ordinal);
         Assert.DoesNotContain("PressActivate() => HoldThenAutoRelease(\"a\")", nativeInput, StringComparison.Ordinal);
         Assert.DoesNotContain("PressBack() => HoldThenAutoRelease(\"b\")", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("Equals(command, \"info\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("ResolveFamilyToken", bridge, StringComparison.Ordinal);
+        Assert.Contains("ok profile=", bridge, StringComparison.Ordinal);
+        Assert.Contains("family=", bridge, StringComparison.Ordinal);
+        Assert.Contains("SendCommand(\"info\")", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("ActiveFamily", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("ParseBridgeInfo", nativeInput, StringComparison.Ordinal);
+
+        var diagnosticsSmoke = LoadText(@"tests\SalmonEgg.GuiTests.Windows\DiagnosticsSettingsSmokeTests.cs");
+        Assert.Contains("nativeGamepad.ActiveFamily", diagnosticsSmoke, StringComparison.Ordinal);
+        Assert.Contains("familyToken", diagnosticsSmoke, StringComparison.Ordinal);
+        Assert.Contains("var familyToken = \"family \" + expectedFamily", diagnosticsSmoke, StringComparison.Ordinal);
     }
 
     [Fact]

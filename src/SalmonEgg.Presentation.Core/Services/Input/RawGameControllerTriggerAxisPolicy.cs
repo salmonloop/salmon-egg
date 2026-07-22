@@ -15,8 +15,10 @@ public static class RawGameControllerTriggerAxisPolicy
     public const int MinimumAxisCountForAnalogTriggers = 6;
 
     public static bool SupportsAnalogTriggerAxes(string? displayName, ushort hardwareVendorId)
-        => GamepadControllerIdentity.IsXbox(displayName, hardwareVendorId)
-            || GamepadControllerIdentity.IsSony(displayName, hardwareVendorId);
+    {
+        var family = GamepadControllerIdentity.ResolveFamily(displayName, hardwareVendorId);
+        return family is GamepadControllerFamily.Xbox or GamepadControllerFamily.Sony;
+    }
 
     public static GamepadInputReading Apply(
         IReadOnlyList<double> axes,
