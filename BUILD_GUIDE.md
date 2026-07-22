@@ -281,7 +281,7 @@ On Linux aarch64/x64 hosts without physical pads or a Windows MSIX environment, 
 
 That gate covers:
 
-- Core unit classes for HIDMaestro catalog family tokens (confirmed ids only; unconfirmed non-blank ids resolve to `Unknown`, not Xbox), controller identity, dual-path active reading and path-tracker transitions, browser brand semantics, standard-path Sony/Nintendo identity contracts, raw unlabeled face / analog LT-RT policy, and the multi-brand adaptation pipeline;
+- Core unit classes for HIDMaestro catalog family tokens (confirmed ids only; unconfirmed non-blank ids resolve to `Unknown`, not Xbox), controller identity, dual-path active reading (including standard voice-shortcut-only winning over concurrent raw face) and path-tracker transitions, navigation/shortcut/context intent processors, browser brand semantics, standard-path Sony/Nintendo identity contracts, raw unlabeled face / analog LT-RT policy, multiprofile manifest alignment, and the multi-brand adaptation pipeline;
 - BrowserWasm multi-brand inject via Playwright (`wasm-gamepad-boundary-smoke.mjs`) against the current `net10.0-browserwasm` build.
 
 It does **not** claim Skia Desktop shell input as gamepad evidence: Desktop DI registers `NoOpGamepadInputService` / `NoOpGamepadDiagnosticsService`, so Xvfb/XTest window probes are shell smoke only.

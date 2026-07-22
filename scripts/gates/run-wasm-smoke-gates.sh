@@ -135,6 +135,25 @@ echo "[gate] Restore browserwasm dependencies"
 echo "[gate] Build browserwasm app"
 "${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
 
+# Stage Debug HotReload browser module when build leaves it only under obj/.
+HOTRELOAD_MODULE_NAME="Microsoft.DotNet.HotReload.WebAssembly.Browser.lib.module.js"
+HOTRELOAD_CANDIDATES=(
+  "${REPO_ROOT}/SalmonEgg/SalmonEgg/obj/${CONFIGURATION}/net10.0-browserwasm/hotreload/${HOTRELOAD_MODULE_NAME}"
+  "${DOTNET_ROOT}/sdk/10.0.302/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0/${HOTRELOAD_MODULE_NAME}"
+)
+HOTRELOAD_SRC=""
+for candidate in "${HOTRELOAD_CANDIDATES[@]}"; do
+  if [ -f "${candidate}" ]; then
+    HOTRELOAD_SRC="${candidate}"
+    break
+  fi
+done
+if [ -n "${HOTRELOAD_SRC}" ]; then
+  mkdir -p "${WWWROOT}/_framework"
+  cp -f "${HOTRELOAD_SRC}" "${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+  echo "[gate] Staged HotReload browser module -> ${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+fi
+
 if [ ! -f "${WWWROOT}/index.html" ]; then
   echo "browserwasm wwwroot was not produced: ${WWWROOT}" >&2
   exit 1

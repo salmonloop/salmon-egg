@@ -243,6 +243,7 @@ export async function openApp(page, baseUrl) {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
   // StartView.Title is a gradient TextBlock; on BrowserWasm it may not project
   // AutomationId into aria-label. Prefer any stable Start shell marker instead.
+  // Cold Mono/Uno first paint on aarch64 Debug can exceed 60s after framework download.
   await page.waitForSelector(
     [
       '[aria-label="StartView.Title"]',
@@ -251,7 +252,7 @@ export async function openApp(page, baseUrl) {
       '[aria-label="StartView.AgentSelector"]',
       '[aria-label="MainNavView"]'
     ].join(", "),
-    { timeout: 60_000 });
+    { timeout: 180_000 });
 }
 
 export async function clearBrowserOriginStorage(browser, targetUrl) {

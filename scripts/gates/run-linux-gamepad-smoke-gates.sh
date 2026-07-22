@@ -91,6 +91,9 @@ echo "[linux-gamepad] Core multi-brand unit matrix"
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerAxisNormalizerTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerButtonLabelMapperTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadAdaptationPipelineTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadIntentProcessorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadShortcutProcessorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadContextIntentProcessorTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Settings.GamepadDiagnosticsViewModelTests" \
   --timeout 3m \
   --output Normal
@@ -103,6 +106,29 @@ echo "[linux-gamepad] Restore browserwasm dependencies"
 
 echo "[linux-gamepad] Build browserwasm app for gamepad inject smoke"
 "${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
+
+# Debug browserwasm configs reference HotReload JS modules that are produced under
+# obj/.../hotreload but are not always copied into wwwroot/_framework by publish-less
+# `dotnet build`. Stage the known module so first-paint is not blocked on 404 retries.
+HOTRELOAD_MODULE_NAME="Microsoft.DotNet.HotReload.WebAssembly.Browser.lib.module.js"
+HOTRELOAD_CANDIDATES=(
+  "${REPO_ROOT}/SalmonEgg/SalmonEgg/obj/${CONFIGURATION}/net10.0-browserwasm/hotreload/${HOTRELOAD_MODULE_NAME}"
+  "${DOTNET_ROOT}/sdk/10.0.302/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0/${HOTRELOAD_MODULE_NAME}"
+)
+HOTRELOAD_SRC=""
+for candidate in "${HOTRELOAD_CANDIDATES[@]}"; do
+  if [ -f "${candidate}" ]; then
+    HOTRELOAD_SRC="${candidate}"
+    break
+  fi
+done
+if [ -n "${HOTRELOAD_SRC}" ]; then
+  mkdir -p "${WWWROOT}/_framework"
+  cp -f "${HOTRELOAD_SRC}" "${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+  echo "[linux-gamepad] Staged HotReload browser module -> ${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
+else
+  echo "[linux-gamepad] WARNING: HotReload browser module not found; Debug WASM first-paint may hang on 404." >&2
+fi
 
 if [ ! -f "${WWWROOT}/index.html" ]; then
   echo "browserwasm wwwroot was not produced: ${WWWROOT}" >&2
@@ -151,7 +177,7 @@ run_playwright_smoke \
 
 echo "[linux-gamepad] PASS"
 echo "[linux-gamepad] Covered on Linux:"
-echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector/path tracker, mapper matrix (incl. Sony standard-path), Diagnostics VM projection"
+echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector/path tracker (incl. standard voice-shortcut-only over raw face), intent/shortcut/context processors, mapper matrix (incl. Sony standard-path), Diagnostics VM projection"
 echo "  - BrowserWasm Playwright inject for Xbox/DualSense/Switch Pro ids + standard-position intents + Diagnostics ActiveInputs"
 echo "[linux-gamepad] Not covered here (need Windows host):"
 echo "  - HIDMaestro multi-profile OS-path runner: scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1"
