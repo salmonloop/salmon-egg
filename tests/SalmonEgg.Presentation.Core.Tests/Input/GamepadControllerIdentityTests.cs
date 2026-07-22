@@ -133,5 +133,75 @@ public sealed class GamepadControllerIdentityTests
         Assert.Equal(expected, GamepadControllerIdentity.ResolveFamily(displayName, vendorId));
         Assert.Equal(expected, GamepadControllerIdentity.ResolveFamily(displayName, (ushort?)vendorId));
     }
+
+    [Fact]
+    public void ResolveFamily_PrefersIdentityOverFaceButtonLabels()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.Cross,
+            B: RawGameControllerButtonLabel.Circle,
+            X: RawGameControllerButtonLabel.Square,
+            Y: RawGameControllerButtonLabel.Triangle);
+
+        // Xbox VID must win even if face labels look Sony (host remapping edge cases).
+        Assert.Equal(
+            GamepadControllerFamily.Xbox,
+            GamepadControllerIdentity.ResolveFamily(
+                displayName: "Xbox Wireless Controller",
+                hardwareVendorId: 0x045E,
+                faceButtonLabels: labels));
+    }
+
+    [Theory]
+    [InlineData(RawGameControllerButtonLabel.Cross, RawGameControllerButtonLabel.Circle, GamepadControllerFamily.Sony)]
+    [InlineData(RawGameControllerButtonLabel.LetterB, RawGameControllerButtonLabel.LetterA, GamepadControllerFamily.Nintendo)]
+    [InlineData(RawGameControllerButtonLabel.XboxA, RawGameControllerButtonLabel.XboxB, GamepadControllerFamily.Xbox)]
+    public void ResolveFamilyFromLabels_InfersFamilyFromHomogeneousFaceGlyphs(
+        RawGameControllerButtonLabel first,
+        RawGameControllerButtonLabel second,
+        GamepadControllerFamily expected)
+    {
+        Assert.Equal(
+            expected,
+            GamepadControllerIdentity.ResolveFamilyFromLabels(first, second));
+    }
+
+    [Fact]
+    public void ResolveFamilyFromLabels_WithMixedGlyphFamilies_ReturnsUnknown()
+    {
+        Assert.Equal(
+            GamepadControllerFamily.Unknown,
+            GamepadControllerIdentity.ResolveFamilyFromLabels(
+                RawGameControllerButtonLabel.Cross,
+                RawGameControllerButtonLabel.LetterB));
+    }
+
+    [Fact]
+    public void ResolveFamily_WhenIdentityMissing_UsesFaceButtonLabels()
+    {
+        var sonyLabels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.Cross,
+            B: RawGameControllerButtonLabel.Circle,
+            X: RawGameControllerButtonLabel.Square,
+            Y: RawGameControllerButtonLabel.Triangle);
+        var nintendoLabels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.LetterB,
+            B: RawGameControllerButtonLabel.LetterA,
+            X: RawGameControllerButtonLabel.LetterY,
+            Y: RawGameControllerButtonLabel.LetterX);
+
+        Assert.Equal(
+            GamepadControllerFamily.Sony,
+            GamepadControllerIdentity.ResolveFamily(
+                displayName: null,
+                hardwareVendorId: null,
+                faceButtonLabels: sonyLabels));
+        Assert.Equal(
+            GamepadControllerFamily.Nintendo,
+            GamepadControllerIdentity.ResolveFamily(
+                displayName: "Generic Pad",
+                hardwareVendorId: 0,
+                faceButtonLabels: nintendoLabels));
+    }
 }
 

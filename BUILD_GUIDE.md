@@ -290,7 +290,7 @@ Real-device gamepad validation must use the current MSIX install and the Diagnos
 - When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading` (`X`/`Y` thumbstick plus `LT`/`RT` unit values).
 - Confirm that standard-path face semantics follow physical labels (Xbox/PS glyphs or Nintendo `Letter*`), not a second brand-specific UI/shell path.
 - The raw-details line that includes `VID`, `PID`, `family` (`Xbox` / `Sony` / `Nintendo` / `Unknown`), `layout`, `unlabeled-index-fallback`, `pressed`, `semantic`, and `reading` (`X`/`Y` plus `LT`/`RT`) whenever raw controllers are present.
-- The standard-details line that includes display name, optional `VID`/`PID`, `family`, `layout`, `labels`, `pressed`, `semantic`, and `reading` whenever standard gamepads are present. `family` is diagnostics identity only and does not invent a second brand shell path.
+- The standard-details line that includes display name, optional `VID`/`PID`, `family`, `layout`, `labels`, `pressed`, `semantic`, and `reading` whenever standard gamepads are present. `family` is diagnostics identity only and does not invent a second brand shell path. When VID/name identity is missing, Diagnostics may infer `family` from homogeneous face-label tokens (`Cross`/`Circle`/`Square`/`Triangle`, `Letter*`, or `Xbox*`); mixed glyph families stay `Unknown`.
 - Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
 
 Minimum Windows validation matrix:

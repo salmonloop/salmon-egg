@@ -311,6 +311,91 @@ public sealed class GamepadDiagnosticsViewModelTests
     }
 
     [Fact]
+    public async Task RefreshSnapshotCommand_WhenStandardFaceLabelsOnly_ProjectsFamilyFromGlyphs()
+    {
+        // Windows may omit RawGameController.FromGameController identity while still
+        // reporting PS / Nintendo face glyphs on standard Gamepad slots.
+        var reading = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: true,
+            Back: false);
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 1,
+            ConnectedRawControllerCount: 0,
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
+            Reading: reading,
+            ActiveIntents: [GamepadNavigationIntent.Activate],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [],
+            StandardGamepads:
+            [
+                new StandardGamepadDiagnostics(
+                    DisplayName: string.Empty,
+                    HardwareVendorId: null,
+                    HardwareProductId: null,
+                    FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
+                    ButtonLabels: ["A:Cross", "B:Circle", "X:Square", "Y:Triangle"],
+                    PressedButtons: ["A"],
+                    Reading: reading)
+            ],
+            RawControllers: []));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Contains("family Sony", viewModel.StandardGamepadsText);
+        Assert.Contains("labels A:Cross, B:Circle, X:Square, Y:Triangle", viewModel.StandardGamepadsText);
+        Assert.Contains("semantic Activate", viewModel.StandardGamepadsText);
+    }
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_WhenRawPressedLetterLabelsOnly_ProjectsNintendoFamily()
+    {
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 0,
+            ConnectedRawControllerCount: 1,
+            InputSource: GamepadDiagnosticsInputSource.RawGameController,
+            Reading: default,
+            ActiveIntents: [GamepadNavigationIntent.Activate],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [],
+            StandardGamepads: [],
+            RawControllers:
+            [
+                new RawGameControllerDiagnostics(
+                    DisplayName: "HID-compliant game controller",
+                    HardwareVendorId: 0,
+                    HardwareProductId: 0,
+                    IsWireless: false,
+                    ButtonCount: 16,
+                    SwitchCount: 1,
+                    AxisCount: 4,
+                    UnlabeledIndexFallbackEnabled: false,
+                    PressedButtons: ["B0:LetterB"],
+                    ActiveSwitches: [],
+                    Axes: [],
+                    Reading: new GamepadInputReading(
+                        MoveUp: false,
+                        MoveDown: false,
+                        MoveLeft: false,
+                        MoveRight: false,
+                        Activate: true,
+                        Back: false))
+            ]));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Contains("family Nintendo", viewModel.RawControllersText);
+        Assert.Contains("B0:LetterB", viewModel.RawControllersText);
+    }
+
+    [Fact]
     public async Task RefreshSnapshotCommand_WhenUnsupported_DoesNotPollPlatformService()
     {
         var service = new FakeGamepadDiagnosticsService(GamepadDiagnosticsSnapshot.Unsupported);
