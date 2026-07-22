@@ -113,4 +113,25 @@ public sealed class GamepadControllerIdentityTests
         Assert.Equal(xbox, GamepadControllerIdentity.IsXbox(displayName, vendorId));
         Assert.Equal(sony, GamepadControllerIdentity.IsSony(displayName, vendorId));
     }
+
+    [Theory]
+    [InlineData("Xbox Wireless Controller", (ushort)0x045E, GamepadControllerFamily.Xbox)]
+    [InlineData("Generic Pad", (ushort)0x045E, GamepadControllerFamily.Xbox)]
+    [InlineData("DualSense Wireless Controller", (ushort)0x054C, GamepadControllerFamily.Sony)]
+    [InlineData("Wireless Controller", (ushort)0x054C, GamepadControllerFamily.Sony)]
+    [InlineData("PS5 Controller", (ushort)0x0000, GamepadControllerFamily.Sony)]
+    [InlineData("Pro Controller", (ushort)0x057E, GamepadControllerFamily.Nintendo)]
+    [InlineData("Nintendo Switch Pro Controller", (ushort)0x0000, GamepadControllerFamily.Nintendo)]
+    [InlineData("Joy-Con (L)", (ushort)0x057E, GamepadControllerFamily.Nintendo)]
+    [InlineData("Generic HID Device", (ushort)0x1234, GamepadControllerFamily.Unknown)]
+    [InlineData(null, (ushort)0x0000, GamepadControllerFamily.Unknown)]
+    public void ResolveFamily_ProjectsAuthoritativeFamilyToken(
+        string? displayName,
+        ushort vendorId,
+        GamepadControllerFamily expected)
+    {
+        Assert.Equal(expected, GamepadControllerIdentity.ResolveFamily(displayName, vendorId));
+        Assert.Equal(expected, GamepadControllerIdentity.ResolveFamily(displayName, (ushort?)vendorId));
+    }
 }
+

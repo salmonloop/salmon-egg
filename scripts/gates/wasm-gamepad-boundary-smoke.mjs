@@ -177,6 +177,7 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         name: "Xbox Wireless Controller",
         vid: "045E",
         pid: "0B13",
+        family: "Xbox",
         layoutPattern: /layout\s+(Standard|标准)/
       },
       {
@@ -185,6 +186,7 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         name: "DualSense Wireless Controller",
         vid: "054C",
         pid: "0CE6",
+        family: "Sony",
         layoutPattern: /layout\s+(Standard|标准)/
       },
       {
@@ -193,6 +195,7 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         name: "Pro Controller",
         vid: "057E",
         pid: "2009",
+        family: "Nintendo",
         layoutPattern: /layout\s+(Nintendo|任天堂)/
       },
       {
@@ -201,6 +204,7 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         name: "DualSense Wireless Controller",
         vid: "054C",
         pid: "0CE6",
+        family: "Sony",
         layoutPattern: /layout\s+(Standard|标准)/
       }
     ];
@@ -225,10 +229,10 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         /^1$/,
         `${brand.label} standard gamepad count`);
 
-      // Format: "#0 {name} VID {vid} PID {pid}; layout {layout}; ..."
-      // Identity is diagnostics/layout labeling only; face semantics stay position-based.
+      // Format: "#0 {name} VID {vid} PID {pid}; family {family}; layout {layout}; ..."
+      // Identity/family/layout are diagnostics labeling only; face semantics stay position-based.
       const detailsPattern = new RegExp(
-        `#0\\s+${escapeRegExp(brand.name)}\\s+VID\\s+${brand.vid}\\s+PID\\s+${brand.pid};\\s*${brand.layoutPattern.source}`,
+        `#0\\s+${escapeRegExp(brand.name)}\\s+VID\\s+${brand.vid}\\s+PID\\s+${brand.pid};\\s*family\\s+${escapeRegExp(brand.family)};\\s*${brand.layoutPattern.source}`,
         "i");
       await expectControlText(
         page,

@@ -74,6 +74,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("X 0.25, Y -0.50; LT 0.00, RT 0.00", viewModel.ThumbstickText);
         Assert.Contains("Wireless Controller", viewModel.RawControllersText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.RawControllersText);
+        Assert.Contains("family Sony", viewModel.RawControllersText);
         Assert.Contains("layout Standard", viewModel.RawControllersText);
         Assert.Contains("unlabeled-index-fallback on", viewModel.RawControllersText);
         Assert.Contains("B0:Cross", viewModel.RawControllersText);
@@ -123,6 +124,7 @@ public sealed class GamepadDiagnosticsViewModelTests
 
         await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
 
+        Assert.Contains("family Nintendo", viewModel.RawControllersText);
         Assert.Contains("layout Nintendo", viewModel.RawControllersText);
         Assert.Contains("semantic Activate", viewModel.RawControllersText);
     }
@@ -212,6 +214,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("1", viewModel.ConnectedGamepadsText);
         Assert.Equal("Gamepad", viewModel.InputSourceText);
         Assert.Equal("Activate, ToggleVoiceInput", viewModel.ActiveInputsText);
+        Assert.Contains("family Xbox", viewModel.StandardGamepadsText);
         Assert.Contains("layout Standard", viewModel.StandardGamepadsText);
         Assert.Contains("labels A:XboxA, B:XboxB, X:XboxX, Y:XboxY", viewModel.StandardGamepadsText);
         Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
@@ -257,6 +260,7 @@ public sealed class GamepadDiagnosticsViewModelTests
 
         Assert.Contains("DualSense Wireless Controller", viewModel.StandardGamepadsText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.StandardGamepadsText);
+        Assert.Contains("family Sony", viewModel.StandardGamepadsText);
         Assert.Contains("layout Standard", viewModel.StandardGamepadsText);
         Assert.Contains("labels A:Cross, B:Circle, X:Square, Y:Triangle", viewModel.StandardGamepadsText);
         Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
@@ -300,6 +304,7 @@ public sealed class GamepadDiagnosticsViewModelTests
 
         Assert.Contains("Nintendo Switch Pro Controller", viewModel.StandardGamepadsText);
         Assert.Contains("VID 057E PID 2009", viewModel.StandardGamepadsText);
+        Assert.Contains("family Nintendo", viewModel.StandardGamepadsText);
         Assert.Contains("layout Nintendo", viewModel.StandardGamepadsText);
         Assert.Contains("labels A:LetterB, B:LetterA, X:LetterY, Y:LetterX", viewModel.StandardGamepadsText);
         Assert.Contains("semantic Activate", viewModel.StandardGamepadsText);
