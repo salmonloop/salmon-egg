@@ -29,7 +29,9 @@ public static class RawGameControllerInputReadingMapper
         IReadOnlyList<GamepadDirectionalSwitchPosition> switches,
         IReadOnlyList<double> axes,
         RawGameControllerFaceButtonLayout faceButtonLayout = RawGameControllerFaceButtonLayout.Standard,
-        bool allowUnlabeledFaceIndexFallback = false)
+        bool allowUnlabeledFaceIndexFallback = false,
+        string? displayName = null,
+        ushort hardwareVendorId = 0)
     {
         ArgumentNullException.ThrowIfNull(pressedButtons);
         ArgumentNullException.ThrowIfNull(switches);
@@ -56,7 +58,11 @@ public static class RawGameControllerInputReadingMapper
 
             if (allowUnlabeledFaceIndexFallback && press.Index >= 0)
             {
-                reading = RawGameControllerUnlabeledFaceIndexPolicy.Apply(press.Index, reading);
+                reading = RawGameControllerUnlabeledFaceIndexPolicy.Apply(
+                    press.Index,
+                    reading,
+                    displayName,
+                    hardwareVendorId);
             }
         }
 

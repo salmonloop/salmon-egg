@@ -67,7 +67,9 @@ public sealed class WindowsRawGameControllerMapper
             switchPositions,
             axes,
             faceButtonLayout,
-            allowUnlabeledFaceIndexFallback);
+            allowUnlabeledFaceIndexFallback,
+            controller.DisplayName,
+            controller.HardwareVendorId);
     }
 }
 #endif
