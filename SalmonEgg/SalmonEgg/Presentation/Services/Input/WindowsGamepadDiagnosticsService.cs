@@ -90,8 +90,15 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
     {
         var reading = gamepad.GetCurrentReading();
         var labels = GetFaceButtonLabels(gamepad);
+        var identity = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
         return new StandardGamepadDiagnostics(
-            FaceButtonLayout: RawGameControllerFaceButtonLayoutResolver.Resolve(labels),
+            DisplayName: identity.DisplayName,
+            HardwareVendorId: identity.HardwareVendorId,
+            HardwareProductId: identity.HardwareProductId,
+            FaceButtonLayout: RawGameControllerFaceButtonLayoutResolver.Resolve(
+                identity.DisplayName,
+                identity.HardwareVendorId,
+                labels),
             ButtonLabels: GetButtonLabels(gamepad),
             PressedButtons: GetPressedButtons(reading.Buttons),
             Reading: GetInputReading(gamepad, reading, labels));

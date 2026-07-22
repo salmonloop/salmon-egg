@@ -4,6 +4,11 @@ using Windows.Gaming.Input;
 
 namespace SalmonEgg.Presentation.Services.Input;
 
+internal readonly record struct WindowsStandardGamepadIdentity(
+    string DisplayName,
+    ushort? HardwareVendorId,
+    ushort? HardwareProductId);
+
 internal static class WindowsGameControllerButtonLabelMapper
 {
     public static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
@@ -14,6 +19,25 @@ internal static class WindowsGameControllerButtonLabelMapper
             B: Map(gamepad.GetButtonLabel(GamepadButtons.B)),
             X: Map(gamepad.GetButtonLabel(GamepadButtons.X)),
             Y: Map(gamepad.GetButtonLabel(GamepadButtons.Y)));
+    }
+
+    public static WindowsStandardGamepadIdentity GetIdentity(Gamepad gamepad)
+    {
+        ArgumentNullException.ThrowIfNull(gamepad);
+
+        var raw = RawGameController.FromGameController(gamepad);
+        if (raw is null)
+        {
+            return new WindowsStandardGamepadIdentity(
+                DisplayName: string.Empty,
+                HardwareVendorId: null,
+                HardwareProductId: null);
+        }
+
+        return new WindowsStandardGamepadIdentity(
+            DisplayName: raw.DisplayName ?? string.Empty,
+            HardwareVendorId: raw.HardwareVendorId,
+            HardwareProductId: raw.HardwareProductId);
     }
 
     public static RawGameControllerButtonLabel Map(GameControllerButtonLabel label)
