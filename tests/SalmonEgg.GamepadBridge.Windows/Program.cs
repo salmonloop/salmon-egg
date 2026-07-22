@@ -51,6 +51,14 @@ while (true)
             continue;
         }
 
+        if (string.Equals(command, "info", StringComparison.OrdinalIgnoreCase))
+        {
+            // Machine-readable identity for multi-brand OS-path smoke (profile + family).
+            Console.WriteLine(
+                $"ok profile={bridge.ProfileId} family={HidMaestroBridge.ResolveFamilyToken(bridge.ProfileId)}");
+            continue;
+        }
+
         Console.WriteLine($"error unsupported-command {command}");
     }
     catch (Exception ex)
@@ -120,6 +128,8 @@ internal sealed class HidMaestroBridge : IDisposable
 
     private object? _controller;
     private object? _profile;
+
+    public string ProfileId => _profileId;
 
     public HidMaestroBridge(string hidMaestroCorePath, string profileId)
     {
@@ -313,6 +323,15 @@ internal sealed class HidMaestroBridge : IDisposable
     }
 
     // Confirmed catalog ids only (see BUILD_GUIDE). Do not invent profile ids here.
+    // Family tokens match Diagnostics invariant family strings (Xbox/Sony/Nintendo).
+    public static string ResolveFamilyToken(string profileId)
+        => ResolveProfileFaceFamily(profileId) switch
+        {
+            ProfileFaceFamily.Sony => "Sony",
+            ProfileFaceFamily.Nintendo => "Nintendo",
+            _ => "Xbox"
+        };
+
     private static ProfileFaceFamily ResolveProfileFaceFamily(string profileId)
     {
         if (string.Equals(profileId, "switch-pro", StringComparison.OrdinalIgnoreCase))
