@@ -231,6 +231,8 @@ internal sealed class HidMaestroBridge : IDisposable
             case "dpad-right":
                 SubmitState(hatName: "East");
                 break;
+            // Physical HMButton names (profile field keys). Prefer semantic commands below
+            // for multi-brand OS-path smoke so Activate/Back/west/Voice track app intent.
             case "a":
                 SubmitState(buttonName: "A");
                 break;
@@ -242,6 +244,36 @@ internal sealed class HidMaestroBridge : IDisposable
                 break;
             case "y":
                 SubmitState(buttonName: "Y");
+                break;
+            case "cross":
+                SubmitState(buttonName: ResolveButtonName("Cross", fallback: "A"));
+                break;
+            case "circle":
+                SubmitState(buttonName: ResolveButtonName("Circle", fallback: "B"));
+                break;
+            case "square":
+                SubmitState(buttonName: ResolveButtonName("Square", fallback: "X"));
+                break;
+            case "triangle":
+                SubmitState(buttonName: ResolveButtonName("Triangle", fallback: "Y"));
+                break;
+            // App-semantic face presses: map physical face by confirmed HIDMaestro profile family.
+            case "activate":
+            case "activate-face":
+                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Activate));
+                break;
+            case "back":
+            case "back-face":
+                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Back));
+                break;
+            case "west":
+            case "west-face":
+                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.West));
+                break;
+            case "voice":
+            case "voice-toggle":
+            case "shortcut-voice":
+                SubmitState(buttonName: ResolveSemanticFaceButton(FaceSemantic.Voice));
                 break;
             case "lt":
             case "left-trigger":
@@ -263,6 +295,91 @@ internal sealed class HidMaestroBridge : IDisposable
             default:
                 throw new InvalidOperationException($"Unsupported gamepad input '{input}'.");
         }
+    }
+
+    private enum FaceSemantic
+    {
+        Activate,
+        Back,
+        West,
+        Voice
+    }
+
+    private enum ProfileFaceFamily
+    {
+        Xbox,
+        Sony,
+        Nintendo
+    }
+
+    // Confirmed catalog ids only (see BUILD_GUIDE). Do not invent profile ids here.
+    private static ProfileFaceFamily ResolveProfileFaceFamily(string profileId)
+    {
+        if (string.Equals(profileId, "switch-pro", StringComparison.OrdinalIgnoreCase))
+        {
+            return ProfileFaceFamily.Nintendo;
+        }
+
+        if (string.Equals(profileId, "dualsense", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profileId, "dualsense-bt", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profileId, "dualshock-4-v2", StringComparison.OrdinalIgnoreCase))
+        {
+            return ProfileFaceFamily.Sony;
+        }
+
+        // xbox-360-wired, xbox-series-xs, and any future confirmed Xbox catalog id.
+        return ProfileFaceFamily.Xbox;
+    }
+
+    private string ResolveSemanticFaceButton(FaceSemantic semantic)
+    {
+        return ResolveProfileFaceFamily(_profileId) switch
+        {
+            // Nintendo physical face: B bottom / A east / Y west / X north.
+            ProfileFaceFamily.Nintendo => semantic switch
+            {
+                FaceSemantic.Activate => "B",
+                FaceSemantic.Back => "A",
+                FaceSemantic.West => "Y",
+                FaceSemantic.Voice => "X",
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            },
+            // DualSense / DualShock: prefer PS glyph HMButton names; fall back to A/B/X/Y
+            // when a HIDMaestro build only exposes Xbox-style field keys for the profile.
+            ProfileFaceFamily.Sony => semantic switch
+            {
+                FaceSemantic.Activate => ResolveButtonName("Cross", fallback: "A"),
+                FaceSemantic.Back => ResolveButtonName("Circle", fallback: "B"),
+                FaceSemantic.West => ResolveButtonName("Square", fallback: "X"),
+                FaceSemantic.Voice => ResolveButtonName("Triangle", fallback: "Y"),
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            },
+            // Xbox face: A bottom / B east / X west / Y north.
+            _ => semantic switch
+            {
+                FaceSemantic.Activate => "A",
+                FaceSemantic.Back => "B",
+                FaceSemantic.West => "X",
+                FaceSemantic.Voice => "Y",
+                _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
+            }
+        };
+    }
+
+    private string ResolveButtonName(string preferred, string fallback)
+    {
+        if (Enum.TryParse(_hmButtonType, preferred, ignoreCase: true, out _))
+        {
+            return preferred;
+        }
+
+        if (Enum.TryParse(_hmButtonType, fallback, ignoreCase: true, out _))
+        {
+            return fallback;
+        }
+
+        throw new InvalidOperationException(
+            $"HIDMaestro HMButton does not define '{preferred}' or fallback '{fallback}' for profile '{_profileId}'.");
     }
 
     public void Dispose()
