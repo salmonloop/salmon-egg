@@ -2920,6 +2920,14 @@ public sealed class XamlComplianceTests
         Assert.Contains("case \"y\":", bridge, StringComparison.Ordinal);
         Assert.Contains("SubmitState(buttonName: \"Y\")", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"release\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"lt\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"left-trigger\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"rt\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"right-trigger\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("leftTrigger: 1f", bridge, StringComparison.Ordinal);
+        Assert.Contains("rightTrigger: 1f", bridge, StringComparison.Ordinal);
+        Assert.Contains("Enum.Parse(_hmAxisType, \"Z\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("Enum.Parse(_hmAxisType, \"Rz\"", bridge, StringComparison.Ordinal);
         Assert.Contains("Sticky press", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("_getProfileMethod.Invoke(_context, [DefaultProfileId])", bridge, StringComparison.Ordinal);
     }

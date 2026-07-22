@@ -138,6 +138,23 @@ public sealed class DiagnosticsSettingsSmokeTests
             $"Native-device west face button did not clear Activate or projected an unexpected semantic."
             + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Analog triggers on the Xbox 360 HID profile project to PageUp / PageDown
+        // context intents (left >= 0.5 -> PageUp, right >= 0.5 -> PageDown).
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressLeftTrigger,
+            activeInputs,
+            expectedFragment: "PageUp",
+            label: "PageUp (LT)",
+            appData);
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressRightTrigger,
+            activeInputs,
+            expectedFragment: "PageDown",
+            label: "PageDown (RT)",
+            appData);
     }
 
     private static void AssertActiveInputAfterPress(
