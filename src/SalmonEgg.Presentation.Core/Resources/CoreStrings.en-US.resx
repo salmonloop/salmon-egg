@@ -542,6 +542,15 @@ Create the corresponding Markdown file in:
   <data name="GamepadDiagnostics_ConnectionWireless" xml:space="preserve">
     <value>wireless</value>
   </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="GamepadDiagnostics_FaceButtonLayoutNintendo" xml:space="preserve">
+    <value>Nintendo</value>
+  </data>
+  <data name="GamepadDiagnostics_StandardGamepadsNone" xml:space="preserve">
+    <value>No standard gamepads detected.</value>
+  </data>
   <data name="VoiceDiagnostics_PendingRefresh" xml:space="preserve">
     <value>Waiting for refresh</value>
   </data>

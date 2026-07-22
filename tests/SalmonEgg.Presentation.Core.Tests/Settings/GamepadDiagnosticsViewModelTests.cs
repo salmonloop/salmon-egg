@@ -38,6 +38,8 @@ public sealed class GamepadDiagnosticsViewModelTests
             {
                 GamepadContextIntent.PageDown
             },
+            ActiveShortcuts: [],
+            StandardGamepads: [],
             RawControllers:
             [
                 new RawGameControllerDiagnostics(
@@ -50,7 +52,15 @@ public sealed class GamepadDiagnosticsViewModelTests
                     AxisCount: 6,
                     PressedButtons: ["B0:Cross"],
                     ActiveSwitches: ["S0:Down"],
-                    Axes: [0.5, 1.0])
+                    Axes: [0.5, 1.0],
+                    Reading: new GamepadInputReading(
+                        MoveUp: false,
+                        MoveDown: true,
+                        MoveLeft: false,
+                        MoveRight: false,
+                        Activate: true,
+                        Back: false,
+                        RightTrigger: 1))
             ]));
         var viewModel = CreateViewModel(service, supportsGamepadInput: true);
 
@@ -63,9 +73,139 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("X 0.25, Y -0.50", viewModel.ThumbstickText);
         Assert.Contains("Wireless Controller", viewModel.RawControllersText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.RawControllersText);
+        Assert.Contains("layout Standard", viewModel.RawControllersText);
         Assert.Contains("B0:Cross", viewModel.RawControllersText);
         Assert.Contains("S0:Down", viewModel.RawControllersText);
         Assert.Contains("A1:1.00", viewModel.RawControllersText);
+        Assert.Contains("semantic MoveDown, Activate, PageDown", viewModel.RawControllersText);
+        Assert.Equal("No standard gamepads detected.", viewModel.StandardGamepadsText);
+    }
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_WhenNintendoRawController_ProjectsNintendoLayoutInDetails()
+    {
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 0,
+            ConnectedRawControllerCount: 1,
+            InputSource: GamepadDiagnosticsInputSource.RawGameController,
+            Reading: default,
+            ActiveIntents: [],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [],
+            StandardGamepads: [],
+            RawControllers:
+            [
+                new RawGameControllerDiagnostics(
+                    DisplayName: "Nintendo Switch Pro Controller",
+                    HardwareVendorId: 0x057E,
+                    HardwareProductId: 0x2009,
+                    IsWireless: true,
+                    ButtonCount: 16,
+                    SwitchCount: 1,
+                    AxisCount: 6,
+                    PressedButtons: ["B0:LetterB"],
+                    ActiveSwitches: [],
+                    Axes: [0, 0],
+                    Reading: new GamepadInputReading(
+                        MoveUp: false,
+                        MoveDown: false,
+                        MoveLeft: false,
+                        MoveRight: false,
+                        Activate: true,
+                        Back: false))
+            ]));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Contains("layout Nintendo", viewModel.RawControllersText);
+        Assert.Contains("semantic Activate", viewModel.RawControllersText);
+    }
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_WhenShortcutActive_ProjectsShortcutDiagnostics()
+    {
+        var shortcutReading = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: false,
+            Back: false,
+            ShortcutVoiceToggle: true);
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 0,
+            ConnectedRawControllerCount: 1,
+            InputSource: GamepadDiagnosticsInputSource.RawGameController,
+            Reading: shortcutReading,
+            ActiveIntents: [],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [GamepadShortcutIntent.ToggleVoiceInput],
+            StandardGamepads: [],
+            RawControllers:
+            [
+                new RawGameControllerDiagnostics(
+                    DisplayName: "Nintendo Switch Pro Controller",
+                    HardwareVendorId: 0x057E,
+                    HardwareProductId: 0x2009,
+                    IsWireless: true,
+                    ButtonCount: 16,
+                    SwitchCount: 1,
+                    AxisCount: 6,
+                    PressedButtons: ["B2:LetterX"],
+                    ActiveSwitches: [],
+                    Axes: [0, 0],
+                    Reading: shortcutReading)
+            ]));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Equal("ToggleVoiceInput", viewModel.ActiveInputsText);
+        Assert.Contains("semantic ToggleVoiceInput", viewModel.RawControllersText);
+    }
+
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_WhenStandardGamepadPresent_ProjectsLabelsAndSemantics()
+    {
+        var reading = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: true,
+            Back: false,
+            ShortcutVoiceToggle: true);
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 1,
+            ConnectedRawControllerCount: 0,
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
+            Reading: reading,
+            ActiveIntents: [GamepadNavigationIntent.Activate],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [GamepadShortcutIntent.ToggleVoiceInput],
+            StandardGamepads:
+            [
+                new StandardGamepadDiagnostics(
+                    ButtonLabels: ["A:XboxA", "B:XboxB", "X:XboxX", "Y:XboxY"],
+                    PressedButtons: ["A", "Y"],
+                    Reading: reading)
+            ],
+            RawControllers: []));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Equal("1", viewModel.ConnectedGamepadsText);
+        Assert.Equal("Gamepad", viewModel.InputSourceText);
+        Assert.Equal("Activate, ToggleVoiceInput", viewModel.ActiveInputsText);
+        Assert.Contains("labels A:XboxA, B:XboxB, X:XboxX, Y:XboxY", viewModel.StandardGamepadsText);
+        Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
+        Assert.Contains("semantic Activate, ToggleVoiceInput", viewModel.StandardGamepadsText);
     }
 
     [Fact]
@@ -79,6 +219,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         viewModel.InputSourceText = "RawGameController";
         viewModel.ActiveInputsText = "MoveDown";
         viewModel.RawControllersText = "Wireless Controller";
+        viewModel.StandardGamepadsText = "stale";
 
         await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
 
@@ -89,6 +230,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal(localizer["GamepadDiagnostics_InputSourceNone"], viewModel.InputSourceText);
         Assert.Equal(localizer["GamepadDiagnostics_ActiveInputsNone"], viewModel.ActiveInputsText);
         Assert.Equal(localizer["GamepadDiagnostics_RawControllersNone"], viewModel.RawControllersText);
+        Assert.Equal(localizer["GamepadDiagnostics_StandardGamepadsNone"], viewModel.StandardGamepadsText);
         Assert.False(viewModel.CanStartMonitoring);
     }
 
@@ -119,6 +261,8 @@ public sealed class GamepadDiagnosticsViewModelTests
             Reading: default,
             ActiveIntents: [],
             ActiveContextIntents: [],
+            ActiveShortcuts: [],
+            StandardGamepads: [],
             RawControllers: []));
         var viewModel = CreateViewModel(service, supportsGamepadInput: true);
 

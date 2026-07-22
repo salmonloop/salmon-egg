@@ -38,7 +38,30 @@ internal static partial class WasmGamepadSnapshotReader
             Reading: reading,
             ActiveIntents: GamepadIntentProcessor.GetActiveIntents(reading),
             ActiveContextIntents: GamepadContextIntentProjector.GetActiveIntents(reading),
+            ActiveShortcuts: GamepadShortcutIntentProjector.GetActiveShortcuts(reading),
+            StandardGamepads: CreateStandardGamepadDiagnostics(readings),
             RawControllers: []);
+    }
+
+
+    private static IReadOnlyList<StandardGamepadDiagnostics> CreateStandardGamepadDiagnostics(
+        IReadOnlyList<GamepadInputReading> readings)
+    {
+        if (readings.Count == 0)
+        {
+            return [];
+        }
+
+        var diagnostics = new List<StandardGamepadDiagnostics>(readings.Count);
+        foreach (var reading in readings)
+        {
+            diagnostics.Add(new StandardGamepadDiagnostics(
+                ButtonLabels: [],
+                PressedButtons: [],
+                Reading: reading));
+        }
+
+        return diagnostics;
     }
 
     public static IReadOnlyList<GamepadInputReading> ReadInputReadings()

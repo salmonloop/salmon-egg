@@ -10,4 +10,5 @@ public sealed record RawGameControllerDiagnostics(
     int AxisCount,
     IReadOnlyList<string> PressedButtons,
     IReadOnlyList<string> ActiveSwitches,
-    IReadOnlyList<double> Axes);
+    IReadOnlyList<double> Axes,
+    GamepadInputReading Reading);

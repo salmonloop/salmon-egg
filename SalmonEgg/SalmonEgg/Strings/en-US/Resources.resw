@@ -411,7 +411,10 @@
   <data name="Diagnostics_GamepadThumbstickLabel.Text" xml:space="preserve">
     <value>Left thumbstick:</value>
   </data>
-  <data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
+    <data name="Diagnostics_GamepadStandardDetailsLabel.Text" xml:space="preserve">
+    <value>Standard details:</value>
+  </data>
+<data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
     <value>Raw details:</value>
   </data>
   <data name="Diagnostics_GamepadStart.Content" xml:space="preserve">

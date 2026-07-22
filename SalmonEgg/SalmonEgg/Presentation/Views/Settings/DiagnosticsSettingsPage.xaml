@@ -582,6 +582,24 @@
 
                                     <controls:ResponsiveFormRow>
                                         <controls:ResponsiveFormRow.Label>
+                                            <TextBlock x:Uid="Diagnostics_GamepadStandardDetailsLabel"
+                                                       Style="{StaticResource SettingsRowTitleTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                        </controls:ResponsiveFormRow.Label>
+                                        <controls:ResponsiveFormRow.Value>
+                                            <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.StandardGamepadsText, Mode=OneWay}"
+                                                       AutomationProperties.AutomationId="Diagnostics.GamepadStandardDetails"
+                                                       Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                       TextWrapping="WrapWholeWords"/>
+                                        </controls:ResponsiveFormRow.Value>
+                                    </controls:ResponsiveFormRow>
+
+                                    <Border Height="1"
+                                            Margin="16,0"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                    <controls:ResponsiveFormRow>
+                                        <controls:ResponsiveFormRow.Label>
                                             <TextBlock x:Uid="Diagnostics_GamepadRawDetailsLabel"
                                                        Style="{StaticResource SettingsRowTitleTextStyle}"
                                                        VerticalAlignment="Center"/>

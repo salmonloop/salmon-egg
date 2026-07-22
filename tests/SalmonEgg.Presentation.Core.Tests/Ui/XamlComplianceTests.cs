@@ -1964,6 +1964,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("ViewModel.GamepadDiagnostics.InputSourceText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.GamepadDiagnostics.ActiveInputsText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.GamepadDiagnostics.ThumbstickText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ViewModel.GamepadDiagnostics.StandardGamepadsText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.GamepadDiagnostics.RawControllersText", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.GamepadDiagnostics.StartMonitoringCommand", xaml, StringComparison.Ordinal);
         Assert.Contains("ViewModel.GamepadDiagnostics.StopMonitoringCommand", xaml, StringComparison.Ordinal);
@@ -2142,6 +2143,7 @@ public sealed class XamlComplianceTests
             "Diagnostics_GamepadInputSourceLabel.Text",
             "Diagnostics_GamepadActiveInputsLabel.Text",
             "Diagnostics_GamepadThumbstickLabel.Text",
+            "Diagnostics_GamepadStandardDetailsLabel.Text",
             "Diagnostics_GamepadRawDetailsLabel.Text",
             "Diagnostics_GamepadStart.Content",
             "Diagnostics_GamepadStop.Content",
@@ -2856,6 +2858,9 @@ public sealed class XamlComplianceTests
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsRawGameControllerMapper.cs");
 
         Assert.Contains("RawGameControllerInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", code, StringComparison.Ordinal);
+        Assert.Contains("controller.DisplayName", code, StringComparison.Ordinal);
+        Assert.Contains("controller.HardwareVendorId", code, StringComparison.Ordinal);
         Assert.Contains("MapButtonLabel(controller.GetButtonLabel(i))", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RawGameControllerAxisNormalizer", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadDirectionalSwitchMapper.Apply", code, StringComparison.Ordinal);
@@ -2871,10 +2876,32 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
 
-        Assert.Contains("foreach (var gamepad in", code);
-        Assert.Contains("foreach (var controller in", code);
+        Assert.Contains("foreach (var diagnostics in standardGamepads)", code, StringComparison.Ordinal);
+        Assert.Contains("foreach (var diagnostics in rawControllers)", code, StringComparison.Ordinal);
+        Assert.Contains("CreateStandardGamepadDiagnostics", code, StringComparison.Ordinal);
+        Assert.Contains("gamepad.GetButtonLabel(button)", code, StringComparison.Ordinal);
+        Assert.Contains("controller.GetCurrentReading(buttons, switches, axes)", code, StringComparison.Ordinal);
+        Assert.Contains("_rawMapper.GetInputReading(controller, buttons, switches, axes)", code, StringComparison.Ordinal);
+        Assert.Contains("StandardGamepads: standardGamepads", code, StringComparison.Ordinal);
         Assert.DoesNotContain("HasMatchingGamepad", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RawGameController.FromGameController", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NativeDeviceGamepadBridge_UsesConfigurableHidMaestroProfile()
+    {
+        var bridge = LoadText(@"tests\SalmonEgg.GamepadBridge.Windows\Program.cs");
+
+        Assert.Contains("SALMONEGG_HIDMAESTRO_PROFILE_ID", bridge, StringComparison.Ordinal);
+        Assert.Contains("DefaultProfileId", bridge, StringComparison.Ordinal);
+        Assert.Contains("ResolveHidMaestroProfileId()", bridge, StringComparison.Ordinal);
+        Assert.Contains("new HidMaestroBridge(hidMaestroCorePath, hidMaestroProfileId)", bridge, StringComparison.Ordinal);
+        Assert.Contains("_getProfileMethod.Invoke(_context, [_profileId])", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"x\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("SubmitTap(buttonName: \"X\")", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"y\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("SubmitTap(buttonName: \"Y\")", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("_getProfileMethod.Invoke(_context, [DefaultProfileId])", bridge, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2887,6 +2914,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("GamepadDiagnosticsInputSource InputSource", snapshot, StringComparison.Ordinal);
         Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", windowsService, StringComparison.Ordinal);
         Assert.Contains("GamepadDiagnosticsInputSource.RawGameController", windowsService, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", viewModel, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyCollection<GamepadShortcutIntent> ActiveShortcuts", snapshot, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyList<StandardGamepadDiagnostics> StandardGamepads", snapshot, StringComparison.Ordinal);
+        Assert.Contains("gamepad.GetButtonLabel(button)", windowsService, StringComparison.Ordinal);
+        Assert.Contains("FormatStandardGamepads", viewModel, StringComparison.Ordinal);
         Assert.Contains("FormatInputSource(GamepadDiagnosticsInputSource inputSource)", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("string InputSource", snapshot, StringComparison.Ordinal);
         Assert.DoesNotContain("FormatInputSource(string", viewModel, StringComparison.Ordinal);

@@ -9,6 +9,24 @@ namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsService
 {
+    private static readonly GamepadButtons[] DiagnosticButtons =
+    [
+        GamepadButtons.A,
+        GamepadButtons.B,
+        GamepadButtons.X,
+        GamepadButtons.Y,
+        GamepadButtons.DPadUp,
+        GamepadButtons.DPadDown,
+        GamepadButtons.DPadLeft,
+        GamepadButtons.DPadRight,
+        GamepadButtons.LeftShoulder,
+        GamepadButtons.RightShoulder,
+        GamepadButtons.LeftThumbstick,
+        GamepadButtons.RightThumbstick,
+        GamepadButtons.Menu,
+        GamepadButtons.View
+    ];
+
     private readonly WindowsRawGameControllerMapper _rawMapper;
 
     public WindowsGamepadDiagnosticsService(WindowsRawGameControllerMapper rawMapper)
@@ -18,18 +36,16 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
 
     public GamepadDiagnosticsSnapshot GetCurrentSnapshot()
     {
-        var gamepads = Gamepad.Gamepads.ToArray();
-        var rawControllers = RawGameController.RawGameControllers.ToArray();
+        var standardGamepads = Gamepad.Gamepads.Select(CreateStandardGamepadDiagnostics).ToArray();
+        var rawControllers = RawGameController.RawGameControllers.Select(CreateRawControllerDiagnostics).ToArray();
 
         var source = GamepadDiagnosticsInputSource.None;
         var reading = default(GamepadInputReading);
 
-        foreach (var gamepad in gamepads)
+        foreach (var diagnostics in standardGamepads)
         {
-            reading = GetInputReading(gamepad.GetCurrentReading());
-            if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
-                || GamepadContextIntentProjector.HasActiveIntents(reading)
-                || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
+            reading = diagnostics.Reading;
+            if (HasActiveInput(reading))
             {
                 source = GamepadDiagnosticsInputSource.Gamepad;
                 break;
@@ -38,12 +54,10 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
 
         if (source == GamepadDiagnosticsInputSource.None)
         {
-            foreach (var controller in rawControllers)
+            foreach (var diagnostics in rawControllers)
             {
-                reading = _rawMapper.GetInputReading(controller);
-                if (GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
-                    || GamepadContextIntentProjector.HasActiveIntents(reading)
-                    || GamepadShortcutIntentProjector.HasActiveShortcuts(reading))
+                reading = diagnostics.Reading;
+                if (HasActiveInput(reading))
                 {
                     source = GamepadDiagnosticsInputSource.RawGameController;
                     break;
@@ -53,23 +67,69 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
 
         var activeIntents = GamepadIntentProcessor.GetActiveIntents(reading);
         var activeContextIntents = GamepadContextIntentProjector.GetActiveIntents(reading);
+        var activeShortcuts = GamepadShortcutIntentProjector.GetActiveShortcuts(reading);
         return new GamepadDiagnosticsSnapshot(
             IsSupported: true,
-            ConnectedGamepadCount: gamepads.Length,
+            ConnectedGamepadCount: standardGamepads.Length,
             ConnectedRawControllerCount: rawControllers.Length,
             InputSource: source,
             Reading: reading,
             ActiveIntents: activeIntents,
             ActiveContextIntents: activeContextIntents,
-            RawControllers: rawControllers.Select(CreateRawControllerDiagnostics).ToArray());
+            ActiveShortcuts: activeShortcuts,
+            StandardGamepads: standardGamepads,
+            RawControllers: rawControllers);
     }
 
-    private static RawGameControllerDiagnostics CreateRawControllerDiagnostics(RawGameController controller)
+    private static bool HasActiveInput(GamepadInputReading reading)
+        => GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
+            || GamepadContextIntentProjector.HasActiveIntents(reading)
+            || GamepadShortcutIntentProjector.HasActiveShortcuts(reading);
+
+    private static StandardGamepadDiagnostics CreateStandardGamepadDiagnostics(Gamepad gamepad)
+    {
+        var reading = gamepad.GetCurrentReading();
+        return new StandardGamepadDiagnostics(
+            ButtonLabels: GetButtonLabels(gamepad),
+            PressedButtons: GetPressedButtons(reading.Buttons),
+            Reading: GetInputReading(reading));
+    }
+
+    private static string[] GetButtonLabels(Gamepad gamepad)
+    {
+        var labels = new List<string>(DiagnosticButtons.Length);
+        foreach (var button in DiagnosticButtons)
+        {
+            var label = gamepad.GetButtonLabel(button);
+            labels.Add(label == GameControllerButtonLabel.None
+                ? $"{button}:None"
+                : $"{button}:{label}");
+        }
+
+        return labels.ToArray();
+    }
+
+    private static string[] GetPressedButtons(GamepadButtons buttons)
+    {
+        var pressedButtons = new List<string>();
+        foreach (var button in DiagnosticButtons)
+        {
+            if (buttons.HasFlag(button))
+            {
+                pressedButtons.Add(button.ToString());
+            }
+        }
+
+        return pressedButtons.ToArray();
+    }
+
+    private RawGameControllerDiagnostics CreateRawControllerDiagnostics(RawGameController controller)
     {
         var buttons = new bool[controller.ButtonCount];
         var switches = new GameControllerSwitchPosition[controller.SwitchCount];
         var axes = new double[controller.AxisCount];
         controller.GetCurrentReading(buttons, switches, axes);
+        var reading = _rawMapper.GetInputReading(controller, buttons, switches, axes);
 
         return new RawGameControllerDiagnostics(
             DisplayName: controller.DisplayName,
@@ -81,7 +141,8 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             AxisCount: controller.AxisCount,
             PressedButtons: GetPressedButtons(controller, buttons),
             ActiveSwitches: GetActiveSwitches(switches),
-            Axes: axes);
+            Axes: axes,
+            Reading: reading);
     }
 
     private static string[] GetPressedButtons(RawGameController controller, IReadOnlyList<bool> buttons)

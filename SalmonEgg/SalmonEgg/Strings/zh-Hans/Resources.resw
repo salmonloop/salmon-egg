@@ -336,7 +336,10 @@
   <data name="Diagnostics_GamepadThumbstickLabel.Text" xml:space="preserve">
     <value>左摇杆：</value>
   </data>
-  <data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
+    <data name="Diagnostics_GamepadStandardDetailsLabel.Text" xml:space="preserve">
+    <value>标准 Gamepad 明细：</value>
+  </data>
+<data name="Diagnostics_GamepadRawDetailsLabel.Text" xml:space="preserve">
     <value>Raw 明细：</value>
   </data>
   <data name="Diagnostics_GamepadStart.Content" xml:space="preserve">
