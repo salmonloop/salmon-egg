@@ -337,7 +337,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
                 i,
                 FormatStandardDisplayName(gamepad.DisplayName),
                 FormatOptionalHardwareIds(gamepad.HardwareVendorId, gamepad.HardwareProductId),
-                FormatControllerFamily(gamepad.DisplayName, gamepad.HardwareVendorId),
+                FormatControllerFamily(gamepad.DisplayName, gamepad.HardwareVendorId, gamepad.ButtonLabels),
                 FormatFaceButtonLayout(gamepad.FaceButtonLayout),
                 FormatStringList(gamepad.ButtonLabels),
                 FormatStringList(gamepad.PressedButtons))
@@ -377,7 +377,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
                 controller.IsWireless
                     ? _localizer["GamepadDiagnostics_ConnectionWireless"]
                     : _localizer["GamepadDiagnostics_ConnectionWired"],
-                FormatControllerFamily(controller.DisplayName, controller.HardwareVendorId),
+                FormatControllerFamily(controller.DisplayName, controller.HardwareVendorId, controller.PressedButtons),
                 FormatFaceButtonLayout(faceButtonLayout),
                 controller.UnlabeledIndexFallbackEnabled ? "on" : "off",
                 controller.ButtonCount,
@@ -419,14 +419,54 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
 
 
     // Invariant family tokens for multi-brand validation captures (not UI chrome).
-    private static string FormatControllerFamily(string? displayName, ushort? hardwareVendorId)
-        => GamepadControllerIdentity.ResolveFamily(displayName, hardwareVendorId) switch
+    // Prefer VID/name identity; when missing, infer from face-label tokens (Cross*/Letter*/Xbox*).
+    private static string FormatControllerFamily(
+        string? displayName,
+        ushort? hardwareVendorId,
+        IReadOnlyList<string>? labelEvidence = null)
+    {
+        var family = GamepadControllerIdentity.ResolveFamily(displayName, hardwareVendorId);
+        if (family == GamepadControllerFamily.Unknown && labelEvidence is { Count: > 0 })
+        {
+            family = GamepadControllerIdentity.ResolveFamilyFromLabels(ParseLabelEvidence(labelEvidence));
+        }
+
+        return family switch
         {
             GamepadControllerFamily.Xbox => "Xbox",
             GamepadControllerFamily.Sony => "Sony",
             GamepadControllerFamily.Nintendo => "Nintendo",
             _ => "Unknown"
         };
+    }
+
+    private static RawGameControllerButtonLabel[] ParseLabelEvidence(IReadOnlyList<string> labelEvidence)
+    {
+        var labels = new List<RawGameControllerButtonLabel>(labelEvidence.Count);
+        foreach (var entry in labelEvidence)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
+            // Diagnostics tokens look like "A:Cross", "B0:LetterB", or bare "Cross".
+            var token = entry;
+            var colon = entry.LastIndexOf(':');
+            if (colon >= 0 && colon + 1 < entry.Length)
+            {
+                token = entry[(colon + 1)..];
+            }
+
+            if (Enum.TryParse<RawGameControllerButtonLabel>(token, ignoreCase: true, out var label)
+                && label != RawGameControllerButtonLabel.None)
+            {
+                labels.Add(label);
+            }
+        }
+
+        return labels.ToArray();
+    }
 
     private string FormatFaceButtonLayout(RawGameControllerFaceButtonLayout layout)
         => layout switch

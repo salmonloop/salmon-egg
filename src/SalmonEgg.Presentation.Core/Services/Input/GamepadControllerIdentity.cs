@@ -83,6 +83,82 @@ public static class GamepadControllerIdentity
     public static GamepadControllerFamily ResolveFamily(string? displayName, ushort? hardwareVendorId)
         => ResolveFamily(displayName, hardwareVendorId ?? 0);
 
+
+    public static GamepadControllerFamily ResolveFamily(
+        string? displayName,
+        ushort? hardwareVendorId,
+        StandardGamepadFaceButtonLabels faceButtonLabels)
+    {
+        var fromIdentity = ResolveFamily(displayName, hardwareVendorId);
+        if (fromIdentity != GamepadControllerFamily.Unknown)
+        {
+            return fromIdentity;
+        }
+
+        return ResolveFamilyFromFaceButtonLabels(faceButtonLabels);
+    }
+
+    public static GamepadControllerFamily ResolveFamilyFromFaceButtonLabels(
+        StandardGamepadFaceButtonLabels faceButtonLabels)
+        => ResolveFamilyFromLabels(
+            faceButtonLabels.A,
+            faceButtonLabels.B,
+            faceButtonLabels.X,
+            faceButtonLabels.Y);
+
+    public static GamepadControllerFamily ResolveFamilyFromLabels(
+        params RawGameControllerButtonLabel[] labels)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+
+        var sawXbox = false;
+        var sawSony = false;
+        var sawNintendo = false;
+        foreach (var label in labels)
+        {
+            switch (label)
+            {
+                case RawGameControllerButtonLabel.XboxA:
+                case RawGameControllerButtonLabel.XboxB:
+                case RawGameControllerButtonLabel.XboxX:
+                case RawGameControllerButtonLabel.XboxY:
+                    sawXbox = true;
+                    break;
+                case RawGameControllerButtonLabel.Cross:
+                case RawGameControllerButtonLabel.Circle:
+                case RawGameControllerButtonLabel.Square:
+                case RawGameControllerButtonLabel.Triangle:
+                    sawSony = true;
+                    break;
+                case RawGameControllerButtonLabel.LetterA:
+                case RawGameControllerButtonLabel.LetterB:
+                case RawGameControllerButtonLabel.LetterX:
+                case RawGameControllerButtonLabel.LetterY:
+                    sawNintendo = true;
+                    break;
+            }
+        }
+
+        // Mutual exclusion: prefer glyph families over Xbox when mixed (should not happen).
+        if (sawSony && !sawNintendo && !sawXbox)
+        {
+            return GamepadControllerFamily.Sony;
+        }
+
+        if (sawNintendo && !sawSony && !sawXbox)
+        {
+            return GamepadControllerFamily.Nintendo;
+        }
+
+        if (sawXbox && !sawSony && !sawNintendo)
+        {
+            return GamepadControllerFamily.Xbox;
+        }
+
+        return GamepadControllerFamily.Unknown;
+    }
+
+
     public static bool IsFullGamepadKnownFamily(string? displayName, ushort hardwareVendorId)
     {
         if (IsSingleJoyCon(displayName))
