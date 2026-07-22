@@ -71,7 +71,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("2", viewModel.ConnectedRawControllersText);
         Assert.Equal("RawGameController", viewModel.InputSourceText);
         Assert.Equal("MoveDown, Activate, PageDown", viewModel.ActiveInputsText);
-        Assert.Equal("X 0.25, Y -0.50", viewModel.ThumbstickText);
+        Assert.Equal("X 0.25, Y -0.50; LT 0.00, RT 0.00", viewModel.ThumbstickText);
         Assert.Contains("Wireless Controller", viewModel.RawControllersText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.RawControllersText);
         Assert.Contains("layout Standard", viewModel.RawControllersText);
@@ -80,6 +80,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Contains("S0:Down", viewModel.RawControllersText);
         Assert.Contains("A1:1.00", viewModel.RawControllersText);
         Assert.Contains("semantic MoveDown, Activate, PageDown", viewModel.RawControllersText);
+        Assert.Contains("LT 0.00, RT 1.00", viewModel.RawControllersText);
         Assert.Equal("No standard gamepads detected.", viewModel.StandardGamepadsText);
     }
 
@@ -400,6 +401,84 @@ public sealed class GamepadDiagnosticsViewModelTests
         languageService.Raise(s => s.LanguageChanged += null, EventArgs.Empty);
 
         Assert.Equal(localizer["GamepadDiagnostics_StatusUnsupported"], viewModel.StatusText);
+    }
+
+
+    [Fact]
+    public async Task RefreshSnapshotCommand_ProjectsTriggerValuesInReadingTextForMultiBrandEvidence()
+    {
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 1,
+            ConnectedRawControllerCount: 1,
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
+            Reading: new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: false,
+                Back: false,
+                LeftTrigger: 0.75,
+                RightTrigger: 0.25,
+                ThumbstickX: 0.10,
+                ThumbstickY: -0.20),
+            ActiveIntents: [],
+            ActiveContextIntents: [GamepadContextIntent.PageUp],
+            ActiveShortcuts: [],
+            StandardGamepads:
+            [
+                new StandardGamepadDiagnostics(
+                    DisplayName: "Xbox Wireless Controller",
+                    HardwareVendorId: 0x045E,
+                    HardwareProductId: 0x0B13,
+                    FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
+                    ButtonLabels: ["A:XboxA", "B:XboxB", "X:XboxX", "Y:XboxY"],
+                    PressedButtons: ["LeftTrigger"],
+                    Reading: new GamepadInputReading(
+                        MoveUp: false,
+                        MoveDown: false,
+                        MoveLeft: false,
+                        MoveRight: false,
+                        Activate: false,
+                        Back: false,
+                        LeftTrigger: 0.75,
+                        RightTrigger: 0.25,
+                        ThumbstickX: 0.10,
+                        ThumbstickY: -0.20))
+            ],
+            RawControllers:
+            [
+                new RawGameControllerDiagnostics(
+                    DisplayName: "Wireless Controller",
+                    HardwareVendorId: 0x054C,
+                    HardwareProductId: 0x0CE6,
+                    IsWireless: true,
+                    ButtonCount: 16,
+                    SwitchCount: 1,
+                    AxisCount: 6,
+                    UnlabeledIndexFallbackEnabled: true,
+                    PressedButtons: ["B1:Cross"],
+                    ActiveSwitches: [],
+                    Axes: [0.5, 0.5, 0.75, 0.25],
+                    Reading: new GamepadInputReading(
+                        MoveUp: false,
+                        MoveDown: false,
+                        MoveLeft: false,
+                        MoveRight: false,
+                        Activate: true,
+                        Back: false,
+                        LeftTrigger: 0.75,
+                        RightTrigger: 0.25))
+            ]));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Equal("X 0.10, Y -0.20; LT 0.75, RT 0.25", viewModel.ThumbstickText);
+        Assert.Contains("LT 0.75, RT 0.25", viewModel.StandardGamepadsText);
+        Assert.Contains("LT 0.75, RT 0.25", viewModel.RawControllersText);
+        Assert.Contains("PageUp", viewModel.ActiveInputsText);
     }
 
     private static GamepadDiagnosticsViewModel CreateViewModel(

@@ -313,9 +313,11 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
     private static string FormatThumbstick(GamepadInputReading reading)
         => string.Format(
             CultureInfo.InvariantCulture,
-            "X {0:0.00}, Y {1:0.00}",
+            "X {0:0.00}, Y {1:0.00}; LT {2:0.00}, RT {3:0.00}",
             reading.ThumbstickX,
-            reading.ThumbstickY);
+            reading.ThumbstickY,
+            reading.LeftTrigger,
+            reading.RightTrigger);
 
 
     private string FormatStandardGamepads(IReadOnlyList<StandardGamepadDiagnostics> gamepads)
