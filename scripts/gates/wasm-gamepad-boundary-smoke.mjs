@@ -193,6 +193,14 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         vid: "057E",
         pid: "2009",
         layoutPattern: /layout\s+(Nintendo|任天堂)/
+      },
+      {
+        label: "Firefox-style DualSense identity",
+        id: "054c-0ce6-DualSense Wireless Controller",
+        name: "DualSense Wireless Controller",
+        vid: "054C",
+        pid: "0CE6",
+        layoutPattern: /layout\s+(Standard|标准)/
       }
     ];
 
@@ -226,6 +234,13 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
         detailsPattern,
         `${brand.label} standard details`);
+
+      // Standard mapping slot A is position-based Activate for all brands under W3C mapping.
+      await expectControlText(
+        page,
+        { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+        /pressed\s+A/i,
+        `${brand.label} pressed standard face A`);
     }
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);

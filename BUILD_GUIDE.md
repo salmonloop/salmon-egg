@@ -253,7 +253,7 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 
 #### BrowserWasm multi-brand gamepad identity smoke
 
-`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and Chrome-style `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`). Diagnostics must project display name, `VID`/`PID`, and face `layout` (Nintendo only for Switch Pro identity). Face **semantics** remain position-based under `mapping: "standard"`; identity is for diagnostics/layout labeling, not a second brand shell path.
+`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and browser `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`) using both Chrome-style (`Name (… Vendor: … Product: …)`) and Firefox-style (`vvvv-pppp-Name`) formats. Diagnostics must project display name, `VID`/`PID`, face `layout` (Nintendo only for Switch Pro identity), and pressed standard slot names (for example `pressed A` for index 0). Face **semantics** remain position-based under `mapping: "standard"`; identity is for diagnostics/layout labeling, not a second brand shell path.
 
 #### Multi-brand gamepad simulation options
 
