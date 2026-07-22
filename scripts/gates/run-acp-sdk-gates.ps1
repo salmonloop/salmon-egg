@@ -31,16 +31,26 @@ New-Item -ItemType Directory -Force -Path $PackageOutput | Out-Null
 Write-Host "[gate] Restore ACP SDK"
 Invoke-GateCommand { & $dotnet restore tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj }
 
-Write-Host "[gate] Build ACP SDK"
+Write-Host "[gate] Check ACP SDK formatting"
+Invoke-GateCommand { & $dotnet format src/SalmonEgg.Acp/SalmonEgg.Acp.csproj `
+  --verify-no-changes `
+  --no-restore }
+Invoke-GateCommand { & $dotnet format tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj `
+  --verify-no-changes `
+  --no-restore }
+
+Write-Host "[gate] Build ACP SDK with analyzers"
 Invoke-GateCommand { & $dotnet build src/SalmonEgg.Acp/SalmonEgg.Acp.csproj `
   --configuration $Configuration `
   --no-restore `
+  -p:EnforceCodeStyleInBuild=true `
   -v minimal }
 
-Write-Host "[gate] Build ACP SDK tests"
+Write-Host "[gate] Build ACP SDK tests with analyzers"
 Invoke-GateCommand { & $dotnet build tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj `
   --configuration $Configuration `
   --no-restore `
+  -p:EnforceCodeStyleInBuild=true `
   -v minimal }
 
 Write-Host "[gate] ACP SDK contracts"

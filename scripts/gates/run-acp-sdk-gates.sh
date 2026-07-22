@@ -12,16 +12,26 @@ mkdir -p "$PACKAGE_OUTPUT"
 echo "[gate] Restore ACP SDK"
 "$DOTNET_BIN" restore tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj
 
-echo "[gate] Build ACP SDK"
+echo "[gate] Check ACP SDK formatting"
+"$DOTNET_BIN" format src/SalmonEgg.Acp/SalmonEgg.Acp.csproj \
+  --verify-no-changes \
+  --no-restore
+"$DOTNET_BIN" format tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj \
+  --verify-no-changes \
+  --no-restore
+
+echo "[gate] Build ACP SDK with analyzers"
 "$DOTNET_BIN" build src/SalmonEgg.Acp/SalmonEgg.Acp.csproj \
   --configuration "$CONFIGURATION" \
   --no-restore \
+  -p:EnforceCodeStyleInBuild=true \
   -v minimal
 
-echo "[gate] Build ACP SDK tests"
+echo "[gate] Build ACP SDK tests with analyzers"
 "$DOTNET_BIN" build tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj \
   --configuration "$CONFIGURATION" \
   --no-restore \
+  -p:EnforceCodeStyleInBuild=true \
   -v minimal
 
 echo "[gate] ACP SDK contracts"
