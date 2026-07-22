@@ -19,32 +19,17 @@ internal static partial class WasmGamepadSnapshotReader
             readings.Add(device.Reading);
         }
 
-        var source = GamepadDiagnosticsInputSource.None;
-        var reading = default(GamepadInputReading);
-
-        foreach (var candidate in readings)
-        {
-            if (GamepadIntentProcessor.GetActiveIntents(candidate).Count == 0
-                && !GamepadContextIntentProjector.HasActiveIntents(candidate)
-                && !GamepadShortcutIntentProjector.HasActiveShortcuts(candidate))
-            {
-                continue;
-            }
-
-            source = GamepadDiagnosticsInputSource.Gamepad;
-            reading = candidate;
-            break;
-        }
+        var active = GamepadDiagnosticsActiveReadingProjector.Project(readings, Array.Empty<GamepadInputReading>());
 
         return new GamepadDiagnosticsSnapshot(
             IsSupported: true,
             ConnectedGamepadCount: readings.Count,
             ConnectedRawControllerCount: 0,
-            InputSource: source,
-            Reading: reading,
-            ActiveIntents: GamepadIntentProcessor.GetActiveIntents(reading),
-            ActiveContextIntents: GamepadContextIntentProjector.GetActiveIntents(reading),
-            ActiveShortcuts: GamepadShortcutIntentProjector.GetActiveShortcuts(reading),
+            InputSource: active.InputSource,
+            Reading: active.Reading,
+            ActiveIntents: active.ActiveIntents,
+            ActiveContextIntents: active.ActiveContextIntents,
+            ActiveShortcuts: active.ActiveShortcuts,
             StandardGamepads: CreateStandardGamepadDiagnostics(devices),
             RawControllers: []);
     }

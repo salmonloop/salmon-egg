@@ -39,52 +39,31 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         var standardGamepads = Gamepad.Gamepads.Select(CreateStandardGamepadDiagnostics).ToArray();
         var rawControllers = RawGameController.RawGameControllers.Select(CreateRawControllerDiagnostics).ToArray();
 
-        var source = GamepadDiagnosticsInputSource.None;
-        var reading = default(GamepadInputReading);
-
-        foreach (var diagnostics in standardGamepads)
+        var standardReadings = new GamepadInputReading[standardGamepads.Length];
+        for (var i = 0; i < standardGamepads.Length; i++)
         {
-            reading = diagnostics.Reading;
-            if (HasActiveInput(reading))
-            {
-                source = GamepadDiagnosticsInputSource.Gamepad;
-                break;
-            }
+            standardReadings[i] = standardGamepads[i].Reading;
         }
 
-        if (source == GamepadDiagnosticsInputSource.None)
+        var rawReadings = new GamepadInputReading[rawControllers.Length];
+        for (var i = 0; i < rawControllers.Length; i++)
         {
-            foreach (var diagnostics in rawControllers)
-            {
-                reading = diagnostics.Reading;
-                if (HasActiveInput(reading))
-                {
-                    source = GamepadDiagnosticsInputSource.RawGameController;
-                    break;
-                }
-            }
+            rawReadings[i] = rawControllers[i].Reading;
         }
 
-        var activeIntents = GamepadIntentProcessor.GetActiveIntents(reading);
-        var activeContextIntents = GamepadContextIntentProjector.GetActiveIntents(reading);
-        var activeShortcuts = GamepadShortcutIntentProjector.GetActiveShortcuts(reading);
+        var active = GamepadDiagnosticsActiveReadingProjector.Project(standardReadings, rawReadings);
         return new GamepadDiagnosticsSnapshot(
             IsSupported: true,
             ConnectedGamepadCount: standardGamepads.Length,
             ConnectedRawControllerCount: rawControllers.Length,
-            InputSource: source,
-            Reading: reading,
-            ActiveIntents: activeIntents,
-            ActiveContextIntents: activeContextIntents,
-            ActiveShortcuts: activeShortcuts,
+            InputSource: active.InputSource,
+            Reading: active.Reading,
+            ActiveIntents: active.ActiveIntents,
+            ActiveContextIntents: active.ActiveContextIntents,
+            ActiveShortcuts: active.ActiveShortcuts,
             StandardGamepads: standardGamepads,
             RawControllers: rawControllers);
     }
-
-    private static bool HasActiveInput(GamepadInputReading reading)
-        => GamepadIntentProcessor.GetActiveIntents(reading).Count > 0
-            || GamepadContextIntentProjector.HasActiveIntents(reading)
-            || GamepadShortcutIntentProjector.HasActiveShortcuts(reading);
 
     private static StandardGamepadDiagnostics CreateStandardGamepadDiagnostics(Gamepad gamepad)
     {

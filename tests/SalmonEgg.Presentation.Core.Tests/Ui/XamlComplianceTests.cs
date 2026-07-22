@@ -2669,7 +2669,8 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
 
-        Assert.Contains("GamepadIntentProcessor", code);
+        Assert.Contains("GamepadReadingPipeline", code, StringComparison.Ordinal);
+        Assert.Contains("ProcessFrame", code, StringComparison.Ordinal);
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", code, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", code, StringComparison.Ordinal);
@@ -2681,10 +2682,40 @@ public sealed class XamlComplianceTests
         Assert.Contains("faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A)", code, StringComparison.Ordinal);
         // Live poll must not call FromGameController; identity is resolved once on connect and reused.
         Assert.DoesNotContain("RawGameController.FromGameController", code, StringComparison.Ordinal);
+        // Platform host must not re-own edge processors; Core pipeline is the single owner.
+        Assert.DoesNotContain("new GamepadIntentProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadShortcutProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadContextIntentProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadInputPathTracker", code, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialRepeatDelay", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RepeatInterval", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ThumbstickDeadzone", code, StringComparison.Ordinal);
         Assert.DoesNotContain("PressState", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WasmGamepadInputService_DelegatesPollFrameToCoreReadingPipeline()
+    {
+        var code = LoadText(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadInputService.cs");
+
+        Assert.Contains("GamepadReadingPipeline", code, StringComparison.Ordinal);
+        Assert.Contains("ProcessFrame", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadIntentProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadShortcutProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadContextIntentProcessor", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadInputPathTracker", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThumbstickDeadzone", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsAndWasmGamepadDiagnostics_DelegateActivePathSelectionToCoreProjector()
+    {
+        var windows = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
+        var wasm = LoadText(@"SalmonEgg\SalmonEgg\Platforms\WebAssembly\WasmGamepadSnapshotReader.cs");
+
+        Assert.Contains("GamepadDiagnosticsActiveReadingProjector.Project", windows, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsActiveReadingProjector.Project", wasm, StringComparison.Ordinal);
+        Assert.DoesNotContain("private static bool HasActiveInput", windows, StringComparison.Ordinal);
     }
 
     [Fact]
