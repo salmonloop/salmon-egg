@@ -270,6 +270,7 @@ Do not guess profile ids in automation. Confirm the installed HIDMaestro profile
 Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
 
 - When `Input source` is `Gamepad`, the standard-details line that includes physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading`.
+- Confirm that standard-path face semantics follow physical labels (Xbox/PS glyphs or Nintendo `Letter*`), not a second brand-specific UI/shell path.
 - The raw-details line that includes `VID`, `PID`, `layout`, `pressed`, `semantic`, and `reading` whenever raw controllers are present.
 - Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
 
@@ -279,7 +280,7 @@ Minimum Windows validation matrix:
 | --- | --- | --- |
 | Xbox controller | USB or official wireless path available to Windows | Standard `Gamepad` path if Windows exposes it, or `RawGameController` fallback with `layout Standard`; D-pad directions project to `Move*`; A projects to `Activate`; B projects to `Back`; Y projects to `ToggleVoiceInput`; X produces no app semantic action. |
 | DualShock / DualSense | USB and Bluetooth when available | `RawGameController` or `Gamepad` path is acceptable only when diagnostics show PS labels or standard semantics; Cross projects to `Activate`; Circle projects to `Back`; Triangle projects to `ToggleVoiceInput`; Square produces no app semantic action. |
-| Switch Pro / Joy-Con | USB and Bluetooth when available | `RawGameController` details show Nintendo identity, `VID 057E` or Nintendo/Switch/Joy-Con display name, and `layout Nintendo`; physical B projects to `Activate`; physical A projects to `Back`; physical X projects to `ToggleVoiceInput`; physical Y produces no app semantic action. |
+| Switch Pro / Joy-Con | USB and Bluetooth when available | Prefer recording both paths when dual-exposed. `RawGameController` details show Nintendo identity, `VID 057E` or Nintendo/Switch/Joy-Con display name, and `layout Nintendo`. On the standard `Gamepad` path, `labels` must show physical `Letter*` (or Nintendo glyphs) and semantic mapping must follow physical position: physical B/`LetterB` -> `Activate`, physical A/`LetterA` -> `Back`, physical X/`LetterX` -> `ToggleVoiceInput`, physical Y/`LetterY` -> no app action. |
 
 For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
 
