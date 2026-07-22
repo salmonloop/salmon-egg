@@ -269,7 +269,7 @@ Do not guess profile ids in automation. Confirm the installed HIDMaestro profile
 
 Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
 
-- When `Input source` is `Gamepad`, the standard-details line that includes resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading`.
+- When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading`.
 - Confirm that standard-path face semantics follow physical labels (Xbox/PS glyphs or Nintendo `Letter*`), not a second brand-specific UI/shell path.
 - The raw-details line that includes `VID`, `PID`, `layout`, `pressed`, `semantic`, and `reading` whenever raw controllers are present.
 - Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
