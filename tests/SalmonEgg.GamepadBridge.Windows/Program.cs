@@ -1,8 +1,8 @@
 using System.Reflection;
+using SalmonEgg.Presentation.Core.Services.Input;
 
 const string HidMaestroCorePathEnvVar = "SALMONEGG_HIDMAESTRO_CORE_PATH";
 const string HidMaestroProfileIdEnvVar = "SALMONEGG_HIDMAESTRO_PROFILE_ID";
-const string DefaultProfileId = "xbox-360-wired";
 
 if (args.Length != 1 || !string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
 {
@@ -55,7 +55,7 @@ while (true)
         {
             // Machine-readable identity for multi-brand OS-path smoke (profile + family).
             Console.WriteLine(
-                $"ok profile={bridge.ProfileId} family={HidMaestroBridge.ResolveFamilyToken(bridge.ProfileId)}");
+                $"ok profile={bridge.ProfileId} family={GamepadHidMaestroProfileCatalog.FormatFamilyToken(bridge.ProfileId)}");
             continue;
         }
 
@@ -90,9 +90,7 @@ static string ResolveHidMaestroCorePath()
 static string ResolveHidMaestroProfileId()
 {
     var configured = Environment.GetEnvironmentVariable(HidMaestroProfileIdEnvVar);
-    return string.IsNullOrWhiteSpace(configured)
-        ? DefaultProfileId
-        : configured.Trim();
+    return GamepadHidMaestroProfileCatalog.NormalizeProfileId(configured);
 }
 
 static string Sanitize(string message)
@@ -315,47 +313,13 @@ internal sealed class HidMaestroBridge : IDisposable
         Voice
     }
 
-    private enum ProfileFaceFamily
-    {
-        Xbox,
-        Sony,
-        Nintendo
-    }
-
-    // Confirmed catalog ids only (see BUILD_GUIDE). Do not invent profile ids here.
-    // Family tokens match Diagnostics invariant family strings (Xbox/Sony/Nintendo).
-    public static string ResolveFamilyToken(string profileId)
-        => ResolveProfileFaceFamily(profileId) switch
-        {
-            ProfileFaceFamily.Sony => "Sony",
-            ProfileFaceFamily.Nintendo => "Nintendo",
-            _ => "Xbox"
-        };
-
-    private static ProfileFaceFamily ResolveProfileFaceFamily(string profileId)
-    {
-        if (string.Equals(profileId, "switch-pro", StringComparison.OrdinalIgnoreCase))
-        {
-            return ProfileFaceFamily.Nintendo;
-        }
-
-        if (string.Equals(profileId, "dualsense", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(profileId, "dualsense-bt", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(profileId, "dualshock-4-v2", StringComparison.OrdinalIgnoreCase))
-        {
-            return ProfileFaceFamily.Sony;
-        }
-
-        // xbox-360-wired, xbox-series-xs, and any future confirmed Xbox catalog id.
-        return ProfileFaceFamily.Xbox;
-    }
-
     private string ResolveSemanticFaceButton(FaceSemantic semantic)
     {
-        return ResolveProfileFaceFamily(_profileId) switch
+        // Profile family comes from Core catalog (confirmed HIDMaestro ids only).
+        return GamepadHidMaestroProfileCatalog.ResolveFamily(_profileId) switch
         {
             // Nintendo physical face: B bottom / A east / Y west / X north.
-            ProfileFaceFamily.Nintendo => semantic switch
+            GamepadControllerFamily.Nintendo => semantic switch
             {
                 FaceSemantic.Activate => "B",
                 FaceSemantic.Back => "A",
@@ -365,7 +329,7 @@ internal sealed class HidMaestroBridge : IDisposable
             },
             // DualSense / DualShock: prefer PS glyph HMButton names; fall back to A/B/X/Y
             // when a HIDMaestro build only exposes Xbox-style field keys for the profile.
-            ProfileFaceFamily.Sony => semantic switch
+            GamepadControllerFamily.Sony => semantic switch
             {
                 FaceSemantic.Activate => ResolveButtonName("Cross", fallback: "A"),
                 FaceSemantic.Back => ResolveButtonName("Circle", fallback: "B"),
