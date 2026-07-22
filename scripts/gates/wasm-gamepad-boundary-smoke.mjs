@@ -279,36 +279,42 @@ async function verifyInjectedMultiBrandFaceAndTriggerSemanticsProjection() {
       pressedButtons: [0],
       activePattern: /Activate/,
       pressedPattern: /pressed\s+A/i,
+      readingPattern: /LT 0\.00, RT 0\.00/,
       label: "bottom face -> Activate"
     },
     {
       pressedButtons: [1],
       activePattern: /Back/,
       pressedPattern: /pressed\s+B/i,
+      readingPattern: /LT 0\.00, RT 0\.00/,
       label: "east face -> Back"
     },
     {
       pressedButtons: [2],
       activePattern: /^(None|无)$/,
       pressedPattern: /pressed\s+X/i,
+      readingPattern: /LT 0\.00, RT 0\.00/,
       label: "west face -> no app semantic"
     },
     {
       pressedButtons: [3],
       activePattern: /ToggleVoiceInput/,
       pressedPattern: /pressed\s+Y/i,
+      readingPattern: /LT 0\.00, RT 0\.00/,
       label: "north face -> ToggleVoiceInput"
     },
     {
       pressedButtons: [6],
       activePattern: /PageUp/,
       pressedPattern: /pressed\s+LeftTrigger/i,
+      readingPattern: /LT 1\.00, RT 0\.00/,
       label: "left trigger -> PageUp"
     },
     {
       pressedButtons: [7],
       activePattern: /PageDown/,
       pressedPattern: /pressed\s+RightTrigger/i,
+      readingPattern: /LT 0\.00, RT 1\.00/,
       label: "right trigger -> PageDown"
     }
   ];
@@ -344,6 +350,16 @@ async function verifyInjectedMultiBrandFaceAndTriggerSemanticsProjection() {
           { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
           sample.pressedPattern,
           `${brand.label} ${sample.label} pressed details`);
+        await expectControlText(
+          page,
+          { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
+          sample.readingPattern,
+          `${brand.label} ${sample.label} reading LT/RT`);
+        await expectControlText(
+          page,
+          { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+          sample.readingPattern,
+          `${brand.label} ${sample.label} standard details reading LT/RT`);
       }
     }
 
@@ -489,7 +505,7 @@ async function expectConnectedNonStandardGamepadWithoutActiveProjection(page, la
   await expectControlText(
     page,
     { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
-    /X 0\.00, Y 0\.00/,
+    /X 0\.00, Y 0\.00; LT 0\.00, RT 0\.00/,
     `${label} thumbstick`);
   await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 }
@@ -528,7 +544,7 @@ async function expectActiveStandardGamepadProjection(page, label) {
   await expectControlText(
     page,
     { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
-    /X 0\.25, Y -0\.50/,
+    /X 0\.25, Y -0\.50; LT 0\.00, RT 0\.00/,
     `${label} thumbstick`);
   await waitForBodyText(page, diagnosticsPagePattern, `${label} page still visible`);
 }
