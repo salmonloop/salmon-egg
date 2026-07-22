@@ -2916,9 +2916,11 @@ public sealed class XamlComplianceTests
         Assert.Contains("new HidMaestroBridge(hidMaestroCorePath, hidMaestroProfileId)", bridge, StringComparison.Ordinal);
         Assert.Contains("_getProfileMethod.Invoke(_context, [_profileId])", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"x\":", bridge, StringComparison.Ordinal);
-        Assert.Contains("SubmitTap(buttonName: \"X\")", bridge, StringComparison.Ordinal);
+        Assert.Contains("SubmitState(buttonName: \"X\")", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"y\":", bridge, StringComparison.Ordinal);
-        Assert.Contains("SubmitTap(buttonName: \"Y\")", bridge, StringComparison.Ordinal);
+        Assert.Contains("SubmitState(buttonName: \"Y\")", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"release\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("Sticky press", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("_getProfileMethod.Invoke(_context, [DefaultProfileId])", bridge, StringComparison.Ordinal);
     }
 
@@ -2939,6 +2941,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("ushort? HardwareVendorId", LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\StandardGamepadDiagnostics.cs"), StringComparison.Ordinal);
         Assert.Contains("GetIdentity", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
         Assert.Contains("RawGameController.FromGameController", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
+        Assert.Contains("WindowsStandardGamepadIdentity.Empty", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
+        Assert.Contains("catch (Exception)", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
         Assert.Contains("gamepad.GetButtonLabel(button)", windowsService, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", windowsService, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", windowsService, StringComparison.Ordinal);

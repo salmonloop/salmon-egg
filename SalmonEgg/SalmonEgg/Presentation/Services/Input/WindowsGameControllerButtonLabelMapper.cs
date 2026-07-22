@@ -1,4 +1,5 @@
 #if WINDOWS
+using System;
 using SalmonEgg.Presentation.Core.Services.Input;
 using Windows.Gaming.Input;
 
@@ -7,7 +8,13 @@ namespace SalmonEgg.Presentation.Services.Input;
 internal readonly record struct WindowsStandardGamepadIdentity(
     string DisplayName,
     ushort? HardwareVendorId,
-    ushort? HardwareProductId);
+    ushort? HardwareProductId)
+{
+    public static WindowsStandardGamepadIdentity Empty { get; } = new(
+        DisplayName: string.Empty,
+        HardwareVendorId: null,
+        HardwareProductId: null);
+}
 
 internal static class WindowsGameControllerButtonLabelMapper
 {
@@ -25,19 +32,25 @@ internal static class WindowsGameControllerButtonLabelMapper
     {
         ArgumentNullException.ThrowIfNull(gamepad);
 
-        var raw = RawGameController.FromGameController(gamepad);
-        if (raw is null)
+        try
         {
-            return new WindowsStandardGamepadIdentity(
-                DisplayName: string.Empty,
-                HardwareVendorId: null,
-                HardwareProductId: null);
-        }
+            var raw = RawGameController.FromGameController(gamepad);
+            if (raw is null)
+            {
+                return WindowsStandardGamepadIdentity.Empty;
+            }
 
-        return new WindowsStandardGamepadIdentity(
-            DisplayName: raw.DisplayName ?? string.Empty,
-            HardwareVendorId: raw.HardwareVendorId,
-            HardwareProductId: raw.HardwareProductId);
+            return new WindowsStandardGamepadIdentity(
+                DisplayName: raw.DisplayName ?? string.Empty,
+                HardwareVendorId: raw.HardwareVendorId,
+                HardwareProductId: raw.HardwareProductId);
+        }
+        catch (Exception)
+        {
+            // Identity is optional enrichment for diagnostics/layout. Never fail live
+            // standard-path polling when FromGameController is unavailable for a device.
+            return WindowsStandardGamepadIdentity.Empty;
+        }
     }
 
     public static RawGameControllerButtonLabel Map(GameControllerButtonLabel label)
