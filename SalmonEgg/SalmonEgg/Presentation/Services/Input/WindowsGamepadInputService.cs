@@ -21,6 +21,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private readonly object _sync = new();
     private readonly List<Gamepad> _connectedGamepads = new();
     private readonly List<RawGameController> _connectedRawControllers = new();
+    private readonly Dictionary<Gamepad, WindowsStandardGamepadIdentity> _standardGamepadIdentities = new();
 
     private DispatcherQueueTimer? _timer;
     private bool _isStarted;
@@ -67,9 +68,11 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             }
 
             _connectedGamepads.Clear();
+            _standardGamepadIdentities.Clear();
             foreach (var gamepad in Gamepad.Gamepads)
             {
                 _connectedGamepads.Add(gamepad);
+                CacheStandardGamepadIdentity(gamepad);
             }
 
             foreach (var controller in RawGameController.RawGameControllers)
@@ -130,6 +133,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             _shortcutProcessor.Reset();
             _contextIntentProcessor.Reset();
             _connectedGamepads.Clear();
+            _standardGamepadIdentities.Clear();
             _connectedRawControllers.Clear();
             _isStarted = false;
             _ = _inputPathTracker.Reset();
@@ -155,6 +159,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             if (!_connectedGamepads.Contains(gamepad))
             {
                 _connectedGamepads.Add(gamepad);
+                CacheStandardGamepadIdentity(gamepad);
                 _logger.LogInformation(
                     "Gamepad added. StandardGamepadCount={StandardGamepadCount}.",
                     _connectedGamepads.Count);
@@ -171,6 +176,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         {
             if (_connectedGamepads.Remove(gamepad))
             {
+                _standardGamepadIdentities.Remove(gamepad);
                 _logger.LogInformation(
                     "Gamepad removed. StandardGamepadCount={StandardGamepadCount}.",
                     _connectedGamepads.Count);
@@ -234,14 +240,26 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private bool TryGetActiveReading(out GamepadInputReading reading)
     {
         Gamepad[] gamepads;
+        WindowsStandardGamepadIdentity[] identities;
         RawGameController[] rawControllers;
         lock (_sync)
         {
             gamepads = _connectedGamepads.ToArray();
+            identities = new WindowsStandardGamepadIdentity[gamepads.Length];
+            for (var i = 0; i < gamepads.Length; i++)
+            {
+                identities[i] = GetOrCacheStandardGamepadIdentity(gamepads[i]);
+            }
+
             rawControllers = _connectedRawControllers.ToArray();
         }
 
-        var gamepadReadings = Array.ConvertAll(gamepads, GetInputReading);
+        var gamepadReadings = new GamepadInputReading[gamepads.Length];
+        for (var i = 0; i < gamepads.Length; i++)
+        {
+            gamepadReadings[i] = GetInputReading(gamepads[i], identities[i]);
+        }
+
         var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
         var selected = GamepadActiveReadingSelector.TrySelectActiveReading(gamepadReadings, rawReadings, out var selection);
 
@@ -283,7 +301,9 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         _logger.LogDebug("Raw game controller remove event ignored for unknown device.");
     }
 
-    private static GamepadInputReading GetInputReading(Gamepad gamepad)
+    private static GamepadInputReading GetInputReading(
+        Gamepad gamepad,
+        WindowsStandardGamepadIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(gamepad);
 
@@ -301,7 +321,24 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             rightTrigger: reading.RightTrigger,
             thumbstickX: reading.LeftThumbstickX,
             thumbstickY: reading.LeftThumbstickY,
-            labels: GetFaceButtonLabels(gamepad));
+            labels: GetFaceButtonLabels(gamepad),
+            displayName: identity.DisplayName,
+            hardwareVendorId: identity.HardwareVendorId);
+    }
+
+    private void CacheStandardGamepadIdentity(Gamepad gamepad)
+        => _standardGamepadIdentities[gamepad] = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
+
+    private WindowsStandardGamepadIdentity GetOrCacheStandardGamepadIdentity(Gamepad gamepad)
+    {
+        if (_standardGamepadIdentities.TryGetValue(gamepad, out var identity))
+        {
+            return identity;
+        }
+
+        identity = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
+        _standardGamepadIdentities[gamepad] = identity;
+        return identity;
     }
 
     private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)

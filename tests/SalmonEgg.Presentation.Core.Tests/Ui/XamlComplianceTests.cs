@@ -2671,7 +2671,13 @@ public sealed class XamlComplianceTests
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", code, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", code, StringComparison.Ordinal);
+        Assert.Contains("WindowsGameControllerButtonLabelMapper.GetIdentity", code, StringComparison.Ordinal);
+        Assert.Contains("displayName: identity.DisplayName", code, StringComparison.Ordinal);
+        Assert.Contains("hardwareVendorId: identity.HardwareVendorId", code, StringComparison.Ordinal);
+        Assert.Contains("_standardGamepadIdentities", code, StringComparison.Ordinal);
+        Assert.Contains("CacheStandardGamepadIdentity", code, StringComparison.Ordinal);
         Assert.Contains("faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A)", code, StringComparison.Ordinal);
+        // Live poll must not call FromGameController; identity is resolved once on connect and reused.
         Assert.DoesNotContain("RawGameController.FromGameController", code, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialRepeatDelay", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RepeatInterval", code, StringComparison.Ordinal);
