@@ -241,7 +241,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
             rawControllers = _connectedRawControllers.ToArray();
         }
 
-        var gamepadReadings = Array.ConvertAll(gamepads, static gamepad => GetInputReading(gamepad.GetCurrentReading()));
+        var gamepadReadings = Array.ConvertAll(gamepads, GetInputReading);
         var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
         var selected = GamepadActiveReadingSelector.TrySelectActiveReading(gamepadReadings, rawReadings, out var selection);
 
@@ -283,21 +283,33 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         _logger.LogDebug("Raw game controller remove event ignored for unknown device.");
     }
 
-    private static GamepadInputReading GetInputReading(GamepadReading reading)
+    private static GamepadInputReading GetInputReading(Gamepad gamepad)
     {
+        ArgumentNullException.ThrowIfNull(gamepad);
+
+        var reading = gamepad.GetCurrentReading();
         return StandardGamepadInputReadingMapper.GetInputReading(
             moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
             moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
             moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
             moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            activate: reading.Buttons.HasFlag(GamepadButtons.A),
-            back: reading.Buttons.HasFlag(GamepadButtons.B),
-            shortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
+            faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A),
+            faceBPressed: reading.Buttons.HasFlag(GamepadButtons.B),
+            faceXPressed: reading.Buttons.HasFlag(GamepadButtons.X),
+            faceYPressed: reading.Buttons.HasFlag(GamepadButtons.Y),
             leftTrigger: reading.LeftTrigger,
             rightTrigger: reading.RightTrigger,
             thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY);
+            thumbstickY: reading.LeftThumbstickY,
+            labels: GetFaceButtonLabels(gamepad));
     }
+
+    private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
+        => new(
+            A: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.A)),
+            B: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.B)),
+            X: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.X)),
+            Y: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.Y)));
 
     private void EmitIntent(GamepadNavigationIntent intent, long tick)
     {

@@ -92,7 +92,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         return new StandardGamepadDiagnostics(
             ButtonLabels: GetButtonLabels(gamepad),
             PressedButtons: GetPressedButtons(reading.Buttons),
-            Reading: GetInputReading(reading));
+            Reading: GetInputReading(gamepad, reading));
     }
 
     private static string[] GetButtonLabels(Gamepad gamepad)
@@ -179,20 +179,29 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         return activeSwitches.ToArray();
     }
 
-    private static GamepadInputReading GetInputReading(GamepadReading reading)
+    private static GamepadInputReading GetInputReading(Gamepad gamepad, GamepadReading reading)
     {
         return StandardGamepadInputReadingMapper.GetInputReading(
             moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
             moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
             moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
             moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            activate: reading.Buttons.HasFlag(GamepadButtons.A),
-            back: reading.Buttons.HasFlag(GamepadButtons.B),
-            shortcutVoiceToggle: reading.Buttons.HasFlag(GamepadButtons.Y),
+            faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A),
+            faceBPressed: reading.Buttons.HasFlag(GamepadButtons.B),
+            faceXPressed: reading.Buttons.HasFlag(GamepadButtons.X),
+            faceYPressed: reading.Buttons.HasFlag(GamepadButtons.Y),
             leftTrigger: reading.LeftTrigger,
             rightTrigger: reading.RightTrigger,
             thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY);
+            thumbstickY: reading.LeftThumbstickY,
+            labels: GetFaceButtonLabels(gamepad));
     }
+
+    private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
+        => new(
+            A: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.A)),
+            B: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.B)),
+            X: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.X)),
+            Y: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.Y)));
 }
 #endif

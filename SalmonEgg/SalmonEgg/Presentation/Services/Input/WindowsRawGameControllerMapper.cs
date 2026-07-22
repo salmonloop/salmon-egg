@@ -48,7 +48,7 @@ public sealed class WindowsRawGameControllerMapper
                 continue;
             }
 
-            pressedButtonLabels.Add(MapButtonLabel(controller.GetButtonLabel(i)));
+            pressedButtonLabels.Add(WindowsGameControllerButtonLabelMapper.Map(controller.GetButtonLabel(i)));
         }
 
         var switchPositions = new GamepadDirectionalSwitchPosition[switches.Count];
@@ -64,37 +64,5 @@ public sealed class WindowsRawGameControllerMapper
             faceButtonLayout);
     }
 
-    private static RawGameControllerButtonLabel MapButtonLabel(GameControllerButtonLabel label)
-    {
-        return label switch
-        {
-            GameControllerButtonLabel.XboxUp => RawGameControllerButtonLabel.XboxUp,
-            GameControllerButtonLabel.Up => RawGameControllerButtonLabel.Up,
-            GameControllerButtonLabel.XboxDown => RawGameControllerButtonLabel.XboxDown,
-            GameControllerButtonLabel.Down => RawGameControllerButtonLabel.Down,
-            GameControllerButtonLabel.XboxLeft => RawGameControllerButtonLabel.XboxLeft,
-            GameControllerButtonLabel.Left => RawGameControllerButtonLabel.Left,
-            GameControllerButtonLabel.XboxRight => RawGameControllerButtonLabel.XboxRight,
-            GameControllerButtonLabel.Right => RawGameControllerButtonLabel.Right,
-            GameControllerButtonLabel.XboxA => RawGameControllerButtonLabel.XboxA,
-            GameControllerButtonLabel.XboxB => RawGameControllerButtonLabel.XboxB,
-            GameControllerButtonLabel.XboxX => RawGameControllerButtonLabel.XboxX,
-            GameControllerButtonLabel.XboxY => RawGameControllerButtonLabel.XboxY,
-            GameControllerButtonLabel.Cross => RawGameControllerButtonLabel.Cross,
-            GameControllerButtonLabel.Circle => RawGameControllerButtonLabel.Circle,
-            GameControllerButtonLabel.Square => RawGameControllerButtonLabel.Square,
-            GameControllerButtonLabel.Triangle => RawGameControllerButtonLabel.Triangle,
-            GameControllerButtonLabel.LetterA => RawGameControllerButtonLabel.LetterA,
-            GameControllerButtonLabel.LetterB => RawGameControllerButtonLabel.LetterB,
-            GameControllerButtonLabel.LetterX => RawGameControllerButtonLabel.LetterX,
-            GameControllerButtonLabel.LetterY => RawGameControllerButtonLabel.LetterY,
-            GameControllerButtonLabel.Back => RawGameControllerButtonLabel.Back,
-            GameControllerButtonLabel.XboxLeftTrigger => RawGameControllerButtonLabel.XboxLeftTrigger,
-            GameControllerButtonLabel.LeftTrigger => RawGameControllerButtonLabel.LeftTrigger,
-            GameControllerButtonLabel.XboxRightTrigger => RawGameControllerButtonLabel.XboxRightTrigger,
-            GameControllerButtonLabel.RightTrigger => RawGameControllerButtonLabel.RightTrigger,
-            _ => RawGameControllerButtonLabel.None
-        };
-    }
 }
 #endif
