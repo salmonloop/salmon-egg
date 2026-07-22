@@ -182,6 +182,17 @@ internal sealed class HidMaestroBridge : IDisposable
 
     public void DisposeController()
     {
+        if (_controller is not null)
+        {
+            try
+            {
+                SubmitState(buttonName: null, hatName: null);
+            }
+            catch
+            {
+            }
+        }
+
         _controller = null;
         _ = _removeAllVirtualControllersMethod.Invoke(_context, null);
     }
@@ -190,31 +201,39 @@ internal sealed class HidMaestroBridge : IDisposable
     {
         EnsureControllerCreated();
 
+        // Sticky press: hold the requested control until the next press or dispose so
+        // diagnostics/GUI smokes can observe the live Windows.Gaming.Input reading while
+        // the virtual controller is still active (app poll is ~50ms).
+        SubmitState(buttonName: null, hatName: null);
+
         switch (input.ToLowerInvariant())
         {
             case "dpad-up":
-                SubmitTap(hatName: "North");
+                SubmitState(hatName: "North");
                 break;
             case "dpad-down":
-                SubmitTap(hatName: "South");
+                SubmitState(hatName: "South");
                 break;
             case "dpad-left":
-                SubmitTap(hatName: "West");
+                SubmitState(hatName: "West");
                 break;
             case "dpad-right":
-                SubmitTap(hatName: "East");
+                SubmitState(hatName: "East");
                 break;
             case "a":
-                SubmitTap(buttonName: "A");
+                SubmitState(buttonName: "A");
                 break;
             case "b":
-                SubmitTap(buttonName: "B");
+                SubmitState(buttonName: "B");
                 break;
             case "x":
-                SubmitTap(buttonName: "X");
+                SubmitState(buttonName: "X");
                 break;
             case "y":
-                SubmitTap(buttonName: "Y");
+                SubmitState(buttonName: "Y");
+                break;
+            case "release":
+                // Already cleared above.
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported gamepad input '{input}'.");
@@ -247,14 +266,6 @@ internal sealed class HidMaestroBridge : IDisposable
 
     private bool IsDriverInstalled()
         => _isDriverInstalledProperty.GetValue(_context) as bool? == true;
-
-    private void SubmitTap(string? buttonName = null, string? hatName = null)
-    {
-        SubmitState(buttonName, hatName);
-        Thread.Sleep(60);
-        SubmitState(buttonName: null, hatName: null);
-        Thread.Sleep(30);
-    }
 
     private void SubmitState(string? buttonName, string? hatName)
     {

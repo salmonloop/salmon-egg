@@ -281,7 +281,7 @@ $env:SALMONEGG_HIDMAESTRO_PROFILE_ID = "xbox-360-wired"
 dotnet run --project tests/SalmonEgg.GamepadBridge.Windows/SalmonEgg.GamepadBridge.Windows.csproj -- serve
 ```
 
-The bridge protocol accepts `create`, `dispose`, and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, `a`, `b`, `x`, and `y`. Face-button validation must record which physical button each profile maps to these commands so Activate, Back, Voice Toggle, and the west-face no-op boundary are all covered.
+The bridge protocol accepts `create`, `dispose`, and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, `a`, `b`, `x`, `y`, and `release`. Each `press` is sticky until the next `press` or dispose so Diagnostics monitoring can observe the held reading under the app poll interval. Face-button validation must record which physical button each profile maps to these commands so Activate, Back, Voice Toggle, and the west-face no-op boundary are all covered. The native-device Diagnostics GUI smoke exercises that face matrix on the default `xbox-360-wired` profile.
 
 Do not guess profile ids in automation. Confirm the installed HIDMaestro profile id first, then record the controller family, transport, profile id, and app diagnostics output in the validation notes.
 

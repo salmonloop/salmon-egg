@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using Xunit.Sdk;
 
@@ -85,6 +86,74 @@ public sealed class DiagnosticsSettingsSmokeTests
                 () => ReadElementText(activeInputs).Contains("MoveDown", StringComparison.Ordinal),
                 TimeSpan.FromSeconds(5)),
             $"Native-device bridge did not project D-pad input into the diagnostics active-intents text."
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Default HIDMaestro profile xbox-360-wired exposes Xbox face semantics on the OS path.
+        // Record Activate / Back / west no-op / Voice so native-device smoke covers the face matrix.
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressActivate,
+            activeInputs,
+            expectedFragment: "Activate",
+            label: "Activate (A)",
+            appData);
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressBack,
+            activeInputs,
+            expectedFragment: "Back",
+            label: "Back (B)",
+            appData);
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressShortcutVoiceToggle,
+            activeInputs,
+            expectedFragment: "ToggleVoiceInput",
+            label: "Voice toggle (Y)",
+            appData);
+
+        // Sticky west face replaces any prior face hold. After Activate, west must clear
+        // Activate and must not introduce Back / ToggleVoiceInput / Move* semantics.
+        AssertActiveInputAfterPress(
+            session,
+            gamepad.PressActivate,
+            activeInputs,
+            expectedFragment: "Activate",
+            label: "Activate before west-face gate",
+            appData);
+        gamepad.PressWestFaceButton();
+        Assert.True(
+            session.WaitUntil(
+                () =>
+                {
+                    var text = ReadElementText(activeInputs);
+                    return !text.Contains("Activate", StringComparison.Ordinal)
+                        && !text.Contains("Back", StringComparison.Ordinal)
+                        && !text.Contains("ToggleVoiceInput", StringComparison.Ordinal)
+                        && !text.Contains("Move", StringComparison.Ordinal);
+                },
+                TimeSpan.FromSeconds(5)),
+            $"Native-device west face button did not clear Activate or projected an unexpected semantic."
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+    private static void AssertActiveInputAfterPress(
+        WindowsGuiAppSession session,
+        Action press,
+        AutomationElement activeInputs,
+        string expectedFragment,
+        string label,
+        GuiAppDataScope appData)
+    {
+        press();
+        Assert.True(
+            session.WaitUntil(
+                () => ReadElementText(activeInputs).Contains(expectedFragment, StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5)),
+            $"Native-device bridge did not project {label} into diagnostics active-intents text."
             + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
