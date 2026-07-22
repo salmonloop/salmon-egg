@@ -39,6 +39,8 @@ public sealed class GamepadAdaptationPipelineTests
     {
         yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.XboxA], [], []), GamepadNavigationIntent.Activate];
         yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.XboxB], [], []), GamepadNavigationIntent.Back];
+        yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.Cross], [], []), GamepadNavigationIntent.Activate];
+        yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.Circle], [], []), GamepadNavigationIntent.Back];
         yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.LetterB], [], [], RawGameControllerFaceButtonLayout.Nintendo), GamepadNavigationIntent.Activate];
         yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.LetterA], [], [], RawGameControllerFaceButtonLayout.Nintendo), GamepadNavigationIntent.Back];
     }
@@ -719,4 +721,52 @@ public sealed class GamepadAdaptationPipelineTests
             switches,
             axes,
             faceButtonLayout);
+
+    [Fact]
+    public void SonyCrossCircleTriangleSquare_MatchAppFaceContractAcrossLabeledRawPath()
+    {
+        // Labeled DualSense glyphs must share app semantics with standard Activate/Back/Voice/west-no-op.
+        var activate = RawController([RawGameControllerButtonLabel.Cross], [], []);
+        var back = RawController([RawGameControllerButtonLabel.Circle], [], []);
+        var voice = RawController([RawGameControllerButtonLabel.Triangle], [], []);
+        var west = RawController([RawGameControllerButtonLabel.Square], [], []);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(activate)));
+        Assert.Equal([GamepadNavigationIntent.Back], Order(GamepadIntentProcessor.GetActiveIntents(back)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(voice).OrderBy(static x => x));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(west));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(west));
+    }
+
+    [Fact]
+    public void NintendoPhysicalLetters_MatchXboxAppFaceContractAtPhysicalPositions()
+    {
+        var activate = RawController(
+            [RawGameControllerButtonLabel.LetterB],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var back = RawController(
+            [RawGameControllerButtonLabel.LetterA],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var voice = RawController(
+            [RawGameControllerButtonLabel.LetterX],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var west = RawController(
+            [RawGameControllerButtonLabel.LetterY],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(activate)));
+        Assert.Equal([GamepadNavigationIntent.Back], Order(GamepadIntentProcessor.GetActiveIntents(back)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(voice).OrderBy(static x => x));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(west));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(west));
+    }
+
 }

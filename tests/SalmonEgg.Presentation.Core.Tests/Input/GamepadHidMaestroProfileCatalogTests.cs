@@ -83,4 +83,49 @@ public sealed class GamepadHidMaestroProfileCatalogTests
             Assert.NotEqual("Unknown", GamepadHidMaestroProfileCatalog.FormatFamilyToken(profileId));
         }
     }
+
+    public static IEnumerable<object[]> PhysicalFaceCandidateSamples()
+    {
+        yield return [GamepadHidMaestroProfileCatalog.Xbox360Wired, GamepadFaceSemantic.Activate, new[] { "A" }];
+        yield return [GamepadHidMaestroProfileCatalog.Xbox360Wired, GamepadFaceSemantic.Back, new[] { "B" }];
+        yield return [GamepadHidMaestroProfileCatalog.Xbox360Wired, GamepadFaceSemantic.West, new[] { "X" }];
+        yield return [GamepadHidMaestroProfileCatalog.Xbox360Wired, GamepadFaceSemantic.Voice, new[] { "Y" }];
+        yield return [GamepadHidMaestroProfileCatalog.XboxSeriesXs, GamepadFaceSemantic.Activate, new[] { "A" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualSense, GamepadFaceSemantic.Activate, new[] { "Cross", "A" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualSense, GamepadFaceSemantic.Back, new[] { "Circle", "B" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualSense, GamepadFaceSemantic.West, new[] { "Square", "X" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualSense, GamepadFaceSemantic.Voice, new[] { "Triangle", "Y" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualSenseBluetooth, GamepadFaceSemantic.Activate, new[] { "Cross", "A" }];
+        yield return [GamepadHidMaestroProfileCatalog.DualShock4V2, GamepadFaceSemantic.Back, new[] { "Circle", "B" }];
+        yield return [GamepadHidMaestroProfileCatalog.SwitchPro, GamepadFaceSemantic.Activate, new[] { "B" }];
+        yield return [GamepadHidMaestroProfileCatalog.SwitchPro, GamepadFaceSemantic.Back, new[] { "A" }];
+        yield return [GamepadHidMaestroProfileCatalog.SwitchPro, GamepadFaceSemantic.West, new[] { "Y" }];
+        yield return [GamepadHidMaestroProfileCatalog.SwitchPro, GamepadFaceSemantic.Voice, new[] { "X" }];
+        // Unconfirmed: inject fallback Xbox letters, but family remains Unknown.
+        yield return ["not-a-real-profile", GamepadFaceSemantic.Activate, new[] { "A" }];
+        yield return ["not-a-real-profile", GamepadFaceSemantic.West, new[] { "X" }];
+    }
+
+    [Theory]
+    [MemberData(nameof(PhysicalFaceCandidateSamples))]
+    public void GetPhysicalButtonNameCandidates_MapsFamilyToOrderedPhysicalKeys(
+        string profileId,
+        GamepadFaceSemantic semantic,
+        string[] expected)
+    {
+        Assert.Equal(
+            expected,
+            GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(profileId, semantic));
+    }
+
+    [Fact]
+    public void GetPhysicalButtonNameCandidates_BlankProfileUsesDefaultXboxKeys()
+    {
+        Assert.Equal(
+            ["A"],
+            GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(null, GamepadFaceSemantic.Activate));
+        Assert.Equal(
+            ["Y"],
+            GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates("  ", GamepadFaceSemantic.Voice));
+    }
 }

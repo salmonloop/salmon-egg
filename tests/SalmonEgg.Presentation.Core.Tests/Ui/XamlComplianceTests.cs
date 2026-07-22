@@ -2910,6 +2910,7 @@ public sealed class XamlComplianceTests
     {
         var bridge = LoadText(@"tests\SalmonEgg.GamepadBridge.Windows\Program.cs");
         var nativeInput = LoadText(@"tests\SalmonEgg.GuiTests.Windows\NativeDeviceGamepadTestInput.cs");
+        var catalog = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadHidMaestroProfileCatalog.cs");
 
         Assert.Contains("SALMONEGG_HIDMAESTRO_PROFILE_ID", bridge, StringComparison.Ordinal);
         Assert.Contains("GamepadHidMaestroProfileCatalog", bridge, StringComparison.Ordinal);
@@ -2925,7 +2926,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("case \"west\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"voice\":", bridge, StringComparison.Ordinal);
         Assert.Contains("ResolveSemanticFaceButton", bridge, StringComparison.Ordinal);
-        Assert.Contains("GamepadHidMaestroProfileCatalog.ResolveFamily", bridge, StringComparison.Ordinal);
+        Assert.Contains("GetPhysicalButtonNameCandidates", bridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadFaceSemantic", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("private enum FaceSemantic", bridge, StringComparison.Ordinal);
+        Assert.Contains("GetPhysicalButtonNameCandidates", catalog, StringComparison.Ordinal);
+
+        Assert.Contains("GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates", bridge, StringComparison.Ordinal);
         Assert.Contains("GamepadHidMaestroProfileCatalog.FormatFamilyToken", bridge, StringComparison.Ordinal);
         Assert.Contains("GamepadHidMaestroProfileCatalog.NormalizeProfileId", bridge, StringComparison.Ordinal);
         Assert.Contains("using SalmonEgg.Presentation.Core.Services.Input;", bridge, StringComparison.Ordinal);
@@ -2933,7 +2939,6 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("ProfileFaceFamily", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("ResolveFamilyToken", bridge, StringComparison.Ordinal);
 
-        var catalog = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadHidMaestroProfileCatalog.cs");
         Assert.Contains("switch-pro", catalog, StringComparison.Ordinal);
         Assert.Contains("dualsense", catalog, StringComparison.Ordinal);
         Assert.Contains("dualsense-bt", catalog, StringComparison.Ordinal);
