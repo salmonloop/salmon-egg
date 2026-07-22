@@ -119,6 +119,7 @@ internal sealed class HidMaestroBridge : IDisposable
     private readonly PropertyInfo _isDriverInstalledProperty;
 
     private object? _controller;
+    private object? _profile;
 
     public HidMaestroBridge(string hidMaestroCorePath, string profileId)
     {
@@ -180,6 +181,13 @@ internal sealed class HidMaestroBridge : IDisposable
 
         _controller = _createControllerMethod.Invoke(_context, [profile])
             ?? throw new InvalidOperationException("HIDMaestro failed to create a virtual controller.");
+
+        // Keep the live controller profile so trigger submission can use profile.Triggers
+        // (DualSense Rx/Ry) or digital L2/R2 indexes when the profile has no analog triggers
+        // (Switch Pro). Do not invent profile ids here — callers choose via env/config.
+        var profileProperty = _controller.GetType().GetProperty("Profile")
+            ?? throw new MissingMemberException(_controller.GetType().FullName, "Profile");
+        _profile = profileProperty.GetValue(_controller) ?? profile;
     }
 
     public void DisposeController()
@@ -196,6 +204,7 @@ internal sealed class HidMaestroBridge : IDisposable
         }
 
         _controller = null;
+        _profile = null;
         _ = _removeAllVirtualControllersMethod.Invoke(_context, null);
     }
 
@@ -237,13 +246,15 @@ internal sealed class HidMaestroBridge : IDisposable
             case "lt":
             case "left-trigger":
             case "lefttrigger":
-                // Canonical HMAxis.Z; not HMButton — triggers are analog axes.
+                // Profile-aware: analog Axes when profile.Triggers is non-empty (Xbox/DualSense),
+                // otherwise digital descriptor button 6 (Switch Pro L2 click).
                 SubmitState(buttonName: null, hatName: null, leftTrigger: 1f);
                 break;
             case "rt":
             case "right-trigger":
             case "righttrigger":
-                // Canonical HMAxis.Rz; not HMButton — triggers are analog axes.
+                // Profile-aware: analog Axes when profile.Triggers is non-empty (Xbox/DualSense),
+                // otherwise digital descriptor button 7 (Switch Pro R2 click).
                 SubmitState(buttonName: null, hatName: null, rightTrigger: 1f);
                 break;
             case "release":
@@ -300,35 +311,110 @@ internal sealed class HidMaestroBridge : IDisposable
         var buttonValue = Enum.Parse(_hmButtonType, buttonName ?? "None", ignoreCase: true);
         var hatValue = Enum.Parse(_hmHatType, hatName ?? "None", ignoreCase: true);
 
+        // When the active profile has no analog trigger axes (Switch Pro full HID),
+        // L2/R2 are digital descriptor buttons at indexes 6/7. Without a ButtonMap,
+        // HMButton bit N maps to descriptor button N, so bit 6/7 light L2/R2.
+        // Only use this when profile.Triggers is empty so Xbox Back/Start (bits 6/7)
+        // are not mis-fired as triggers on analog-trigger profiles.
+        if ((leftTrigger is not null || rightTrigger is not null)
+            && !ProfileHasAnalogTriggers())
+        {
+            var digitalMask = Convert.ToUInt32(buttonValue);
+            if (leftTrigger is not null)
+            {
+                digitalMask |= 1u << 6;
+            }
+
+            if (rightTrigger is not null)
+            {
+                digitalMask |= 1u << 7;
+            }
+
+            buttonValue = Enum.ToObject(_hmButtonType, digitalMask);
+        }
+
         buttonsField.SetValue(state, buttonValue);
         hatField.SetValue(state, hatValue);
 
-        // HIDMaestro v1.3.9+ drives analog triggers through HMGamepadState.Axes.
-        // ResolveTrigger reads canonical HMAxis.Z / HMAxis.Rz first, then profile
-        // trigger field keys. Full press uses 1.0 so app threshold (>= 0.5) trips.
-        if (leftTrigger is not null || rightTrigger is not null)
+        // Analog triggers: write profile.Triggers field keys and canonical Z/Rz + Rx/Ry
+        // so Xbox (Z/Rz), DualSense (Rx/Ry / axisMap), and other full pads all feed
+        // HIDMaestro ResolveTrigger and the XUSB companion GIP path.
+        if ((leftTrigger is not null || rightTrigger is not null)
+            && ProfileHasAnalogTriggers())
         {
-            var axesType = typeof(Dictionary<,>).MakeGenericType(_hmAxisType, typeof(float));
-            var axes = Activator.CreateInstance(axesType)
-                ?? throw new InvalidOperationException("Failed to create HMGamepadState.Axes dictionary.");
-            var indexer = axesType.GetProperty("Item")
-                ?? throw new MissingMemberException(axesType.FullName, "Item");
-
-            if (leftTrigger is float left)
-            {
-                indexer.SetValue(axes, left, [Enum.Parse(_hmAxisType, "Z", ignoreCase: true)]);
-            }
-
-            if (rightTrigger is float right)
-            {
-                indexer.SetValue(axes, right, [Enum.Parse(_hmAxisType, "Rz", ignoreCase: true)]);
-            }
-
-            axesField.SetValue(state, axes);
+            axesField.SetValue(state, BuildTriggerAxes(leftTrigger, rightTrigger));
         }
 
         var args = new[] { state };
         _ = _submitStateMethod.Invoke(_controller, args);
+    }
+
+    private bool ProfileHasAnalogTriggers()
+    {
+        var triggers = GetProfileTriggers();
+        return triggers is not null && triggers.Count > 0;
+    }
+
+    private System.Collections.IList? GetProfileTriggers()
+    {
+        if (_profile is null)
+        {
+            return null;
+        }
+
+        var triggersProperty = _profile.GetType().GetProperty("Triggers");
+        if (triggersProperty is null)
+        {
+            return null;
+        }
+
+        return triggersProperty.GetValue(_profile) as System.Collections.IList;
+    }
+
+    private object BuildTriggerAxes(float? leftTrigger, float? rightTrigger)
+    {
+        var axesType = typeof(Dictionary<,>).MakeGenericType(_hmAxisType, typeof(float));
+        var axes = Activator.CreateInstance(axesType)
+            ?? throw new InvalidOperationException("Failed to create HMGamepadState.Axes dictionary.");
+        var indexer = axesType.GetProperty("Item")
+            ?? throw new MissingMemberException(axesType.FullName, "Item");
+
+        void WriteAxis(string axisName, float value)
+        {
+            indexer.SetValue(axes, value, [Enum.Parse(_hmAxisType, axisName, ignoreCase: true)]);
+        }
+
+        void WriteProfileTriggerSlot(int slot, float value)
+        {
+            var triggers = GetProfileTriggers();
+            if (triggers is null || slot >= triggers.Count || triggers[slot] is null)
+            {
+                return;
+            }
+
+            var axisProperty = triggers[slot]!.GetType().GetProperty("Axis")
+                ?? throw new MissingMemberException(triggers[slot]!.GetType().FullName, "Axis");
+            var axisValue = axisProperty.GetValue(triggers[slot])
+                ?? throw new InvalidOperationException("Profile trigger Axis was null.");
+            indexer.SetValue(axes, value, [axisValue]);
+        }
+
+        if (leftTrigger is float left)
+        {
+            // Canonical first (PadForge / older consumers), then profile field key.
+            WriteAxis("Z", left);
+            WriteAxis("Rx", left);
+            WriteProfileTriggerSlot(0, left);
+        }
+
+        if (rightTrigger is float right)
+        {
+            WriteAxis("Rz", right);
+            WriteAxis("Ry", right);
+            WriteProfileTriggerSlot(1, right);
+        }
+
+        return axes;
     }
 
     private Type ResolveType(string fullName)
