@@ -323,6 +323,126 @@ public sealed class GamepadAdaptationPipelineTests
         Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(selection.Reading)));
     }
 
+    [Theory]
+    [InlineData(RawGameControllerButtonLabel.XboxA, true, false, false)]
+    [InlineData(RawGameControllerButtonLabel.XboxB, false, true, false)]
+    [InlineData(RawGameControllerButtonLabel.XboxX, false, false, false)]
+    [InlineData(RawGameControllerButtonLabel.XboxY, false, false, true)]
+    [InlineData(RawGameControllerButtonLabel.Cross, true, false, false)]
+    [InlineData(RawGameControllerButtonLabel.Circle, false, true, false)]
+    [InlineData(RawGameControllerButtonLabel.Square, false, false, false)]
+    [InlineData(RawGameControllerButtonLabel.Triangle, false, false, true)]
+    public void LabeledRawFaceButtons_ProjectXboxAndPlayStationPhysicalSemantics(
+        RawGameControllerButtonLabel label,
+        bool activate,
+        bool back,
+        bool voice)
+    {
+        var reading = RawController([label], [], [], RawGameControllerFaceButtonLayout.Standard);
+
+        Assert.Equal(activate, reading.Activate);
+        Assert.Equal(back, reading.Back);
+        Assert.Equal(voice, reading.ShortcutVoiceToggle);
+
+        var expectedNav = new List<GamepadNavigationIntent>();
+        if (activate)
+        {
+            expectedNav.Add(GamepadNavigationIntent.Activate);
+        }
+
+        if (back)
+        {
+            expectedNav.Add(GamepadNavigationIntent.Back);
+        }
+
+        Assert.Equal(expectedNav, Order(GamepadIntentProcessor.GetActiveIntents(reading)));
+        Assert.Equal(
+            voice ? [GamepadShortcutIntent.ToggleVoiceInput] : Array.Empty<GamepadShortcutIntent>(),
+            GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Theory]
+    [InlineData(RawGameControllerButtonLabel.LetterB, true, false, false)]
+    [InlineData(RawGameControllerButtonLabel.LetterA, false, true, false)]
+    [InlineData(RawGameControllerButtonLabel.LetterY, false, false, false)]
+    [InlineData(RawGameControllerButtonLabel.LetterX, false, false, true)]
+    public void LabeledRawNintendoFaceButtons_ProjectPhysicalGlyphSemantics(
+        RawGameControllerButtonLabel label,
+        bool activate,
+        bool back,
+        bool voice)
+    {
+        var reading = RawController([label], [], [], RawGameControllerFaceButtonLayout.Nintendo);
+
+        Assert.Equal(activate, reading.Activate);
+        Assert.Equal(back, reading.Back);
+        Assert.Equal(voice, reading.ShortcutVoiceToggle);
+
+        var expectedNav = new List<GamepadNavigationIntent>();
+        if (activate)
+        {
+            expectedNav.Add(GamepadNavigationIntent.Activate);
+        }
+
+        if (back)
+        {
+            expectedNav.Add(GamepadNavigationIntent.Back);
+        }
+
+        Assert.Equal(expectedNav, Order(GamepadIntentProcessor.GetActiveIntents(reading)));
+        Assert.Equal(
+            voice ? [GamepadShortcutIntent.ToggleVoiceInput] : Array.Empty<GamepadShortcutIntent>(),
+            GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Theory]
+    [InlineData("Joy-Con (L)", (ushort)0x057E)]
+    [InlineData("Joy-Con (R)", (ushort)0x057E)]
+    [InlineData("JoyCon (L)", (ushort)0x0000)]
+    public void SingleJoyCon_RejectsFullGamepadUnlabeledIndexFallback(string displayName, ushort vendorId)
+    {
+        Assert.False(RawGameControllerUnlabeledFaceIndexPolicy.SupportsFullGamepadUnlabeledIndexFallback(
+            displayName,
+            vendorId));
+
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(1, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayoutResolver.Resolve(displayName, vendorId),
+            allowUnlabeledFaceIndexFallback: false);
+
+        Assert.Equal(default, reading);
+    }
+
+    [Fact]
+    public void UnlabeledFullGamepadIndexes_MapWestFaceAsNoOpAndTriggersAsPageContext()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(2, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(7, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true);
+
+        Assert.False(reading.Activate);
+        Assert.False(reading.Back);
+        Assert.False(reading.ShortcutVoiceToggle);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Equal(
+            [GamepadContextIntent.PageUp, GamepadContextIntent.PageDown],
+            GamepadContextIntentProjector.GetActiveIntents(reading).OrderBy(static intent => intent));
+    }
+
     [Fact]
     public void RawLetterLabelsWithoutNintendoIdentity_StillUseNintendoFaceSemantics()
     {

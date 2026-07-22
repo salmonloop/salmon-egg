@@ -20,10 +20,13 @@ public static class RawGameControllerUnlabeledFaceIndexPolicy
         }
 
         // Joy-Con name tokens only reach here after single Joy-Con exclusion above.
+        // PS4/PS5 short names appear on some Windows HID paths without Sony VID metadata.
         return ContainsToken(displayName, "Xbox")
             || ContainsToken(displayName, "PlayStation")
             || ContainsToken(displayName, "DualShock")
             || ContainsToken(displayName, "DualSense")
+            || ContainsToken(displayName, "PS5")
+            || ContainsToken(displayName, "PS4")
             || ContainsToken(displayName, "Nintendo")
             || ContainsToken(displayName, "Switch Pro")
             || ContainsToken(displayName, "Joy-Con")
