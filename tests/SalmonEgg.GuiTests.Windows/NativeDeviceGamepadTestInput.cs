@@ -18,6 +18,10 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
     private CancellationTokenSource? _autoReleaseCts;
     private bool _disposed;
 
+    public string ActiveProfileId { get; private set; } = string.Empty;
+
+    public string ActiveFamily { get; private set; } = string.Empty;
+
     public NativeDeviceGamepadTestInput()
     {
         var bridgePath = GetRequiredBridgePath();
@@ -26,6 +30,8 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         _holdDuration = TryParseHold(Environment.GetEnvironmentVariable(HoldMsEnvVar));
         _bridgeProcess = StartBridgeProcess(bridgePath);
         SendCommand("create");
+        var info = SendCommand("info");
+        ParseBridgeInfo(info);
     }
 
     internal static bool IsBridgeConfigured(out string failureReason)
@@ -186,7 +192,7 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         return process;
     }
 
-    private void SendCommand(string command)
+    private string SendCommand(string command)
     {
         ThrowIfDisposed();
 
@@ -221,9 +227,9 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
                         + $"{Environment.NewLine}stderr: {stderr}");
                 }
 
-                if (string.Equals(line, "ok", StringComparison.OrdinalIgnoreCase))
+                if (line.StartsWith("ok", StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    return line;
                 }
 
                 if (line.StartsWith("error ", StringComparison.OrdinalIgnoreCase))
@@ -232,6 +238,31 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
                         $"The native-device gamepad bridge rejected '{command}': {line}");
                 }
             }
+        }
+    }
+
+    private void ParseBridgeInfo(string infoLine)
+    {
+        // Expected: ok profile=<id> family=Xbox|Sony|Nintendo
+        ActiveProfileId = string.Empty;
+        ActiveFamily = string.Empty;
+        var parts = infoLine.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("profile=", StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveProfileId = part["profile=".Length..];
+            }
+            else if (part.StartsWith("family=", StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveFamily = part["family=".Length..];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(ActiveProfileId) || string.IsNullOrWhiteSpace(ActiveFamily))
+        {
+            throw new InvalidOperationException(
+                $"The native-device gamepad bridge returned an incomplete info line: '{infoLine}'.");
         }
     }
 

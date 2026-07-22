@@ -66,6 +66,11 @@ public sealed class DiagnosticsSettingsSmokeTests
             $"Gamepad diagnostics stop button did not become enabled after starting native-device monitoring.{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         var gamepad = session.CreateConfiguredGamepadInput();
+        var nativeGamepad = gamepad as NativeDeviceGamepadTestInput
+            ?? throw new InvalidOperationException(
+                "Native-device Diagnostics smoke requires NativeDeviceGamepadTestInput; "
+                + "set SALMONEGG_GUI_GAMEPAD_INPUT_BACKEND=native-device.");
+        var expectedFamily = nativeGamepad.ActiveFamily;
         var standardCount = session.FindByAutomationId("Diagnostics.GamepadStandardCount", TimeSpan.FromSeconds(5));
 
         Assert.True(
@@ -76,6 +81,24 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}StandardCount={ReadElementText(standardCount)}"
             + $"{Environment.NewLine}RawCount={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawCount", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
+        // Multi-brand evidence: Diagnostics must project the family token for the active
+        // HIDMaestro profile (Xbox default; DualSense/Switch when SALMONEGG_HIDMAESTRO_PROFILE_ID is set).
+        Assert.True(
+            session.WaitUntil(
+                () =>
+                {
+                    var standard = ReadElementText(session.FindByAutomationId("Diagnostics.GamepadStandardDetails", TimeSpan.FromSeconds(2)));
+                    var raw = ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawDetails", TimeSpan.FromSeconds(2)));
+                    var familyToken = "family " + expectedFamily;
+                    return standard.Contains(familyToken, StringComparison.Ordinal)
+                        || raw.Contains(familyToken, StringComparison.Ordinal);
+                },
+                TimeSpan.FromSeconds(5)),
+            $"Native-device Diagnostics did not project family '{expectedFamily}' for HIDMaestro profile '{nativeGamepad.ActiveProfileId}'."
+            + $"{Environment.NewLine}StandardDetails={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadStandardDetails", TimeSpan.FromSeconds(2)))}"
+            + $"{Environment.NewLine}RawDetails={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadRawDetails", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         gamepad.PressDown();
