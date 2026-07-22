@@ -42,7 +42,9 @@ public static class StandardGamepadInputReadingMapper
         double rightTrigger,
         double thumbstickX,
         double thumbstickY,
-        StandardGamepadFaceButtonLabels labels)
+        StandardGamepadFaceButtonLabels labels,
+        string? displayName = null,
+        ushort? hardwareVendorId = null)
     {
         var reading = new GamepadInputReading(
             MoveUp: moveUp,
@@ -57,7 +59,12 @@ public static class StandardGamepadInputReadingMapper
             ThumbstickX: ClampSigned(thumbstickX),
             ThumbstickY: ClampSigned(thumbstickY));
 
-        var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(labels);
+        // Prefer controller identity when available so standard-path layout matches
+        // diagnostics and raw layout resolution for the same device facts.
+        var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            displayName,
+            hardwareVendorId,
+            labels);
         if (faceAPressed)
         {
             reading = ApplyFaceButton(reading, labels.A, faceButtonLayout, activateFallback: true, backFallback: false, voiceFallback: false);

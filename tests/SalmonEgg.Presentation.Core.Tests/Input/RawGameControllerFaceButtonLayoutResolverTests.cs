@@ -8,6 +8,7 @@ public sealed class RawGameControllerFaceButtonLayoutResolverTests
     [InlineData("Nintendo Switch Pro Controller", 0x0000)]
     [InlineData("Joy-Con (L)", 0x0000)]
     [InlineData("JoyCon Pair", 0x0000)]
+    [InlineData("Pro Controller", 0x0000)]
     [InlineData("Wireless Controller", 0x057E)]
     public void Resolve_WhenNintendoIdentityIsPresent_UsesNintendoLayout(
         string displayName,
@@ -25,6 +26,7 @@ public sealed class RawGameControllerFaceButtonLayoutResolverTests
     [InlineData("", 0x0000)]
     [InlineData("Xbox Wireless Controller", 0x045E)]
     [InlineData("Wireless Controller", 0x054C)]
+    [InlineData("Xbox Pro Controller", 0x0000)]
     public void Resolve_WhenNintendoIdentityIsAbsent_UsesStandardLayout(
         string? displayName,
         ushort hardwareVendorId)

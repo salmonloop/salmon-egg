@@ -144,12 +144,64 @@ public sealed class StandardGamepadInputReadingMapperTests
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
     }
 
+
+    [Fact]
+    public void GetInputReading_WithNintendoIdentityAndNoLabels_UsesPhysicalSlotFallbackSemantics()
+    {
+        // When identity is Nintendo but Windows reports no face labels, standard path still
+        // uses physical slot fallbacks (Windows remaps Nintendo faces to Gamepad A/B/X/Y slots).
+        var reading = StandardGamepadInputReadingMapper.GetInputReading(
+            moveUp: false,
+            moveDown: false,
+            moveLeft: false,
+            moveRight: false,
+            faceAPressed: true,
+            faceBPressed: true,
+            faceXPressed: true,
+            faceYPressed: true,
+            leftTrigger: 0,
+            rightTrigger: 0,
+            thumbstickX: 0,
+            thumbstickY: 0,
+            labels: default,
+            displayName: "Pro Controller",
+            hardwareVendorId: 0x057E);
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            GamepadIntentProcessor.GetActiveIntents(reading).OrderBy(static intent => intent));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_WithNintendoIdentityAndLetterLabels_StillMapsByPhysicalGlyph()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.LetterB,
+            B: RawGameControllerButtonLabel.LetterA,
+            X: RawGameControllerButtonLabel.LetterY,
+            Y: RawGameControllerButtonLabel.LetterX);
+
+        var bottom = MapFace(faceA: true, labels: labels, displayName: "Pro Controller", hardwareVendorId: 0x057E);
+        var east = MapFace(faceB: true, labels: labels, displayName: "Pro Controller", hardwareVendorId: 0x057E);
+        var west = MapFace(faceX: true, labels: labels, displayName: "Pro Controller", hardwareVendorId: 0x057E);
+        var north = MapFace(faceY: true, labels: labels, displayName: "Pro Controller", hardwareVendorId: 0x057E);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(bottom));
+        Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(east));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(west));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(west));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(north));
+    }
+
     private static GamepadInputReading MapFace(
         bool faceA = false,
         bool faceB = false,
         bool faceX = false,
         bool faceY = false,
-        StandardGamepadFaceButtonLabels labels = default)
+        StandardGamepadFaceButtonLabels labels = default,
+        string? displayName = null,
+        ushort? hardwareVendorId = null)
         => StandardGamepadInputReadingMapper.GetInputReading(
             moveUp: false,
             moveDown: false,
@@ -163,5 +215,7 @@ public sealed class StandardGamepadInputReadingMapperTests
             rightTrigger: 0,
             thumbstickX: 0,
             thumbstickY: 0,
-            labels: labels);
+            labels: labels,
+            displayName: displayName,
+            hardwareVendorId: hardwareVendorId);
 }

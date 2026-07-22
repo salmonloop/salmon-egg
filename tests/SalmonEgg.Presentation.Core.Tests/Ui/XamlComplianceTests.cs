@@ -2687,6 +2687,9 @@ public sealed class XamlComplianceTests
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", code, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", code, StringComparison.Ordinal);
+        Assert.Contains("WindowsGameControllerButtonLabelMapper.GetIdentity", code, StringComparison.Ordinal);
+        Assert.Contains("displayName: identity.DisplayName", code, StringComparison.Ordinal);
+        Assert.Contains("hardwareVendorId: identity.HardwareVendorId", code, StringComparison.Ordinal);
         Assert.DoesNotContain("new GamepadInputReading(", code, StringComparison.Ordinal);
     }
 

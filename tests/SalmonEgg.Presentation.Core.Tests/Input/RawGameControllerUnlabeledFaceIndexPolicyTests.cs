@@ -12,6 +12,7 @@ public sealed class RawGameControllerUnlabeledFaceIndexPolicyTests
     [InlineData("PS4 Controller", 0x0000)]
     [InlineData("Xbox Series X Controller", 0x0000)]
     [InlineData("Nintendo Switch Pro Controller", 0x057E)]
+    [InlineData("Pro Controller", 0x0000)]
     [InlineData("Joy-Con Pair", 0x057E)]
     [InlineData("Joy-Con Grip", 0x0000)]
     [InlineData("Dual Joy-Con", 0x0000)]

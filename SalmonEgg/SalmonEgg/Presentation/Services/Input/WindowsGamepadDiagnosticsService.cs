@@ -101,7 +101,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
                 labels),
             ButtonLabels: GetButtonLabels(gamepad),
             PressedButtons: GetPressedButtons(reading.Buttons),
-            Reading: GetInputReading(gamepad, reading, labels));
+            Reading: GetInputReading(gamepad, reading, labels, identity));
     }
 
     private static string[] GetButtonLabels(Gamepad gamepad)
@@ -194,7 +194,8 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
     private static GamepadInputReading GetInputReading(
         Gamepad gamepad,
         GamepadReading reading,
-        StandardGamepadFaceButtonLabels labels)
+        StandardGamepadFaceButtonLabels labels,
+        WindowsStandardGamepadIdentity identity)
     {
         return StandardGamepadInputReadingMapper.GetInputReading(
             moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
@@ -209,7 +210,9 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             rightTrigger: reading.RightTrigger,
             thumbstickX: reading.LeftThumbstickX,
             thumbstickY: reading.LeftThumbstickY,
-            labels: labels);
+            labels: labels,
+            displayName: identity.DisplayName,
+            hardwareVendorId: identity.HardwareVendorId);
     }
 
     private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
