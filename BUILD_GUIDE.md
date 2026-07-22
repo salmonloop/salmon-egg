@@ -273,7 +273,7 @@ Authoritative multi-brand completion still requires current Windows MSIX + Diagn
 
 Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
 
-By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
+By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) are owned by Core `GamepadHidMaestroProfileCatalog` and currently include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids; profile → family mapping for bridge `info` and semantic face presses comes from that catalog. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
 
 ```powershell
 $env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"

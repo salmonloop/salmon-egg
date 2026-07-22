@@ -2912,7 +2912,7 @@ public sealed class XamlComplianceTests
         var nativeInput = LoadText(@"tests\SalmonEgg.GuiTests.Windows\NativeDeviceGamepadTestInput.cs");
 
         Assert.Contains("SALMONEGG_HIDMAESTRO_PROFILE_ID", bridge, StringComparison.Ordinal);
-        Assert.Contains("DefaultProfileId", bridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadHidMaestroProfileCatalog", bridge, StringComparison.Ordinal);
         Assert.Contains("ResolveHidMaestroProfileId()", bridge, StringComparison.Ordinal);
         Assert.Contains("new HidMaestroBridge(hidMaestroCorePath, hidMaestroProfileId)", bridge, StringComparison.Ordinal);
         Assert.Contains("_getProfileMethod.Invoke(_context, [_profileId])", bridge, StringComparison.Ordinal);
@@ -2925,13 +2925,22 @@ public sealed class XamlComplianceTests
         Assert.Contains("case \"west\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"voice\":", bridge, StringComparison.Ordinal);
         Assert.Contains("ResolveSemanticFaceButton", bridge, StringComparison.Ordinal);
-        Assert.Contains("ResolveProfileFaceFamily", bridge, StringComparison.Ordinal);
-        Assert.Contains("ProfileFaceFamily.Nintendo", bridge, StringComparison.Ordinal);
-        Assert.Contains("ProfileFaceFamily.Sony", bridge, StringComparison.Ordinal);
-        Assert.Contains("\"switch-pro\"", bridge, StringComparison.Ordinal);
-        Assert.Contains("\"dualsense\"", bridge, StringComparison.Ordinal);
-        Assert.Contains("\"dualsense-bt\"", bridge, StringComparison.Ordinal);
-        Assert.Contains("\"dualshock-4-v2\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadHidMaestroProfileCatalog.ResolveFamily", bridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadHidMaestroProfileCatalog.FormatFamilyToken", bridge, StringComparison.Ordinal);
+        Assert.Contains("GamepadHidMaestroProfileCatalog.NormalizeProfileId", bridge, StringComparison.Ordinal);
+        Assert.Contains("using SalmonEgg.Presentation.Core.Services.Input;", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveProfileFaceFamily", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProfileFaceFamily", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResolveFamilyToken", bridge, StringComparison.Ordinal);
+
+        var catalog = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadHidMaestroProfileCatalog.cs");
+        Assert.Contains("switch-pro", catalog, StringComparison.Ordinal);
+        Assert.Contains("dualsense", catalog, StringComparison.Ordinal);
+        Assert.Contains("dualsense-bt", catalog, StringComparison.Ordinal);
+        Assert.Contains("dualshock-4-v2", catalog, StringComparison.Ordinal);
+        Assert.Contains("xbox-360-wired", catalog, StringComparison.Ordinal);
+        Assert.Contains("xbox-series-xs", catalog, StringComparison.Ordinal);
+        Assert.Contains("DefaultProfileId", catalog, StringComparison.Ordinal);
         Assert.Contains("case \"cross\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"circle\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"square\":", bridge, StringComparison.Ordinal);
@@ -2960,7 +2969,7 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("PressActivate() => HoldThenAutoRelease(\"a\")", nativeInput, StringComparison.Ordinal);
         Assert.DoesNotContain("PressBack() => HoldThenAutoRelease(\"b\")", nativeInput, StringComparison.Ordinal);
         Assert.Contains("Equals(command, \"info\"", bridge, StringComparison.Ordinal);
-        Assert.Contains("ResolveFamilyToken", bridge, StringComparison.Ordinal);
+        Assert.Contains("FormatFamilyToken", bridge, StringComparison.Ordinal);
         Assert.Contains("ok profile=", bridge, StringComparison.Ordinal);
         Assert.Contains("family=", bridge, StringComparison.Ordinal);
         Assert.Contains("SendCommand(\"info\")", nativeInput, StringComparison.Ordinal);
