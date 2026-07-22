@@ -54,4 +54,29 @@ public sealed class RawGameControllerAxisNormalizerTests
         Assert.True(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, double.NaN, double.NegativeInfinity]));
         Assert.False(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, double.PositiveInfinity, 0.5]));
     }
+
+    [Theory]
+    [InlineData(0.0, 0.0)]
+    [InlineData(0.5, 0.5)]
+    [InlineData(1.0, 1.0)]
+    [InlineData(-0.25, 0.0)]
+    [InlineData(1.25, 1.0)]
+    [InlineData(double.NaN, 0.0)]
+    [InlineData(double.NegativeInfinity, 0.0)]
+    [InlineData(double.PositiveInfinity, 0.0)]
+    public void NormalizeUnit_ClampsUnipolarTriggerAxis(double rawValue, double expected)
+    {
+        var normalized = RawGameControllerAxisNormalizer.NormalizeUnit(rawValue);
+
+        Assert.Equal(expected, normalized);
+    }
+
+    [Fact]
+    public void AreStickAxesIdle_TreatsExactZeroAndNonFiniteAsIdle()
+    {
+        Assert.True(RawGameControllerAxisNormalizer.AreStickAxesIdle(0.0, 0.0));
+        Assert.True(RawGameControllerAxisNormalizer.AreStickAxesIdle(double.NaN, 0.0));
+        Assert.False(RawGameControllerAxisNormalizer.AreStickAxesIdle(0.5, 0.5));
+        Assert.False(RawGameControllerAxisNormalizer.AreStickAxesIdle(0.0, 0.5));
+    }
 }

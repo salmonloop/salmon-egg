@@ -168,4 +168,94 @@ public sealed class RawGameControllerInputReadingMapperTests
             [GamepadContextIntent.PageUp, GamepadContextIntent.PageDown],
             GamepadContextIntentProjector.GetActiveIntents(reading).OrderBy(static intent => intent));
     }
+
+
+    [Fact]
+    public void GetInputReading_WithXboxAnalogTriggerAxes_ProjectsPageContextIntents()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 1.0, 0.0],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
+
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Equal(0.0, reading.RightTrigger);
+        Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(reading));
+        // Stick centers must not invent navigation while triggers are active.
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_WithSonyAnalogTriggerAxes_ProjectsUnitTravelAndPageDown()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 0.0, 0.8],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+
+        Assert.Equal(0.0, reading.LeftTrigger);
+        Assert.Equal(0.8, reading.RightTrigger);
+        Assert.Equal([GamepadContextIntent.PageDown], GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_WithNintendoAxes_DoesNotProjectAnalogTriggersFromSlots4And5()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 1.0, 1.0],
+            RawGameControllerFaceButtonLayout.Nintendo,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Pro Controller",
+            hardwareVendorId: 0x057E);
+
+        Assert.Equal(0.0, reading.LeftTrigger);
+        Assert.Equal(0.0, reading.RightTrigger);
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_AnalogTriggerAxes_DoNotOverrideHigherDigitalTrigger()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None)],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 0.3, 0.0],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
+
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_TriggerAxesAlone_DoNotInventThumbstickFromZeroStickSlots()
+    {
+        // Zero stick slots with active LT must not run bipolar normalizer (0 -> -1).
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [],
+            [],
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
+
+        Assert.Equal(0.0, reading.ThumbstickX);
+        Assert.Equal(0.0, reading.ThumbstickY);
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
 }
