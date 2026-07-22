@@ -282,6 +282,8 @@ Minimum Windows validation matrix:
 | DualShock / DualSense | USB and Bluetooth when available | `RawGameController` or `Gamepad` path is acceptable only when diagnostics show PS labels or standard semantics; Cross projects to `Activate`; Circle projects to `Back`; Triangle projects to `ToggleVoiceInput`; Square produces no app semantic action. |
 | Switch Pro / Joy-Con | USB and Bluetooth when available | Prefer recording both paths when dual-exposed. `RawGameController` details show Nintendo identity, `VID 057E` or Nintendo/Switch/Joy-Con display name, and `layout Nintendo`. On the standard `Gamepad` path, `labels` must show physical `Letter*` (or Nintendo glyphs) and semantic mapping must follow physical position: physical B/`LetterB` -> `Activate`, physical A/`LetterA` -> `Back`, physical X/`LetterX` -> `ToggleVoiceInput`, physical Y/`LetterY` -> no app action. |
 
+When raw-only controllers report `pressed B0` / `B1` / `B2` / `B3` with no label suffix, known Xbox (`045E`), Sony (`054C`), and Nintendo (`057E`) families may still project face semantics from those physical face indexes. Prefer labeled evidence (`B0:Cross`, `B0:LetterB`, etc.) when Windows provides `GetButtonLabel` values.
+
 For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
 
 #### WebAssembly 持久化策略
