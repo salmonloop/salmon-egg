@@ -86,6 +86,7 @@ try {
   await verifyInjectedNonStandardGamepadIsNotMisread();
   await verifyInjectedStandardGamepadProjection();
   await verifyInjectedMultiBrandGamepadIdentityProjection();
+  await verifyInjectedMultiBrandFaceAndTriggerSemanticsProjection();
   await verifyInjectedStandardGamepadNativeControlBridge();
   console.log("WASM gamepad boundary smoke passed");
 } finally {
@@ -246,6 +247,104 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
         /Activate/,
         `${brand.label} active Activate intent`);
+    }
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+
+async function verifyInjectedMultiBrandFaceAndTriggerSemanticsProjection() {
+  // W3C standard mapping is position-based for every brand under mapping:"standard".
+  // Identity only labels diagnostics; face/trigger intents must stay brand-neutral slots.
+  const brands = [
+    {
+      label: "Xbox standard face/trigger semantics",
+      id: "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)"
+    },
+    {
+      label: "DualSense standard face/trigger semantics",
+      id: "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)"
+    },
+    {
+      label: "Switch Pro standard face/trigger semantics",
+      id: "Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)"
+    }
+  ];
+
+  const cases = [
+    {
+      pressedButtons: [0],
+      activePattern: /Activate/,
+      pressedPattern: /pressed\s+A/i,
+      label: "bottom face -> Activate"
+    },
+    {
+      pressedButtons: [1],
+      activePattern: /Back/,
+      pressedPattern: /pressed\s+B/i,
+      label: "east face -> Back"
+    },
+    {
+      pressedButtons: [2],
+      activePattern: /^(None|无)$/,
+      pressedPattern: /pressed\s+X/i,
+      label: "west face -> no app semantic"
+    },
+    {
+      pressedButtons: [3],
+      activePattern: /ToggleVoiceInput/,
+      pressedPattern: /pressed\s+Y/i,
+      label: "north face -> ToggleVoiceInput"
+    },
+    {
+      pressedButtons: [6],
+      activePattern: /PageUp/,
+      pressedPattern: /pressed\s+LeftTrigger/i,
+      label: "left trigger -> PageUp"
+    },
+    {
+      pressedButtons: [7],
+      activePattern: /PageDown/,
+      pressedPattern: /pressed\s+RightTrigger/i,
+      label: "right trigger -> PageDown"
+    }
+  ];
+
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await context.addInitScript({ content: standardGamepadProjectionScript });
+    await openDiagnosticsGamepadSection(page);
+
+    for (const brand of brands) {
+      for (const sample of cases) {
+        await page.evaluate(({ id, pressedButtons }) => {
+          globalThis.__salmoneggSmokeGamepad.setState({
+            connected: true,
+            mapping: "standard",
+            id,
+            pressedButtons,
+            axes: [0, 0, 0, 0]
+          });
+        }, { id: brand.id, pressedButtons: sample.pressedButtons });
+
+        await clickVisibleControl(page, gamepadRefresh);
+        await page.waitForTimeout(200);
+
+        await expectControlText(
+          page,
+          { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+          sample.activePattern,
+          `${brand.label} ${sample.label} active inputs`);
+        await expectControlText(
+          page,
+          { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+          sample.pressedPattern,
+          `${brand.label} ${sample.label} pressed details`);
+      }
     }
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
