@@ -47,6 +47,8 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         return true;
     }
 
+    // Face presses use app-semantic bridge commands so DualSense / Switch Pro HIDMaestro
+    // profiles map physical face buttons correctly (not Xbox-only A/B/X/Y field keys).
     public void PressUp() => HoldThenAutoRelease("dpad-up");
 
     public void PressDown() => HoldThenAutoRelease("dpad-down");
@@ -55,13 +57,13 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
 
     public void PressRight() => HoldThenAutoRelease("dpad-right");
 
-    public void PressActivate() => HoldThenAutoRelease("a");
+    public void PressActivate() => HoldThenAutoRelease("activate");
 
-    public void PressBack() => HoldThenAutoRelease("b");
+    public void PressBack() => HoldThenAutoRelease("back");
 
-    public void PressWestFaceButton() => HoldThenAutoRelease("x");
+    public void PressWestFaceButton() => HoldThenAutoRelease("west");
 
-    public void PressShortcutVoiceToggle() => HoldThenAutoRelease("y");
+    public void PressShortcutVoiceToggle() => HoldThenAutoRelease("voice");
 
     public void PressLeftTrigger() => HoldThenAutoRelease("lt");
 

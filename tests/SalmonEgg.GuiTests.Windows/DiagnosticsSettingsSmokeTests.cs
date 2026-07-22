@@ -90,28 +90,29 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
-        // Default HIDMaestro profile xbox-360-wired exposes Xbox face semantics on the OS path.
-        // Record Activate / Back / west no-op / Voice so native-device smoke covers the face matrix.
+        // Semantic face presses (activate/back/west/voice) resolve physical buttons from the
+        // active HIDMaestro profile family so DualSense / Switch Pro re-runs stay correct.
+        // Default xbox-360-wired still maps A/B/X/Y. Record Activate / Back / west no-op / Voice.
         AssertActiveInputAfterPress(
             session,
             gamepad.PressActivate,
             activeInputs,
             expectedFragment: "Activate",
-            label: "Activate (A)",
+            label: "Activate (semantic face)",
             appData);
         AssertActiveInputAfterPress(
             session,
             gamepad.PressBack,
             activeInputs,
             expectedFragment: "Back",
-            label: "Back (B)",
+            label: "Back (semantic face)",
             appData);
         AssertActiveInputAfterPress(
             session,
             gamepad.PressShortcutVoiceToggle,
             activeInputs,
             expectedFragment: "ToggleVoiceInput",
-            label: "Voice toggle (Y)",
+            label: "Voice toggle (semantic face)",
             appData);
 
         // Sticky west face replaces any prior face hold. After Activate, west must clear
