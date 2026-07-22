@@ -287,9 +287,9 @@ Do not guess profile ids in automation. Confirm the installed HIDMaestro profile
 
 Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
 
-- When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading`.
+- When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading` (`X`/`Y` thumbstick plus `LT`/`RT` unit values).
 - Confirm that standard-path face semantics follow physical labels (Xbox/PS glyphs or Nintendo `Letter*`), not a second brand-specific UI/shell path.
-- The raw-details line that includes `VID`, `PID`, `layout`, `pressed`, `semantic`, and `reading` whenever raw controllers are present.
+- The raw-details line that includes `VID`, `PID`, `layout`, `unlabeled-index-fallback`, `pressed`, `semantic`, and `reading` (`X`/`Y` plus `LT`/`RT`) whenever raw controllers are present.
 - Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
 
 Minimum Windows validation matrix:
@@ -302,7 +302,7 @@ Minimum Windows validation matrix:
 
 When raw-only controllers report `pressed B0` / `B1` / `B2` / `B3` with no label suffix, known full Xbox (`045E`), Sony (`054C`), and Nintendo (`057E`) families—or matching display-name tokens such as `Xbox`, `DualSense`/`DualShock`/`Dual Sense`/`Dual Shock`, `PS5`/`PS4`/`DS5`/`DS4`, `Nintendo`, `Switch Pro`, Switch `Pro Controller` (excluding Xbox-named strings), and non-single Joy-Con pair/grip/dual names—may still project face semantics from family-specific HID face index maps. Xbox and Nintendo full pads use physical bottom/right/west/north at indexes `0-3` (`Activate` / `Back` / no-op / `ToggleVoiceInput`). Sony DualShock/DualSense HID reports Square/Cross/Circle/Triangle at indexes `0-3`, so Cross (`B1`) is Activate, Circle (`B2`) is Back, Triangle (`B3`) is Voice, and Square (`B0`) is a no-op. Unlabeled digital trigger indexes `B6` / `B7` project to left/right trigger (`PageUp` / `PageDown`) on the same full-gamepad gate. Diagnostics raw lines record `unlabeled-index-fallback on|off` for that gate. Single Joy-Con presentations (`Joy-Con (L/R)`, `JoyCon (L/R)`) are excluded because their HID index map is not the full-gamepad face/trigger layout; pair/grip/dual Joy-Con presentations remain eligible when identity otherwise matches. Prefer labeled evidence (`B0:Cross`, `B0:LetterB`, etc.) when Windows provides `GetButtonLabel` values.
 
-For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
+For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, trigger travel changes `LT`/`RT` on the same reading line, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
 
 #### WebAssembly 持久化策略
 
