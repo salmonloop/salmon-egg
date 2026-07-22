@@ -109,6 +109,7 @@ internal sealed class HidMaestroBridge : IDisposable
     private readonly string _profileId;
     private readonly Type _hmButtonType;
     private readonly Type _hmHatType;
+    private readonly Type _hmAxisType;
     private readonly Type _hmGamepadStateType;
     private readonly MethodInfo _createControllerMethod;
     private readonly MethodInfo _removeAllVirtualControllersMethod;
@@ -137,6 +138,7 @@ internal sealed class HidMaestroBridge : IDisposable
 
         _hmButtonType = _assembly.GetType("HIDMaestro.HMButton", throwOnError: true)!;
         _hmHatType = _assembly.GetType("HIDMaestro.HMHat", throwOnError: true)!;
+        _hmAxisType = _assembly.GetType("HIDMaestro.HMAxis", throwOnError: true)!;
         _hmGamepadStateType = _assembly.GetType("HIDMaestro.HMGamepadState", throwOnError: true)!;
 
         _createControllerMethod = hmContextType.GetMethod("CreateController", [ResolveType("HIDMaestro.HMProfile")])
@@ -232,6 +234,18 @@ internal sealed class HidMaestroBridge : IDisposable
             case "y":
                 SubmitState(buttonName: "Y");
                 break;
+            case "lt":
+            case "left-trigger":
+            case "lefttrigger":
+                // Canonical HMAxis.Z; not HMButton — triggers are analog axes.
+                SubmitState(buttonName: null, hatName: null, leftTrigger: 1f);
+                break;
+            case "rt":
+            case "right-trigger":
+            case "righttrigger":
+                // Canonical HMAxis.Rz; not HMButton — triggers are analog axes.
+                SubmitState(buttonName: null, hatName: null, rightTrigger: 1f);
+                break;
             case "release":
                 // Already cleared above.
                 break;
@@ -267,7 +281,11 @@ internal sealed class HidMaestroBridge : IDisposable
     private bool IsDriverInstalled()
         => _isDriverInstalledProperty.GetValue(_context) as bool? == true;
 
-    private void SubmitState(string? buttonName, string? hatName)
+    private void SubmitState(
+        string? buttonName = null,
+        string? hatName = null,
+        float? leftTrigger = null,
+        float? rightTrigger = null)
     {
         var state = Activator.CreateInstance(_hmGamepadStateType)
             ?? throw new InvalidOperationException("Failed to create HMGamepadState.");
@@ -276,12 +294,38 @@ internal sealed class HidMaestroBridge : IDisposable
             ?? throw new MissingFieldException(_hmGamepadStateType.FullName, "Buttons");
         var hatField = _hmGamepadStateType.GetField("Hat")
             ?? throw new MissingFieldException(_hmGamepadStateType.FullName, "Hat");
+        var axesField = _hmGamepadStateType.GetField("Axes")
+            ?? throw new MissingFieldException(_hmGamepadStateType.FullName, "Axes");
 
         var buttonValue = Enum.Parse(_hmButtonType, buttonName ?? "None", ignoreCase: true);
         var hatValue = Enum.Parse(_hmHatType, hatName ?? "None", ignoreCase: true);
 
         buttonsField.SetValue(state, buttonValue);
         hatField.SetValue(state, hatValue);
+
+        // HIDMaestro v1.3.9+ drives analog triggers through HMGamepadState.Axes.
+        // ResolveTrigger reads canonical HMAxis.Z / HMAxis.Rz first, then profile
+        // trigger field keys. Full press uses 1.0 so app threshold (>= 0.5) trips.
+        if (leftTrigger is not null || rightTrigger is not null)
+        {
+            var axesType = typeof(Dictionary<,>).MakeGenericType(_hmAxisType, typeof(float));
+            var axes = Activator.CreateInstance(axesType)
+                ?? throw new InvalidOperationException("Failed to create HMGamepadState.Axes dictionary.");
+            var indexer = axesType.GetProperty("Item")
+                ?? throw new MissingMemberException(axesType.FullName, "Item");
+
+            if (leftTrigger is float left)
+            {
+                indexer.SetValue(axes, left, [Enum.Parse(_hmAxisType, "Z", ignoreCase: true)]);
+            }
+
+            if (rightTrigger is float right)
+            {
+                indexer.SetValue(axes, right, [Enum.Parse(_hmAxisType, "Rz", ignoreCase: true)]);
+            }
+
+            axesField.SetValue(state, axes);
+        }
 
         var args = new[] { state };
         _ = _submitStateMethod.Invoke(_controller, args);

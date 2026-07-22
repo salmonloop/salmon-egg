@@ -63,6 +63,10 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
 
     public void PressShortcutVoiceToggle() => HoldThenAutoRelease("y");
 
+    public void PressLeftTrigger() => HoldThenAutoRelease("lt");
+
+    public void PressRightTrigger() => HoldThenAutoRelease("rt");
+
     public void Dispose()
     {
         if (_disposed)

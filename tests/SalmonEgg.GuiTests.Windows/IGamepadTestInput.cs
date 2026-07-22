@@ -17,4 +17,8 @@ internal interface IGamepadTestInput : IDisposable
     void PressWestFaceButton();
 
     void PressShortcutVoiceToggle();
+
+    void PressLeftTrigger();
+
+    void PressRightTrigger();
 }
