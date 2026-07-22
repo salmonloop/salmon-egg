@@ -315,6 +315,23 @@ The bridge protocol accepts `create`, `dispose`, `info` (returns `ok profile=<id
 
 Do not guess profile ids in automation. Confirm the installed HIDMaestro profile id first, then record the controller family, transport, profile id, and app diagnostics output in the validation notes.
 
+#### Physical multi-brand Diagnostics evidence matrix (required for completion)
+
+Unit tests, BrowserWasm inject, and HIDMaestro multiprofile automation are **not** sufficient to close multi-brand gamepad adaptation. Completion requires Windows **MSIX** Diagnostics captures for each cell below, recorded with build commit, package path, and whether the path was `Gamepad` and/or `RawGameController`.
+
+| Controller | Transport | Path | Face matrix (Activate / Back / west no-op / Voice) | LT / RT | `family` token |
+|------------|-----------|------|-----------------------------------------------------|---------|----------------|
+| Xbox (wired and/or wireless) | USB | Gamepad + Raw if both enumerate | record | record | `Xbox` |
+| Xbox | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Xbox` |
+| DualSense / DualShock | USB | Gamepad + Raw if both enumerate | record | record | `Sony` |
+| DualSense / DualShock | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Sony` |
+| Switch Pro | USB | Gamepad + Raw if both enumerate | record | record | `Nintendo` |
+| Switch Pro | Bluetooth | Gamepad + Raw if both enumerate | record | record | `Nintendo` |
+
+Capture notes must include Diagnostics reading `X {x}, Y {y}; LT {lt}, RT {rt}` (invariant `0.00`), ActiveInputs, pressed details, and must **not** reintroduce shell polled DPad focus bridging.
+
+
+
 Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
 
 - When `Input source` is `Gamepad`, the standard-details line that includes controller identity when available (`DisplayName`, `VID`, `PID`), resolved face `layout`, physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading` (`X`/`Y` thumbstick plus `LT`/`RT` unit values).
