@@ -269,4 +269,71 @@ public sealed class GamepadActiveReadingSelectorTests
         Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
         Assert.True(selection.Reading.Activate);
     }
+
+    [Fact]
+    public void TrySelectActiveReading_SelectsFirstActiveRawAmongMultipleControllers()
+    {
+        // Multi-device raw host: first idle DualSense, second active Switch face.
+        // Selection must take the first active raw reading, not invent a brand mix.
+        var rawReadings = new[]
+        {
+            default(GamepadInputReading),
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            [],
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
+        Assert.True(selection.Reading.Activate);
+        Assert.Equal(rawReadings[1], selection.Reading);
+    }
+
+    [Fact]
+    public void TrySelectActiveReading_PrefersEarlierActiveStandardOverLaterActiveRaw()
+    {
+        // Dual-enumeration multi-brand: standard Xbox LT active must win over a later
+        // raw DualSense Activate even when both paths have active projections.
+        var gamepadReadings = new[]
+        {
+            default(GamepadInputReading),
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: false,
+                Back: false,
+                LeftTrigger: 1)
+        };
+        var rawReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            gamepadReadings,
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
+        Assert.Equal(1, selection.Reading.LeftTrigger);
+        Assert.False(selection.Reading.Activate);
+    }
 }

@@ -129,4 +129,20 @@ public sealed class RawGameControllerTriggerAxisPolicyTests
 
         Assert.Equal(default, reading);
     }
+
+    [Fact]
+    public void Apply_WithSonyDigitalAndPartialAnalog_MergesUsingMax()
+    {
+        var existing = default(GamepadInputReading) with { LeftTrigger = 1.0 };
+        var axes = new[] { 0.5, 0.5, 0.5, 0.5, 0.2, 0.0 };
+
+        var reading = RawGameControllerTriggerAxisPolicy.Apply(
+            axes,
+            existing,
+            "DualSense Wireless Controller",
+            GamepadControllerIdentity.SonyVendorId);
+
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Equal(0.0, reading.RightTrigger);
+    }
 }

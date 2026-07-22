@@ -258,4 +258,47 @@ public sealed class RawGameControllerInputReadingMapperTests
         Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
         Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(reading));
     }
+
+    [Fact]
+    public void GetInputReading_WithNintendoDigitalTriggerIndexes_ProjectsPageContextWithoutAnalogAxes()
+    {
+        // Switch Pro L2/R2 are digital descriptor clicks (B6/B7). Axes 4/5 must not be
+        // treated as analog LT/RT for Nintendo family even when non-zero.
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(7, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 0.9, 0.9],
+            RawGameControllerFaceButtonLayout.Nintendo,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Pro Controller",
+            hardwareVendorId: 0x057E);
+
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Equal(1.0, reading.RightTrigger);
+        Assert.Equal(
+            [GamepadContextIntent.PageUp, GamepadContextIntent.PageDown],
+            GamepadContextIntentProjector.GetActiveIntents(reading).OrderBy(static intent => intent));
+    }
+
+    [Fact]
+    public void GetInputReading_WithSonyDigitalTriggerAndPartialAnalog_MergesUsingMax()
+    {
+        // DualSense can report L2 click + partial analog travel on axes 4/5; Core merges
+        // with Math.Max so full digital click is not downgraded by partial axis travel.
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(Index: -1, Label: RawGameControllerButtonLabel.LeftTrigger)],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 0.35, 0.0],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+
+        Assert.Equal(1.0, reading.LeftTrigger);
+        Assert.Equal(0.0, reading.RightTrigger);
+        Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
 }
