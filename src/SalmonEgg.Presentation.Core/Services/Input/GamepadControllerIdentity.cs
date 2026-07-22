@@ -58,6 +58,31 @@ public static class GamepadControllerIdentity
             || ContainsToken(displayName, "JoyCon");
     }
 
+
+    public static GamepadControllerFamily ResolveFamily(string? displayName, ushort hardwareVendorId)
+    {
+        // Order is VID/name family helpers; known full controllers are mutually exclusive.
+        if (IsXbox(displayName, hardwareVendorId))
+        {
+            return GamepadControllerFamily.Xbox;
+        }
+
+        if (IsSony(displayName, hardwareVendorId))
+        {
+            return GamepadControllerFamily.Sony;
+        }
+
+        if (IsNintendo(displayName, hardwareVendorId))
+        {
+            return GamepadControllerFamily.Nintendo;
+        }
+
+        return GamepadControllerFamily.Unknown;
+    }
+
+    public static GamepadControllerFamily ResolveFamily(string? displayName, ushort? hardwareVendorId)
+        => ResolveFamily(displayName, hardwareVendorId ?? 0);
+
     public static bool IsFullGamepadKnownFamily(string? displayName, ushort hardwareVendorId)
     {
         if (IsSingleJoyCon(displayName))
