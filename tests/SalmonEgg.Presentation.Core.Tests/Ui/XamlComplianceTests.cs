@@ -2909,6 +2909,7 @@ public sealed class XamlComplianceTests
     public void NativeDeviceGamepadBridge_UsesConfigurableHidMaestroProfile()
     {
         var bridge = LoadText(@"tests\SalmonEgg.GamepadBridge.Windows\Program.cs");
+        var nativeInput = LoadText(@"tests\SalmonEgg.GuiTests.Windows\NativeDeviceGamepadTestInput.cs");
 
         Assert.Contains("SALMONEGG_HIDMAESTRO_PROFILE_ID", bridge, StringComparison.Ordinal);
         Assert.Contains("DefaultProfileId", bridge, StringComparison.Ordinal);
@@ -2919,6 +2920,22 @@ public sealed class XamlComplianceTests
         Assert.Contains("SubmitState(buttonName: \"X\")", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"y\":", bridge, StringComparison.Ordinal);
         Assert.Contains("SubmitState(buttonName: \"Y\")", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"activate\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"back\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"west\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"voice\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("ResolveSemanticFaceButton", bridge, StringComparison.Ordinal);
+        Assert.Contains("ResolveProfileFaceFamily", bridge, StringComparison.Ordinal);
+        Assert.Contains("ProfileFaceFamily.Nintendo", bridge, StringComparison.Ordinal);
+        Assert.Contains("ProfileFaceFamily.Sony", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"switch-pro\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"dualsense\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"dualsense-bt\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("\"dualshock-4-v2\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"cross\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"circle\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"square\":", bridge, StringComparison.Ordinal);
+        Assert.Contains("case \"triangle\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"release\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"lt\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"left-trigger\":", bridge, StringComparison.Ordinal);
@@ -2936,6 +2953,12 @@ public sealed class XamlComplianceTests
         Assert.Contains("1u << 7", bridge, StringComparison.Ordinal);
         Assert.Contains("Sticky press", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("_getProfileMethod.Invoke(_context, [DefaultProfileId])", bridge, StringComparison.Ordinal);
+        Assert.Contains("HoldThenAutoRelease(\"activate\")", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("HoldThenAutoRelease(\"back\")", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("HoldThenAutoRelease(\"west\")", nativeInput, StringComparison.Ordinal);
+        Assert.Contains("HoldThenAutoRelease(\"voice\")", nativeInput, StringComparison.Ordinal);
+        Assert.DoesNotContain("PressActivate() => HoldThenAutoRelease(\"a\")", nativeInput, StringComparison.Ordinal);
+        Assert.DoesNotContain("PressBack() => HoldThenAutoRelease(\"b\")", nativeInput, StringComparison.Ordinal);
     }
 
     [Fact]
