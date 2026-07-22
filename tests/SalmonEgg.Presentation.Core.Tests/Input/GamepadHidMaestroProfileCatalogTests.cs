@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using SalmonEgg.Presentation.Core.Services.Input;
 using Xunit;
 
@@ -127,5 +129,65 @@ public sealed class GamepadHidMaestroProfileCatalogTests
         Assert.Equal(
             ["Y"],
             GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates("  ", GamepadFaceSemantic.Voice));
+    }
+
+    [Fact]
+    public void GetMultiProfileGateRows_ProjectsConfirmedProfilesWithPreferredFaceKeys()
+    {
+        var rows = GamepadHidMaestroProfileCatalog.GetMultiProfileGateRows();
+        Assert.Equal(GamepadHidMaestroProfileCatalog.ConfirmedProfileIds.Count, rows.Count);
+
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var profileId = GamepadHidMaestroProfileCatalog.ConfirmedProfileIds[i];
+            var row = rows[i];
+            Assert.Equal(profileId, row.ProfileId);
+            Assert.Equal(GamepadHidMaestroProfileCatalog.FormatFamilyToken(profileId), row.FamilyToken);
+            Assert.Equal(
+                GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Activate)[0],
+                row.PreferredActivateKey);
+            Assert.Equal(
+                GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Back)[0],
+                row.PreferredBackKey);
+            Assert.Equal(
+                GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.West)[0],
+                row.PreferredWestKey);
+            Assert.Equal(
+                GamepadHidMaestroProfileCatalog.GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Voice)[0],
+                row.PreferredVoiceKey);
+        }
+    }
+
+    [Fact]
+    public void CheckedInMultiProfileGateManifest_MatchesCoreSerialization()
+    {
+        var expected = GamepadHidMaestroProfileCatalog.FormatMultiProfileGateManifest();
+        var path = FindRepoManifest();
+
+        Assert.True(File.Exists(path), $"Missing multiprofile manifest at {path}");
+        var actual = File.ReadAllText(path).Replace("\r\n", "\n");
+        if (!actual.EndsWith("\n", StringComparison.Ordinal))
+        {
+            actual += "\n";
+        }
+
+        Assert.Equal(expected, actual);
+    }
+
+    private static string FindRepoManifest()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "scripts", "gates", "hidmaestro-multiprofile-manifest.txt");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException("Unable to locate scripts/gates/hidmaestro-multiprofile-manifest.txt from test host.");
     }
 }
