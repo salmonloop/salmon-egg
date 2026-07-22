@@ -8,11 +8,6 @@ namespace SalmonEgg.Presentation.Services.Input;
 
 public sealed class WindowsRawGameControllerMapper
 {
-    public HashSet<GamepadNavigationIntent> GetActiveIntents(RawGameController controller)
-    {
-        return GamepadIntentProcessor.GetActiveIntents(GetInputReading(controller));
-    }
-
     public GamepadInputReading GetInputReading(RawGameController controller)
     {
         ArgumentNullException.ThrowIfNull(controller);
