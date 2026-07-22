@@ -20,15 +20,20 @@ public sealed class GamepadContextIntentDispatcherSourceTests
     [Fact]
     public void WindowsGamepadInputService_MapsTriggersToContextIntentEvents()
     {
-        var code = TestSourceFiles.ReadAllText(
+        var service = TestSourceFiles.ReadAllText(
             @"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadInputService.cs");
+        var mapper = TestSourceFiles.ReadAllText(
+            @"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsStandardGamepadReadingMapper.cs");
 
-        Assert.Contains("GamepadContextIntentProcessor", code);
-        Assert.Contains("ContextIntentRaised", code);
-        Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code);
-        Assert.Contains("leftTrigger: reading.LeftTrigger", code);
-        Assert.Contains("rightTrigger: reading.RightTrigger", code);
-        Assert.DoesNotContain("GamepadNavigationIntent.PageDown", code);
+        // Triggers are facts in the shared Windows mapper; Core pipeline owns context intent processing.
+        Assert.Contains("ContextIntentRaised", service, StringComparison.Ordinal);
+        Assert.Contains("WindowsStandardGamepadReadingMapper.GetInputReading", service, StringComparison.Ordinal);
+        Assert.Contains("GamepadReadingPipeline", service, StringComparison.Ordinal);
+        Assert.Contains("leftTrigger: reading.LeftTrigger", mapper, StringComparison.Ordinal);
+        Assert.Contains("rightTrigger: reading.RightTrigger", mapper, StringComparison.Ordinal);
+        Assert.DoesNotContain("new GamepadContextIntentProcessor", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.PageDown", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadNavigationIntent.PageDown", mapper, StringComparison.Ordinal);
     }
 
     [Fact]
