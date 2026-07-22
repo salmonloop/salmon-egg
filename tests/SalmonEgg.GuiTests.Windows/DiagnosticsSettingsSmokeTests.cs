@@ -140,7 +140,9 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
 
         // Analog triggers on the Xbox 360 HID profile project to PageUp / PageDown
-        // context intents (left >= 0.5 -> PageUp, right >= 0.5 -> PageDown).
+        // context intents (left >= 0.5 -> PageUp, right >= 0.5 -> PageDown) and
+        // must also surface unit LT/RT values on the Diagnostics reading line.
+        var thumbstick = session.FindByAutomationId("Diagnostics.GamepadThumbstick", TimeSpan.FromSeconds(5));
         AssertActiveInputAfterPress(
             session,
             gamepad.PressLeftTrigger,
@@ -148,6 +150,15 @@ public sealed class DiagnosticsSettingsSmokeTests
             expectedFragment: "PageUp",
             label: "PageUp (LT)",
             appData);
+        Assert.True(
+            session.WaitUntil(
+                () => TryReadTriggerValue(ReadElementText(thumbstick), "LT") >= 0.5,
+                TimeSpan.FromSeconds(5)),
+            $"Native-device LT press did not surface LT >= 0.5 on Diagnostics reading text."
+            + $"{Environment.NewLine}Thumbstick={ReadElementText(thumbstick)}"
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+
         AssertActiveInputAfterPress(
             session,
             gamepad.PressRightTrigger,
@@ -155,6 +166,14 @@ public sealed class DiagnosticsSettingsSmokeTests
             expectedFragment: "PageDown",
             label: "PageDown (RT)",
             appData);
+        Assert.True(
+            session.WaitUntil(
+                () => TryReadTriggerValue(ReadElementText(thumbstick), "RT") >= 0.5,
+                TimeSpan.FromSeconds(5)),
+            $"Native-device RT press did not surface RT >= 0.5 on Diagnostics reading text."
+            + $"{Environment.NewLine}Thumbstick={ReadElementText(thumbstick)}"
+            + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
+            + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
     }
 
     private static void AssertActiveInputAfterPress(
@@ -174,6 +193,49 @@ public sealed class DiagnosticsSettingsSmokeTests
             + $"{Environment.NewLine}ActiveInputs={ReadElementText(activeInputs)}"
             + $"{Environment.NewLine}InputSource={ReadElementText(session.FindByAutomationId("Diagnostics.GamepadInputSource", TimeSpan.FromSeconds(2)))}"
             + $"{Environment.NewLine}{appData.ReadBootLogTail()}");
+    }
+
+
+    private static double TryReadTriggerValue(string readingText, string label)
+    {
+        if (string.IsNullOrEmpty(readingText) || string.IsNullOrEmpty(label))
+        {
+            return double.NaN;
+        }
+
+        var marker = label + " ";
+        var index = readingText.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return double.NaN;
+        }
+
+        var start = index + marker.Length;
+        var end = start;
+        while (end < readingText.Length)
+        {
+            var ch = readingText[end];
+            if (char.IsDigit(ch) || ch is '.' or '-' or '+')
+            {
+                end++;
+                continue;
+            }
+
+            break;
+        }
+
+        if (end <= start)
+        {
+            return double.NaN;
+        }
+
+        return double.TryParse(
+            readingText.AsSpan(start, end - start),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : double.NaN;
     }
 
     private static void NavigateToDiagnosticsSettings(WindowsGuiAppSession session)
