@@ -2863,8 +2863,10 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsRawGameControllerMapper.cs");
 
-        Assert.Contains("RawGameControllerInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerInputReadingMapper.GetInputReadingFromPresses", code, StringComparison.Ordinal);
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerUnlabeledFaceIndexPolicy.SupportsFallback", code, StringComparison.Ordinal);
+        Assert.Contains("new RawGameControllerButtonPress", code, StringComparison.Ordinal);
         Assert.Contains("controller.DisplayName", code, StringComparison.Ordinal);
         Assert.Contains("controller.HardwareVendorId", code, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.Map(controller.GetButtonLabel(i))", code, StringComparison.Ordinal);

@@ -72,4 +72,49 @@ public sealed class RawGameControllerInputReadingMapperTests
         Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(reading));
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
     }
+
+    [Fact]
+    public void GetInputReading_WithUnlabeledKnownFaceIndexes_ProjectsPhysicalFaceSemantics()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(3, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_WithUnlabeledIndexes_WithoutFallbackFlag_DoesNotInventSemantics()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo,
+            allowUnlabeledFaceIndexFallback: false);
+
+        Assert.Equal(default, reading);
+    }
+
+    [Fact]
+    public void GetInputReading_PrefersExplicitLabelsOverUnlabeledIndexFallback()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.Circle)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true);
+
+        // Index 0 would be Activate under fallback, but explicit Circle must remain Back.
+        Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.False(reading.Activate);
+    }
 }

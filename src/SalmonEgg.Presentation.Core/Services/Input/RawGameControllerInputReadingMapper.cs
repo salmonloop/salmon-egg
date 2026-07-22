@@ -9,17 +9,55 @@ public static class RawGameControllerInputReadingMapper
         RawGameControllerFaceButtonLayout faceButtonLayout = RawGameControllerFaceButtonLayout.Standard)
     {
         ArgumentNullException.ThrowIfNull(pressedButtonLabels);
+
+        var presses = new RawGameControllerButtonPress[pressedButtonLabels.Count];
+        for (var i = 0; i < pressedButtonLabels.Count; i++)
+        {
+            presses[i] = new RawGameControllerButtonPress(Index: -1, Label: pressedButtonLabels[i]);
+        }
+
+        return GetInputReadingFromPresses(
+            presses,
+            switches,
+            axes,
+            faceButtonLayout,
+            allowUnlabeledFaceIndexFallback: false);
+    }
+
+    public static GamepadInputReading GetInputReadingFromPresses(
+        IReadOnlyList<RawGameControllerButtonPress> pressedButtons,
+        IReadOnlyList<GamepadDirectionalSwitchPosition> switches,
+        IReadOnlyList<double> axes,
+        RawGameControllerFaceButtonLayout faceButtonLayout = RawGameControllerFaceButtonLayout.Standard,
+        bool allowUnlabeledFaceIndexFallback = false)
+    {
+        ArgumentNullException.ThrowIfNull(pressedButtons);
         ArgumentNullException.ThrowIfNull(switches);
         ArgumentNullException.ThrowIfNull(axes);
 
         var reading = default(GamepadInputReading);
+        var labelsForLayout = new List<RawGameControllerButtonLabel>(pressedButtons.Count);
+        foreach (var press in pressedButtons)
+        {
+            labelsForLayout.Add(press.Label);
+        }
+
         var effectiveLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
             faceButtonLayout,
-            pressedButtonLabels);
+            labelsForLayout);
 
-        foreach (var label in pressedButtonLabels)
+        foreach (var press in pressedButtons)
         {
-            reading = RawGameControllerButtonLabelMapper.Apply(label, reading, effectiveLayout);
+            if (press.Label != RawGameControllerButtonLabel.None)
+            {
+                reading = RawGameControllerButtonLabelMapper.Apply(press.Label, reading, effectiveLayout);
+                continue;
+            }
+
+            if (allowUnlabeledFaceIndexFallback && press.Index >= 0)
+            {
+                reading = RawGameControllerUnlabeledFaceIndexPolicy.Apply(press.Index, reading);
+            }
         }
 
         foreach (var position in switches)

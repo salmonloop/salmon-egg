@@ -336,6 +336,35 @@ public sealed class GamepadAdaptationPipelineTests
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
     }
 
+
+    [Theory]
+    [InlineData(0x045E, "Xbox Wireless Controller")]
+    [InlineData(0x054C, "Wireless Controller")]
+    [InlineData(0x057E, "Nintendo Switch Pro Controller")]
+    public void UnlabeledKnownFamilyFaceIndexes_ProjectThroughRawPathLikeLabeledStandardFaces(
+        ushort vendorId,
+        string displayName)
+    {
+        Assert.True(RawGameControllerUnlabeledFaceIndexPolicy.SupportsFallback(displayName, vendorId));
+
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(1, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(2, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(3, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayoutResolver.Resolve(displayName, vendorId),
+            allowUnlabeledFaceIndexFallback: true);
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            Order(GamepadIntentProcessor.GetActiveIntents(reading)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
     private static readonly DateTimeOffset SampleTime = DateTimeOffset.Parse("2026-07-06T00:00:00Z");
 
     private static GamepadInputReading LabeledStandard(

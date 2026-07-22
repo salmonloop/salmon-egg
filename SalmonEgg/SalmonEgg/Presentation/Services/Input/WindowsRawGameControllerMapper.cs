@@ -36,8 +36,11 @@ public sealed class WindowsRawGameControllerMapper
         ArgumentNullException.ThrowIfNull(switches);
         ArgumentNullException.ThrowIfNull(axes);
 
-        var pressedButtonLabels = new List<RawGameControllerButtonLabel>();
+        var pressedButtons = new List<RawGameControllerButtonPress>();
         var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            controller.DisplayName,
+            controller.HardwareVendorId);
+        var allowUnlabeledFaceIndexFallback = RawGameControllerUnlabeledFaceIndexPolicy.SupportsFallback(
             controller.DisplayName,
             controller.HardwareVendorId);
 
@@ -48,7 +51,9 @@ public sealed class WindowsRawGameControllerMapper
                 continue;
             }
 
-            pressedButtonLabels.Add(WindowsGameControllerButtonLabelMapper.Map(controller.GetButtonLabel(i)));
+            pressedButtons.Add(new RawGameControllerButtonPress(
+                Index: i,
+                Label: WindowsGameControllerButtonLabelMapper.Map(controller.GetButtonLabel(i))));
         }
 
         var switchPositions = new GamepadDirectionalSwitchPosition[switches.Count];
@@ -57,12 +62,12 @@ public sealed class WindowsRawGameControllerMapper
             switchPositions[i] = (GamepadDirectionalSwitchPosition)(int)switches[i];
         }
 
-        return RawGameControllerInputReadingMapper.GetInputReading(
-            pressedButtonLabels,
+        return RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            pressedButtons,
             switchPositions,
             axes,
-            faceButtonLayout);
+            faceButtonLayout,
+            allowUnlabeledFaceIndexFallback);
     }
-
 }
 #endif
