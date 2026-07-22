@@ -251,6 +251,10 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 
 它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
+#### BrowserWasm multi-brand gamepad identity smoke
+
+`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and Chrome-style `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`). Diagnostics must project display name, `VID`/`PID`, and face `layout` (Nintendo only for Switch Pro identity). Face **semantics** remain position-based under `mapping: "standard"`; identity is for diagnostics/layout labeling, not a second brand shell path.
+
 #### Windows native gamepad bridge
 
 Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.

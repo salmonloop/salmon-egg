@@ -27,6 +27,7 @@ const standardGamepadProjectionScript = `
   const state = {
     connected: false,
     mapping: "standard",
+    id: "SalmonEgg Smoke Standard Gamepad",
     pressedButtons: new Set(),
     axes: [0, 0, 0, 0],
     timestamp: 1
@@ -52,7 +53,7 @@ const standardGamepadProjectionScript = `
 
       state.timestamp += 1;
       return [{
-        id: "SalmonEgg Smoke Standard Gamepad",
+        id: state.id,
         index: 0,
         connected: true,
         mapping: state.mapping,
@@ -69,6 +70,9 @@ const standardGamepadProjectionScript = `
     setState(nextState) {
       state.connected = Boolean(nextState?.connected);
       state.mapping = typeof nextState?.mapping === "string" ? nextState.mapping : "standard";
+      if (typeof nextState?.id === "string" && nextState.id.trim().length > 0) {
+        state.id = nextState.id;
+      }
       state.pressedButtons = new Set(nextState?.pressedButtons ?? []);
       state.axes = Array.isArray(nextState?.axes) ? nextState.axes.slice(0, 4) : [0, 0, 0, 0];
     }
@@ -81,6 +85,7 @@ try {
   await verifyNativeBrowserNoDeviceProjection();
   await verifyInjectedNonStandardGamepadIsNotMisread();
   await verifyInjectedStandardGamepadProjection();
+  await verifyInjectedMultiBrandGamepadIdentityProjection();
   await verifyInjectedStandardGamepadNativeControlBridge();
   console.log("WASM gamepad boundary smoke passed");
 } finally {
@@ -155,6 +160,82 @@ async function verifyInjectedStandardGamepadProjection() {
   } finally {
     await context.close();
   }
+}
+
+async function verifyInjectedMultiBrandGamepadIdentityProjection() {
+  const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
+
+  try {
+    await context.addInitScript({ content: standardGamepadProjectionScript });
+    await openDiagnosticsGamepadSection(page);
+
+    const brands = [
+      {
+        label: "Xbox Wireless Controller identity",
+        id: "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)",
+        name: "Xbox Wireless Controller",
+        vid: "045E",
+        pid: "0B13",
+        layoutPattern: /layout\s+(Standard|标准)/
+      },
+      {
+        label: "DualSense identity",
+        id: "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)",
+        name: "DualSense Wireless Controller",
+        vid: "054C",
+        pid: "0CE6",
+        layoutPattern: /layout\s+(Standard|标准)/
+      },
+      {
+        label: "Switch Pro Controller identity",
+        id: "Pro Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)",
+        name: "Pro Controller",
+        vid: "057E",
+        pid: "2009",
+        layoutPattern: /layout\s+(Nintendo|任天堂)/
+      }
+    ];
+
+    for (const brand of brands) {
+      await page.evaluate(id => {
+        globalThis.__salmoneggSmokeGamepad.setState({
+          connected: true,
+          mapping: "standard",
+          id,
+          pressedButtons: [0],
+          axes: [0, 0, 0, 0]
+        });
+      }, brand.id);
+
+      await clickVisibleControl(page, gamepadRefresh);
+      await page.waitForTimeout(250);
+
+      await expectControlText(
+        page,
+        { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
+        /^1$/,
+        `${brand.label} standard gamepad count`);
+
+      // Format: "#0 {name} VID {vid} PID {pid}; layout {layout}; ..."
+      // Identity is diagnostics/layout labeling only; face semantics stay position-based.
+      const detailsPattern = new RegExp(
+        `#0\\s+${escapeRegExp(brand.name)}\\s+VID\\s+${brand.vid}\\s+PID\\s+${brand.pid};\\s*${brand.layoutPattern.source}`,
+        "i");
+      await expectControlText(
+        page,
+        { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+        detailsPattern,
+        `${brand.label} standard details`);
+    }
+
+    assertNoFatalConsoleMessages(fatalConsoleMessages);
+  } finally {
+    await context.close();
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function verifyInjectedStandardGamepadNativeControlBridge() {
