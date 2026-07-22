@@ -71,7 +71,10 @@ public static class RawGameControllerInputReadingMapper
             reading = GamepadDirectionalSwitchMapper.Apply(position, reading);
         }
 
-        if (axes.Count >= 2 && !RawGameControllerAxisNormalizer.IsAllAxesZero(axes))
+        // Thumbstick idle must only inspect stick slots (0/1). Trigger travel on later
+        // axes must not force centered-zero sticks through the bipolar normalizer.
+        if (axes.Count >= 2
+            && !RawGameControllerAxisNormalizer.AreStickAxesIdle(axes[0], axes[1]))
         {
             reading = reading with
             {
@@ -79,6 +82,12 @@ public static class RawGameControllerInputReadingMapper
                 ThumbstickY = RawGameControllerAxisNormalizer.NormalizeVertical(axes[1])
             };
         }
+
+        reading = RawGameControllerTriggerAxisPolicy.Apply(
+            axes,
+            reading,
+            displayName,
+            hardwareVendorId);
 
         return reading;
     }
