@@ -420,8 +420,9 @@ public sealed class GamepadAdaptationPipelineTests
     }
 
     [Fact]
-    public void UnlabeledFullGamepadIndexes_MapWestFaceAsNoOpAndTriggersAsPageContext()
+    public void UnlabeledXboxWestFaceAndTriggers_MapNoOpAndPageContext()
     {
+        // Xbox/Nintendo full pads: index 2 is west face (no-op); 6/7 are digital triggers.
         var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
             [
                 new RawGameControllerButtonPress(2, RawGameControllerButtonLabel.None),
@@ -431,7 +432,36 @@ public sealed class GamepadAdaptationPipelineTests
             [],
             [],
             RawGameControllerFaceButtonLayout.Standard,
-            allowUnlabeledFaceIndexFallback: true);
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
+
+        Assert.False(reading.Activate);
+        Assert.False(reading.Back);
+        Assert.False(reading.ShortcutVoiceToggle);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Equal(
+            [GamepadContextIntent.PageUp, GamepadContextIntent.PageDown],
+            GamepadContextIntentProjector.GetActiveIntents(reading).OrderBy(static intent => intent));
+    }
+
+    [Fact]
+    public void UnlabeledSonySquareAndTriggers_MapNoOpAndPageContext()
+    {
+        // DualSense HID: index 0 is Square (west no-op); index 2 is Circle (Back).
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(7, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
 
         Assert.False(reading.Activate);
         Assert.False(reading.Back);
@@ -477,12 +507,57 @@ public sealed class GamepadAdaptationPipelineTests
             [],
             [],
             RawGameControllerFaceButtonLayoutResolver.Resolve(displayName, vendorId),
-            allowUnlabeledFaceIndexFallback: true);
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: displayName,
+            hardwareVendorId: vendorId);
 
         Assert.Equal(
             [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
             Order(GamepadIntentProcessor.GetActiveIntents(reading)));
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Fact]
+    public void UnlabeledSonyHidFaceIndexes_ProjectCrossActivateAndSquareNoOp()
+    {
+        var cross = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(1, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Wireless Controller",
+            hardwareVendorId: 0x054C);
+        var square = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+        var circle = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(2, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+        var triangle = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(3, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(cross)));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(square));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(square));
+        Assert.Equal([GamepadNavigationIntent.Back], Order(GamepadIntentProcessor.GetActiveIntents(circle)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(triangle));
     }
 
     private static readonly DateTimeOffset SampleTime = DateTimeOffset.Parse("2026-07-06T00:00:00Z");

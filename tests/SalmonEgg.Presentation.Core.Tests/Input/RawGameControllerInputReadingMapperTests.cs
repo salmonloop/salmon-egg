@@ -84,10 +84,37 @@ public sealed class RawGameControllerInputReadingMapperTests
             [],
             [],
             RawGameControllerFaceButtonLayout.Standard,
-            allowUnlabeledFaceIndexFallback: true);
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
 
         Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(reading));
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_WithUnlabeledSonyFaceIndexes_UsesCrossCircleSquareTriangleOrder()
+    {
+        var cross = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(1, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Wireless Controller",
+            hardwareVendorId: 0x054C);
+        var square = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(0, RawGameControllerButtonLabel.None)],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "DualSense Controller",
+            hardwareVendorId: 0);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(cross));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(square));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(square));
     }
 
     [Fact]
@@ -111,9 +138,11 @@ public sealed class RawGameControllerInputReadingMapperTests
             [],
             [],
             RawGameControllerFaceButtonLayout.Standard,
-            allowUnlabeledFaceIndexFallback: true);
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
 
-        // Index 0 would be Activate under fallback, but explicit Circle must remain Back.
+        // Index 0 would be Activate under Xbox fallback, but explicit Circle must remain Back.
         Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(reading));
         Assert.False(reading.Activate);
     }
@@ -129,7 +158,9 @@ public sealed class RawGameControllerInputReadingMapperTests
             [],
             [],
             RawGameControllerFaceButtonLayout.Standard,
-            allowUnlabeledFaceIndexFallback: true);
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Xbox Wireless Controller",
+            hardwareVendorId: 0x045E);
 
         Assert.Equal(1, reading.LeftTrigger);
         Assert.Equal(1, reading.RightTrigger);
