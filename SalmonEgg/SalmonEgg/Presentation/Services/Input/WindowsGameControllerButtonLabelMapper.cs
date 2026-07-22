@@ -6,6 +6,16 @@ namespace SalmonEgg.Presentation.Services.Input;
 
 internal static class WindowsGameControllerButtonLabelMapper
 {
+    public static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
+    {
+        ArgumentNullException.ThrowIfNull(gamepad);
+        return new(
+            A: Map(gamepad.GetButtonLabel(GamepadButtons.A)),
+            B: Map(gamepad.GetButtonLabel(GamepadButtons.B)),
+            X: Map(gamepad.GetButtonLabel(GamepadButtons.X)),
+            Y: Map(gamepad.GetButtonLabel(GamepadButtons.Y)));
+    }
+
     public static RawGameControllerButtonLabel Map(GameControllerButtonLabel label)
         => label switch
         {

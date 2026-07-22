@@ -305,11 +305,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     }
 
     private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
-        => new(
-            A: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.A)),
-            B: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.B)),
-            X: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.X)),
-            Y: WindowsGameControllerButtonLabelMapper.Map(gamepad.GetButtonLabel(GamepadButtons.Y)));
+        => WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels(gamepad);
 
     private void EmitIntent(GamepadNavigationIntent intent, long tick)
     {

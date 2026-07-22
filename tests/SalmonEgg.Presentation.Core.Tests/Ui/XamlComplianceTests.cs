@@ -2670,7 +2670,7 @@ public sealed class XamlComplianceTests
         Assert.Contains("GamepadIntentProcessor", code);
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", code, StringComparison.Ordinal);
-        Assert.Contains("WindowsGameControllerButtonLabelMapper.Map", code, StringComparison.Ordinal);
+        Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", code, StringComparison.Ordinal);
         Assert.Contains("faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("InitialRepeatDelay", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RepeatInterval", code, StringComparison.Ordinal);
@@ -2685,7 +2685,7 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", code, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", code, StringComparison.Ordinal);
-        Assert.Contains("WindowsGameControllerButtonLabelMapper.Map", code, StringComparison.Ordinal);
+        Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", code, StringComparison.Ordinal);
         Assert.DoesNotContain("new GamepadInputReading(", code, StringComparison.Ordinal);
     }
 
@@ -2922,9 +2922,10 @@ public sealed class XamlComplianceTests
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", viewModel, StringComparison.Ordinal);
         Assert.Contains("IReadOnlyCollection<GamepadShortcutIntent> ActiveShortcuts", snapshot, StringComparison.Ordinal);
         Assert.Contains("IReadOnlyList<StandardGamepadDiagnostics> StandardGamepads", snapshot, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerFaceButtonLayout FaceButtonLayout", LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\StandardGamepadDiagnostics.cs"), StringComparison.Ordinal);
         Assert.Contains("gamepad.GetButtonLabel(button)", windowsService, StringComparison.Ordinal);
         Assert.Contains("GetFaceButtonLabels", windowsService, StringComparison.Ordinal);
-        Assert.Contains("WindowsGameControllerButtonLabelMapper.Map", windowsService, StringComparison.Ordinal);
+        Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", windowsService, StringComparison.Ordinal);
         Assert.Contains("FormatStandardGamepads", viewModel, StringComparison.Ordinal);
         Assert.Contains("FormatInputSource(GamepadDiagnosticsInputSource inputSource)", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("string InputSource", snapshot, StringComparison.Ordinal);
