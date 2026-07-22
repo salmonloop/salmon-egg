@@ -13,6 +13,9 @@ public sealed class RawGameControllerAxisNormalizerTests
     [InlineData(1.0, 1.0)]
     [InlineData(-0.25, -1.0)]
     [InlineData(1.25, 1.0)]
+    [InlineData(double.NaN, 0.0)]
+    [InlineData(double.NegativeInfinity, 0.0)]
+    [InlineData(double.PositiveInfinity, 0.0)]
     public void NormalizeHorizontal_MapsRawAxisRangeToStandardThumbstickRange(double rawValue, double expected)
     {
         var normalized = RawGameControllerAxisNormalizer.NormalizeHorizontal(rawValue);
@@ -28,6 +31,9 @@ public sealed class RawGameControllerAxisNormalizerTests
     [InlineData(1.0, -1.0)]
     [InlineData(-0.25, 1.0)]
     [InlineData(1.25, -1.0)]
+    [InlineData(double.NaN, 0.0)]
+    [InlineData(double.NegativeInfinity, 0.0)]
+    [InlineData(double.PositiveInfinity, 0.0)]
     public void NormalizeVertical_InvertsRawAxisRangeForStandardThumbstickY(double rawValue, double expected)
     {
         var normalized = RawGameControllerAxisNormalizer.NormalizeVertical(rawValue);
@@ -40,5 +46,12 @@ public sealed class RawGameControllerAxisNormalizerTests
     {
         Assert.True(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, 0.0, 0.0]));
         Assert.False(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, 0.5, 0.0]));
+    }
+
+    [Fact]
+    public void IsAllAxesZero_TreatsNonFiniteValuesAsIdle()
+    {
+        Assert.True(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, double.NaN, double.NegativeInfinity]));
+        Assert.False(RawGameControllerAxisNormalizer.IsAllAxesZero([0.0, double.PositiveInfinity, 0.5]));
     }
 }

@@ -46,6 +46,48 @@ public sealed class RawGameControllerButtonLabelMapperTests
     }
 
     [Theory]
+    [InlineData(RawGameControllerButtonLabel.XboxX)]
+    [InlineData(RawGameControllerButtonLabel.Square)]
+    [InlineData(RawGameControllerButtonLabel.LetterX)]
+    public void Apply_LeavesWestFaceButtonLabelsWithoutProjectedIntent(
+        RawGameControllerButtonLabel label)
+    {
+        var reading = RawGameControllerButtonLabelMapper.Apply(label, default);
+
+        Assert.False(reading.ShortcutVoiceToggle);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void Apply_WithNintendoLayout_MapsLetterFaceButtonsByPhysicalPosition()
+    {
+        var letterA = RawGameControllerButtonLabelMapper.Apply(
+            RawGameControllerButtonLabel.LetterA,
+            default,
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var letterB = RawGameControllerButtonLabelMapper.Apply(
+            RawGameControllerButtonLabel.LetterB,
+            default,
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var letterX = RawGameControllerButtonLabelMapper.Apply(
+            RawGameControllerButtonLabel.LetterX,
+            default,
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var letterY = RawGameControllerButtonLabelMapper.Apply(
+            RawGameControllerButtonLabel.LetterY,
+            default,
+            RawGameControllerFaceButtonLayout.Nintendo);
+
+        Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(letterA));
+        Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(letterB));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(letterX));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(letterY));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(letterY));
+    }
+
+    [Theory]
     [InlineData(RawGameControllerButtonLabel.XboxLeftTrigger, GamepadContextIntent.PageUp)]
     [InlineData(RawGameControllerButtonLabel.LeftTrigger, GamepadContextIntent.PageUp)]
     [InlineData(RawGameControllerButtonLabel.XboxRightTrigger, GamepadContextIntent.PageDown)]

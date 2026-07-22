@@ -5,7 +5,8 @@ public static class RawGameControllerInputReadingMapper
     public static GamepadInputReading GetInputReading(
         IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels,
         IReadOnlyList<GamepadDirectionalSwitchPosition> switches,
-        IReadOnlyList<double> axes)
+        IReadOnlyList<double> axes,
+        RawGameControllerFaceButtonLayout faceButtonLayout = RawGameControllerFaceButtonLayout.Standard)
     {
         ArgumentNullException.ThrowIfNull(pressedButtonLabels);
         ArgumentNullException.ThrowIfNull(switches);
@@ -15,7 +16,7 @@ public static class RawGameControllerInputReadingMapper
 
         foreach (var label in pressedButtonLabels)
         {
-            reading = RawGameControllerButtonLabelMapper.Apply(label, reading);
+            reading = RawGameControllerButtonLabelMapper.Apply(label, reading, faceButtonLayout);
         }
 
         foreach (var position in switches)

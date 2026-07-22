@@ -17,7 +17,7 @@ public static class RawGameControllerAxisNormalizer
     {
         foreach (var axis in axes)
         {
-            if (axis != 0)
+            if (double.IsFinite(axis) && axis != 0)
             {
                 return false;
             }
@@ -28,6 +28,11 @@ public static class RawGameControllerAxisNormalizer
 
     private static double NormalizeCenteredAxis(double value)
     {
+        if (!double.IsFinite(value))
+        {
+            return 0;
+        }
+
         var normalized = (value - CenteredAxisValue) * StandardAxisScale;
         return Math.Clamp(normalized, -1.0, 1.0);
     }

@@ -22,9 +22,26 @@ public sealed class WindowsRawGameControllerMapper
         var axes = new double[controller.AxisCount];
         controller.GetCurrentReading(buttons, switches, axes);
 
-        var pressedButtonLabels = new List<RawGameControllerButtonLabel>();
+        return GetInputReading(controller, buttons, switches, axes);
+    }
 
-        for (var i = 0; i < buttons.Length; i++)
+    public GamepadInputReading GetInputReading(
+        RawGameController controller,
+        IReadOnlyList<bool> buttons,
+        IReadOnlyList<GameControllerSwitchPosition> switches,
+        IReadOnlyList<double> axes)
+    {
+        ArgumentNullException.ThrowIfNull(controller);
+        ArgumentNullException.ThrowIfNull(buttons);
+        ArgumentNullException.ThrowIfNull(switches);
+        ArgumentNullException.ThrowIfNull(axes);
+
+        var pressedButtonLabels = new List<RawGameControllerButtonLabel>();
+        var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            controller.DisplayName,
+            controller.HardwareVendorId);
+
+        for (var i = 0; i < buttons.Count; i++)
         {
             if (!buttons[i])
             {
@@ -34,11 +51,17 @@ public sealed class WindowsRawGameControllerMapper
             pressedButtonLabels.Add(MapButtonLabel(controller.GetButtonLabel(i)));
         }
 
-        var switchPositions = Array.ConvertAll(
-            switches,
-            static position => (GamepadDirectionalSwitchPosition)(int)position);
+        var switchPositions = new GamepadDirectionalSwitchPosition[switches.Count];
+        for (var i = 0; i < switches.Count; i++)
+        {
+            switchPositions[i] = (GamepadDirectionalSwitchPosition)(int)switches[i];
+        }
 
-        return RawGameControllerInputReadingMapper.GetInputReading(pressedButtonLabels, switchPositions, axes);
+        return RawGameControllerInputReadingMapper.GetInputReading(
+            pressedButtonLabels,
+            switchPositions,
+            axes,
+            faceButtonLayout);
     }
 
     private static RawGameControllerButtonLabel MapButtonLabel(GameControllerButtonLabel label)
@@ -54,15 +77,18 @@ public sealed class WindowsRawGameControllerMapper
             GameControllerButtonLabel.XboxRight => RawGameControllerButtonLabel.XboxRight,
             GameControllerButtonLabel.Right => RawGameControllerButtonLabel.Right,
             GameControllerButtonLabel.XboxA => RawGameControllerButtonLabel.XboxA,
-            GameControllerButtonLabel.Cross => RawGameControllerButtonLabel.Cross,
-            GameControllerButtonLabel.LetterA => RawGameControllerButtonLabel.LetterA,
             GameControllerButtonLabel.XboxB => RawGameControllerButtonLabel.XboxB,
-            GameControllerButtonLabel.Circle => RawGameControllerButtonLabel.Circle,
-            GameControllerButtonLabel.LetterB => RawGameControllerButtonLabel.LetterB,
-            GameControllerButtonLabel.Back => RawGameControllerButtonLabel.Back,
+            GameControllerButtonLabel.XboxX => RawGameControllerButtonLabel.XboxX,
             GameControllerButtonLabel.XboxY => RawGameControllerButtonLabel.XboxY,
+            GameControllerButtonLabel.Cross => RawGameControllerButtonLabel.Cross,
+            GameControllerButtonLabel.Circle => RawGameControllerButtonLabel.Circle,
+            GameControllerButtonLabel.Square => RawGameControllerButtonLabel.Square,
             GameControllerButtonLabel.Triangle => RawGameControllerButtonLabel.Triangle,
+            GameControllerButtonLabel.LetterA => RawGameControllerButtonLabel.LetterA,
+            GameControllerButtonLabel.LetterB => RawGameControllerButtonLabel.LetterB,
+            GameControllerButtonLabel.LetterX => RawGameControllerButtonLabel.LetterX,
             GameControllerButtonLabel.LetterY => RawGameControllerButtonLabel.LetterY,
+            GameControllerButtonLabel.Back => RawGameControllerButtonLabel.Back,
             GameControllerButtonLabel.XboxLeftTrigger => RawGameControllerButtonLabel.XboxLeftTrigger,
             GameControllerButtonLabel.LeftTrigger => RawGameControllerButtonLabel.LeftTrigger,
             GameControllerButtonLabel.XboxRightTrigger => RawGameControllerButtonLabel.XboxRightTrigger,

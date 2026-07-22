@@ -39,6 +39,8 @@ public sealed class GamepadAdaptationPipelineTests
     {
         yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.XboxA], [], []), GamepadNavigationIntent.Activate];
         yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.XboxB], [], []), GamepadNavigationIntent.Back];
+        yield return [Standard(activate: true), RawController([RawGameControllerButtonLabel.LetterB], [], [], RawGameControllerFaceButtonLayout.Nintendo), GamepadNavigationIntent.Activate];
+        yield return [Standard(back: true), RawController([RawGameControllerButtonLabel.LetterA], [], [], RawGameControllerFaceButtonLayout.Nintendo), GamepadNavigationIntent.Back];
     }
 
     public static IEnumerable<object[]> ThumbstickSamples()
@@ -167,6 +169,47 @@ public sealed class GamepadAdaptationPipelineTests
     }
 
     [Fact]
+    public void StandardGamepadAndNintendoRawControllerVoiceShortcut_ProjectToSameShortcutIntent()
+    {
+        var standardReading = Standard(shortcutVoiceToggle: true);
+        var rawReading = RawController(
+            [RawGameControllerButtonLabel.LetterX],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(standardReading));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(rawReading));
+        Assert.Equal(
+            GamepadShortcutIntentProjector.GetActiveShortcuts(standardReading),
+            GamepadShortcutIntentProjector.GetActiveShortcuts(rawReading));
+    }
+
+    [Fact]
+    public void NintendoRawControllerReading_SelectedFromRawPath_FansOutThroughCommonProcessors()
+    {
+        var rawReading = RawController(
+            [RawGameControllerButtonLabel.LetterB, RawGameControllerButtonLabel.LetterX],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Nintendo);
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            [default],
+            [rawReading],
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate],
+            Order(new GamepadIntentProcessor().Process(selection.Reading, SampleTime)));
+        Assert.Equal(
+            [GamepadShortcutIntent.ToggleVoiceInput],
+            new GamepadShortcutProcessor().Process(selection.Reading));
+        Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(selection.Reading));
+    }
+
+    [Fact]
     public void StandardGamepadAndRawControllerTriggers_ProjectToSameContextIntent()
     {
         var standardReading = Standard(leftTrigger: 0.75, rightTrigger: 0.75);
@@ -222,6 +265,11 @@ public sealed class GamepadAdaptationPipelineTests
     private static GamepadInputReading RawController(
         IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels,
         IReadOnlyList<GamepadDirectionalSwitchPosition> switches,
-        IReadOnlyList<double> axes)
-        => RawGameControllerInputReadingMapper.GetInputReading(pressedButtonLabels, switches, axes);
+        IReadOnlyList<double> axes,
+        RawGameControllerFaceButtonLayout faceButtonLayout = RawGameControllerFaceButtonLayout.Standard)
+        => RawGameControllerInputReadingMapper.GetInputReading(
+            pressedButtonLabels,
+            switches,
+            axes,
+            faceButtonLayout);
 }

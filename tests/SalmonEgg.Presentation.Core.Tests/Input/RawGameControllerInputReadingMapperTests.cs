@@ -10,9 +10,10 @@ public sealed class RawGameControllerInputReadingMapperTests
     public void GetInputReading_ProjectsButtonsSwitchesAndAxesThroughCommonSemanticReading()
     {
         var reading = RawGameControllerInputReadingMapper.GetInputReading(
-            [RawGameControllerButtonLabel.XboxA, RawGameControllerButtonLabel.XboxY, RawGameControllerButtonLabel.LeftTrigger],
+            [RawGameControllerButtonLabel.LetterB, RawGameControllerButtonLabel.LetterX, RawGameControllerButtonLabel.LeftTrigger],
             [GamepadDirectionalSwitchPosition.DownRight],
-            [0.875, 0.45]);
+            [0.875, 0.45],
+            RawGameControllerFaceButtonLayout.Nintendo);
 
         Assert.Equal(
             [
@@ -34,6 +35,18 @@ public sealed class RawGameControllerInputReadingMapperTests
             [],
             [],
             [0.0, 0.0]);
+
+        Assert.Equal(default, reading);
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+    }
+
+    [Fact]
+    public void GetInputReading_TreatsNonFiniteAxesAsIdleWithoutCreatingThumbstickIntent()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReading(
+            [],
+            [],
+            [double.NaN, double.PositiveInfinity, double.NegativeInfinity]);
 
         Assert.Equal(default, reading);
         Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
