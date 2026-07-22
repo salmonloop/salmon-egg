@@ -12,7 +12,13 @@ internal static partial class WasmGamepadSnapshotReader
 {
     public static GamepadDiagnosticsSnapshot ReadSnapshot()
     {
-        var readings = ReadInputReadings();
+        var devices = ReadDevices();
+        var readings = new List<GamepadInputReading>(devices.Count);
+        foreach (var device in devices)
+        {
+            readings.Add(device.Reading);
+        }
+
         var source = GamepadDiagnosticsInputSource.None;
         var reading = default(GamepadInputReading);
 
@@ -39,36 +45,50 @@ internal static partial class WasmGamepadSnapshotReader
             ActiveIntents: GamepadIntentProcessor.GetActiveIntents(reading),
             ActiveContextIntents: GamepadContextIntentProjector.GetActiveIntents(reading),
             ActiveShortcuts: GamepadShortcutIntentProjector.GetActiveShortcuts(reading),
-            StandardGamepads: CreateStandardGamepadDiagnostics(readings),
+            StandardGamepads: CreateStandardGamepadDiagnostics(devices),
             RawControllers: []);
     }
 
+    public static IReadOnlyList<GamepadInputReading> ReadInputReadings()
+    {
+        var devices = ReadDevices();
+        var readings = new List<GamepadInputReading>(devices.Count);
+        foreach (var device in devices)
+        {
+            readings.Add(device.Reading);
+        }
+
+        return readings;
+    }
 
     private static IReadOnlyList<StandardGamepadDiagnostics> CreateStandardGamepadDiagnostics(
-        IReadOnlyList<GamepadInputReading> readings)
+        IReadOnlyList<BrowserGamepadDeviceReading> devices)
     {
-        if (readings.Count == 0)
+        if (devices.Count == 0)
         {
             return [];
         }
 
-        var diagnostics = new List<StandardGamepadDiagnostics>(readings.Count);
-        foreach (var reading in readings)
+        var diagnostics = new List<StandardGamepadDiagnostics>(devices.Count);
+        foreach (var device in devices)
         {
             diagnostics.Add(new StandardGamepadDiagnostics(
-                DisplayName: string.Empty,
-                HardwareVendorId: null,
-                HardwareProductId: null,
-                FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
+                DisplayName: device.Identity.DisplayName,
+                HardwareVendorId: device.Identity.HardwareVendorId,
+                HardwareProductId: device.Identity.HardwareProductId,
+                FaceButtonLayout: RawGameControllerFaceButtonLayoutResolver.Resolve(
+                    device.Identity.DisplayName,
+                    device.Identity.HardwareVendorId,
+                    labels: default),
                 ButtonLabels: [],
                 PressedButtons: [],
-                Reading: reading));
+                Reading: device.Reading));
         }
 
         return diagnostics;
     }
 
-    public static IReadOnlyList<GamepadInputReading> ReadInputReadings()
+    private static IReadOnlyList<BrowserGamepadDeviceReading> ReadDevices()
     {
         using var gamepads = GetGamepads();
         if (gamepads is null)
@@ -82,7 +102,7 @@ internal static partial class WasmGamepadSnapshotReader
             return [];
         }
 
-        var readings = new List<GamepadInputReading>(length);
+        var devices = new List<BrowserGamepadDeviceReading>(length);
         for (var i = 0; i < length; i++)
         {
             using var gamepad = SafeGetObject(gamepads, i.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -91,25 +111,28 @@ internal static partial class WasmGamepadSnapshotReader
                 continue;
             }
 
-            readings.Add(ReadInputReading(gamepad));
+            devices.Add(ReadDevice(gamepad));
         }
 
-        return readings;
+        return devices;
     }
 
     [JSImport("globalThis.navigator.getGamepads")]
     private static partial JSObject? GetGamepads();
 
-    private static GamepadInputReading ReadInputReading(JSObject gamepad)
+    private static BrowserGamepadDeviceReading ReadDevice(JSObject gamepad)
     {
         using var buttons = SafeGetObject(gamepad, "buttons");
         using var axes = SafeGetObject(gamepad, "axes");
         var mapping = SafeGetString(gamepad, "mapping");
-
-        return BrowserGamepadInputReadingMapper.GetInputReading(
+        var id = SafeGetString(gamepad, "id");
+        var identity = BrowserGamepadIdentityParser.Parse(id);
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
             mapping,
             ReadButtons(buttons),
             ReadAxes(axes));
+
+        return new BrowserGamepadDeviceReading(identity, reading);
     }
 
     private static IReadOnlyList<BrowserGamepadButtonReading> ReadButtons(JSObject? buttons)
@@ -230,5 +253,9 @@ internal static partial class WasmGamepadSnapshotReader
             return 0;
         }
     }
+
+    private readonly record struct BrowserGamepadDeviceReading(
+        BrowserGamepadIdentity Identity,
+        GamepadInputReading Reading);
 }
 #endif

@@ -315,6 +315,9 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("#if __WASM__", reader, StringComparison.Ordinal);
         Assert.Contains("[JSImport(\"globalThis.navigator.getGamepads\")]", reader, StringComparison.Ordinal);
         Assert.Contains("SafeGetString(gamepad, \"mapping\")", reader, StringComparison.Ordinal);
+        Assert.Contains("SafeGetString(gamepad, \"id\")", reader, StringComparison.Ordinal);
+        Assert.Contains("BrowserGamepadIdentityParser.Parse", reader, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", reader, StringComparison.Ordinal);
         Assert.Contains("BrowserGamepadInputReadingMapper.GetInputReading", reader, StringComparison.Ordinal);
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Input\BrowserGamepadInputReadingMapper.cs"), StringComparison.Ordinal);
         Assert.Contains("GamepadIntentProcessor.GetActiveIntents", reader, StringComparison.Ordinal);
