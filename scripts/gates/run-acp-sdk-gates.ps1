@@ -37,6 +37,12 @@ Invoke-GateCommand { & $dotnet build src/SalmonEgg.Acp/SalmonEgg.Acp.csproj `
   --no-restore `
   -v minimal }
 
+Write-Host "[gate] Build ACP SDK tests"
+Invoke-GateCommand { & $dotnet build tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj `
+  --configuration $Configuration `
+  --no-restore `
+  -v minimal }
+
 Write-Host "[gate] ACP SDK contracts"
 Invoke-GateCommand { & $dotnet test `
   --project tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj `

@@ -18,6 +18,12 @@ echo "[gate] Build ACP SDK"
   --no-restore \
   -v minimal
 
+echo "[gate] Build ACP SDK tests"
+"$DOTNET_BIN" build tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj \
+  --configuration "$CONFIGURATION" \
+  --no-restore \
+  -v minimal
+
 echo "[gate] ACP SDK contracts"
 "$DOTNET_BIN" test \
   --project tests/SalmonEgg.Acp.Tests/SalmonEgg.Acp.Tests.csproj \
