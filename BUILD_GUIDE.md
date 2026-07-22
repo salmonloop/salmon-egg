@@ -255,6 +255,20 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 
 `scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and Chrome-style `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`). Diagnostics must project display name, `VID`/`PID`, and face `layout` (Nintendo only for Switch Pro identity). Face **semantics** remain position-based under `mapping: "standard"`; identity is for diagnostics/layout labeling, not a second brand shell path.
 
+#### Multi-brand gamepad simulation options
+
+To approximate real-device smoke without every physical controller present, prefer layered evidence rather than inventing brand shell patches:
+
+| Layer | Tooling | What it can prove | Limits |
+|-------|---------|-------------------|--------|
+| Core unit matrix | xUnit over `Presentation.Core` mappers / identity / unlabeled policy | PS / Xbox / Nintendo face semantics, Joy-Con exclusion, unlabeled B0–B3 / B6–B7 | Not OS HID label or dual-path exposure |
+| BrowserWasm inject | Playwright + `navigator.getGamepads` override (`wasm-gamepad-boundary-smoke.mjs`) | W3C standard-position intents + Chrome-style `id` → name/VID/PID/layout diagnostics | Browser Gamepad API only; not Windows `Gamepad`/`RawGameController` |
+| Windows synthetic keys | FlaUI `synthetic` GUI backend | Shell routing for VirtualKey-style inject | Not `Windows.Gaming.Input` brand labels |
+| Windows virtual HID | `tests/SalmonEgg.GamepadBridge.Windows` + HIDMaestro (`SALMONEGG_HIDMAESTRO_*`) | Virtual controller appears on the OS input path used by native-device GUI smoke | Default profile is `xbox-360-wired`; other profiles only after confirming installed HIDMaestro profile ids—do not invent ids |
+| Optional second virtual bus | Nefarius **ViGEmBus** + `Nefarius.ViGEm.Client` / Python **vgamepad** | Common Xbox 360 / DualShock 4 style virtual pads on Windows | Does **not** replace DualSense / Switch Pro HID identity evidence; not a substitute for MSIX real-device Diagnostics matrix |
+
+Authoritative multi-brand completion still requires current Windows MSIX + Diagnostics capture for physical PS / Xbox / Switch controllers per the validation matrix below.
+
 #### Windows native gamepad bridge
 
 Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
