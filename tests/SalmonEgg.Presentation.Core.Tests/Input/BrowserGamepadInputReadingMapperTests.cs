@@ -75,6 +75,25 @@ public sealed class BrowserGamepadInputReadingMapperTests
         Assert.Empty(GamepadContextIntentProjector.GetActiveIntents(reading));
     }
 
+
+    [Theory]
+    [InlineData(6, GamepadContextIntent.PageUp)]
+    [InlineData(7, GamepadContextIntent.PageDown)]
+    public void GetInputReading_MapsStandardTriggersToPageContextIntents(
+        int buttonIndex,
+        GamepadContextIntent expected)
+    {
+        var reading = BrowserGamepadInputReadingMapper.GetInputReading(
+            BrowserGamepadInputReadingMapper.StandardMapping,
+            CreateStandardButtons(pressed: [buttonIndex], values: new Dictionary<int, double>()),
+            []);
+
+        Assert.Equal([expected], GamepadContextIntentProjector.GetActiveIntents(reading));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
