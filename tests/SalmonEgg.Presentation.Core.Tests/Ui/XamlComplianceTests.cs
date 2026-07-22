@@ -2932,16 +2932,20 @@ public sealed class XamlComplianceTests
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
 
-        Assert.Contains("foreach (var diagnostics in standardGamepads)", code, StringComparison.Ordinal);
-        Assert.Contains("foreach (var diagnostics in rawControllers)", code, StringComparison.Ordinal);
-        Assert.Contains("CreateStandardGamepadDiagnostics", code, StringComparison.Ordinal);
+        // Dual-path rows are always collected; Core projector owns active path (including raw when standard is idle).
+        Assert.Contains("Gamepad.Gamepads.Select(CreateStandardGamepadDiagnostics)", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameController.RawGameControllers.Select(CreateRawControllerDiagnostics)", code, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsActiveReadingProjector.Project", code, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetIdentity", code, StringComparison.Ordinal);
         Assert.Contains("gamepad.GetButtonLabel(button)", code, StringComparison.Ordinal);
         Assert.Contains("controller.GetCurrentReading(buttons, switches, axes)", code, StringComparison.Ordinal);
         Assert.Contains("_rawMapper.GetInputReading(controller, buttons, switches, axes)", code, StringComparison.Ordinal);
         Assert.Contains("StandardGamepads: standardGamepads", code, StringComparison.Ordinal);
+        Assert.Contains("RawControllers: rawControllers", code, StringComparison.Ordinal);
         Assert.DoesNotContain("HasMatchingGamepad", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RawGameController.FromGameController", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadDiagnosticsInputSource.Gamepad", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadDiagnosticsInputSource.RawGameController", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3077,10 +3081,13 @@ public sealed class XamlComplianceTests
         var snapshot = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadDiagnosticsSnapshot.cs");
         var viewModel = LoadText(@"src\SalmonEgg.Presentation.Core\ViewModels\Settings\GamepadDiagnosticsViewModel.cs");
         var windowsService = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGamepadDiagnosticsService.cs");
+        var projector = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadDiagnosticsActiveReadingProjector.cs");
 
         Assert.Contains("GamepadDiagnosticsInputSource InputSource", snapshot, StringComparison.Ordinal);
-        Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", windowsService, StringComparison.Ordinal);
-        Assert.Contains("GamepadDiagnosticsInputSource.RawGameController", windowsService, StringComparison.Ordinal);
+        Assert.Contains("InputSource: active.InputSource", windowsService, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsActiveReadingProjector.Project", windowsService, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", projector, StringComparison.Ordinal);
+        Assert.Contains("GamepadDiagnosticsInputSource.RawGameController", projector, StringComparison.Ordinal);
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", viewModel, StringComparison.Ordinal);
         Assert.Contains("IReadOnlyCollection<GamepadShortcutIntent> ActiveShortcuts", snapshot, StringComparison.Ordinal);
         Assert.Contains("IReadOnlyList<StandardGamepadDiagnostics> StandardGamepads", snapshot, StringComparison.Ordinal);
@@ -3091,13 +3098,14 @@ public sealed class XamlComplianceTests
         Assert.Contains("WindowsStandardGamepadIdentity.Empty", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
         Assert.Contains("catch (Exception)", LoadText(@"SalmonEgg\SalmonEgg\Presentation\Services\Input\WindowsGameControllerButtonLabelMapper.cs"), StringComparison.Ordinal);
         Assert.Contains("gamepad.GetButtonLabel(button)", windowsService, StringComparison.Ordinal);
-        Assert.Contains("GetFaceButtonLabels", windowsService, StringComparison.Ordinal);
         Assert.Contains("WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels", windowsService, StringComparison.Ordinal);
         Assert.Contains("FormatStandardGamepads", viewModel, StringComparison.Ordinal);
         Assert.Contains("FormatInputSource(GamepadDiagnosticsInputSource inputSource)", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("string InputSource", snapshot, StringComparison.Ordinal);
         Assert.DoesNotContain("FormatInputSource(string", viewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("InputSource: \"", windowsService, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadDiagnosticsInputSource.Gamepad", windowsService, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadDiagnosticsInputSource.RawGameController", windowsService, StringComparison.Ordinal);
     }
 
     [Fact]
