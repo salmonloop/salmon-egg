@@ -168,4 +168,35 @@ public sealed class GamepadActiveReadingSelectorTests
         Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
         Assert.Equal(gamepadReadings[0], selection.Reading);
     }
+
+    [Fact]
+    public void TrySelectActiveReading_IdleStandardDoesNotHideActiveRawFaceIntent()
+    {
+        // Dual-path invariant: an idle standard Gamepad must not suppress an active
+        // RawGameController face intent (for example DualSense/Switch raw-only paths).
+        var gamepadReadings = new[]
+        {
+            default(GamepadInputReading),
+            default(GamepadInputReading)
+        };
+        var rawReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            gamepadReadings,
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
+        Assert.True(selection.Reading.Activate);
+    }
 }
