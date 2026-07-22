@@ -78,6 +78,7 @@ echo "[linux-gamepad] Core multi-brand unit matrix"
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadHidMaestroProfileCatalogTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadControllerIdentityTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadActiveReadingSelectorTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadInputPathTrackerTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserStandardGamepadBrandSemanticsTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadIdentityParserTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadInputReadingMapperTests" \
@@ -150,7 +151,7 @@ run_playwright_smoke \
 
 echo "[linux-gamepad] PASS"
 echo "[linux-gamepad] Covered on Linux:"
-echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector, mapper matrix, Diagnostics VM projection"
+echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector/path tracker, mapper matrix (incl. Sony standard-path), Diagnostics VM projection"
 echo "  - BrowserWasm Playwright inject for Xbox/DualSense/Switch Pro ids + standard-position intents + Diagnostics ActiveInputs"
 echo "[linux-gamepad] Not covered here (need Windows host):"
 echo "  - HIDMaestro multi-profile OS-path runner: scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1"
