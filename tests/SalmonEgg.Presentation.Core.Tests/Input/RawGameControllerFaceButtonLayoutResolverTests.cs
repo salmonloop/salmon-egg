@@ -35,4 +35,52 @@ public sealed class RawGameControllerFaceButtonLayoutResolverTests
 
         Assert.Equal(RawGameControllerFaceButtonLayout.Standard, layout);
     }
+
+    [Fact]
+    public void Resolve_FromFaceLabels_UsesNintendoWhenAnyLetterLabelPresent()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.LetterB,
+            B: RawGameControllerButtonLabel.None,
+            X: RawGameControllerButtonLabel.None,
+            Y: RawGameControllerButtonLabel.None);
+
+        Assert.Equal(
+            RawGameControllerFaceButtonLayout.Nintendo,
+            RawGameControllerFaceButtonLayoutResolver.Resolve(labels));
+    }
+
+    [Fact]
+    public void Resolve_FromFaceLabels_UsesStandardWhenNoLetterLabels()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.XboxA,
+            B: RawGameControllerButtonLabel.Cross,
+            X: RawGameControllerButtonLabel.Square,
+            Y: RawGameControllerButtonLabel.Triangle);
+
+        Assert.Equal(
+            RawGameControllerFaceButtonLayout.Standard,
+            RawGameControllerFaceButtonLayoutResolver.Resolve(labels));
+    }
+
+    [Fact]
+    public void Resolve_FromPressedLabels_PromotesStandardIdentityToNintendoWhenLettersAppear()
+    {
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            RawGameControllerFaceButtonLayout.Standard,
+            [RawGameControllerButtonLabel.LetterA, RawGameControllerButtonLabel.XboxA]);
+
+        Assert.Equal(RawGameControllerFaceButtonLayout.Nintendo, layout);
+    }
+
+    [Fact]
+    public void Resolve_FromPressedLabels_KeepsNintendoIdentityWithoutLetters()
+    {
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            RawGameControllerFaceButtonLayout.Nintendo,
+            [RawGameControllerButtonLabel.Cross]);
+
+        Assert.Equal(RawGameControllerFaceButtonLayout.Nintendo, layout);
+    }
 }

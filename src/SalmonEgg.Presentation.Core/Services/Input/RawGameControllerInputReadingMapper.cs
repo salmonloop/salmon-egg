@@ -13,10 +13,13 @@ public static class RawGameControllerInputReadingMapper
         ArgumentNullException.ThrowIfNull(axes);
 
         var reading = default(GamepadInputReading);
+        var effectiveLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
+            faceButtonLayout,
+            pressedButtonLabels);
 
         foreach (var label in pressedButtonLabels)
         {
-            reading = RawGameControllerButtonLabelMapper.Apply(label, reading, faceButtonLayout);
+            reading = RawGameControllerButtonLabelMapper.Apply(label, reading, effectiveLayout);
         }
 
         foreach (var position in switches)

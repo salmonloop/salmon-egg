@@ -59,4 +59,17 @@ public sealed class RawGameControllerInputReadingMapperTests
         Assert.Throws<ArgumentNullException>(() => RawGameControllerInputReadingMapper.GetInputReading([], null!, []));
         Assert.Throws<ArgumentNullException>(() => RawGameControllerInputReadingMapper.GetInputReading([], [], null!));
     }
+
+    [Fact]
+    public void GetInputReading_WithLetterLabelsAndStandardIdentity_UsesNintendoFaceSemantics()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReading(
+            [RawGameControllerButtonLabel.LetterA, RawGameControllerButtonLabel.LetterX],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard);
+
+        Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(reading));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
 }

@@ -225,7 +225,139 @@ public sealed class GamepadAdaptationPipelineTests
             GamepadContextIntentProjector.GetActiveIntents(rawReading));
     }
 
+
+    [Fact]
+    public void XboxPlayStationAndNintendoStandardLabels_ProjectExpectedFaceSemantics()
+    {
+        var xbox = LabeledStandard(
+            faceA: true,
+            faceB: true,
+            faceX: true,
+            faceY: true,
+            labels: new(
+                A: RawGameControllerButtonLabel.XboxA,
+                B: RawGameControllerButtonLabel.XboxB,
+                X: RawGameControllerButtonLabel.XboxX,
+                Y: RawGameControllerButtonLabel.XboxY));
+        var playstation = LabeledStandard(
+            faceA: true,
+            faceB: true,
+            faceX: true,
+            faceY: true,
+            labels: new(
+                A: RawGameControllerButtonLabel.Cross,
+                B: RawGameControllerButtonLabel.Circle,
+                X: RawGameControllerButtonLabel.Square,
+                Y: RawGameControllerButtonLabel.Triangle));
+        var nintendoPositionNormalized = LabeledStandard(
+            faceA: true,
+            faceB: true,
+            faceX: true,
+            faceY: true,
+            labels: new(
+                A: RawGameControllerButtonLabel.LetterB,
+                B: RawGameControllerButtonLabel.LetterA,
+                X: RawGameControllerButtonLabel.LetterY,
+                Y: RawGameControllerButtonLabel.LetterX));
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            Order(GamepadIntentProcessor.GetActiveIntents(xbox)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(xbox));
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            Order(GamepadIntentProcessor.GetActiveIntents(playstation)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(playstation));
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            Order(GamepadIntentProcessor.GetActiveIntents(nintendoPositionNormalized)));
+        Assert.Equal(
+            [GamepadShortcutIntent.ToggleVoiceInput],
+            GamepadShortcutIntentProjector.GetActiveShortcuts(nintendoPositionNormalized));
+    }
+
+    [Fact]
+    public void DualExposedSwitchController_StandardAndRawPathsProjectSamePhysicalFaceSemantics()
+    {
+        // Standard path: Windows position slots with physical Letter* labels.
+        var standardBottom = LabeledStandard(
+            faceA: true,
+            labels: new(A: RawGameControllerButtonLabel.LetterB));
+        var standardEast = LabeledStandard(
+            faceB: true,
+            labels: new(B: RawGameControllerButtonLabel.LetterA));
+        var standardNorth = LabeledStandard(
+            faceY: true,
+            labels: new(Y: RawGameControllerButtonLabel.LetterX));
+        var standardWest = LabeledStandard(
+            faceX: true,
+            labels: new(X: RawGameControllerButtonLabel.LetterY));
+
+        // Raw path: identity Nintendo + physical letter presses (or letter-only promotion).
+        var rawBottom = RawController([RawGameControllerButtonLabel.LetterB], [], [], RawGameControllerFaceButtonLayout.Nintendo);
+        var rawEast = RawController([RawGameControllerButtonLabel.LetterA], [], [], RawGameControllerFaceButtonLayout.Nintendo);
+        var rawNorth = RawController([RawGameControllerButtonLabel.LetterX], [], [], RawGameControllerFaceButtonLayout.Nintendo);
+        var rawWest = RawController([RawGameControllerButtonLabel.LetterY], [], [], RawGameControllerFaceButtonLayout.Nintendo);
+
+        Assert.Equal(
+            Order(GamepadIntentProcessor.GetActiveIntents(standardBottom)),
+            Order(GamepadIntentProcessor.GetActiveIntents(rawBottom)));
+        Assert.Equal(
+            Order(GamepadIntentProcessor.GetActiveIntents(standardEast)),
+            Order(GamepadIntentProcessor.GetActiveIntents(rawEast)));
+        Assert.Equal(
+            GamepadShortcutIntentProjector.GetActiveShortcuts(standardNorth),
+            GamepadShortcutIntentProjector.GetActiveShortcuts(rawNorth));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(standardWest));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(standardWest));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(rawWest));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(rawWest));
+
+        Assert.True(GamepadActiveReadingSelector.TrySelectActiveReading(
+            [standardBottom],
+            [rawEast],
+            out var selection));
+        Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(selection.Reading)));
+    }
+
+    [Fact]
+    public void RawLetterLabelsWithoutNintendoIdentity_StillUseNintendoFaceSemantics()
+    {
+        var reading = RawController(
+            [RawGameControllerButtonLabel.LetterB, RawGameControllerButtonLabel.LetterX],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(reading)));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
     private static readonly DateTimeOffset SampleTime = DateTimeOffset.Parse("2026-07-06T00:00:00Z");
+
+    private static GamepadInputReading LabeledStandard(
+        bool faceA = false,
+        bool faceB = false,
+        bool faceX = false,
+        bool faceY = false,
+        StandardGamepadFaceButtonLabels labels = default)
+        => StandardGamepadInputReadingMapper.GetInputReading(
+            moveUp: false,
+            moveDown: false,
+            moveLeft: false,
+            moveRight: false,
+            faceAPressed: faceA,
+            faceBPressed: faceB,
+            faceXPressed: faceX,
+            faceYPressed: faceY,
+            leftTrigger: 0,
+            rightTrigger: 0,
+            thumbstickX: 0,
+            thumbstickY: 0,
+            labels: labels);
 
     private static GamepadInputReading Standard(
         bool moveUp = false,

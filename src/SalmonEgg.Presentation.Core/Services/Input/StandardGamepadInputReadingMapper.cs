@@ -57,7 +57,7 @@ public static class StandardGamepadInputReadingMapper
             ThumbstickX: ClampSigned(thumbstickX),
             ThumbstickY: ClampSigned(thumbstickY));
 
-        var faceButtonLayout = ResolveFaceButtonLayout(labels);
+        var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(labels);
         if (faceAPressed)
         {
             reading = ApplyFaceButton(reading, labels.A, faceButtonLayout, activateFallback: true, backFallback: false, voiceFallback: false);
@@ -80,25 +80,6 @@ public static class StandardGamepadInputReadingMapper
 
         return reading;
     }
-
-    private static RawGameControllerFaceButtonLayout ResolveFaceButtonLayout(StandardGamepadFaceButtonLabels labels)
-    {
-        if (IsLetterLabel(labels.A)
-            || IsLetterLabel(labels.B)
-            || IsLetterLabel(labels.X)
-            || IsLetterLabel(labels.Y))
-        {
-            return RawGameControllerFaceButtonLayout.Nintendo;
-        }
-
-        return RawGameControllerFaceButtonLayout.Standard;
-    }
-
-    private static bool IsLetterLabel(RawGameControllerButtonLabel label)
-        => label is RawGameControllerButtonLabel.LetterA
-            or RawGameControllerButtonLabel.LetterB
-            or RawGameControllerButtonLabel.LetterX
-            or RawGameControllerButtonLabel.LetterY;
 
     private static GamepadInputReading ApplyFaceButton(
         GamepadInputReading reading,

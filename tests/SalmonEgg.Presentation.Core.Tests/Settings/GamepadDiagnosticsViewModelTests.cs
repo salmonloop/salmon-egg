@@ -191,6 +191,7 @@ public sealed class GamepadDiagnosticsViewModelTests
             StandardGamepads:
             [
                 new StandardGamepadDiagnostics(
+                    FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
                     ButtonLabels: ["A:XboxA", "B:XboxB", "X:XboxX", "Y:XboxY"],
                     PressedButtons: ["A", "Y"],
                     Reading: reading)
@@ -203,6 +204,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Equal("1", viewModel.ConnectedGamepadsText);
         Assert.Equal("Gamepad", viewModel.InputSourceText);
         Assert.Equal("Activate, ToggleVoiceInput", viewModel.ActiveInputsText);
+        Assert.Contains("layout Standard", viewModel.StandardGamepadsText);
         Assert.Contains("labels A:XboxA, B:XboxB, X:XboxX, Y:XboxY", viewModel.StandardGamepadsText);
         Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
         Assert.Contains("semantic Activate, ToggleVoiceInput", viewModel.StandardGamepadsText);

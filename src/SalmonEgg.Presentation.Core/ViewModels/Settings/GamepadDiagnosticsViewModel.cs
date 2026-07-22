@@ -331,8 +331,9 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
             var gamepad = gamepads[i];
             lines.Add(string.Format(
                 CultureInfo.InvariantCulture,
-                "#{0} labels {1}; pressed {2}",
+                "#{0} layout {1}; labels {2}; pressed {3}",
                 i,
+                FormatFaceButtonLayout(gamepad.FaceButtonLayout),
                 FormatStringList(gamepad.ButtonLabels),
                 FormatStringList(gamepad.PressedButtons))
                 + "; semantic "

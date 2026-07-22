@@ -24,7 +24,54 @@ public static class RawGameControllerFaceButtonLayoutResolver
         return RawGameControllerFaceButtonLayout.Standard;
     }
 
+    public static RawGameControllerFaceButtonLayout Resolve(StandardGamepadFaceButtonLabels labels)
+    {
+        if (IsLetterLabel(labels.A)
+            || IsLetterLabel(labels.B)
+            || IsLetterLabel(labels.X)
+            || IsLetterLabel(labels.Y))
+        {
+            return RawGameControllerFaceButtonLayout.Nintendo;
+        }
+
+        return RawGameControllerFaceButtonLayout.Standard;
+    }
+
+    public static RawGameControllerFaceButtonLayout Resolve(
+        RawGameControllerFaceButtonLayout identityLayout,
+        IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels)
+    {
+        ArgumentNullException.ThrowIfNull(pressedButtonLabels);
+
+        if (identityLayout == RawGameControllerFaceButtonLayout.Nintendo)
+        {
+            return RawGameControllerFaceButtonLayout.Nintendo;
+        }
+
+        foreach (var label in pressedButtonLabels)
+        {
+            if (IsLetterLabel(label))
+            {
+                return RawGameControllerFaceButtonLayout.Nintendo;
+            }
+        }
+
+        return identityLayout;
+    }
+
+    private static bool IsLetterLabel(RawGameControllerButtonLabel label)
+        => label is RawGameControllerButtonLabel.LetterA
+            or RawGameControllerButtonLabel.LetterB
+            or RawGameControllerButtonLabel.LetterX
+            or RawGameControllerButtonLabel.LetterY;
+
     private static bool ContainsToken(string? value, string token)
-        => !string.IsNullOrWhiteSpace(value)
-            && value.Contains(token, StringComparison.OrdinalIgnoreCase);
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return value.Contains(token, StringComparison.OrdinalIgnoreCase);
+    }
 }
