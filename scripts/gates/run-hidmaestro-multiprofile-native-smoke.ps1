@@ -56,6 +56,52 @@ function Resolve-ProfileIds {
     )
 }
 
+
+function Get-ExpectedFamilyToken {
+    param([string]$ProfileId)
+    switch -Regex ($ProfileId.Trim().ToLowerInvariant()) {
+        '^(xbox-360-wired|xbox-series-xs)$' { return 'Xbox' }
+        '^(dualsense|dualsense-bt|dualshock-4-v2)$' { return 'Sony' }
+        '^switch-pro$' { return 'Nintendo' }
+        default { return 'Unknown' }
+    }
+}
+
+function Get-ExpectedPreferredFaceKey {
+    param(
+        [string]$ProfileId,
+        [ValidateSet('Activate','Back','West','Voice')]
+        [string]$Semantic
+    )
+    $family = Get-ExpectedFamilyToken -ProfileId $ProfileId
+    switch ($family) {
+        'Nintendo' {
+            switch ($Semantic) {
+                'Activate' { return 'B' }
+                'Back' { return 'A' }
+                'West' { return 'Y' }
+                'Voice' { return 'X' }
+            }
+        }
+        'Sony' {
+            switch ($Semantic) {
+                'Activate' { return 'Cross' }
+                'Back' { return 'Circle' }
+                'West' { return 'Square' }
+                'Voice' { return 'Triangle' }
+            }
+        }
+        default {
+            switch ($Semantic) {
+                'Activate' { return 'A' }
+                'Back' { return 'B' }
+                'West' { return 'X' }
+                'Voice' { return 'Y' }
+            }
+        }
+    }
+}
+
 function Resolve-BridgeExecutable {
     param([string]$RepoRoot, [string]$Configuration)
 
@@ -98,7 +144,12 @@ function Invoke-NativeDiagnosticsSmoke {
     $method = "SalmonEgg.GuiTests.Windows.DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_NativeDeviceBackend_ReflectsVirtualControllerInput"
 
     for ($attempt = 1; $attempt -le $Retries; $attempt++) {
-        Write-Host "[multi-profile] profile=$ProfileId attempt=$attempt/$Retries bridge=$BridgePath"
+        $expectedFamily = Get-ExpectedFamilyToken -ProfileId $ProfileId
+        $activateKey = Get-ExpectedPreferredFaceKey -ProfileId $ProfileId -Semantic Activate
+        $backKey = Get-ExpectedPreferredFaceKey -ProfileId $ProfileId -Semantic Back
+        $westKey = Get-ExpectedPreferredFaceKey -ProfileId $ProfileId -Semantic West
+        $voiceKey = Get-ExpectedPreferredFaceKey -ProfileId $ProfileId -Semantic Voice
+        Write-Host "[multi-profile] profile=$ProfileId family=$expectedFamily face=Activate:$activateKey,Back:$backKey,West:$westKey,Voice:$voiceKey attempt=$attempt/$Retries bridge=$BridgePath"
         try {
             dotnet test `
               --project tests/SalmonEgg.GuiTests.Windows/SalmonEgg.GuiTests.Windows.csproj `
