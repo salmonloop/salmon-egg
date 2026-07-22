@@ -241,6 +241,11 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
         /pressed\s+A/i,
         `${brand.label} pressed standard face A`);
+      await expectControlText(
+        page,
+        { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+        /Activate/,
+        `${brand.label} active Activate intent`);
     }
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
