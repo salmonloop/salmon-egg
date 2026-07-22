@@ -40,7 +40,7 @@ public sealed class WindowsRawGameControllerMapper
         var faceButtonLayout = RawGameControllerFaceButtonLayoutResolver.Resolve(
             controller.DisplayName,
             controller.HardwareVendorId);
-        var allowUnlabeledFaceIndexFallback = RawGameControllerUnlabeledFaceIndexPolicy.SupportsFallback(
+        var allowUnlabeledFaceIndexFallback = RawGameControllerUnlabeledFaceIndexPolicy.SupportsFullGamepadUnlabeledIndexFallback(
             controller.DisplayName,
             controller.HardwareVendorId);
 

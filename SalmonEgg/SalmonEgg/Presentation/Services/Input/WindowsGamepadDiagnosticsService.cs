@@ -148,6 +148,9 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
             ButtonCount: controller.ButtonCount,
             SwitchCount: controller.SwitchCount,
             AxisCount: controller.AxisCount,
+            UnlabeledIndexFallbackEnabled: RawGameControllerUnlabeledFaceIndexPolicy.SupportsFullGamepadUnlabeledIndexFallback(
+                controller.DisplayName,
+                controller.HardwareVendorId),
             PressedButtons: GetPressedButtons(controller, buttons),
             ActiveSwitches: GetActiveSwitches(switches),
             Axes: axes,

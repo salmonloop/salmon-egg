@@ -2865,7 +2865,7 @@ public sealed class XamlComplianceTests
 
         Assert.Contains("RawGameControllerInputReadingMapper.GetInputReadingFromPresses", code, StringComparison.Ordinal);
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", code, StringComparison.Ordinal);
-        Assert.Contains("RawGameControllerUnlabeledFaceIndexPolicy.SupportsFallback", code, StringComparison.Ordinal);
+        Assert.Contains("RawGameControllerUnlabeledFaceIndexPolicy.SupportsFullGamepadUnlabeledIndexFallback", code, StringComparison.Ordinal);
         Assert.Contains("new RawGameControllerButtonPress", code, StringComparison.Ordinal);
         Assert.Contains("controller.DisplayName", code, StringComparison.Ordinal);
         Assert.Contains("controller.HardwareVendorId", code, StringComparison.Ordinal);

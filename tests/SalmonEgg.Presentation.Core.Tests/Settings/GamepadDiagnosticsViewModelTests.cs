@@ -50,6 +50,7 @@ public sealed class GamepadDiagnosticsViewModelTests
                     ButtonCount: 16,
                     SwitchCount: 1,
                     AxisCount: 6,
+                    UnlabeledIndexFallbackEnabled: true,
                     PressedButtons: ["B0:Cross"],
                     ActiveSwitches: ["S0:Down"],
                     Axes: [0.5, 1.0],
@@ -74,6 +75,7 @@ public sealed class GamepadDiagnosticsViewModelTests
         Assert.Contains("Wireless Controller", viewModel.RawControllersText);
         Assert.Contains("VID 054C PID 0CE6", viewModel.RawControllersText);
         Assert.Contains("layout Standard", viewModel.RawControllersText);
+        Assert.Contains("unlabeled-index-fallback on", viewModel.RawControllersText);
         Assert.Contains("B0:Cross", viewModel.RawControllersText);
         Assert.Contains("S0:Down", viewModel.RawControllersText);
         Assert.Contains("A1:1.00", viewModel.RawControllersText);
@@ -104,6 +106,7 @@ public sealed class GamepadDiagnosticsViewModelTests
                     ButtonCount: 16,
                     SwitchCount: 1,
                     AxisCount: 6,
+                    UnlabeledIndexFallbackEnabled: true,
                     PressedButtons: ["B0:LetterB"],
                     ActiveSwitches: [],
                     Axes: [0, 0],
@@ -154,6 +157,7 @@ public sealed class GamepadDiagnosticsViewModelTests
                     ButtonCount: 16,
                     SwitchCount: 1,
                     AxisCount: 6,
+                    UnlabeledIndexFallbackEnabled: true,
                     PressedButtons: ["B2:LetterX"],
                     ActiveSwitches: [],
                     Axes: [0, 0],

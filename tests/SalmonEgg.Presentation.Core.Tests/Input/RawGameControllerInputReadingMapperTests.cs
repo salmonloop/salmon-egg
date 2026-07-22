@@ -117,4 +117,24 @@ public sealed class RawGameControllerInputReadingMapperTests
         Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(reading));
         Assert.False(reading.Activate);
     }
+
+    [Fact]
+    public void GetInputReading_WithUnlabeledTriggerIndexes_ProjectsPageContextIntents()
+    {
+        var reading = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [
+                new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None),
+                new RawGameControllerButtonPress(7, RawGameControllerButtonLabel.None)
+            ],
+            [],
+            [],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true);
+
+        Assert.Equal(1, reading.LeftTrigger);
+        Assert.Equal(1, reading.RightTrigger);
+        Assert.Equal(
+            [GamepadContextIntent.PageUp, GamepadContextIntent.PageDown],
+            GamepadContextIntentProjector.GetActiveIntents(reading).OrderBy(static intent => intent));
+    }
 }

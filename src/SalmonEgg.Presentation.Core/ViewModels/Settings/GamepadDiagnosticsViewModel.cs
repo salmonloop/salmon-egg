@@ -366,7 +366,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
                 controller.HardwareVendorId);
             lines.Add(string.Format(
                 CultureInfo.InvariantCulture,
-                "#{0} {1} VID {2:X4} PID {3:X4} {4}; layout {5}; buttons {6}; switches {7}; axes {8}; pressed {9}; active switches {10}; axis values {11}",
+                "#{0} {1} VID {2:X4} PID {3:X4} {4}; layout {5}; unlabeled-index-fallback {6}; buttons {7}; switches {8}; axes {9}; pressed {10}; active switches {11}; axis values {12}",
                 i,
                 string.IsNullOrWhiteSpace(controller.DisplayName) ? "RawGameController" : controller.DisplayName,
                 controller.HardwareVendorId,
@@ -375,6 +375,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
                     ? _localizer["GamepadDiagnostics_ConnectionWireless"]
                     : _localizer["GamepadDiagnostics_ConnectionWired"],
                 FormatFaceButtonLayout(faceButtonLayout),
+                controller.UnlabeledIndexFallbackEnabled ? "on" : "off",
                 controller.ButtonCount,
                 controller.SwitchCount,
                 controller.AxisCount,
