@@ -273,7 +273,7 @@ Authoritative multi-brand completion still requires current Windows MSIX + Diagn
 
 Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
 
-By default it creates the `xbox-360-wired` HIDMaestro profile. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
+By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
 
 ```powershell
 $env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
@@ -281,7 +281,7 @@ $env:SALMONEGG_HIDMAESTRO_PROFILE_ID = "xbox-360-wired"
 dotnet run --project tests/SalmonEgg.GamepadBridge.Windows/SalmonEgg.GamepadBridge.Windows.csproj -- serve
 ```
 
-The bridge protocol accepts `create`, `dispose`, and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, `a`, `b`, `x`, `y`, `lt` / `left-trigger`, `rt` / `right-trigger`, and `release`. Each `press` is sticky until the next `press` or dispose so Diagnostics monitoring can observe the held reading under the app poll interval. Face-button validation must record which physical button each profile maps to these commands so Activate, Back, Voice Toggle, and the west-face no-op boundary are all covered. Triggers are analog HIDMaestro `HMAxis` values (canonical `Z` / `Rz` at full press `1.0`), not `HMButton` flags; left projects to `PageUp` and right to `PageDown` when the app threshold is met. The native-device Diagnostics GUI smoke exercises the face matrix and LT/RT page intents on the default `xbox-360-wired` profile.
+The bridge protocol accepts `create`, `dispose`, and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, `a`, `b`, `x`, `y`, `lt` / `left-trigger`, `rt` / `right-trigger`, and `release`. Each `press` is sticky until the next `press` or dispose so Diagnostics monitoring can observe the held reading under the app poll interval. Face-button validation must record which physical button each profile maps to these commands so Activate, Back, Voice Toggle, and the west-face no-op boundary are all covered. Triggers are profile-aware: when the active HIDMaestro profile exposes analog `profile.Triggers`, the bridge writes full-press `1.0` on the profile trigger axes plus canonical `Z`/`Rz` and `Rx`/`Ry` so Xbox and DualSense paths both feed `SubmitState`; when the profile has no analog triggers (for example Switch Pro L2/R2 digital clicks), the bridge holds descriptor buttons `6`/`7` instead of misusing Xbox Back/Start semantics. Left projects to `PageUp` and right to `PageDown` when the app threshold is met. The native-device Diagnostics GUI smoke exercises the face matrix and LT/RT page intents on the default `xbox-360-wired` profile; re-run with a confirmed DualSense or Switch Pro profile id for multi-brand OS-path evidence.
 
 Do not guess profile ids in automation. Confirm the installed HIDMaestro profile id first, then record the controller family, transport, profile id, and app diagnostics output in the validation notes.
 

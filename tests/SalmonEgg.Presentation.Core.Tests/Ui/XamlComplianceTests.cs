@@ -2926,8 +2926,14 @@ public sealed class XamlComplianceTests
         Assert.Contains("case \"right-trigger\":", bridge, StringComparison.Ordinal);
         Assert.Contains("leftTrigger: 1f", bridge, StringComparison.Ordinal);
         Assert.Contains("rightTrigger: 1f", bridge, StringComparison.Ordinal);
-        Assert.Contains("Enum.Parse(_hmAxisType, \"Z\"", bridge, StringComparison.Ordinal);
-        Assert.Contains("Enum.Parse(_hmAxisType, \"Rz\"", bridge, StringComparison.Ordinal);
+        Assert.Contains("ProfileHasAnalogTriggers()", bridge, StringComparison.Ordinal);
+        Assert.Contains("BuildTriggerAxes", bridge, StringComparison.Ordinal);
+        Assert.Contains("WriteAxis(\"Z\", left)", bridge, StringComparison.Ordinal);
+        Assert.Contains("WriteAxis(\"Rz\", right)", bridge, StringComparison.Ordinal);
+        Assert.Contains("WriteAxis(\"Rx\", left)", bridge, StringComparison.Ordinal);
+        Assert.Contains("WriteAxis(\"Ry\", right)", bridge, StringComparison.Ordinal);
+        Assert.Contains("1u << 6", bridge, StringComparison.Ordinal);
+        Assert.Contains("1u << 7", bridge, StringComparison.Ordinal);
         Assert.Contains("Sticky press", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("_getProfileMethod.Invoke(_context, [DefaultProfileId])", bridge, StringComparison.Ordinal);
     }
