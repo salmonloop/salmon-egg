@@ -25,7 +25,27 @@ public sealed class BrowserGamepadIdentityParserTests
         "DualSense Wireless Controller",
         (ushort)0x054C,
         (ushort)0x0CE6)]
-    public void Parse_ChromeStyleIds_ExtractsNameAndHardwareIds(
+    [InlineData(
+        "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 0x045e Product: 0x0b13)",
+        "Xbox Wireless Controller",
+        (ushort)0x045E,
+        (ushort)0x0B13)]
+    [InlineData(
+        "045e-0b13-Xbox Wireless Controller",
+        "Xbox Wireless Controller",
+        (ushort)0x045E,
+        (ushort)0x0B13)]
+    [InlineData(
+        "054c-0ce6-DualSense Wireless Controller",
+        "DualSense Wireless Controller",
+        (ushort)0x054C,
+        (ushort)0x0CE6)]
+    [InlineData(
+        "057e-2009-Pro Controller",
+        "Pro Controller",
+        (ushort)0x057E,
+        (ushort)0x2009)]
+    public void Parse_KnownBrowserIdFormats_ExtractsNameAndHardwareIds(
         string gamepadId,
         string expectedName,
         ushort expectedVendor,

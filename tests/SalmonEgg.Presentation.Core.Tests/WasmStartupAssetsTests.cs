@@ -317,6 +317,8 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("SafeGetString(gamepad, \"mapping\")", reader, StringComparison.Ordinal);
         Assert.Contains("SafeGetString(gamepad, \"id\")", reader, StringComparison.Ordinal);
         Assert.Contains("BrowserGamepadIdentityParser.Parse", reader, StringComparison.Ordinal);
+        Assert.Contains("BrowserStandardGamepadPressedButtons.GetPressedNames", reader, StringComparison.Ordinal);
+        Assert.Contains("PressedButtons: device.PressedButtons", reader, StringComparison.Ordinal);
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", reader, StringComparison.Ordinal);
         Assert.Contains("BrowserGamepadInputReadingMapper.GetInputReading", reader, StringComparison.Ordinal);
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Input\BrowserGamepadInputReadingMapper.cs"), StringComparison.Ordinal);

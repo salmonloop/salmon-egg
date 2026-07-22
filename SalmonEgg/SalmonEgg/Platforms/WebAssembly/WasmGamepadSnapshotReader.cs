@@ -81,7 +81,7 @@ internal static partial class WasmGamepadSnapshotReader
                     device.Identity.HardwareVendorId,
                     labels: default),
                 ButtonLabels: [],
-                PressedButtons: [],
+                PressedButtons: device.PressedButtons,
                 Reading: device.Reading));
         }
 
@@ -122,17 +122,19 @@ internal static partial class WasmGamepadSnapshotReader
 
     private static BrowserGamepadDeviceReading ReadDevice(JSObject gamepad)
     {
-        using var buttons = SafeGetObject(gamepad, "buttons");
+        using var buttonsObject = SafeGetObject(gamepad, "buttons");
         using var axes = SafeGetObject(gamepad, "axes");
         var mapping = SafeGetString(gamepad, "mapping");
         var id = SafeGetString(gamepad, "id");
         var identity = BrowserGamepadIdentityParser.Parse(id);
+        var buttons = ReadButtons(buttonsObject);
         var reading = BrowserGamepadInputReadingMapper.GetInputReading(
             mapping,
-            ReadButtons(buttons),
+            buttons,
             ReadAxes(axes));
+        var pressedButtons = BrowserStandardGamepadPressedButtons.GetPressedNames(mapping, buttons);
 
-        return new BrowserGamepadDeviceReading(identity, reading);
+        return new BrowserGamepadDeviceReading(identity, reading, pressedButtons);
     }
 
     private static IReadOnlyList<BrowserGamepadButtonReading> ReadButtons(JSObject? buttons)
@@ -256,6 +258,7 @@ internal static partial class WasmGamepadSnapshotReader
 
     private readonly record struct BrowserGamepadDeviceReading(
         BrowserGamepadIdentity Identity,
-        GamepadInputReading Reading);
+        GamepadInputReading Reading,
+        IReadOnlyList<string> PressedButtons);
 }
 #endif
