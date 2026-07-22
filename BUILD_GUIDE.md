@@ -251,6 +251,38 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 
 它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
+#### Windows native gamepad bridge
+
+Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
+
+By default it creates the `xbox-360-wired` HIDMaestro profile. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
+
+```powershell
+$env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
+$env:SALMONEGG_HIDMAESTRO_PROFILE_ID = "xbox-360-wired"
+dotnet run --project tests/SalmonEgg.GamepadBridge.Windows/SalmonEgg.GamepadBridge.Windows.csproj -- serve
+```
+
+The bridge protocol accepts `create`, `dispose`, and `press <input>`. Supported inputs are `dpad-up`, `dpad-down`, `dpad-left`, `dpad-right`, `a`, `b`, `x`, and `y`. Face-button validation must record which physical button each profile maps to these commands so Activate, Back, Voice Toggle, and the west-face no-op boundary are all covered.
+
+Do not guess profile ids in automation. Confirm the installed HIDMaestro profile id first, then record the controller family, transport, profile id, and app diagnostics output in the validation notes.
+
+Real-device gamepad validation must use the current MSIX install and the Diagnostics > Gamepad monitor. For every controller family and transport under test, capture:
+
+- When `Input source` is `Gamepad`, the standard-details line that includes physical `labels` from `Gamepad.GetButtonLabel`, `pressed`, `semantic`, and `reading`.
+- The raw-details line that includes `VID`, `PID`, `layout`, `pressed`, `semantic`, and `reading` whenever raw controllers are present.
+- Whether Windows exposes the device on the standard `Gamepad` path, the `RawGameController` path, or both; do not change path priority from diagnostics alone.
+
+Minimum Windows validation matrix:
+
+| Controller | Transport | Required diagnostics evidence |
+| --- | --- | --- |
+| Xbox controller | USB or official wireless path available to Windows | Standard `Gamepad` path if Windows exposes it, or `RawGameController` fallback with `layout Standard`; D-pad directions project to `Move*`; A projects to `Activate`; B projects to `Back`; Y projects to `ToggleVoiceInput`; X produces no app semantic action. |
+| DualShock / DualSense | USB and Bluetooth when available | `RawGameController` or `Gamepad` path is acceptable only when diagnostics show PS labels or standard semantics; Cross projects to `Activate`; Circle projects to `Back`; Triangle projects to `ToggleVoiceInput`; Square produces no app semantic action. |
+| Switch Pro / Joy-Con | USB and Bluetooth when available | `RawGameController` details show Nintendo identity, `VID 057E` or Nintendo/Switch/Joy-Con display name, and `layout Nintendo`; physical B projects to `Activate`; physical A projects to `Back`; physical X projects to `ToggleVoiceInput`; physical Y produces no app semantic action. |
+
+For each run, also verify disconnect/reconnect updates counts, triggers project to `PageUp` / `PageDown` when exposed, thumbstick movement changes `reading X/Y` without stale values, and inactive controllers do not hide an active raw fallback behind an idle standard gamepad.
+
 #### WebAssembly 持久化策略
 
 Uno 官方 IDBFS 文档要求通过 `<WasmShellEnableIDBFS>true</WasmShellEnableIDBFS>` 显式启用浏览器 IndexedDB-backed 文件系统。本仓库在 `net10.0-browserwasm` 上启用该构建能力，用于 `/local/SalmonEgg` 下的应用数据。
