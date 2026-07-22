@@ -131,4 +131,61 @@ public static class GamepadHidMaestroProfileCatalog
             }
         };
     }
+
+    /// <summary>
+    /// Canonical multi-profile OS-path gate rows derived only from confirmed catalog
+    /// ids and Core face/family ownership. Gate scripts must consume this projection
+    /// (or a checked-in serialization of it) instead of inventing brand tables.
+    /// </summary>
+    public static IReadOnlyList<GamepadHidMaestroProfileGateRow> GetMultiProfileGateRows()
+    {
+        var rows = new GamepadHidMaestroProfileGateRow[ConfirmedProfileIds.Count];
+        for (var i = 0; i < ConfirmedProfileIds.Count; i++)
+        {
+            var profileId = ConfirmedProfileIds[i];
+            rows[i] = new GamepadHidMaestroProfileGateRow(
+                ProfileId: profileId,
+                FamilyToken: FormatFamilyToken(profileId),
+                PreferredActivateKey: PreferFirst(GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Activate)),
+                PreferredBackKey: PreferFirst(GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Back)),
+                PreferredWestKey: PreferFirst(GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.West)),
+                PreferredVoiceKey: PreferFirst(GetPhysicalButtonNameCandidates(profileId, GamepadFaceSemantic.Voice)));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Stable pipe-delimited serialization for gate scripts.
+    /// Columns: profileId|family|activate|back|west|voice
+    /// </summary>
+    public static string FormatMultiProfileGateManifest()
+    {
+        var rows = GetMultiProfileGateRows();
+        var lines = new string[rows.Count];
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            lines[i] = string.Join(
+                '|',
+                row.ProfileId,
+                row.FamilyToken,
+                row.PreferredActivateKey,
+                row.PreferredBackKey,
+                row.PreferredWestKey,
+                row.PreferredVoiceKey);
+        }
+
+        return string.Join("\n", lines) + "\n";
+    }
+
+    private static string PreferFirst(IReadOnlyList<string> candidates)
+    {
+        if (candidates is null || candidates.Count == 0 || string.IsNullOrWhiteSpace(candidates[0]))
+        {
+            throw new InvalidOperationException("Physical button candidate list must include a preferred key.");
+        }
+
+        return candidates[0];
+    }
 }

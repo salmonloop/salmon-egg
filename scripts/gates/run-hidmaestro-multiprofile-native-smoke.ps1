@@ -45,26 +45,73 @@ function Resolve-ProfileIds {
         )
     }
 
-    # Core catalog ConfirmedProfileIds — keep in sync with GamepadHidMaestroProfileCatalog.
-    return @(
-        "xbox-360-wired",
-        "xbox-series-xs",
-        "dualsense",
-        "dualsense-bt",
-        "dualshock-4-v2",
-        "switch-pro"
-    )
+    # Core-owned checked-in manifest (FormatMultiProfileGateManifest). Do not invent ids here.
+    return @(Get-MultiProfileManifestRows | ForEach-Object { $_.ProfileId })
 }
 
 
+function Get-MultiProfileManifestPath {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    $path = Join-Path $scriptDir "hidmaestro-multiprofile-manifest.txt"
+    if (-not (Test-Path -LiteralPath $path)) {
+        throw "Core multiprofile manifest missing: $path. Keep scripts/gates/hidmaestro-multiprofile-manifest.txt aligned with GamepadHidMaestroProfileCatalog.FormatMultiProfileGateManifest()."
+    }
+    return (Resolve-Path -LiteralPath $path).Path
+}
+
+function Get-MultiProfileManifestRows {
+    $path = Get-MultiProfileManifestPath
+    $rows = @()
+    foreach ($line in Get-Content -LiteralPath $path) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
+            continue
+        }
+
+        $parts = $trimmed.Split('|')
+        if ($parts.Count -ne 6) {
+            throw "Invalid multiprofile manifest line (expected profile|family|activate|back|west|voice): $trimmed"
+        }
+
+        $rows += [pscustomobject]@{
+            ProfileId = $parts[0]
+            FamilyToken = $parts[1]
+            PreferredActivateKey = $parts[2]
+            PreferredBackKey = $parts[3]
+            PreferredWestKey = $parts[4]
+            PreferredVoiceKey = $parts[5]
+        }
+    }
+
+    if ($rows.Count -eq 0) {
+        throw "Multiprofile manifest is empty: $path"
+    }
+
+    return $rows
+}
+
+function Get-ManifestRow {
+    param([string]$ProfileId)
+    $match = Get-MultiProfileManifestRows | Where-Object {
+        $_.ProfileId.Equals($ProfileId.Trim(), [System.StringComparison]::OrdinalIgnoreCase)
+    } | Select-Object -First 1
+    if ($null -eq $match) {
+        # Unconfirmed profile: family Unknown; preferred keys fall back to Xbox letters for inject notes only.
+        return [pscustomobject]@{
+            ProfileId = $ProfileId.Trim()
+            FamilyToken = 'Unknown'
+            PreferredActivateKey = 'A'
+            PreferredBackKey = 'B'
+            PreferredWestKey = 'X'
+            PreferredVoiceKey = 'Y'
+        }
+    }
+    return $match
+}
+
 function Get-ExpectedFamilyToken {
     param([string]$ProfileId)
-    switch -Regex ($ProfileId.Trim().ToLowerInvariant()) {
-        '^(xbox-360-wired|xbox-series-xs)$' { return 'Xbox' }
-        '^(dualsense|dualsense-bt|dualshock-4-v2)$' { return 'Sony' }
-        '^switch-pro$' { return 'Nintendo' }
-        default { return 'Unknown' }
-    }
+    return (Get-ManifestRow -ProfileId $ProfileId).FamilyToken
 }
 
 function Get-ExpectedPreferredFaceKey {
@@ -73,32 +120,12 @@ function Get-ExpectedPreferredFaceKey {
         [ValidateSet('Activate','Back','West','Voice')]
         [string]$Semantic
     )
-    $family = Get-ExpectedFamilyToken -ProfileId $ProfileId
-    switch ($family) {
-        'Nintendo' {
-            switch ($Semantic) {
-                'Activate' { return 'B' }
-                'Back' { return 'A' }
-                'West' { return 'Y' }
-                'Voice' { return 'X' }
-            }
-        }
-        'Sony' {
-            switch ($Semantic) {
-                'Activate' { return 'Cross' }
-                'Back' { return 'Circle' }
-                'West' { return 'Square' }
-                'Voice' { return 'Triangle' }
-            }
-        }
-        default {
-            switch ($Semantic) {
-                'Activate' { return 'A' }
-                'Back' { return 'B' }
-                'West' { return 'X' }
-                'Voice' { return 'Y' }
-            }
-        }
+    $row = Get-ManifestRow -ProfileId $ProfileId
+    switch ($Semantic) {
+        'Activate' { return $row.PreferredActivateKey }
+        'Back' { return $row.PreferredBackKey }
+        'West' { return $row.PreferredWestKey }
+        'Voice' { return $row.PreferredVoiceKey }
     }
 }
 
