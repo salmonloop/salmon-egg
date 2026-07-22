@@ -219,6 +219,50 @@ public sealed class GamepadDiagnosticsViewModelTests
 
 
     [Fact]
+    public async Task RefreshSnapshotCommand_WhenStandardDualSenseIdentityPresent_ProjectsSonyIdsAndStandardLayout()
+    {
+        var reading = new GamepadInputReading(
+            MoveUp: false,
+            MoveDown: false,
+            MoveLeft: false,
+            MoveRight: false,
+            Activate: true,
+            Back: false,
+            ShortcutVoiceToggle: true);
+        var service = new FakeGamepadDiagnosticsService(new GamepadDiagnosticsSnapshot(
+            IsSupported: true,
+            ConnectedGamepadCount: 1,
+            ConnectedRawControllerCount: 0,
+            InputSource: GamepadDiagnosticsInputSource.Gamepad,
+            Reading: reading,
+            ActiveIntents: [GamepadNavigationIntent.Activate],
+            ActiveContextIntents: [],
+            ActiveShortcuts: [GamepadShortcutIntent.ToggleVoiceInput],
+            StandardGamepads:
+            [
+                new StandardGamepadDiagnostics(
+                    DisplayName: "DualSense Wireless Controller",
+                    HardwareVendorId: 0x054C,
+                    HardwareProductId: 0x0CE6,
+                    FaceButtonLayout: RawGameControllerFaceButtonLayout.Standard,
+                    ButtonLabels: ["A:Cross", "B:Circle", "X:Square", "Y:Triangle"],
+                    PressedButtons: ["A", "Y"],
+                    Reading: reading)
+            ],
+            RawControllers: []));
+        var viewModel = CreateViewModel(service, supportsGamepadInput: true);
+
+        await viewModel.RefreshSnapshotCommand.ExecuteAsync(null);
+
+        Assert.Contains("DualSense Wireless Controller", viewModel.StandardGamepadsText);
+        Assert.Contains("VID 054C PID 0CE6", viewModel.StandardGamepadsText);
+        Assert.Contains("layout Standard", viewModel.StandardGamepadsText);
+        Assert.Contains("labels A:Cross, B:Circle, X:Square, Y:Triangle", viewModel.StandardGamepadsText);
+        Assert.Contains("pressed A, Y", viewModel.StandardGamepadsText);
+        Assert.Contains("semantic Activate, ToggleVoiceInput", viewModel.StandardGamepadsText);
+    }
+
+    [Fact]
     public async Task RefreshSnapshotCommand_WhenStandardNintendoIdentityPresent_ProjectsNintendoLayoutAndIds()
     {
         var reading = new GamepadInputReading(

@@ -11,6 +11,39 @@ public static class GamepadControllerIdentity
     public const ushort SonyVendorId = 0x054C;
     public const ushort NintendoVendorId = 0x057E;
 
+    public static bool IsXbox(string? displayName, ushort hardwareVendorId)
+    {
+        if (hardwareVendorId == MicrosoftVendorId)
+        {
+            return true;
+        }
+
+        // "Xbox" covers Series / One / 360 product strings. Exclude pure "XInput"
+        // generic wrappers without Xbox branding; those are not authoritative family facts.
+        return ContainsToken(displayName, "Xbox");
+    }
+
+    public static bool IsSony(string? displayName, ushort hardwareVendorId)
+    {
+        if (hardwareVendorId == SonyVendorId)
+        {
+            return true;
+        }
+
+        // Name tokens for HID paths that omit Sony VID metadata (BT aliases, third-party
+        // drivers, browser Gamepad.id short names). Spaced Dual Shock / Dual Sense forms
+        // appear on some host strings alongside the compact DualShock / DualSense tokens.
+        return ContainsToken(displayName, "PlayStation")
+            || ContainsToken(displayName, "DualShock")
+            || ContainsToken(displayName, "DualSense")
+            || ContainsToken(displayName, "Dual Shock")
+            || ContainsToken(displayName, "Dual Sense")
+            || ContainsToken(displayName, "PS5")
+            || ContainsToken(displayName, "PS4")
+            || ContainsToken(displayName, "DS5")
+            || ContainsToken(displayName, "DS4");
+    }
+
     public static bool IsNintendo(string? displayName, ushort hardwareVendorId)
     {
         if (hardwareVendorId == NintendoVendorId)
@@ -32,24 +65,11 @@ public static class GamepadControllerIdentity
             return false;
         }
 
-        if (hardwareVendorId is MicrosoftVendorId or SonyVendorId or NintendoVendorId)
-        {
-            return true;
-        }
-
-        // Joy-Con name tokens only reach here after single Joy-Con exclusion above.
-        // PS4/PS5 short names appear on some Windows HID paths without Sony VID metadata.
-        return ContainsToken(displayName, "Xbox")
-            || ContainsToken(displayName, "PlayStation")
-            || ContainsToken(displayName, "DualShock")
-            || ContainsToken(displayName, "DualSense")
-            || ContainsToken(displayName, "PS5")
-            || ContainsToken(displayName, "PS4")
-            || ContainsToken(displayName, "Nintendo")
-            || ContainsToken(displayName, "Switch Pro")
-            || IsProControllerName(displayName)
-            || ContainsToken(displayName, "Joy-Con")
-            || ContainsToken(displayName, "JoyCon");
+        // Vendor ids alone are sufficient for known full-gamepad families; name tokens
+        // cover HID paths that omit vendor metadata (see IsXbox / IsSony / IsNintendo).
+        return IsXbox(displayName, hardwareVendorId)
+            || IsSony(displayName, hardwareVendorId)
+            || IsNintendo(displayName, hardwareVendorId);
     }
 
     public static bool IsSingleJoyCon(string? displayName)

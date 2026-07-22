@@ -8,6 +8,8 @@ public sealed class RawGameControllerUnlabeledFaceIndexPolicyTests
     [InlineData("Xbox Wireless Controller", 0x045E)]
     [InlineData("Wireless Controller", 0x054C)]
     [InlineData("DualSense Controller", 0x0000)]
+    [InlineData("Dual Shock 4", 0x0000)]
+    [InlineData("DS4 Wireless Controller", 0x0000)]
     [InlineData("PS5 Controller", 0x0000)]
     [InlineData("PS4 Controller", 0x0000)]
     [InlineData("Xbox Series X Controller", 0x0000)]
