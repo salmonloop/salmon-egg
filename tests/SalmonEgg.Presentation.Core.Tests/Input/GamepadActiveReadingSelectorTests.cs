@@ -199,4 +199,74 @@ public sealed class GamepadActiveReadingSelectorTests
         Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
         Assert.True(selection.Reading.Activate);
     }
+
+    [Fact]
+    public void TrySelectActiveReading_PrefersStandard_WhenStandardTriggerAndRawFaceBothActive()
+    {
+        // Dual-path: when the standard Gamepad path has any active projection (here LT
+        // PageUp), it remains authoritative even if Raw reports a face Activate. This
+        // keeps Xbox/DualSense dual-enumeration hosts from double-dispatching.
+        var gamepadReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: false,
+                Back: false,
+                LeftTrigger: 1)
+        };
+        var rawReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            gamepadReadings,
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.Gamepad, selection.InputPath);
+        Assert.Equal(1, selection.Reading.LeftTrigger);
+        Assert.False(selection.Reading.Activate);
+    }
+
+    [Fact]
+    public void TrySelectActiveReading_FallsBackToRaw_WhenStandardIsWestFaceNoOpOnly()
+    {
+        // A west-face-only standard reading projects no app intents/shortcuts/context.
+        // Raw DualSense/Switch face must still be selectable (no silent dual-path hide).
+        var gamepadReadings = new[]
+        {
+            // West no-op is represented as an all-clear reading after Core projection.
+            default(GamepadInputReading)
+        };
+        var rawReadings = new[]
+        {
+            new GamepadInputReading(
+                MoveUp: false,
+                MoveDown: false,
+                MoveLeft: false,
+                MoveRight: false,
+                Activate: true,
+                Back: false)
+        };
+
+        var selected = GamepadActiveReadingSelector.TrySelectActiveReading(
+            gamepadReadings,
+            rawReadings,
+            out var selection);
+
+        Assert.True(selected);
+        Assert.Equal(GamepadInputPath.RawGameController, selection.InputPath);
+        Assert.True(selection.Reading.Activate);
+    }
 }

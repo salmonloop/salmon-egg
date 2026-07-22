@@ -194,6 +194,56 @@ public sealed class StandardGamepadInputReadingMapperTests
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(north));
     }
 
+
+    [Fact]
+    public void GetInputReading_WithSonyLabelsAndDualSenseIdentity_UsesPhysicalGlyphSemantics()
+    {
+        var labels = new StandardGamepadFaceButtonLabels(
+            A: RawGameControllerButtonLabel.Cross,
+            B: RawGameControllerButtonLabel.Circle,
+            X: RawGameControllerButtonLabel.Square,
+            Y: RawGameControllerButtonLabel.Triangle);
+
+        var cross = MapFace(faceA: true, labels: labels, displayName: "DualSense Wireless Controller", hardwareVendorId: 0x054C);
+        var circle = MapFace(faceB: true, labels: labels, displayName: "DualSense Wireless Controller", hardwareVendorId: 0x054C);
+        var square = MapFace(faceX: true, labels: labels, displayName: "DualSense Wireless Controller", hardwareVendorId: 0x054C);
+        var triangle = MapFace(faceY: true, labels: labels, displayName: "DualSense Wireless Controller", hardwareVendorId: 0x054C);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], GamepadIntentProcessor.GetActiveIntents(cross));
+        Assert.Equal([GamepadNavigationIntent.Back], GamepadIntentProcessor.GetActiveIntents(circle));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(square));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(square));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(triangle));
+    }
+
+    [Fact]
+    public void GetInputReading_WithSonyIdentityAndNoLabels_UsesPhysicalSlotFallbackSemantics()
+    {
+        // Windows standard Gamepad remaps DualSense faces into A/B/X/Y slots. Without
+        // glyph labels, Core must still project bottom/east/west/north app semantics.
+        var reading = StandardGamepadInputReadingMapper.GetInputReading(
+            moveUp: false,
+            moveDown: false,
+            moveLeft: false,
+            moveRight: false,
+            faceAPressed: true,
+            faceBPressed: true,
+            faceXPressed: true,
+            faceYPressed: true,
+            leftTrigger: 0,
+            rightTrigger: 0,
+            thumbstickX: 0,
+            thumbstickY: 0,
+            labels: default,
+            displayName: "DualSense Wireless Controller",
+            hardwareVendorId: 0x054C);
+
+        Assert.Equal(
+            [GamepadNavigationIntent.Activate, GamepadNavigationIntent.Back],
+            GamepadIntentProcessor.GetActiveIntents(reading).OrderBy(static intent => intent));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(reading));
+    }
+
     private static GamepadInputReading MapFace(
         bool faceA = false,
         bool faceB = false,
