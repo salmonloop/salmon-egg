@@ -266,14 +266,44 @@ To approximate real-device smoke without every physical controller present, pref
 | Windows synthetic keys | FlaUI `synthetic` GUI backend | Shell routing for VirtualKey-style inject | Not `Windows.Gaming.Input` brand labels |
 | Windows virtual HID | `tests/SalmonEgg.GamepadBridge.Windows` + HIDMaestro (`SALMONEGG_HIDMAESTRO_*`) | Virtual controller appears on the OS input path used by native-device GUI smoke | Default profile is `xbox-360-wired`; other profiles only after confirming installed HIDMaestro profile ids—do not invent ids |
 | Optional second virtual bus | Nefarius **ViGEmBus** + `Nefarius.ViGEm.Client` / Python **vgamepad** | Common Xbox 360 / DualShock 4 style virtual pads on Windows | Does **not** replace DualSense / Switch Pro HID identity evidence; not a substitute for MSIX real-device Diagnostics matrix |
+| Linux host approximation | `scripts/gates/run-linux-gamepad-smoke-gates.sh` | Core multi-brand unit matrix + BrowserWasm Playwright inject (Xbox / DualSense / Switch Pro) on this machine | Not Windows `Gamepad`/`RawGameController`, not HIDMaestro OS-path, not physical MSIX |
+| Windows multi-profile virtual HID loop | `scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1` | Loops Core `ConfirmedProfileIds` (or `SALMONEGG_HIDMAESTRO_PROFILE_IDS` / `-ProfileIds`) through native-device Diagnostics GUI smoke | Requires Windows + HIDMaestro packs; still not physical USB/BT matrix |
 
 Authoritative multi-brand completion still requires current Windows MSIX + Diagnostics capture for physical PS / Xbox / Switch controllers per the validation matrix below.
+
+#### Linux-runnable gamepad smoke
+
+On Linux aarch64/x64 hosts without physical pads or a Windows MSIX environment, run:
+
+```bash
+./scripts/gates/run-linux-gamepad-smoke-gates.sh Debug
+```
+
+That gate covers:
+
+- Core unit classes for HIDMaestro catalog family tokens (confirmed ids only; unconfirmed non-blank ids resolve to `Unknown`, not Xbox), controller identity, dual-path active reading, browser brand semantics, raw unlabeled face / analog LT-RT policy, and the multi-brand adaptation pipeline;
+- BrowserWasm multi-brand inject via Playwright (`wasm-gamepad-boundary-smoke.mjs`) against the current `net10.0-browserwasm` build.
+
+It does **not** claim Skia Desktop shell input as gamepad evidence: Desktop DI registers `NoOpGamepadInputService` / `NoOpGamepadDiagnosticsService`, so Xvfb/XTest window probes are shell smoke only.
+
+#### Windows multi-profile HIDMaestro runner
+
+On a Windows host with HIDMaestro installed and profile packs present:
+
+```powershell
+$env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
+# optional: subset; default loops all Core ConfirmedProfileIds
+# $env:SALMONEGG_HIDMAESTRO_PROFILE_IDS = "xbox-360-wired,dualsense,switch-pro"
+./scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1 -Configuration Debug
+```
+
+Each profile sets `SALMONEGG_HIDMAESTRO_PROFILE_ID` and re-runs `DiagnosticsSettingsSmokeTests.GamepadDiagnosticsMonitor_NativeDeviceBackend_ReflectsVirtualControllerInput` so Diagnostics must project the matching `family` token and semantic face / LT-RT intents on the OS input path.
 
 #### Windows native gamepad bridge
 
 Windows-only native gamepad validation uses `tests/SalmonEgg.GamepadBridge.Windows` with HIDMaestro. The bridge resolves `HIDMaestro.Core.dll` from `SALMONEGG_HIDMAESTRO_CORE_PATH` or from a DLL placed beside the bridge executable.
 
-By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) are owned by Core `GamepadHidMaestroProfileCatalog` and currently include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids; profile → family mapping for bridge `info` and semantic face presses comes from that catalog. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
+By default it creates the `xbox-360-wired` HIDMaestro profile. Confirmed catalog ids for multi-brand native-device work (only after the matching HIDMaestro package is installed) are owned by Core `GamepadHidMaestroProfileCatalog` and currently include `xbox-360-wired`, `xbox-series-xs`, `dualsense`, `dualsense-bt`, `dualshock-4-v2`, and `switch-pro`. Do not invent other ids; profile → family mapping for bridge `info` and semantic face presses comes from that catalog. Blank/`SALMONEGG_HIDMAESTRO_PROFILE_ID` missing still normalizes to the default confirmed `xbox-360-wired` (family Xbox); any other **unconfirmed non-blank** id maps to family `Unknown` so automation cannot claim Xbox identity evidence by inventing profile strings. To validate another installed HIDMaestro controller profile, set `SALMONEGG_HIDMAESTRO_PROFILE_ID` before starting the bridge:
 
 ```powershell
 $env:SALMONEGG_HIDMAESTRO_CORE_PATH = "C:\Path\To\HIDMaestro.Core.dll"
