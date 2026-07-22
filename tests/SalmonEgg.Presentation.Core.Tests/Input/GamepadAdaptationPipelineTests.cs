@@ -560,6 +560,79 @@ public sealed class GamepadAdaptationPipelineTests
         Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(triangle));
     }
 
+    [Fact]
+    public void MultiBrandTriggerTravel_ProjectsSamePageIntentsOnStandardAndRawPaths()
+    {
+        var standardLeft = Standard(leftTrigger: 0.75);
+        var standardRight = Standard(rightTrigger: 1.0);
+
+        // Xbox / DualSense raw-only analog slots 4/5 (sticks centered so only triggers matter).
+        var xboxLeft = RawAnalogTriggers(
+            displayName: "Xbox Wireless Controller",
+            vendorId: 0x045E,
+            left: 0.75,
+            right: 0);
+        var dualSenseRight = RawAnalogTriggers(
+            displayName: "DualSense Wireless Controller",
+            vendorId: 0x054C,
+            left: 0,
+            right: 1.0);
+        // Switch Pro: digital L2/R2 only — unlabeled B6/B7, not axes 4/5.
+        var switchLeft = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(6, RawGameControllerButtonLabel.None)],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 1.0, 1.0],
+            RawGameControllerFaceButtonLayout.Nintendo,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Pro Controller",
+            hardwareVendorId: 0x057E);
+        var switchRight = RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [new RawGameControllerButtonPress(7, RawGameControllerButtonLabel.None)],
+            [],
+            [0.5, 0.5, 0.5, 0.5, 1.0, 1.0],
+            RawGameControllerFaceButtonLayout.Nintendo,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: "Pro Controller",
+            hardwareVendorId: 0x057E);
+
+        Assert.Equal(
+            GamepadContextIntentProjector.GetActiveIntents(standardLeft).OrderBy(static i => i),
+            GamepadContextIntentProjector.GetActiveIntents(xboxLeft).OrderBy(static i => i));
+        Assert.Equal(
+            GamepadContextIntentProjector.GetActiveIntents(standardRight).OrderBy(static i => i),
+            GamepadContextIntentProjector.GetActiveIntents(dualSenseRight).OrderBy(static i => i));
+        Assert.Equal([GamepadContextIntent.PageUp], GamepadContextIntentProjector.GetActiveIntents(switchLeft));
+        Assert.Equal([GamepadContextIntent.PageDown], GamepadContextIntentProjector.GetActiveIntents(switchRight));
+        // Nintendo must not treat full axes 4/5 as analog LT/RT when only digital L2 is pressed.
+        Assert.Equal(1.0, switchLeft.LeftTrigger);
+        Assert.Equal(0.0, switchLeft.RightTrigger);
+    }
+
+    [Theory]
+    [InlineData("Xbox Wireless Controller", (ushort)0x045E, "XboxA", "XboxB", "XboxX", "XboxY")]
+    [InlineData("DualSense Wireless Controller", (ushort)0x054C, "Cross", "Circle", "Square", "Triangle")]
+    [InlineData("Pro Controller", (ushort)0x057E, "LetterB", "LetterA", "LetterY", "LetterX")]
+    public void MultiBrandLabeledFaceButtons_ProjectSharedPhysicalFaceSemantics(
+        string displayName,
+        ushort vendorId,
+        string activateLabel,
+        string backLabel,
+        string westLabel,
+        string voiceLabel)
+    {
+        var layout = RawGameControllerFaceButtonLayoutResolver.Resolve(displayName, vendorId);
+        var activate = RawController([ParseLabel(activateLabel)], [], [], layout);
+        var back = RawController([ParseLabel(backLabel)], [], [], layout);
+        var west = RawController([ParseLabel(westLabel)], [], [], layout);
+        var voice = RawController([ParseLabel(voiceLabel)], [], [], layout);
+
+        Assert.Equal([GamepadNavigationIntent.Activate], Order(GamepadIntentProcessor.GetActiveIntents(activate)));
+        Assert.Equal([GamepadNavigationIntent.Back], Order(GamepadIntentProcessor.GetActiveIntents(back)));
+        Assert.Empty(GamepadIntentProcessor.GetActiveIntents(west));
+        Assert.Empty(GamepadShortcutIntentProjector.GetActiveShortcuts(west));
+        Assert.Equal([GamepadShortcutIntent.ToggleVoiceInput], GamepadShortcutIntentProjector.GetActiveShortcuts(voice));
+    }
+
     private static readonly DateTimeOffset SampleTime = DateTimeOffset.Parse("2026-07-06T00:00:00Z");
 
     private static GamepadInputReading LabeledStandard(
@@ -617,6 +690,24 @@ public sealed class GamepadAdaptationPipelineTests
 
     private static GamepadNavigationIntent[] Order(IEnumerable<GamepadNavigationIntent> intents)
         => intents.OrderBy(static intent => intent).ToArray();
+
+
+    private static GamepadInputReading RawAnalogTriggers(
+        string displayName,
+        ushort vendorId,
+        double left,
+        double right)
+        => RawGameControllerInputReadingMapper.GetInputReadingFromPresses(
+            [],
+            [],
+            [0.5, 0.5, 0.5, 0.5, left, right],
+            RawGameControllerFaceButtonLayout.Standard,
+            allowUnlabeledFaceIndexFallback: true,
+            displayName: displayName,
+            hardwareVendorId: vendorId);
+
+    private static RawGameControllerButtonLabel ParseLabel(string name)
+        => Enum.Parse<RawGameControllerButtonLabel>(name);
 
     private static GamepadInputReading RawController(
         IReadOnlyList<RawGameControllerButtonLabel> pressedButtonLabels,
