@@ -86,13 +86,7 @@ public static class GamepadHidMaestroProfileCatalog
     /// Invariant family token used by bridge <c>info</c> and Diagnostics captures.
     /// </summary>
     public static string FormatFamilyToken(string? profileId)
-        => ResolveFamily(profileId) switch
-        {
-            GamepadControllerFamily.Sony => "Sony",
-            GamepadControllerFamily.Nintendo => "Nintendo",
-            GamepadControllerFamily.Xbox => "Xbox",
-            _ => "Unknown"
-        };
+        => GamepadControllerIdentity.FormatFamilyToken(ResolveFamily(profileId));
 
     /// <summary>
     /// Ordered physical HMButton field-name candidates for an app face semantic.

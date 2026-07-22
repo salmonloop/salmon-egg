@@ -84,6 +84,20 @@ public static class GamepadControllerIdentity
         => ResolveFamily(displayName, hardwareVendorId ?? 0);
 
 
+
+    /// <summary>
+    /// Invariant family token for Diagnostics captures and multi-brand validation notes.
+    /// Not localized UI chrome — keep tokens stable: Xbox / Sony / Nintendo / Unknown.
+    /// </summary>
+    public static string FormatFamilyToken(GamepadControllerFamily family)
+        => family switch
+        {
+            GamepadControllerFamily.Xbox => "Xbox",
+            GamepadControllerFamily.Sony => "Sony",
+            GamepadControllerFamily.Nintendo => "Nintendo",
+            _ => "Unknown"
+        };
+
     public static GamepadControllerFamily ResolveFamily(
         string? displayName,
         ushort? hardwareVendorId,

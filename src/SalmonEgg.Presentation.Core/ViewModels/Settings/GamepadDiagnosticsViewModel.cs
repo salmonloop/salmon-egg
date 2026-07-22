@@ -431,13 +431,7 @@ public sealed partial class GamepadDiagnosticsViewModel : ObservableObject, IDis
             family = GamepadControllerIdentity.ResolveFamilyFromLabels(ParseLabelEvidence(labelEvidence));
         }
 
-        return family switch
-        {
-            GamepadControllerFamily.Xbox => "Xbox",
-            GamepadControllerFamily.Sony => "Sony",
-            GamepadControllerFamily.Nintendo => "Nintendo",
-            _ => "Unknown"
-        };
+        return GamepadControllerIdentity.FormatFamilyToken(family);
     }
 
     private static RawGameControllerButtonLabel[] ParseLabelEvidence(IReadOnlyList<string> labelEvidence)
