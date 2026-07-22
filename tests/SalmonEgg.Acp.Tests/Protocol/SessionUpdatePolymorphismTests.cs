@@ -2,7 +2,7 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.Protocol;
 
-namespace SalmonEgg.Domain.Tests.Protocol;
+namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class SessionUpdatePolymorphismTests
 {

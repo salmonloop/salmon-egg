@@ -42,11 +42,10 @@ Invoke-GateCommand { dotnet test `
   --timeout 5m `
   --output Normal }
 
-Write-Host "[gate] ACP protocol contracts"
+Write-Host "[gate] Configuration persistence contracts"
 Invoke-GateCommand { dotnet test `
   --project tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj `
   --configuration $Configuration `
-  --filter-class SalmonEgg.Infrastructure.Tests.Client.AcpClientTests `
   --filter-class SalmonEgg.Infrastructure.Tests.Storage.AppSettingsServiceTests `
   --timeout 5m `
   --output Normal }

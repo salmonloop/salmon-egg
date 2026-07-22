@@ -26,11 +26,10 @@ dotnet test \
   --timeout 5m \
   --output Normal
 
-echo "[gate] ACP protocol contracts"
+echo "[gate] Configuration persistence contracts"
 dotnet test \
   --project tests/SalmonEgg.Infrastructure.Tests/SalmonEgg.Infrastructure.Tests.csproj \
   --configuration "$CONFIGURATION" \
-  --filter-class SalmonEgg.Infrastructure.Tests.Client.AcpClientTests \
   --filter-class SalmonEgg.Infrastructure.Tests.Storage.AppSettingsServiceTests \
   --timeout 5m \
   --output Normal

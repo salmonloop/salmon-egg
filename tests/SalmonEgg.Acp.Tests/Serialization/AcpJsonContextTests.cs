@@ -2,11 +2,10 @@ using System.Text.Json;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
-using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.JsonRpc;
 using Xunit;
 
-namespace SalmonEgg.Infrastructure.Tests.Serialization;
+namespace SalmonEgg.Acp.Tests.Serialization;
 
 public sealed class AcpJsonContextTests
 {

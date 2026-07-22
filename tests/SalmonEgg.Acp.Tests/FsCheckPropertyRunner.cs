@@ -1,7 +1,7 @@
 using System.Reflection;
 using FsCheck;
 
-namespace SalmonEgg.Domain.Tests;
+namespace SalmonEgg.Acp.Tests;
 
 internal static class FsCheckPropertyRunner
 {

@@ -2,7 +2,7 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.JsonRpc;
 
-namespace SalmonEgg.Domain.Tests.Models.JsonRpc;
+namespace SalmonEgg.Acp.Tests.JsonRpc;
 
 public sealed class AcpExceptionTests
 {

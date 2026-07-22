@@ -4,9 +4,8 @@ using System.Text.Json.Serialization;
 using Xunit;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Domain.Models.Session;
 
-namespace SalmonEgg.Domain.Tests.Protocol;
+namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class SessionPromptTypesTests
 {

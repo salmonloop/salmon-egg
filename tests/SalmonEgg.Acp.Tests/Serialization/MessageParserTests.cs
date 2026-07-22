@@ -5,10 +5,9 @@ using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 
-namespace SalmonEgg.Infrastructure.Tests.Serialization;
+namespace SalmonEgg.Acp.Tests.Serialization;
 
 public class MessageParserTests
 {

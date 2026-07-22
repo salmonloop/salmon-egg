@@ -4,7 +4,7 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.Content;
 
-namespace SalmonEgg.Domain.Tests.Models.Content
+namespace SalmonEgg.Acp.Tests.Content
 {
     /// <summary>
     /// 内容块属性测试。

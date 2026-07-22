@@ -3,7 +3,7 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.JsonRpc;
 
-namespace SalmonEgg.Domain.Tests.Models.JsonRpc
+namespace SalmonEgg.Acp.Tests.JsonRpc
 {
     /// <summary>
     /// JSON-RPC 消息属性测试。

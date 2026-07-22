@@ -7,18 +7,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Moq;
-using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Mcp;
-using SalmonEgg.Domain.Services;
-using SalmonEgg.Infrastructure.Client;
-using SalmonEgg.Infrastructure.Services;
 using Xunit;
 using SalmonEgg.Acp.Client;
 
-namespace SalmonEgg.Infrastructure.Tests.Client
+namespace SalmonEgg.Acp.Tests.Client
 {
     public class AcpClientTests
     {
@@ -27,9 +22,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             "salmon-egg-tests",
             "workspace",
             "project"));
-        private readonly Mock<ITransport> _transportMock = new();
+        private readonly Mock<IAcpTransport> _transportMock = new();
         private readonly Mock<IMessageParser> _parserMock = new();
-        private readonly Mock<IErrorLogger> _errorLoggerMock = new();
+        private readonly Mock<IAcpClientLogger> _loggerMock = new();
 
         public AcpClientTests()
         {
@@ -40,12 +35,12 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         private async Task<AcpClient> CreateInitializedClientAsync(
             AgentCapabilities? capabilities = null,
             ClientCapabilities? clientCapabilities = null,
-            ITerminalSessionManager? terminalSessionManager = null,
-            ISessionManager? sessionManager = null)
+            IAcpTerminalSessionManager? terminalSessionManager = null,
+            IAcpClientSessionStore? sessionStore = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
-            var client = CreateClient(parser, terminalSessionManager, sessionManager);
+            var client = CreateClient(parser, terminalSessionManager, sessionStore);
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
@@ -68,14 +63,14 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
         private AcpClient CreateClient(
             MessageParser parser,
-            ITerminalSessionManager? terminalSessionManager = null,
-            ISessionManager? sessionManager = null)
+            IAcpTerminalSessionManager? terminalSessionManager = null,
+            IAcpClientSessionStore? sessionStore = null)
             => new(
-                new DomainAcpTransportAdapter(_transportMock.Object),
+                _transportMock.Object,
                 parser,
                 null,
-                new DomainAcpClientLogger(_errorLoggerMock.Object),
-                sessionManager is null ? null : new DomainAcpClientSessionStore(sessionManager),
+                _loggerMock.Object,
+                sessionStore,
                 terminalSessionManager);
 
 
@@ -155,9 +150,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task CreateSessionAsync_WhenSessionAlreadyTrackedFromUpdate_ShouldReturnResponse()
         {
             var parser = new MessageParser();
-            var sessionManager = new SessionManager();
-            var client = await CreateInitializedClientAsync(sessionManager: sessionManager);
-            await sessionManager.CreateSessionAsync("session-123", AbsoluteCwd);
+            var sessionStore = new RecordingAcpClientSessionStore();
+            var client = await CreateInitializedClientAsync(sessionStore: sessionStore);
+            await sessionStore.CreateSessionAsync("session-123", AbsoluteCwd);
 
             SetupJsonRpcResponse(
                 "session/new",
@@ -167,7 +162,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             var result = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
 
             Assert.Equal("session-123", result.SessionId);
-            Assert.NotNull(sessionManager.GetSession("session-123"));
+            Assert.True(sessionStore.ContainsSession("session-123"));
         }
 
         [Fact]
@@ -486,7 +481,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
                 .Callback(() => _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new TransportErrorEventArgs("Unable to start process: stdio command not found")))
+                    new AcpTransportErrorEventArgs("Unable to start process: stdio command not found")))
                 .ReturnsAsync(false);
             var client = CreateClient(parser);
 
@@ -536,7 +531,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 .Setup(t => t.ConnectAsync(It.IsAny<CancellationToken>()))
                 .Callback(() => _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new TransportErrorEventArgs(
+                    new AcpTransportErrorEventArgs(
                         "Failed to connect transport",
                         new InvalidOperationException(
                             "Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS."))))
@@ -580,7 +575,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 isConnected = false;
                 _transportMock.Raise(
                     t => t.ErrorOccurred += null,
-                    new TransportErrorEventArgs("Agent process exited"));
+                    new AcpTransportErrorEventArgs("Agent process exited"));
 
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(
                     async () => await initializeTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
@@ -612,7 +607,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 {
                     _transportMock.Raise(
                         t => t.ErrorOccurred += null,
-                        new TransportErrorEventArgs("Failed to send message: broken pipe"));
+                        new AcpTransportErrorEventArgs("Failed to send message: broken pipe"));
                     sessionNewSent.TrySetResult(null);
                 })
                 .ReturnsAsync(false);
@@ -660,7 +655,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                             parser.Options));
                     _transportMock.Raise(
                         t => t.MessageReceived += null,
-                        new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+                        new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(response)));
                     return Task.FromResult(true);
                 });
 
@@ -681,9 +676,9 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
-                new TransportErrorEventArgs(
+                new AcpTransportErrorEventArgs(
                     "Process exited immediately after start. ExitCode=255",
-                    kind: TransportErrorKind.ProcessStartFailed));
+                    kind: AcpTransportErrorKind.ProcessStartFailed));
 
             Assert.NotNull(receivedError);
             Assert.Contains("ssh -t", receivedError, StringComparison.Ordinal);
@@ -701,16 +696,18 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.ErrorOccurred += null,
-                new TransportErrorEventArgs(
+                new AcpTransportErrorEventArgs(
                     "Process error: }",
-                    kind: TransportErrorKind.AgentStderr));
+                    kind: AcpTransportErrorKind.AgentStderr));
 
             Assert.Empty(receivedErrors);
-            _errorLoggerMock.Verify(
-                logger => logger.LogError(It.Is<ErrorLogEntry>(entry =>
-                    entry.ErrorCode == "AGENT_STDERR" &&
-                    entry.Severity == ErrorSeverity.Info &&
-                    entry.ErrorMessage.Contains("Process error: }", StringComparison.Ordinal))),
+            _loggerMock.Verify(
+                logger => logger.Log(
+                    AcpClientLogLevel.Information,
+                    "AGENT_STDERR",
+                    It.Is<string>(message => message.Contains("Process error: }", StringComparison.Ordinal)),
+                    It.IsAny<string?>(),
+                    It.IsAny<Exception?>()),
                 Times.Once);
         }
 
@@ -1029,16 +1026,16 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task SetSessionModeAsync_WhenAgentReturnsStandardEmptyObject_UpdatesTrackedSessionFromRequest()
         {
             var parser = new MessageParser();
-            var sessionManager = new SessionManager();
-            await sessionManager.CreateSessionAsync("session-123", AbsoluteCwd);
-            var client = await CreateInitializedClientAsync(sessionManager: sessionManager);
+            var sessionStore = new RecordingAcpClientSessionStore();
+            await sessionStore.CreateSessionAsync("session-123", AbsoluteCwd);
+            var client = await CreateInitializedClientAsync(sessionStore: sessionStore);
 
             SetupJsonRpcResponse("session/set_mode", ElementFromJson("{}"), parser);
 
             var result = await client.SetSessionModeAsync(new SessionSetModeParams("session-123", "plan"), TestContext.Current.CancellationToken);
 
             Assert.NotNull(result);
-            Assert.Equal("plan", sessionManager.GetSession("session-123")!.Mode.CurrentModeId);
+            Assert.Equal("plan", sessionStore.GetCurrentModeId("session-123"));
         }
 
         [Fact]
@@ -1248,8 +1245,8 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task CloseSessionAsync_WhenSupported_RemovesTrackedLocalSession()
         {
             var parser = new MessageParser();
-            var sessionManager = new SessionManager();
-            var client = CreateClient(parser, sessionManager: sessionManager);
+            var sessionStore = new RecordingAcpClientSessionStore();
+            var client = CreateClient(parser, sessionStore: sessionStore);
 
             SetupJsonRpcResponse(
                 "initialize",
@@ -1272,7 +1269,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
                 parser);
             await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
-            Assert.NotNull(sessionManager.GetSession("session-123"));
+            Assert.True(sessionStore.ContainsSession("session-123"));
 
             SetupJsonRpcResponse(
                 "session/close",
@@ -1280,7 +1277,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                 parser);
             await client.CloseSessionAsync(new SessionCloseParams("session-123"), TestContext.Current.CancellationToken);
 
-            Assert.Null(sessionManager.GetSession("session-123"));
+            Assert.False(sessionStore.ContainsSession("session-123"));
         }
 
         [Fact]
@@ -1424,10 +1421,10 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task SendPromptAsync_WhenSessionIsTrackedByInjectedManager_AllowsWarmLoadedSession()
         {
             var parser = new MessageParser();
-            var sessionManager = new SessionManager();
-            await sessionManager.CreateSessionAsync("remote-1", AbsoluteCwd);
+            var sessionStore = new RecordingAcpClientSessionStore();
+            await sessionStore.CreateSessionAsync("remote-1", AbsoluteCwd);
 
-            var client = CreateClient(parser, sessionManager: sessionManager);
+            var client = CreateClient(parser, sessionStore: sessionStore);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
@@ -1443,7 +1440,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                             parser.Options));
                     _transportMock.Raise(
                         t => t.MessageReceived += null,
-                        new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+                        new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(response)));
                     return Task.FromResult(true);
                 });
 
@@ -1456,7 +1453,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
                         JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options));
                     _transportMock.Raise(
                         t => t.MessageReceived += null,
-                        new MessageReceivedEventArgs(parser.SerializeMessage(response)));
+                        new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(response)));
                     return Task.FromResult(true);
                 });
 
@@ -1509,7 +1506,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             await client.CancelSessionAsync(new SessionCancelParams("session-1"), TestContext.Current.CancellationToken);
 
@@ -1581,7 +1578,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(notificationJson));
+                new AcpTransportMessageReceivedEventArgs(notificationJson));
 
             Assert.NotNull(published);
             Assert.Equal("sess-meta-runtime", published!.SessionId);
@@ -1617,7 +1614,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
 
             var createResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 99);
             Assert.True(createResponse.IsError);
@@ -1628,7 +1625,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         public async Task TerminalRequests_WhenClientAdvertisedTerminal_ExecuteAndRespond()
         {
             var parser = new MessageParser();
-            var terminalSessionManager = new Mock<ITerminalSessionManager>(MockBehavior.Strict);
+            var terminalSessionManager = new Mock<IAcpTerminalSessionManager>(MockBehavior.Strict);
             terminalSessionManager
                 .Setup(x => x.CreateAsync(
                     It.Is<TerminalCreateRequest>(request =>
@@ -1663,7 +1660,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
 
             var createResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 99);
             Assert.False(createResponse.IsError);
@@ -1708,7 +1705,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(createRequest)));
 
             var createResponse = await WaitForResponseAsync(parser, sentMessages, responseId: 99);
             Assert.True(createResponse.IsError);
@@ -1767,7 +1764,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 201);
 
@@ -1821,7 +1818,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 202);
 
@@ -1867,7 +1864,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 203);
 
@@ -1901,7 +1898,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 204);
 
@@ -1942,7 +1939,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
             await WaitForPublishedPermissionRequestAsync(() => published);
 
             var ex = await Assert.ThrowsAsync<AcpException>(() =>
@@ -1989,7 +1986,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 206);
             var respondedAfterFailure = await client.RespondToPermissionRequestAsync(206, "cancelled");
@@ -2026,7 +2023,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 207);
             var respondedAfterFailure = await client.RespondToFileSystemRequestAsync(207, success: true, content: "content");
@@ -2058,7 +2055,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             Assert.NotNull(published);
             Assert.Equal("fs/read_text_file", published.Method);
@@ -2110,7 +2107,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
             await WaitForPublishedPermissionRequestAsync(() => published);
 
             Assert.NotNull(published);
@@ -2149,7 +2146,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 207);
 
@@ -2191,7 +2188,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 208);
 
@@ -2230,7 +2227,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 209);
 
@@ -2270,7 +2267,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
 
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(parser.SerializeMessage(request)));
+                new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(request)));
 
             var response = await WaitForResponseAsync(parser, sentMessages, responseId: 210);
 
@@ -2418,6 +2415,54 @@ namespace SalmonEgg.Infrastructure.Tests.Client
             Assert.Equal(JsonRpcErrorCode.ParseError, ex.ErrorCode);
         }
 
+
+        private sealed class RecordingAcpClientSessionStore : IAcpClientSessionStore
+        {
+            private readonly ConcurrentDictionary<string, string?> _sessions = new();
+            private readonly ConcurrentDictionary<string, string> _currentModes = new();
+
+            public bool ContainsSession(string sessionId)
+                => !string.IsNullOrWhiteSpace(sessionId) && _sessions.ContainsKey(sessionId);
+
+            public Task CreateSessionAsync(string sessionId, string? cwd = null)
+            {
+                if (!string.IsNullOrWhiteSpace(sessionId))
+                {
+                    _sessions.TryAdd(sessionId, cwd);
+                }
+
+                return Task.CompletedTask;
+            }
+
+            public string? GetCurrentModeId(string sessionId)
+                => _currentModes.TryGetValue(sessionId, out var modeId) ? modeId : null;
+
+            public bool RemoveSession(string sessionId)
+            {
+                if (string.IsNullOrWhiteSpace(sessionId))
+                {
+                    return false;
+                }
+
+                _currentModes.TryRemove(sessionId, out _);
+                return _sessions.TryRemove(sessionId, out _);
+            }
+
+            public bool UpdateCurrentMode(string sessionId, string modeId)
+            {
+                if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(modeId))
+                {
+                    return false;
+                }
+
+                _currentModes[sessionId] = modeId;
+                return ContainsSession(sessionId);
+            }
+
+            public Task<bool> CancelSessionAsync(string sessionId)
+                => Task.FromResult(ContainsSession(sessionId));
+        }
+
         private static async Task<JsonRpcResponse> WaitForResponseAsync(
             MessageParser parser,
             ConcurrentQueue<string> sentMessages,
@@ -2488,7 +2533,7 @@ namespace SalmonEgg.Infrastructure.Tests.Client
         {
             _transportMock.Raise(
                 t => t.MessageReceived += null,
-                new MessageReceivedEventArgs(message));
+                new AcpTransportMessageReceivedEventArgs(message));
         }
 
         private static async Task WaitForPublishedPermissionRequestAsync(

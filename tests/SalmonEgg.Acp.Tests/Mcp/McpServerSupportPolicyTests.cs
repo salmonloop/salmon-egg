@@ -3,7 +3,7 @@ using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
 
-namespace SalmonEgg.Domain.Tests.Models;
+namespace SalmonEgg.Acp.Tests.Mcp;
 
 public sealed class McpServerSupportPolicyTests
 {

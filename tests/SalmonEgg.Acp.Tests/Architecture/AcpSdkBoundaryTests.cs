@@ -3,7 +3,7 @@ using System.Linq;
 using System.Xml.Linq;
 using Xunit;
 
-namespace SalmonEgg.Domain.Tests.Architecture;
+namespace SalmonEgg.Acp.Tests.Architecture;
 
 public sealed class AcpSdkBoundaryTests
 {

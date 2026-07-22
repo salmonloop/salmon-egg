@@ -2,7 +2,7 @@ using Xunit;
 using SalmonEgg.Acp.Protocol;
 using System.Text.Json;
 
-namespace SalmonEgg.Domain.Tests.Protocol;
+namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class SessionListRuntimeTypesTests
 {

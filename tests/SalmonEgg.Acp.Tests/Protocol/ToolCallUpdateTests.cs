@@ -3,7 +3,7 @@ using Xunit;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Tool;
 
-namespace SalmonEgg.Domain.Tests.Protocol;
+namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class ToolCallUpdateTests
 {
