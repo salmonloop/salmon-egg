@@ -77,71 +77,72 @@ async function revealGamepadDiagnosticsSection(page) {
     automationIds: ["Diagnostics.GamepadMonitorHeader"]
   };
 
-  for (let attempt = 0; attempt < 16; attempt += 1) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
     const state = await readControlState(page, gamepadStart);
     if (state.found) {
       return;
     }
 
-    await page.evaluate(() => {
+    // Uno Expander does not reliably expand from synthetic element.click() in
+    // BrowserWasm. Use a real Playwright mouse click on the Gamepad expander
+    // toggle (or the nearest ExpanderToggleButton whose text mentions gamepad).
+    const togglePoint = await page.evaluate(() => {
       const normalize = value => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      const titles = new Set(["gamepad input", "手柄输入", "compatibility monitor", "兼容性监测"]);
-
-      // Prefer exact leaf text matches so we click the section header, not a large ancestor.
-      const leafHeaders = Array.from(document.querySelectorAll("body *"))
-        .filter(element => {
-          const children = Array.from(element.childNodes);
-          const directText = children
-            .filter(node => node.nodeType === Node.TEXT_NODE)
-            .map(node => normalize(node.textContent))
-            .join(" ")
-            .trim();
-          const text = normalize(element.textContent);
-          const aria = normalize(element.getAttribute("aria-label"));
-          return titles.has(directText) || titles.has(text) || titles.has(aria);
-        })
-        .sort((left, right) => {
-          const leftArea = left.getBoundingClientRect().width * left.getBoundingClientRect().height;
-          const rightArea = right.getBoundingClientRect().width * right.getBoundingClientRect().height;
-          return leftArea - rightArea;
-        });
-
-      for (const element of leafHeaders) {
-        const expander =
-          element.closest(".uno-expander")
-          ?? element.closest("[class*='Expander']")
-          ?? element.closest("details");
-        const header =
-          expander?.querySelector("button, [role='button'], .uno-expanderheader, summary")
-          ?? element.closest("button, [role='button'], summary")
-          ?? element;
-        header.scrollIntoView({ block: "center", inline: "nearest" });
-        if (typeof header.click === "function") {
-          header.click();
-          return true;
+      const start = document.querySelector('[aria-label="Diagnostics.GamepadStart"]');
+      const expander =
+        start?.closest(".uno-expander")
+        ?? start?.closest("[class*='Expander']")
+        ?? start?.closest("details")
+        ?? null;
+      const ownedToggle =
+        expander?.querySelector('[aria-label="ExpanderToggleButton"], button, [role="button"], .uno-expanderheader, summary')
+        ?? null;
+      if (ownedToggle) {
+        const rect = ownedToggle.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+            source: "owned-toggle"
+          };
         }
       }
 
-      // Fallback: expand any collapsed expander that is still closed on the diagnostics page.
-      const toggles = Array.from(document.querySelectorAll("button, [role='button'], summary"))
-        .filter(element => {
-          const ariaExpanded = element.getAttribute("aria-expanded");
-          return ariaExpanded === "false" || element.tagName.toLowerCase() === "summary";
-        });
+      const toggles = Array.from(
+        document.querySelectorAll('[aria-label="ExpanderToggleButton"], button, [role="button"], summary'));
       for (const toggle of toggles) {
         const text = normalize(toggle.textContent);
-        if (text.includes("gamepad") || text.includes("手柄") || text.includes("monitor") || text.includes("监测") || text.includes("diagnostics") || text.includes("诊断") || text.includes("logs") || text.includes("日志") || text.includes("voice") || text.includes("语音")) {
-          toggle.scrollIntoView({ block: "center", inline: "nearest" });
-          toggle.click();
+        if (text.includes("gamepad") || text.includes("手柄") || text.includes("compatibility monitor") || text.includes("兼容性监测")) {
+          const rect = toggle.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0
+            && rect.left >= -1
+            && rect.top >= -1
+            && rect.left <= innerWidth
+            && rect.top <= innerHeight) {
+            return {
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+              source: "text-toggle"
+            };
+          }
         }
       }
 
-      return false;
+      return null;
     });
+
+    if (togglePoint) {
+      await page.mouse.click(togglePoint.x, togglePoint.y);
+      await page.waitForTimeout(500);
+      const afterToggle = await readControlState(page, gamepadStart);
+      if (afterToggle.found) {
+        return;
+      }
+    }
 
     await scrollToVisibleControl(page, headerTargets);
     await scrollToVisibleControl(page, gamepadStart);
-    await page.mouse.wheel(0, 500);
+    await page.mouse.wheel(0, 700);
     await page.waitForTimeout(300);
   }
 

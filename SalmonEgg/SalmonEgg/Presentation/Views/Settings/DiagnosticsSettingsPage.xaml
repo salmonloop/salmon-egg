@@ -449,6 +449,7 @@
                                 <Grid Padding="12,8" HorizontalAlignment="Stretch">
                                     <TextBlock x:Uid="Diagnostics_GamepadMonitorHeader"
                                                AutomationProperties.AutomationId="Diagnostics.GamepadMonitorHeader"
+                                                       AutomationProperties.Name="Diagnostics.GamepadMonitorHeader"
                                                Style="{StaticResource SettingsRowTitleTextStyle}" />
                                 </Grid>
 
@@ -487,6 +488,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.StatusText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadStatus"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStatus"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -504,6 +506,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ConnectedGamepadsText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadStandardCount"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStandardCount"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -521,6 +524,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ConnectedRawControllersText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadRawCount"
+                                                       AutomationProperties.Name="Diagnostics.GamepadRawCount"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -538,6 +542,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.InputSourceText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadInputSource"
+                                                       AutomationProperties.Name="Diagnostics.GamepadInputSource"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -555,6 +560,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ActiveInputsText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadActiveInputs"
+                                                       AutomationProperties.Name="Diagnostics.GamepadActiveInputs"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -572,6 +578,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.ThumbstickText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadThumbstick"
+                                                       AutomationProperties.Name="Diagnostics.GamepadThumbstick"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
                                         </controls:ResponsiveFormRow.Value>
                                     </controls:ResponsiveFormRow>
@@ -589,6 +596,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.StandardGamepadsText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadStandardDetails"
+                                                       AutomationProperties.Name="Diagnostics.GamepadStandardDetails"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>
@@ -607,6 +615,7 @@
                                         <controls:ResponsiveFormRow.Value>
                                             <TextBlock Text="{x:Bind ViewModel.GamepadDiagnostics.RawControllersText, Mode=OneWay}"
                                                        AutomationProperties.AutomationId="Diagnostics.GamepadRawDetails"
+                                                       AutomationProperties.Name="Diagnostics.GamepadRawDetails"
                                                        Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                        TextWrapping="WrapWholeWords"/>
                                         </controls:ResponsiveFormRow.Value>

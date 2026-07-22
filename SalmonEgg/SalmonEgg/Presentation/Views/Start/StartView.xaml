@@ -135,7 +135,8 @@
                                    TextWrapping="WrapWholeWords"
                                    TextTrimming="CharacterEllipsis"
                                    MaxLines="2"
-                                   AutomationProperties.AutomationId="StartView.Title">
+                                   AutomationProperties.AutomationId="StartView.Title"
+                                   AutomationProperties.Name="StartView.Title">
                             <TextBlock.Foreground>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                     <GradientStop Color="{ThemeResource SystemAccentColor}" Offset="0" />
