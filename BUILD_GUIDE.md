@@ -246,14 +246,14 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - Diagnostics 页焦点边界：确认焦点不会落到隐藏、stale 或 body-only 状态；
 - 设置持久化：通过 UI 切换应用语言并修改外观、数据与存储、快捷键、ACP 和 MCP 服务器状态，验证 shell 重载后的 `x:Uid` 与 singleton ViewModel 文案，并在刷新后从可见设置页确认状态仍存在；
 - ACP / 平台能力边界：保存 ACP WebSocket profile，验证 WASM 不声明 `clientCapabilities.fs` / `terminal=true`，并确认受限平台不会暴露桌面文件系统入口；
-- Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键经平台 bridge 进入 Uno 原生焦点与控件激活路径；
+- Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键进入 Diagnostics 的 pressed 槽位与 ActiveInputs 意图事实（`MoveDown` / `Activate`）。原生焦点由键盘/XYFocus 与控件 consumer 拥有；壳层不再对轮询手柄做全局 SendInput / FocusManager 焦点 bridge，避免双路径分发；
 - WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。
 
 它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
 
 #### BrowserWasm multi-brand gamepad identity smoke
 
-`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and browser `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`) using both Chrome-style (`Name (… Vendor: … Product: …)`) and Firefox-style (`vvvv-pppp-Name`) formats. Diagnostics must project display name, `VID`/`PID`, controller `family` (`Xbox` / `Sony` / `Nintendo`), face `layout` (Nintendo only for Switch Pro identity), and pressed standard slot names (for example `pressed A` for index 0). Face **semantics** remain position-based under `mapping: "standard"` (bottom/east/west/north slots and LT/RT map to Activate/Back/no-op/ToggleVoiceInput/PageUp/PageDown for every brand id); identity is for diagnostics/layout labeling, not a second brand shell path. The multi-brand face/trigger smoke asserts those intents plus pressed slot names and Diagnostics reading `LT`/`RT` unit values for Xbox, DualSense, and Switch Pro ids.
+`scripts/gates/wasm-gamepad-boundary-smoke.mjs` injects W3C `standard` mapping gamepads and browser `Gamepad.id` strings for Xbox (`045E`), DualSense (`054C`), and Switch Pro (`057E`) using both Chrome-style (`Name (… Vendor: … Product: …)`) and Firefox-style (`vvvv-pppp-Name`) formats. Diagnostics must project display name, `VID`/`PID`, controller `family` (`Xbox` / `Sony` / `Nintendo`), face `layout` (Nintendo only for Switch Pro identity), and pressed standard slot names (for example `pressed A` for index 0) plus ActiveInputs intent facts such as `Activate` / `MoveDown`. Face **semantics** remain position-based under `mapping: "standard"` (bottom/east/west/north slots and LT/RT map to Activate/Back/no-op/ToggleVoiceInput/PageUp/PageDown for every brand id); identity is for diagnostics/layout labeling, not a second brand shell path. The multi-brand face/trigger smoke asserts those intents plus pressed slot names and Diagnostics reading `LT`/`RT` unit values for Xbox, DualSense, and Switch Pro ids.
 
 #### Multi-brand gamepad simulation options
 
@@ -266,7 +266,7 @@ To approximate real-device smoke without every physical controller present, pref
 | Windows synthetic keys | FlaUI `synthetic` GUI backend | Shell routing for VirtualKey-style inject | Not `Windows.Gaming.Input` brand labels |
 | Windows virtual HID | `tests/SalmonEgg.GamepadBridge.Windows` + HIDMaestro (`SALMONEGG_HIDMAESTRO_*`) | Virtual controller appears on the OS input path used by native-device GUI smoke | Default profile is `xbox-360-wired`; other profiles only after confirming installed HIDMaestro profile ids—do not invent ids |
 | Optional second virtual bus | Nefarius **ViGEmBus** + `Nefarius.ViGEm.Client` / Python **vgamepad** | Common Xbox 360 / DualShock 4 style virtual pads on Windows | Does **not** replace DualSense / Switch Pro HID identity evidence; not a substitute for MSIX real-device Diagnostics matrix |
-| Linux host approximation | `scripts/gates/run-linux-gamepad-smoke-gates.sh` | Core multi-brand unit matrix + BrowserWasm Playwright inject (Xbox / DualSense / Switch Pro) on this machine | Not Windows `Gamepad`/`RawGameController`, not HIDMaestro OS-path, not physical MSIX |
+| Linux host approximation | `scripts/gates/run-linux-gamepad-smoke-gates.sh` | Core multi-brand unit/mapper/Diagnostics VM matrix + BrowserWasm Playwright inject (Xbox / DualSense / Switch Pro ids, standard-position intents, Diagnostics ActiveInputs) on this machine | Not Windows `Gamepad`/`RawGameController`, not HIDMaestro OS-path, not physical MSIX; Desktop remains `NoOpGamepad*` so XTest shell probes are not gamepad evidence |
 | Windows multi-profile virtual HID loop | `scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1` | Loops Core `ConfirmedProfileIds` (or `SALMONEGG_HIDMAESTRO_PROFILE_IDS` / `-ProfileIds`) through native-device Diagnostics GUI smoke | Requires Windows + HIDMaestro packs; still not physical USB/BT matrix |
 
 Authoritative multi-brand completion still requires current Windows MSIX + Diagnostics capture for physical PS / Xbox / Switch controllers per the validation matrix below.

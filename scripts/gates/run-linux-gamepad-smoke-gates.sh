@@ -80,10 +80,17 @@ echo "[linux-gamepad] Core multi-brand unit matrix"
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadActiveReadingSelectorTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserStandardGamepadBrandSemanticsTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadIdentityParserTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserGamepadInputReadingMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.BrowserStandardGamepadPressedButtonsTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.StandardGamepadInputReadingMapperTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerTriggerAxisPolicyTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerUnlabeledFaceIndexPolicyTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerFaceButtonLayoutResolverTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerInputReadingMapperTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerAxisNormalizerTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Input.RawGameControllerButtonLabelMapperTests" \
   --filter-class "SalmonEgg.Presentation.Core.Tests.Input.GamepadAdaptationPipelineTests" \
+  --filter-class "SalmonEgg.Presentation.Core.Tests.Settings.GamepadDiagnosticsViewModelTests" \
   --timeout 3m \
   --output Normal
 
@@ -143,8 +150,8 @@ run_playwright_smoke \
 
 echo "[linux-gamepad] PASS"
 echo "[linux-gamepad] Covered on Linux:"
-echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector"
-echo "  - BrowserWasm Playwright inject for Xbox/DualSense/Switch Pro ids + standard-position intents"
+echo "  - Core PS/Xbox/Nintendo identity, unlabeled face, analog LT/RT policy, dual-path selector, mapper matrix, Diagnostics VM projection"
+echo "  - BrowserWasm Playwright inject for Xbox/DualSense/Switch Pro ids + standard-position intents + Diagnostics ActiveInputs"
 echo "[linux-gamepad] Not covered here (need Windows host):"
 echo "  - HIDMaestro multi-profile OS-path runner: scripts/gates/run-hidmaestro-multiprofile-native-smoke.ps1"
 echo "  - FlaUI native-device Diagnostics smoke / MSIX physical matrix"
