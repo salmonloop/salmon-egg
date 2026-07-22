@@ -68,7 +68,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
     private static StandardGamepadDiagnostics CreateStandardGamepadDiagnostics(Gamepad gamepad)
     {
         var reading = gamepad.GetCurrentReading();
-        var labels = GetFaceButtonLabels(gamepad);
+        var labels = WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels(gamepad);
         var identity = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
         return new StandardGamepadDiagnostics(
             DisplayName: identity.DisplayName,
@@ -80,7 +80,7 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
                 labels),
             ButtonLabels: GetButtonLabels(gamepad),
             PressedButtons: GetPressedButtons(reading.Buttons),
-            Reading: GetInputReading(gamepad, reading, labels, identity));
+            Reading: WindowsStandardGamepadReadingMapper.GetInputReading(gamepad, reading, labels, identity));
     }
 
     private static string[] GetButtonLabels(Gamepad gamepad)
@@ -170,31 +170,5 @@ public sealed class WindowsGamepadDiagnosticsService : IGamepadDiagnosticsServic
         return activeSwitches.ToArray();
     }
 
-    private static GamepadInputReading GetInputReading(
-        Gamepad gamepad,
-        GamepadReading reading,
-        StandardGamepadFaceButtonLabels labels,
-        WindowsStandardGamepadIdentity identity)
-    {
-        return StandardGamepadInputReadingMapper.GetInputReading(
-            moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
-            moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
-            moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
-            moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A),
-            faceBPressed: reading.Buttons.HasFlag(GamepadButtons.B),
-            faceXPressed: reading.Buttons.HasFlag(GamepadButtons.X),
-            faceYPressed: reading.Buttons.HasFlag(GamepadButtons.Y),
-            leftTrigger: reading.LeftTrigger,
-            rightTrigger: reading.RightTrigger,
-            thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY,
-            labels: labels,
-            displayName: identity.DisplayName,
-            hardwareVendorId: identity.HardwareVendorId);
-    }
-
-    private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
-        => WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels(gamepad);
 }
 #endif

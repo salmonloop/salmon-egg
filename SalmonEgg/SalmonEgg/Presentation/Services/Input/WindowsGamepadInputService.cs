@@ -266,27 +266,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
     private static GamepadInputReading GetInputReading(
         Gamepad gamepad,
         WindowsStandardGamepadIdentity identity)
-    {
-        ArgumentNullException.ThrowIfNull(gamepad);
-
-        var reading = gamepad.GetCurrentReading();
-        return StandardGamepadInputReadingMapper.GetInputReading(
-            moveUp: reading.Buttons.HasFlag(GamepadButtons.DPadUp),
-            moveDown: reading.Buttons.HasFlag(GamepadButtons.DPadDown),
-            moveLeft: reading.Buttons.HasFlag(GamepadButtons.DPadLeft),
-            moveRight: reading.Buttons.HasFlag(GamepadButtons.DPadRight),
-            faceAPressed: reading.Buttons.HasFlag(GamepadButtons.A),
-            faceBPressed: reading.Buttons.HasFlag(GamepadButtons.B),
-            faceXPressed: reading.Buttons.HasFlag(GamepadButtons.X),
-            faceYPressed: reading.Buttons.HasFlag(GamepadButtons.Y),
-            leftTrigger: reading.LeftTrigger,
-            rightTrigger: reading.RightTrigger,
-            thumbstickX: reading.LeftThumbstickX,
-            thumbstickY: reading.LeftThumbstickY,
-            labels: GetFaceButtonLabels(gamepad),
-            displayName: identity.DisplayName,
-            hardwareVendorId: identity.HardwareVendorId);
-    }
+        => WindowsStandardGamepadReadingMapper.GetInputReading(gamepad, identity);
 
     private void CacheStandardGamepadIdentity(Gamepad gamepad)
         => _standardGamepadIdentities[gamepad] = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
@@ -302,9 +282,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         _standardGamepadIdentities[gamepad] = identity;
         return identity;
     }
-
-    private static StandardGamepadFaceButtonLabels GetFaceButtonLabels(Gamepad gamepad)
-        => WindowsGameControllerButtonLabelMapper.GetFaceButtonLabels(gamepad);
 
     private void EmitIntent(GamepadNavigationIntent intent, long tick)
     {
