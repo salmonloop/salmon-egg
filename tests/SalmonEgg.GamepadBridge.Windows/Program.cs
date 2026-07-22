@@ -1,6 +1,8 @@
 using System.Reflection;
 
 const string HidMaestroCorePathEnvVar = "SALMONEGG_HIDMAESTRO_CORE_PATH";
+const string HidMaestroProfileIdEnvVar = "SALMONEGG_HIDMAESTRO_PROFILE_ID";
+const string DefaultProfileId = "xbox-360-wired";
 
 if (args.Length != 1 || !string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
 {
@@ -9,7 +11,8 @@ if (args.Length != 1 || !string.Equals(args[0], "serve", StringComparison.Ordina
 }
 
 var hidMaestroCorePath = ResolveHidMaestroCorePath();
-using var bridge = new HidMaestroBridge(hidMaestroCorePath);
+var hidMaestroProfileId = ResolveHidMaestroProfileId();
+using var bridge = new HidMaestroBridge(hidMaestroCorePath, hidMaestroProfileId);
 
 while (true)
 {
@@ -76,6 +79,14 @@ static string ResolveHidMaestroCorePath()
         $"Unable to locate HIDMaestro.Core.dll. Set {HidMaestroCorePathEnvVar} or place the DLL beside the bridge executable.");
 }
 
+static string ResolveHidMaestroProfileId()
+{
+    var configured = Environment.GetEnvironmentVariable(HidMaestroProfileIdEnvVar);
+    return string.IsNullOrWhiteSpace(configured)
+        ? DefaultProfileId
+        : configured.Trim();
+}
+
 static string Sanitize(string message)
     => message.Replace("\r", " ", StringComparison.Ordinal)
         .Replace("\n", " ", StringComparison.Ordinal);
@@ -93,10 +104,9 @@ static string Describe(Exception exception)
 
 internal sealed class HidMaestroBridge : IDisposable
 {
-    private const string DefaultProfileId = "xbox-360-wired";
-
     private readonly Assembly _assembly;
     private readonly object _context;
+    private readonly string _profileId;
     private readonly Type _hmButtonType;
     private readonly Type _hmHatType;
     private readonly Type _hmGamepadStateType;
@@ -109,12 +119,16 @@ internal sealed class HidMaestroBridge : IDisposable
 
     private object? _controller;
 
-    public HidMaestroBridge(string hidMaestroCorePath)
+    public HidMaestroBridge(string hidMaestroCorePath, string profileId)
     {
         if (!File.Exists(hidMaestroCorePath))
         {
             throw new FileNotFoundException("HIDMaestro.Core.dll was not found.", hidMaestroCorePath);
         }
+
+        _profileId = string.IsNullOrWhiteSpace(profileId)
+            ? throw new ArgumentException("HIDMaestro profile id is required.", nameof(profileId))
+            : profileId.Trim();
 
         _assembly = Assembly.LoadFrom(hidMaestroCorePath);
         var hmContextType = _assembly.GetType("HIDMaestro.HMContext", throwOnError: true)!;
@@ -156,10 +170,10 @@ internal sealed class HidMaestroBridge : IDisposable
                 "HIDMaestro driver is not installed. Install it once with administrator privileges before using the native-device gamepad backend.");
         }
 
-        var profile = _getProfileMethod.Invoke(_context, [DefaultProfileId]);
+        var profile = _getProfileMethod.Invoke(_context, [_profileId]);
         if (profile is null)
         {
-            throw new InvalidOperationException($"Unable to resolve HIDMaestro profile '{DefaultProfileId}'.");
+            throw new InvalidOperationException($"Unable to resolve HIDMaestro profile '{_profileId}'.");
         }
 
         _controller = _createControllerMethod.Invoke(_context, [profile])
@@ -195,6 +209,9 @@ internal sealed class HidMaestroBridge : IDisposable
                 break;
             case "b":
                 SubmitTap(buttonName: "B");
+                break;
+            case "x":
+                SubmitTap(buttonName: "X");
                 break;
             case "y":
                 SubmitTap(buttonName: "Y");

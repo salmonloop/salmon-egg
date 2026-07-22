@@ -70,6 +70,11 @@ internal sealed class NativeDeviceGamepadTestInput : IGamepadTestInput
         SendCommand("press b");
     }
 
+    public void PressWestFaceButton()
+    {
+        SendCommand("press x");
+    }
+
     public void PressShortcutVoiceToggle()
     {
         SendCommand("press y");

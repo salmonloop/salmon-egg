@@ -39,6 +39,11 @@ internal sealed class SyntheticVirtualKeyGamepadTestInput : IGamepadTestInput
         _session.PressSyntheticGamepadBack();
     }
 
+    public void PressWestFaceButton()
+    {
+        _session.PressSyntheticGamepadWestFaceButton();
+    }
+
     public void PressShortcutVoiceToggle()
     {
         _session.PressSyntheticGamepadShortcutVoiceToggle();
