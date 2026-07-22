@@ -315,7 +315,10 @@ internal sealed class HidMaestroBridge : IDisposable
 
     private string ResolveSemanticFaceButton(FaceSemantic semantic)
     {
-        // Profile family comes from Core catalog (confirmed HIDMaestro ids only).
+        // Profile family comes from Core catalog. Confirmed Sony/Nintendo ids map
+        // to physical face keys; confirmed Xbox and unconfirmed/Unknown profiles use
+        // Xbox-layout field keys only as a physical inject fallback (info still reports
+        // family=Unknown for unconfirmed ids so Diagnostics evidence is not claimed).
         return GamepadHidMaestroProfileCatalog.ResolveFamily(_profileId) switch
         {
             // Nintendo physical face: B bottom / A east / Y west / X north.
@@ -337,7 +340,8 @@ internal sealed class HidMaestroBridge : IDisposable
                 FaceSemantic.Voice => ResolveButtonName("Triangle", fallback: "Y"),
                 _ => throw new ArgumentOutOfRangeException(nameof(semantic), semantic, null)
             },
-            // Xbox face: A bottom / B east / X west / Y north.
+            // Xbox face (confirmed) or unknown profile inject fallback:
+            // A bottom / B east / X west / Y north.
             _ => semantic switch
             {
                 FaceSemantic.Activate => "A",

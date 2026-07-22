@@ -38,7 +38,10 @@ public sealed class GamepadHidMaestroProfileCatalogTests
     [InlineData("dualsense-bt", GamepadControllerFamily.Sony, "Sony")]
     [InlineData("dualshock-4-v2", GamepadControllerFamily.Sony, "Sony")]
     [InlineData("switch-pro", GamepadControllerFamily.Nintendo, "Nintendo")]
+    [InlineData("SWITCH-PRO", GamepadControllerFamily.Nintendo, "Nintendo")]
     [InlineData(null, GamepadControllerFamily.Xbox, "Xbox")]
+    [InlineData("", GamepadControllerFamily.Xbox, "Xbox")]
+    [InlineData("  ", GamepadControllerFamily.Xbox, "Xbox")]
     public void ResolveFamily_MapsConfirmedProfilesToInvariantTokens(
         string? profileId,
         GamepadControllerFamily expectedFamily,
@@ -46,6 +49,18 @@ public sealed class GamepadHidMaestroProfileCatalogTests
     {
         Assert.Equal(expectedFamily, GamepadHidMaestroProfileCatalog.ResolveFamily(profileId));
         Assert.Equal(expectedToken, GamepadHidMaestroProfileCatalog.FormatFamilyToken(profileId));
+    }
+
+    [Theory]
+    [InlineData("not-a-real-profile")]
+    [InlineData("dualsense-usb")]
+    [InlineData("xbox-one")]
+    [InlineData("switch-joycon")]
+    public void ResolveFamily_UnconfirmedNonBlankProfile_IsUnknown(string profileId)
+    {
+        Assert.False(GamepadHidMaestroProfileCatalog.IsConfirmedProfileId(profileId));
+        Assert.Equal(GamepadControllerFamily.Unknown, GamepadHidMaestroProfileCatalog.ResolveFamily(profileId));
+        Assert.Equal("Unknown", GamepadHidMaestroProfileCatalog.FormatFamilyToken(profileId));
     }
 
     [Fact]
@@ -58,5 +73,14 @@ public sealed class GamepadHidMaestroProfileCatalogTests
         Assert.Contains(GamepadHidMaestroProfileCatalog.DualShock4V2, GamepadHidMaestroProfileCatalog.ConfirmedProfileIds);
         Assert.Contains(GamepadHidMaestroProfileCatalog.SwitchPro, GamepadHidMaestroProfileCatalog.ConfirmedProfileIds);
         Assert.Equal(6, GamepadHidMaestroProfileCatalog.ConfirmedProfileIds.Count);
+
+        foreach (var profileId in GamepadHidMaestroProfileCatalog.ConfirmedProfileIds)
+        {
+            Assert.True(GamepadHidMaestroProfileCatalog.IsConfirmedProfileId(profileId));
+            Assert.NotEqual(
+                GamepadControllerFamily.Unknown,
+                GamepadHidMaestroProfileCatalog.ResolveFamily(profileId));
+            Assert.NotEqual("Unknown", GamepadHidMaestroProfileCatalog.FormatFamilyToken(profileId));
+        }
     }
 }

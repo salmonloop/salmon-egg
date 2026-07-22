@@ -2941,6 +2941,8 @@ public sealed class XamlComplianceTests
         Assert.Contains("xbox-360-wired", catalog, StringComparison.Ordinal);
         Assert.Contains("xbox-series-xs", catalog, StringComparison.Ordinal);
         Assert.Contains("DefaultProfileId", catalog, StringComparison.Ordinal);
+        Assert.Contains("IsConfirmedProfileId", catalog, StringComparison.Ordinal);
+        Assert.Contains("GamepadControllerFamily.Unknown", catalog, StringComparison.Ordinal);
         Assert.Contains("case \"cross\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"circle\":", bridge, StringComparison.Ordinal);
         Assert.Contains("case \"square\":", bridge, StringComparison.Ordinal);

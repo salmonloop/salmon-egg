@@ -52,7 +52,19 @@ public static class GamepadHidMaestroProfileCatalog
 
     public static GamepadControllerFamily ResolveFamily(string? profileId)
     {
-        var normalized = NormalizeProfileId(profileId);
+        // Blank/missing config means "use the default confirmed Xbox profile" for
+        // bridge startup. That is not the same as inventing family for a free-form id.
+        if (string.IsNullOrWhiteSpace(profileId))
+        {
+            return GamepadControllerFamily.Xbox;
+        }
+
+        var normalized = profileId.Trim();
+        if (!IsConfirmedProfileId(normalized))
+        {
+            // Unconfirmed HIDMaestro ids must not default to Xbox identity evidence.
+            return GamepadControllerFamily.Unknown;
+        }
 
         if (string.Equals(normalized, SwitchPro, StringComparison.OrdinalIgnoreCase))
         {
@@ -66,8 +78,7 @@ public static class GamepadHidMaestroProfileCatalog
             return GamepadControllerFamily.Sony;
         }
 
-        // Confirmed Xbox catalog ids and any future unlisted Microsoft HIDMaestro
-        // profiles default to Xbox. Non-Xbox families must be listed explicitly above.
+        // Remaining confirmed catalog ids are Xbox family.
         return GamepadControllerFamily.Xbox;
     }
 
