@@ -396,6 +396,10 @@ function escapeRegExp(value) {
 }
 
 async function verifyInjectedStandardGamepadNativeControlBridge() {
+  // Architecture (post shell-fallback removal): BrowserWasm gamepad polling is an
+  // authoritative fact/diagnostics source. Native Uno focus ownership stays with
+  // keyboard/XYFocus and control consumers; smoke must not require a second global
+  // shell focus bridge that reintroduces double-dispatch risk.
   const { context, page, fatalConsoleMessages } = await createInstrumentedContext(browser);
 
   try {
@@ -412,30 +416,42 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
 
     // Keep diagnostics polling so ActiveInputs updates while injected buttons stay pressed.
     await scrollToVisibleControl(page, gamepadStart, 15_000);
-    const startState = await waitForControlState(page, gamepadStart, "native bridge start action");
+    const startState = await waitForControlState(page, gamepadStart, "diagnostics monitor start action");
     if (startState.enabled) {
       await clickVisibleControl(page, gamepadStart);
       await page.waitForTimeout(300);
     }
 
-    const beforeMove = await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh");
+    // Standard-mapping DPadDown (index 13) must project as MoveDown intent facts.
     await setInjectedGamepadButtons(page, [13]);
-    const afterMove = await waitForDifferentFocusedElement(page, beforeMove, "DPadDown diagnostics focus move");
+    await clickVisibleControl(page, gamepadRefresh);
+    await waitForControlText(
+      page,
+      { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+      /MoveDown/,
+      "gamepad DPadDown active MoveDown intent",
+      15_000);
+    await expectControlText(
+      page,
+      { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+      /pressed\s+DPadDown/i,
+      "gamepad DPadDown pressed standard slot");
     await setInjectedGamepadButtons(page, []);
 
-    if (afterMove.isBody || !afterMove.visible) {
-      throw new Error(`DPadDown moved focus to an invalid target. Snapshot=${JSON.stringify(afterMove)}`);
-    }
-
-    await focusControlByAutomationId(page, "Diagnostics.GamepadRefresh", "diagnostics refresh before activate");
+    // Standard-mapping A (index 0) must project Activate intent facts for consumers.
     await setInjectedGamepadButtons(page, [0]);
     await clickVisibleControl(page, gamepadRefresh);
     await waitForControlText(
       page,
       { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
       /Activate/,
-      "gamepad Activate native control invocation",
+      "gamepad Activate active intent",
       15_000);
+    await expectControlText(
+      page,
+      { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
+      /pressed\s+A/i,
+      "gamepad Activate pressed standard slot");
     await setInjectedGamepadButtons(page, []);
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
@@ -443,6 +459,7 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
     await context.close();
   }
 }
+
 
 async function openDiagnosticsGamepadSection(page) {
   await openApp(page, baseUrl);
@@ -655,52 +672,6 @@ async function setInjectedGamepadButtons(page, pressedButtons) {
   }, pressedButtons);
 }
 
-async function focusControlByAutomationId(page, automationId, label) {
-  await scrollToVisibleControl(page, { labels: [], automationIds: [automationId] });
-  const focused = await page.evaluate(id => {
-    const element = document.querySelector(`[aria-label="${id}"]`);
-    if (!element || typeof element.focus !== "function") {
-      return false;
-    }
-
-    element.focus();
-    return document.activeElement === element;
-  }, automationId);
-
-  if (!focused) {
-    const state = await readControlState(page, { labels: [], automationIds: [automationId] });
-    throw new Error(`Could not focus ${label}. State=${JSON.stringify(state)}`);
-  }
-
-  return await waitForFocusedElementSnapshot(page, `${label} focus`);
-}
-
-async function waitForDifferentFocusedElement(page, beforeSnapshot, label) {
-  const deadline = Date.now() + 5_000;
-  let lastSnapshot = null;
-
-  while (Date.now() < deadline) {
-    lastSnapshot = await waitForFocusedElementSnapshot(page, label, 1_000);
-    if (!isSameFocusSnapshot(beforeSnapshot, lastSnapshot)) {
-      return lastSnapshot;
-    }
-
-    await page.waitForTimeout(100);
-  }
-
-  throw new Error(`Timed out waiting for ${label}. Before=${JSON.stringify(beforeSnapshot)} After=${JSON.stringify(lastSnapshot)}`);
-}
-
-function isSameFocusSnapshot(left, right) {
-  return left?.tag === right?.tag
-    && left?.text === right?.text
-    && left?.aria === right?.aria
-    && left?.role === right?.role
-    && left?.rect?.left === right?.rect?.left
-    && left?.rect?.top === right?.rect?.top
-    && left?.rect?.width === right?.rect?.width
-    && left?.rect?.height === right?.rect?.height;
-}
 
 async function revealGamepadDiagnosticsSection(page) {
   await waitForBodyText(page, diagnosticsPagePattern, "diagnostics settings page before gamepad reveal");

@@ -3023,6 +3023,8 @@ public sealed class XamlComplianceTests
         Assert.DoesNotContain("_nativeInputBridge", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ShouldSuppressPolledGamepadIntent", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("_gamepadNavigationDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("_gamepadInputService.IntentRaised", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("OnGamepadIntentRaised", mainPage, StringComparison.Ordinal);
         Assert.DoesNotContain("GamepadNavigationIntent.MoveDown => TryMoveFocus", code);
         Assert.DoesNotContain("XamlFocusManager.TryMoveFocus", code);
         Assert.DoesNotContain("GetNavigationSearchRoot()", code);
