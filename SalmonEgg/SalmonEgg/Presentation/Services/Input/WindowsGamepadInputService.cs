@@ -202,7 +202,7 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
         var gamepadReadings = new GamepadInputReading[gamepads.Length];
         for (var i = 0; i < gamepads.Length; i++)
         {
-            gamepadReadings[i] = GetInputReading(gamepads[i], identities[i]);
+            gamepadReadings[i] = WindowsStandardGamepadReadingMapper.GetInputReading(gamepads[i], identities[i]);
         }
 
         var rawReadings = Array.ConvertAll(rawControllers, _rawMapper.GetInputReading);
@@ -262,11 +262,6 @@ public sealed class WindowsGamepadInputService : IGamepadInputService
 
         _logger.LogDebug("Raw game controller remove event ignored for unknown device.");
     }
-
-    private static GamepadInputReading GetInputReading(
-        Gamepad gamepad,
-        WindowsStandardGamepadIdentity identity)
-        => WindowsStandardGamepadReadingMapper.GetInputReading(gamepad, identity);
 
     private void CacheStandardGamepadIdentity(Gamepad gamepad)
         => _standardGamepadIdentities[gamepad] = WindowsGameControllerButtonLabelMapper.GetIdentity(gamepad);
