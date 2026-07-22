@@ -2990,6 +2990,46 @@ public sealed class XamlComplianceTests
     }
 
     [Fact]
+    public void HidMaestroMultiProfileRunner_StaysAlignedWithCoreCatalog()
+    {
+        // Prevent PS1 multi-profile loop from drifting brand tables off Core catalog.
+        var runner = LoadText(@"scripts\gates\run-hidmaestro-multiprofile-native-smoke.ps1");
+        var catalog = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadHidMaestroProfileCatalog.cs");
+
+        foreach (var profileId in new[]
+                 {
+                     "xbox-360-wired",
+                     "xbox-series-xs",
+                     "dualsense",
+                     "dualsense-bt",
+                     "dualshock-4-v2",
+                     "switch-pro"
+                 })
+        {
+            Assert.Contains(profileId, runner, StringComparison.Ordinal);
+            Assert.Contains(profileId, catalog, StringComparison.Ordinal);
+        }
+
+        // Family tokens and preferred physical face keys must match Core ownership.
+        Assert.Contains("Get-ExpectedFamilyToken", runner, StringComparison.Ordinal);
+        Assert.Contains("Get-ExpectedPreferredFaceKey", runner, StringComparison.Ordinal);
+        Assert.Contains("'Xbox'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Sony'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Nintendo'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Unknown'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Cross'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Circle'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Square'", runner, StringComparison.Ordinal);
+        Assert.Contains("'Triangle'", runner, StringComparison.Ordinal);
+        // Switch Pro physical face preferred keys
+        Assert.Contains("return 'B'", runner, StringComparison.Ordinal);
+        Assert.Contains("return 'A'", runner, StringComparison.Ordinal);
+        Assert.Contains("return 'Y'", runner, StringComparison.Ordinal);
+        Assert.Contains("return 'X'", runner, StringComparison.Ordinal);
+        Assert.Contains("GetPhysicalButtonNameCandidates", catalog, StringComparison.Ordinal);
+        Assert.Contains("GamepadControllerIdentity.FormatFamilyToken", catalog, StringComparison.Ordinal);
+    }
+
     public void GamepadDiagnosticsSnapshot_UsesTypedInputSourceContract()
     {
         var snapshot = LoadText(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadDiagnosticsSnapshot.cs");

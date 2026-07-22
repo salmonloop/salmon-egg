@@ -203,5 +203,29 @@ public sealed class GamepadControllerIdentityTests
                 hardwareVendorId: 0,
                 faceButtonLabels: nintendoLabels));
     }
+    [Theory]
+    [InlineData(GamepadControllerFamily.Xbox, "Xbox")]
+    [InlineData(GamepadControllerFamily.Sony, "Sony")]
+    [InlineData(GamepadControllerFamily.Nintendo, "Nintendo")]
+    [InlineData(GamepadControllerFamily.Unknown, "Unknown")]
+    public void FormatFamilyToken_ProjectsInvariantTokens(GamepadControllerFamily family, string expected)
+    {
+        Assert.Equal(expected, GamepadControllerIdentity.FormatFamilyToken(family));
+    }
+
+    [Theory]
+    [InlineData("Xbox Wireless Controller", 0x045E, "Xbox")]
+    [InlineData("DualSense Wireless Controller", 0x054C, "Sony")]
+    [InlineData("Nintendo Switch Pro Controller", 0x057E, "Nintendo")]
+    [InlineData("Generic Pad", 0, "Unknown")]
+    public void FormatFamilyToken_MatchesResolveFamilyProjection(
+        string displayName,
+        int vendorId,
+        string expectedToken)
+    {
+        var family = GamepadControllerIdentity.ResolveFamily(displayName, (ushort)vendorId);
+        Assert.Equal(expectedToken, GamepadControllerIdentity.FormatFamilyToken(family));
+    }
+
 }
 
