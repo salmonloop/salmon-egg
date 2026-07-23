@@ -4,6 +4,7 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tests.Protocol;
 
@@ -138,4 +139,37 @@ public sealed class SessionLoadTypesTests
 
         Assert.Throws<JsonException>((() => JsonSerializer.Deserialize<SessionResumeResponse>(json)));
     }
+
+    [Fact]
+    public void SessionResumeParams_WhenReplayFromIsNull_OmitsReplayFromProperty()
+    {
+        var sessionParams = new SessionResumeParams("test-session", "/home/user/project");
+
+        var json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionResumeParams);
+        using var parsed = JsonDocument.Parse(json);
+
+        Assert.False(parsed.RootElement.TryGetProperty("replayFrom", out _));
+    }
+
+    [Fact]
+    public void SessionResumeParams_WhenReplayFromStart_SerializesTypeStart()
+    {
+        var sessionParams = new SessionResumeParams(
+            "test-session",
+            "/home/user/project",
+            replayFrom: SessionReplayFrom.Start);
+
+        var json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionResumeParams);
+        using var parsed = JsonDocument.Parse(json);
+
+        Assert.True(parsed.RootElement.TryGetProperty("replayFrom", out var replayFrom));
+        Assert.Equal("start", replayFrom.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void SessionReplayFrom_Start_IsTypeStart()
+    {
+        Assert.Equal("start", SessionReplayFrom.Start.Type);
+    }
+
 }

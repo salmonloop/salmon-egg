@@ -50,6 +50,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(SessionPromptResponse))]
 [JsonSerializable(typeof(SessionLoadParams))]
 [JsonSerializable(typeof(SessionLoadResponse))]
+[JsonSerializable(typeof(SessionReplayFrom))]
 [JsonSerializable(typeof(SessionResumeParams))]
 [JsonSerializable(typeof(SessionResumeResponse))]
 [JsonSerializable(typeof(SessionCloseParams))]

@@ -334,7 +334,8 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 恢复已有会话但不要求 Agent 重放历史。
+        /// 恢复已有会话。省略 <see cref="SessionResumeParams.ReplayFrom"/> 时不要求重放历史；
+        /// 设置 <c>replayFrom: { type: "start" }</c> 时请求完整历史重放（V2）。
         /// </summary>
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
         {

@@ -178,8 +178,44 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
+    /// ACP session/resume replay cursor.
+    /// Official V2 known form is <c>{ "type": "start" }</c> for full history replay.
+    /// Other <c>type</c> values remain open for custom/future cursors.
+    /// </summary>
+    public class SessionReplayFrom : AcpProtocolObject
+    {
+        /// <summary>
+        /// Replay cursor type. Official full-history replay uses <c>start</c>.
+        /// </summary>
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Creates an empty replay cursor.
+        /// </summary>
+        public SessionReplayFrom()
+        {
+        }
+
+        /// <summary>
+        /// Creates a replay cursor with the given type.
+        /// </summary>
+        /// <param name="type">Replay cursor type.</param>
+        public SessionReplayFrom(string type)
+        {
+            Type = type;
+        }
+
+        /// <summary>
+        /// Official V2 full-history replay cursor: <c>{ "type": "start" }</c>.
+        /// </summary>
+        public static SessionReplayFrom Start { get; } = new("start");
+    }
+
+    /// <summary>
     /// Session/Resume 方法的请求参数。
-    /// 用于恢复已存在的会话上下文，但不要求 Agent 重放历史消息。
+    /// 用于恢复已存在的会话上下文；省略 <see cref="ReplayFrom"/> 时不要求 Agent 重放历史，
+    /// 设置 <c>replayFrom: { type: "start" }</c> 时请求完整历史重放（V2 对 session/load 的替代路径）。
     /// </summary>
     public class SessionResumeParams : AcpProtocolObject
     {
@@ -209,6 +245,13 @@ namespace SalmonEgg.Acp.Protocol
         public List<string>? AdditionalDirectories { get; set; }
 
         /// <summary>
+        /// Optional V2 history replay cursor.
+        /// Omit/null resumes without replaying history; <see cref="SessionReplayFrom.Start"/> requests full history.
+        /// </summary>
+        [JsonPropertyName("replayFrom")]
+        public SessionReplayFrom? ReplayFrom { get; set; }
+
+        /// <summary>
         /// 创建新的 SessionResumeParams 实例。
         /// </summary>
         public SessionResumeParams()
@@ -222,16 +265,19 @@ namespace SalmonEgg.Acp.Protocol
         /// <param name="cwd">工作目录</param>
         /// <param name="mcpServers">MCP 服务器配置</param>
         /// <param name="additionalDirectories">附加工作目录</param>
+        /// <param name="replayFrom">Optional V2 history replay cursor</param>
         public SessionResumeParams(
             string sessionId,
             string cwd,
             List<McpServer>? mcpServers = null,
-            List<string>? additionalDirectories = null)
+            List<string>? additionalDirectories = null,
+            SessionReplayFrom? replayFrom = null)
         {
             SessionId = sessionId;
             Cwd = cwd;
             McpServers = mcpServers ?? new List<McpServer>();
             AdditionalDirectories = additionalDirectories;
+            ReplayFrom = replayFrom;
         }
     }
 

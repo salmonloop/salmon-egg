@@ -1320,6 +1320,36 @@ namespace SalmonEgg.Acp.Tests.Client
             Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
             Assert.Equal(AbsoluteCwd, @params.GetProperty("cwd").GetString());
             Assert.Equal(JsonValueKind.Array, @params.GetProperty("mcpServers").ValueKind);
+            Assert.False(@params.TryGetProperty("replayFrom", out _));
+        }
+
+        [Fact]
+        public async Task ResumeSessionAsync_WhenReplayFromStart_SendsReplayFromStartCursor()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
+
+            SetupJsonRpcResponse(
+                "session/resume",
+                ElementFromJson("""{ }"""),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            var result = await client.ResumeSessionAsync(
+                new SessionResumeParams("session-123", AbsoluteCwd, replayFrom: SessionReplayFrom.Start),
+                TestContext.Current.CancellationToken);
+
+            Assert.NotNull(result);
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            Assert.Equal("session/resume", document.RootElement.GetProperty("method").GetString());
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal("start", @params.GetProperty("replayFrom").GetProperty("type").GetString());
         }
 
         [Fact]

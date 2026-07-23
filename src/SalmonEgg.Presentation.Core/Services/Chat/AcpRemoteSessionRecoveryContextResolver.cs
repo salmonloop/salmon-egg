@@ -187,12 +187,14 @@ public static class AcpRemoteSessionRecoveryRequestFactory
     public static SessionResumeParams CreateResumeParams(
         string remoteSessionId,
         AcpRemoteSessionRecoveryContext context,
-        IReadOnlyList<McpServer> mcpServers)
+        IReadOnlyList<McpServer> mcpServers,
+        SessionReplayFrom? replayFrom = null)
         => new(
             remoteSessionId,
             context.Cwd,
             McpServerJsonConverter.CloneServers(mcpServers),
-            CreateAdditionalDirectories(context));
+            CreateAdditionalDirectories(context),
+            replayFrom);
 
     private static List<string>? CreateAdditionalDirectories(AcpRemoteSessionRecoveryContext context)
         => context.AdditionalDirectories.IsDefaultOrEmpty
