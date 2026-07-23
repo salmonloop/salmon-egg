@@ -1918,8 +1918,15 @@ namespace SalmonEgg.Acp.Client
             }
         }
 
-        private static JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo) =>
-            JsonSerializer.SerializeToElement(value, typeInfo);
+        private JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo)
+        {
+            // 沿调用流把协商后的协议版本传给内部 converter（如 McpServer 的版本分流写入）。
+            // set→SerializeToElement→restore 同步闭合，中间无 await，并发请求不会串版本。
+            using (AcpProtocolWriteContext.Enter(_protocolVersion))
+            {
+                return JsonSerializer.SerializeToElement(value, typeInfo);
+            }
+        }
 
         private static T? FromElement<T>(JsonElement value, JsonTypeInfo<T> typeInfo) =>
             value.Deserialize(typeInfo);

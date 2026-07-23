@@ -380,6 +380,54 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task CreateSessionAsync_WhenNegotiatedV2_WritesStdioTypeDiscriminator()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(protocolVersion: AcpProtocolVersion.V2);
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.CreateSessionAsync(new SessionNewParams(
+                AbsoluteCwd,
+                new List<McpServer> { new StdioMcpServer("filesystem", "/usr/local/bin/node", ["server.js"]) }), TestContext.Current.CancellationToken);
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var mcpServers = document.RootElement.GetProperty("params").GetProperty("mcpServers");
+            // 协商为 V2：stdio 携带 type 判别式（V2 schema 要求）。
+            Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
+        }
+
+        [Fact]
+        public async Task CreateSessionAsync_WhenNegotiatedV1_OmitsStdioTypeDiscriminator()
+        {
+            var parser = new MessageParser();
+            var sentMessages = new ConcurrentQueue<string>();
+            var client = await CreateInitializedClientAsync(protocolVersion: AcpProtocolVersion.V1);
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+
+            await client.CreateSessionAsync(new SessionNewParams(
+                AbsoluteCwd,
+                new List<McpServer> { new StdioMcpServer("filesystem", "/usr/local/bin/node", ["server.js"]) }), TestContext.Current.CancellationToken);
+
+            Assert.True(sentMessages.TryDequeue(out var requestJson));
+            using var document = JsonDocument.Parse(requestJson);
+            var mcpServers = document.RootElement.GetProperty("params").GetProperty("mcpServers");
+            // 协商降级为 V1：stdio 无 type 字段（V1 靠缺省 type 隐式判定），不向 V1 Agent 发送未知字段。
+            Assert.False(mcpServers[0].TryGetProperty("type", out _));
+        }
+
+        [Fact]
         public async Task InitializeAsync_SendsAskUserCapabilityMetadataInClientCapabilities()
         {
             var parser = new MessageParser();

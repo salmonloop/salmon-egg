@@ -28,7 +28,8 @@ public sealed class SessionLoadTypesTests
 
         Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
         Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
-        Assert.False(mcpServers[0].TryGetProperty("type", out _));
+        // 默认写入上下文为 V2 主线：stdio 显式携带 type 判别式（V2 schema 以 type 区分三种 transport）。
+        Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
         Assert.Equal("/usr/local/bin/node", mcpServers[0].GetProperty("command").GetString());
     }
 

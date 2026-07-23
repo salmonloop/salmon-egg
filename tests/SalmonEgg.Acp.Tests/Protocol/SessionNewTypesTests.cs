@@ -30,7 +30,8 @@ public sealed class SessionNewTypesTests
 
         Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
         Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
-        Assert.False(mcpServers[0].TryGetProperty("type", out _));
+        // 默认写入上下文为 V2 主线：stdio 显式携带 type 判别式（V2 schema 以 type 区分三种 transport）。
+        Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
         Assert.Equal("test-server", mcpServers[0].GetProperty("name").GetString());
         Assert.Equal("/usr/local/bin/node", mcpServers[0].GetProperty("command").GetString());
         Assert.Equal("server.js", mcpServers[0].GetProperty("args")[0].GetString());
@@ -211,8 +212,10 @@ public sealed class SessionNewTypesTests
     }
 
     [Fact]
-    public void McpServer_WithStdioTypeDiscriminator_Should_NotDeserialize()
+    public void McpServer_WithStdioTypeDiscriminator_Should_Deserialize()
     {
+        // V2 schema 以 `type` 判别式显式标注 stdio；读路径对两版本一视同仁地接受
+        // 带或不带 type 的 stdio 形态（V1 无 type、V2 有 type 均合法）。
         var json = """
         {
           "type": "stdio",
@@ -223,16 +226,44 @@ public sealed class SessionNewTypesTests
         }
         """;
 
-        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        Assert.IsType<StdioMcpServer>(server);
+        var stdio = (StdioMcpServer)server!;
+        Assert.Equal("test-server", stdio.Name);
+        Assert.Equal("/usr/local/bin/node", stdio.Command);
     }
 
     [Fact]
-    public void McpServer_WhenRequiredArrayIsMissing_Should_NotDeserialize()
+    public void McpServer_StdioWithoutArgs_Should_Deserialize_WithNullArgs()
     {
+        // V2 将 stdio 的 args 放宽为可选；缺省时忠实还原为 null（区别于「显式空数组」），
+        // client 不再反向收紧为必填。
         var json = """
         {
           "name": "test-server",
           "command": "/usr/local/bin/node",
+          "env": []
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        Assert.IsType<StdioMcpServer>(server);
+        var stdio = (StdioMcpServer)server!;
+        Assert.Null(stdio.Args);
+    }
+
+    [Fact]
+    public void McpServer_StdioWithNonArrayArgs_Should_NotDeserialize()
+    {
+        // 类型契约不放宽：args 一旦提供却非数组，仍视为协议违规抛出，
+        // 不做反向的过度容忍。
+        var json = """
+        {
+          "name": "test-server",
+          "command": "/usr/local/bin/node",
+          "args": "server.js",
           "env": []
         }
         """;
@@ -343,5 +374,70 @@ public sealed class SessionNewTypesTests
         """;
 
         Assert.Throws<JsonException>((() => JsonSerializer.Deserialize<SessionNewResponse>(json)));
+    }
+
+    [Fact]
+    public void McpServer_WithUnknownTransport_Should_Deserialize_As_CustomAndPreserveRawPayload()
+    {
+        // V2 schema "other" 分支：非 stdio/http/sse 的 transport，client 不认识也不收紧，
+        // 按 spec「preserve the raw payload」原样保留，交由 Agent 决定接受或拒绝。
+        var json = """
+        {
+          "type": "_experimental-grpc",
+          "name": "future-server",
+          "endpoint": "grpc://future.example.com",
+          "customField": { "nested": [1, 2, 3] }
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        var custom = Assert.IsType<CustomMcpServer>(server);
+        Assert.Equal("_experimental-grpc", custom.Transport);
+        Assert.Equal("future-server", custom.Name);
+        Assert.Equal(JsonValueKind.Object, custom.RawPayload.ValueKind);
+        Assert.Equal("grpc://future.example.com", custom.RawPayload.GetProperty("endpoint").GetString());
+    }
+
+    [Fact]
+    public void McpServer_WithUnknownTransport_Should_RoundTrip_UnknownFieldsIntact()
+    {
+        var json = """
+        {
+          "type": "_experimental-grpc",
+          "name": "future-server",
+          "endpoint": "grpc://future.example.com",
+          "customField": { "nested": [1, 2, 3] }
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+        var reserialized = JsonSerializer.Serialize(server);
+        var parsed = JsonDocument.Parse(reserialized);
+
+        // 前向兼容透传：重新序列化必须原样带回全部未知字段，不丢弃、不重排语义。
+        Assert.Equal("_experimental-grpc", parsed.RootElement.GetProperty("type").GetString());
+        Assert.Equal("future-server", parsed.RootElement.GetProperty("name").GetString());
+        Assert.Equal("grpc://future.example.com", parsed.RootElement.GetProperty("endpoint").GetString());
+        Assert.Equal(1, parsed.RootElement.GetProperty("customField").GetProperty("nested")[0].GetInt32());
+    }
+
+    [Fact]
+    public void CustomMcpServer_Should_Clone_RawPayload_Independently()
+    {
+        var json = """
+        {
+          "type": "_experimental-grpc",
+          "name": "future-server",
+          "endpoint": "grpc://future.example.com"
+        }
+        """;
+
+        var custom = (CustomMcpServer)JsonSerializer.Deserialize<McpServer>(json)!;
+        var clone = (CustomMcpServer)McpServerJsonConverter.CloneServer(custom);
+
+        Assert.Equal(custom.Transport, clone.Transport);
+        Assert.Equal(custom.Name, clone.Name);
+        Assert.Equal("grpc://future.example.com", clone.RawPayload.GetProperty("endpoint").GetString());
     }
 }

@@ -112,6 +112,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(StdioMcpServer))]
 [JsonSerializable(typeof(HttpMcpServer))]
 [JsonSerializable(typeof(SseMcpServer))]
+[JsonSerializable(typeof(CustomMcpServer))]
 [JsonSerializable(typeof(McpHttpHeader))]
 [JsonSerializable(typeof(McpEnvVariable))]
 [JsonSerializable(typeof(ContentBlock))]

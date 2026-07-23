@@ -25,7 +25,8 @@ namespace SalmonEgg.Acp.Mcp
     {
         Stdio,
         Http,
-        Sse
+        Sse,
+        Custom
     }
 
     /// <summary>
@@ -158,6 +159,47 @@ namespace SalmonEgg.Acp.Mcp
     }
 
     /// <summary>
+    /// 自定义 / 未来的 MCP transport 配置。
+    /// 承载 V2 schema "other" 分支（<c>type</c> 值非 stdio/http/sse）的前向兼容透传：
+    /// spec 要求 receiver 对不认识的 transport「preserve the raw payload」，
+    /// 由 Agent 而非 client 决定接受或拒绝。
+    /// </summary>
+    public class CustomMcpServer : McpServer
+    {
+        /// <summary>
+        /// 原始 <c>type</c> transport 值（如 <c>_custom</c> 扩展或未来 ACP 变体值）。
+        /// </summary>
+        [JsonPropertyName("type")]
+        public string Transport { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 原始 server object payload，原样保留以供透传。
+        /// 由 <see cref="McpServerJsonConverter"/> 手动读写，不经默认序列化。
+        /// </summary>
+        public JsonElement RawPayload { get; set; }
+
+        /// <summary>
+        /// 创建新的 CustomMcpServer 实例。
+        /// </summary>
+        public CustomMcpServer()
+        {
+        }
+
+        /// <summary>
+        /// 创建新的 CustomMcpServer 实例。
+        /// </summary>
+        /// <param name="name">服务器名称</param>
+        /// <param name="transport">原始 transport 值</param>
+        /// <param name="rawPayload">原始 server object payload</param>
+        public CustomMcpServer(string name, string transport, JsonElement rawPayload)
+        {
+            Name = name;
+            Transport = transport;
+            RawPayload = rawPayload;
+        }
+    }
+
+    /// <summary>
     /// MCP 环境变量配置类。
     /// </summary>
     public class McpEnvVariable : AcpProtocolObject
@@ -276,6 +318,14 @@ namespace SalmonEgg.Acp.Mcp
                     {
                         Meta = CloneMeta(sse.Meta)
                     };
+                case CustomMcpServer custom:
+                    return new CustomMcpServer(
+                        custom.Name,
+                        custom.Transport,
+                        custom.RawPayload.Clone())
+                    {
+                        Meta = CloneMeta(custom.Meta)
+                    };
                 default:
                     throw new ArgumentException("Unsupported MCP server type.", nameof(server));
             }
@@ -294,6 +344,7 @@ namespace SalmonEgg.Acp.Mcp
             {
                 McpServerTransport.Http => ReadHttp(root),
                 McpServerTransport.Sse => ReadSse(root),
+                McpServerTransport.Custom => ReadOther(root),
                 _ => ReadStdio(root)
             };
         }
@@ -323,6 +374,9 @@ namespace SalmonEgg.Acp.Mcp
                     AcpMetaJson.Write(writer, sse.Meta);
                     writer.WriteEndObject();
                     break;
+                case CustomMcpServer custom:
+                    WriteCustom(writer, custom);
+                    break;
                 default:
                     throw new JsonException($"Unsupported MCP server type: {value.GetType().FullName}");
             }
@@ -338,9 +392,12 @@ namespace SalmonEgg.Acp.Mcp
 
             return typeElement.GetString() switch
             {
+                "stdio" => McpServerTransport.Stdio,
                 "http" => McpServerTransport.Http,
                 "sse" => McpServerTransport.Sse,
-                _ => throw new JsonException("Unknown MCP server transport type.")
+                // V2 schema "other" 分支：任何非 stdio/http/sse 的 type 值（含 `_` 扩展与未来 ACP 变体）
+                // 均须 preserve raw payload 前向透传，由 Agent 而非 client 收紧。Read 纯容错，不按版本区分。
+                _ => McpServerTransport.Custom
             };
         }
 
@@ -350,7 +407,7 @@ namespace SalmonEgg.Acp.Mcp
             {
                 Name = ReadRequiredString(root, "name"),
                 Command = ReadRequiredString(root, "command"),
-                Args = ReadRequiredStringArray(root, "args"),
+                Args = ReadOptionalStringArray(root, "args"),
                 Env = ReadOptionalNameValueArray<McpEnvVariable>(
                     root,
                     "env",
@@ -387,6 +444,30 @@ namespace SalmonEgg.Acp.Mcp
             };
         }
 
+        /// <summary>
+        /// 读取 V2 schema "other" 分支：非 stdio/http/sse 的 transport。
+        /// 按 spec「preserve the raw payload」原样保留整个 server object，
+        /// 由 Agent 而非 client 决定接受或拒绝，client 层不做任何字段收紧。
+        /// </summary>
+        private static CustomMcpServer ReadOther(JsonElement root)
+        {
+            // type 一定存在且为字符串（ResolveTransport 已保证进入本分支的前提），
+            // 但仍防御性取值，缺省回退空串而非抛出，贯彻纯透传语义。
+            var transport = root.TryGetProperty("type", out var typeElement)
+                && typeElement.ValueKind == JsonValueKind.String
+                    ? typeElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+            // name 是所有 transport 共有的必需字段，读取以供上层展示；
+            // 其余未知字段全部保存在 RawPayload 中透传，不做解释。
+            var name = root.TryGetProperty("name", out var nameElement)
+                && nameElement.ValueKind == JsonValueKind.String
+                    ? nameElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+            return new CustomMcpServer(name, transport, root.Clone());
+        }
+
         private static string ReadRequiredString(JsonElement root, string propertyName)
         {
             if (!root.TryGetProperty(propertyName, out var value))
@@ -402,13 +483,16 @@ namespace SalmonEgg.Acp.Mcp
             return value.GetString() ?? string.Empty;
         }
 
-        private static List<string> ReadRequiredStringArray(JsonElement root, string propertyName)
+        private static List<string>? ReadOptionalStringArray(JsonElement root, string propertyName)
         {
+            // V2 将 args 放宽为可选：缺省时返回 null（忠实表达「未提供」，区别于「显式空数组」）。
             if (!root.TryGetProperty(propertyName, out var values))
             {
-                throw new JsonException($"MCP server is missing required '{propertyName}'.");
+                return null;
             }
 
+            // 但类型契约不放宽：一旦提供，非数组 / 非字符串条目仍视为协议违规而抛出，
+            // 不做反向的过度容忍（args 未标注 x-deserialize-default-on-error）。
             if (values.ValueKind != JsonValueKind.Array)
             {
                 throw new JsonException($"MCP server '{propertyName}' must be an array.");
@@ -489,6 +573,13 @@ namespace SalmonEgg.Acp.Mcp
         private static void WriteStdio(Utf8JsonWriter writer, StdioMcpServer stdio)
         {
             writer.WriteStartObject();
+            // V2 schema 以 `type` 判别式区分 stdio/http/sse；V1 stdio 无 type 字段，
+            // 靠缺省 type 隐式判定。仅在协商为 V2 时写出 type，避免向 V1 Agent 发送其不认识的字段。
+            if (AcpProtocolWriteContext.Current >= AcpProtocolVersion.V2)
+            {
+                writer.WriteString("type", "stdio");
+            }
+
             writer.WriteString("name", stdio.Name);
             writer.WriteString("command", stdio.Command);
             writer.WritePropertyName("args");
@@ -518,6 +609,24 @@ namespace SalmonEgg.Acp.Mcp
 
             writer.WriteEndArray();
             AcpMetaJson.Write(writer, stdio.Meta);
+            writer.WriteEndObject();
+        }
+
+        private static void WriteCustom(Utf8JsonWriter writer, CustomMcpServer custom)
+        {
+            // 前向兼容透传：原样写回读入时保留的 raw payload，不重排字段、不丢弃未知属性，
+            // 由 Agent 而非 client 决定接受或拒绝该 transport。若 RawPayload 为空（如手工构造），
+            // 退化为按已知字段最小写出，仍携带原始 type 值。
+            if (custom.RawPayload.ValueKind == JsonValueKind.Object)
+            {
+                custom.RawPayload.WriteTo(writer);
+                return;
+            }
+
+            writer.WriteStartObject();
+            writer.WriteString("type", custom.Transport);
+            writer.WriteString("name", custom.Name);
+            AcpMetaJson.Write(writer, custom.Meta);
             writer.WriteEndObject();
         }
 
