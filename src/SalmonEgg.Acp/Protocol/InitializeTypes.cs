@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
@@ -9,13 +10,14 @@ namespace SalmonEgg.Acp.Protocol
     /// Initialize 方法的请求参数。
     /// 用于客户端向 Agent 发起初始化请求。
     /// </summary>
+    [JsonConverter(typeof(InitializeParamsJsonConverter))]
     public class InitializeParams : AcpProtocolObject
     {
         /// <summary>
         /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; set; } = 1;
+        public int ProtocolVersion { get; set; } = AcpProtocolVersion.Latest;
 
         /// <summary>
         /// 客户端信息。
@@ -257,24 +259,23 @@ namespace SalmonEgg.Acp.Protocol
     /// Initialize 方法的响应。
     /// Agent 对初始化请求的响应。
     /// </summary>
+    [JsonConverter(typeof(InitializeResponseJsonConverter))]
     public class InitializeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; set; } = 1;
+        public int ProtocolVersion { get; set; } = AcpProtocolVersion.Latest;
 
         /// <summary>
         /// Agent 信息。
         /// </summary>
-        [JsonPropertyName("agentInfo")]
         public AgentInfo AgentInfo { get; set; } = new AgentInfo();
 
         /// <summary>
         /// Agent 能力声明。
         /// </summary>
-        [JsonPropertyName("agentCapabilities")]
         public AgentCapabilities AgentCapabilities { get; set; } = new AgentCapabilities();
 
         /// <summary>
@@ -420,17 +421,17 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 判断是否支持图片内容。
         /// </summary>
-        public bool SupportsImage => PromptCapabilities?.Image ?? false;
+        public bool SupportsImage => PromptCapabilities?.Image == true || SessionCapabilities?.Prompt?.Image == true;
 
         /// <summary>
         /// 判断是否支持音频内容。
         /// </summary>
-        public bool SupportsAudio => PromptCapabilities?.Audio ?? false;
+        public bool SupportsAudio => PromptCapabilities?.Audio == true || SessionCapabilities?.Prompt?.Audio == true;
 
         /// <summary>
         /// 判断是否支持嵌入上下文。
         /// </summary>
-        public bool SupportsEmbeddedContext => PromptCapabilities?.EmbeddedContext ?? false;
+        public bool SupportsEmbeddedContext => PromptCapabilities?.EmbeddedContext == true || SessionCapabilities?.Prompt?.EmbeddedContext == true;
 
         /// <summary>
         /// 判断是否支持会话加载。
@@ -470,12 +471,17 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// 判断是否支持 HTTP 传输。
         /// </summary>
-        public bool SupportsHttp => McpCapabilities?.Http ?? false;
+        public bool SupportsHttp => McpCapabilities?.Http == true || SessionCapabilities?.Mcp?.Http == true;
 
         /// <summary>
         /// 判断是否支持 SSE 传输。
         /// </summary>
-        public bool SupportsSse => McpCapabilities?.Sse ?? false;
+        public bool SupportsSse => McpCapabilities?.Sse == true || SessionCapabilities?.Mcp?.Sse == true;
+
+        /// <summary>
+        /// 判断是否支持 stdio 传输。
+        /// </summary>
+        public bool SupportsStdio => SessionCapabilities?.Mcp?.SupportsStdio == true;
     }
 
     /// <summary>
@@ -575,12 +581,26 @@ namespace SalmonEgg.Acp.Protocol
         public McpCapabilities(
             bool http = false,
             bool sse = false,
-            Dictionary<string, object?>? meta = null)
+            Dictionary<string, object?>? meta = null,
+            bool? stdio = null)
         {
             Http = http;
             Sse = sse;
             Meta = meta;
+            Stdio = stdio;
         }
+
+        /// <summary>
+        /// 是否支持 stdio 传输。
+        /// v1 wire 不公开该字段，v2 wire 通过 session.mcp.stdio 公开。
+        /// </summary>
+        [JsonIgnore]
+        public bool? Stdio { get; set; }
+
+        /// <summary>
+        /// 判断是否支持 stdio 传输。
+        /// </summary>
+        public bool SupportsStdio => Stdio ?? false;
     }
 
     /// <summary>
@@ -588,6 +608,18 @@ namespace SalmonEgg.Acp.Protocol
     /// </summary>
     public class SessionCapabilities : AcpProtocolObject
     {
+        /// <summary>
+        /// 是否支持 prompt 扩展。
+        /// </summary>
+        [JsonPropertyName("prompt")]
+        public PromptCapabilities? Prompt { get; set; }
+
+        /// <summary>
+        /// 是否支持 MCP 传输。
+        /// </summary>
+        [JsonPropertyName("mcp")]
+        public McpCapabilities? Mcp { get; set; }
+
         /// <summary>
         /// 是否支持会话列表功能。
         /// </summary>
@@ -677,5 +709,396 @@ namespace SalmonEgg.Acp.Protocol
     /// </summary>
     public class SessionAdditionalDirectoriesCapabilities : AcpProtocolObject
     {
+    }
+
+    public sealed class InitializeParamsJsonConverter : JsonConverter<InitializeParams>
+    {
+        public override InitializeParams? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+
+            var result = new InitializeParams
+            {
+                ProtocolVersion = ReadProtocolVersion(root),
+                ClientInfo = ReadClientInfo(root),
+                ClientCapabilities = ReadClientCapabilities(root),
+                Meta = AcpMetaJson.Read(root)
+            };
+
+            return result;
+        }
+
+        public override void Write(Utf8JsonWriter writer, InitializeParams value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("protocolVersion", value.ProtocolVersion);
+
+            if (value.ProtocolVersion == AcpProtocolVersion.V1)
+            {
+                writer.WritePropertyName("clientInfo");
+                JsonSerializer.Serialize(writer, value.ClientInfo, AcpJsonContext.Default.ClientInfo);
+                writer.WritePropertyName("clientCapabilities");
+                JsonSerializer.Serialize(writer, value.ClientCapabilities, AcpJsonContext.Default.ClientCapabilities);
+            }
+            else
+            {
+                writer.WritePropertyName("info");
+                JsonSerializer.Serialize(writer, value.ClientInfo, AcpJsonContext.Default.ClientInfo);
+                WriteClientCapabilitiesV2(writer, value.ClientCapabilities);
+            }
+
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
+
+        private static int ReadProtocolVersion(JsonElement root)
+        {
+            if (!root.TryGetProperty("protocolVersion", out var version) || version.ValueKind != JsonValueKind.Number)
+            {
+                return AcpProtocolVersion.V1;
+            }
+
+            return version.GetInt32();
+        }
+
+        private static ClientInfo ReadClientInfo(JsonElement root)
+        {
+            if (root.TryGetProperty("info", out var info))
+            {
+                return JsonSerializer.Deserialize(info.GetRawText(), AcpJsonContext.Default.ClientInfo) ?? new ClientInfo();
+            }
+
+            if (root.TryGetProperty("clientInfo", out var clientInfo))
+            {
+                return JsonSerializer.Deserialize(clientInfo.GetRawText(), AcpJsonContext.Default.ClientInfo) ?? new ClientInfo();
+            }
+
+            return new ClientInfo();
+        }
+
+        private static ClientCapabilities ReadClientCapabilities(JsonElement root)
+        {
+            if (root.TryGetProperty("capabilities", out var capabilities))
+            {
+                return JsonSerializer.Deserialize(capabilities.GetRawText(), AcpJsonContext.Default.ClientCapabilities) ?? new ClientCapabilities();
+            }
+
+            if (root.TryGetProperty("clientCapabilities", out var clientCapabilities))
+            {
+                return JsonSerializer.Deserialize(clientCapabilities.GetRawText(), AcpJsonContext.Default.ClientCapabilities) ?? new ClientCapabilities();
+            }
+
+            return new ClientCapabilities();
+        }
+
+        private static void WriteClientCapabilitiesV2(Utf8JsonWriter writer, ClientCapabilities value)
+        {
+            writer.WritePropertyName("capabilities");
+            JsonSerializer.Serialize(writer, value, AcpJsonContext.Default.ClientCapabilities);
+        }
+    }
+
+    public sealed class InitializeResponseJsonConverter : JsonConverter<InitializeResponse>
+    {
+        public override InitializeResponse? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+
+            var result = new InitializeResponse
+            {
+                ProtocolVersion = ReadProtocolVersion(root),
+                AgentInfo = ReadAgentInfo(root),
+                AgentCapabilities = ReadAgentCapabilities(root),
+                AuthMethods = ReadAuthMethods(root),
+                Meta = AcpMetaJson.Read(root)
+            };
+
+            return result;
+        }
+
+        public override void Write(Utf8JsonWriter writer, InitializeResponse value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber("protocolVersion", value.ProtocolVersion);
+
+            if (value.ProtocolVersion == AcpProtocolVersion.V1)
+            {
+                writer.WritePropertyName("agentInfo");
+                JsonSerializer.Serialize(writer, value.AgentInfo, AcpJsonContext.Default.AgentInfo);
+                writer.WritePropertyName("agentCapabilities");
+                JsonSerializer.Serialize(writer, value.AgentCapabilities, AcpJsonContext.Default.AgentCapabilities);
+            }
+            else
+            {
+                writer.WritePropertyName("info");
+                JsonSerializer.Serialize(writer, value.AgentInfo, AcpJsonContext.Default.AgentInfo);
+                WriteAgentCapabilitiesV2(writer, value.AgentCapabilities);
+            }
+
+            writer.WritePropertyName("authMethods");
+            WriteAuthMethods(writer, value.AuthMethods, value.ProtocolVersion);
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
+
+        private static int ReadProtocolVersion(JsonElement root)
+        {
+            if (!root.TryGetProperty("protocolVersion", out var version) || version.ValueKind != JsonValueKind.Number)
+            {
+                return AcpProtocolVersion.V1;
+            }
+
+            return version.GetInt32();
+        }
+
+        private static AgentInfo ReadAgentInfo(JsonElement root)
+        {
+            if (root.TryGetProperty("info", out var info))
+            {
+                return JsonSerializer.Deserialize(info.GetRawText(), AcpJsonContext.Default.AgentInfo) ?? new AgentInfo();
+            }
+
+            if (root.TryGetProperty("agentInfo", out var agentInfo))
+            {
+                return JsonSerializer.Deserialize(agentInfo.GetRawText(), AcpJsonContext.Default.AgentInfo) ?? new AgentInfo();
+            }
+
+            return new AgentInfo();
+        }
+
+        private static AgentCapabilities ReadAgentCapabilities(JsonElement root)
+        {
+            if (root.TryGetProperty("capabilities", out var capabilities))
+            {
+                return ReadAgentCapabilitiesV2(capabilities);
+            }
+
+            if (root.TryGetProperty("agentCapabilities", out var agentCapabilities))
+            {
+                return JsonSerializer.Deserialize(agentCapabilities.GetRawText(), AcpJsonContext.Default.AgentCapabilities) ?? new AgentCapabilities();
+            }
+
+            return new AgentCapabilities();
+        }
+
+        private static List<AuthMethodDefinition>? ReadAuthMethods(JsonElement root)
+        {
+            if (!root.TryGetProperty("authMethods", out var authMethods) || authMethods.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize(authMethods.GetRawText(), AcpJsonContext.Default.ListAuthMethodDefinition);
+        }
+
+        private static AgentCapabilities ReadAgentCapabilitiesV2(JsonElement root)
+        {
+            var capabilities = new AgentCapabilities();
+
+            if (root.TryGetProperty("session", out var session) && session.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.SessionCapabilities = ReadSessionCapabilitiesV2(session);
+            }
+
+            if (root.TryGetProperty("auth", out var auth) && auth.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.Auth = JsonSerializer.Deserialize(auth.GetRawText(), AcpJsonContext.Default.AgentAuthCapabilities);
+            }
+
+            capabilities.Meta = AcpMetaJson.Read(root);
+            return capabilities;
+        }
+
+        private static SessionCapabilities ReadSessionCapabilitiesV2(JsonElement session)
+        {
+            var capabilities = new SessionCapabilities
+            {
+                List = new SessionListCapabilities(),
+                Resume = new SessionResumeCapabilities(),
+                Close = new SessionCloseCapabilities()
+            };
+
+            if (session.TryGetProperty("delete", out var delete) && delete.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.Delete = new SessionDeleteCapabilities();
+            }
+
+            if (session.TryGetProperty("additionalDirectories", out var additionalDirectories) && additionalDirectories.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.AdditionalDirectories = new SessionAdditionalDirectoriesCapabilities();
+            }
+
+            if (session.TryGetProperty("prompt", out var prompt) && prompt.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.Prompt = new PromptCapabilities
+                {
+                    Image = IsObjectMarkerPresent(prompt, "image"),
+                    Audio = IsObjectMarkerPresent(prompt, "audio"),
+                    EmbeddedContext = IsObjectMarkerPresent(prompt, "embeddedContext"),
+                    Meta = AcpMetaJson.Read(prompt)
+                };
+            }
+
+            if (session.TryGetProperty("mcp", out var mcp) && mcp.ValueKind == JsonValueKind.Object)
+            {
+                capabilities.Mcp = new McpCapabilities(
+                    http: IsObjectMarkerPresent(mcp, "http"),
+                    sse: false,
+                    meta: AcpMetaJson.Read(mcp),
+                    stdio: IsObjectMarkerPresent(mcp, "stdio"));
+            }
+
+            capabilities.Meta = AcpMetaJson.Read(session);
+            return capabilities;
+        }
+
+        private static bool IsObjectMarkerPresent(JsonElement root, string propertyName)
+            => root.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Object;
+
+        private static void WriteAgentCapabilitiesV2(Utf8JsonWriter writer, AgentCapabilities value)
+        {
+            writer.WritePropertyName("capabilities");
+            writer.WriteStartObject();
+
+            if (value.SessionCapabilities != null)
+            {
+                writer.WritePropertyName("session");
+                writer.WriteStartObject();
+
+                if (value.SessionCapabilities?.Prompt != null)
+                {
+                    writer.WritePropertyName("prompt");
+                    writer.WriteStartObject();
+                    WritePromptCapabilityMarker(writer, "image", value.SessionCapabilities.Prompt.Image);
+                    WritePromptCapabilityMarker(writer, "audio", value.SessionCapabilities.Prompt.Audio);
+                    WritePromptCapabilityMarker(writer, "embeddedContext", value.SessionCapabilities.Prompt.EmbeddedContext);
+                    AcpMetaJson.Write(writer, value.SessionCapabilities.Prompt.Meta);
+                    writer.WriteEndObject();
+                }
+
+                if (value.SessionCapabilities?.Mcp != null)
+                {
+                    writer.WritePropertyName("mcp");
+                    writer.WriteStartObject();
+                    if (value.SessionCapabilities.Mcp.SupportsStdio)
+                    {
+                        writer.WritePropertyName("stdio");
+                        writer.WriteStartObject();
+                        AcpMetaJson.Write(writer, value.SessionCapabilities.Mcp.Meta);
+                        writer.WriteEndObject();
+                    }
+
+                    if (value.SessionCapabilities.Mcp.Http)
+                    {
+                        writer.WritePropertyName("http");
+                        writer.WriteStartObject();
+                        AcpMetaJson.Write(writer, value.SessionCapabilities.Mcp.Meta);
+                        writer.WriteEndObject();
+                    }
+
+                    writer.WriteEndObject();
+                }
+
+                if (value.SessionCapabilities?.Delete != null)
+                {
+                    writer.WritePropertyName("delete");
+                    writer.WriteStartObject();
+                    AcpMetaJson.Write(writer, value.SessionCapabilities.Delete.Meta);
+                    writer.WriteEndObject();
+                }
+
+                if (value.SessionCapabilities?.AdditionalDirectories != null)
+                {
+                    writer.WritePropertyName("additionalDirectories");
+                    writer.WriteStartObject();
+                    AcpMetaJson.Write(writer, value.SessionCapabilities.AdditionalDirectories.Meta);
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndObject();
+            }
+
+            if (value.Auth != null)
+            {
+                writer.WritePropertyName("auth");
+                JsonSerializer.Serialize(writer, value.Auth, AcpJsonContext.Default.AgentAuthCapabilities);
+            }
+
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
+
+        private static void WritePromptCapabilityMarker(Utf8JsonWriter writer, string name, bool supported)
+        {
+            if (!supported)
+            {
+                return;
+            }
+
+            writer.WritePropertyName(name);
+            writer.WriteStartObject();
+            writer.WriteEndObject();
+        }
+
+        private static void WriteAuthMethods(Utf8JsonWriter writer, List<AuthMethodDefinition>? authMethods, int protocolVersion)
+        {
+            if (authMethods == null)
+            {
+                writer.WriteStartArray();
+                writer.WriteEndArray();
+                return;
+            }
+
+            writer.WriteStartArray();
+            foreach (var authMethod in authMethods)
+            {
+                if (protocolVersion == AcpProtocolVersion.V1)
+                {
+                    WriteAuthMethodV1(writer, authMethod);
+                }
+                else
+                {
+                    WriteAuthMethodV2(writer, authMethod);
+                }
+            }
+
+            writer.WriteEndArray();
+        }
+
+        private static void WriteAuthMethodV1(Utf8JsonWriter writer, AuthMethodDefinition authMethod)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", authMethod.Id);
+            writer.WriteString("name", authMethod.Name);
+            if (!string.IsNullOrWhiteSpace(authMethod.Description))
+            {
+                writer.WriteString("description", authMethod.Description);
+            }
+
+            if (!string.IsNullOrWhiteSpace(authMethod.Type))
+            {
+                writer.WriteString("type", authMethod.Type);
+            }
+
+            AcpMetaJson.Write(writer, authMethod.Meta);
+            writer.WriteEndObject();
+        }
+
+        private static void WriteAuthMethodV2(Utf8JsonWriter writer, AuthMethodDefinition authMethod)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("methodId", authMethod.Id);
+            writer.WriteString("name", authMethod.Name);
+            writer.WriteString("type", string.IsNullOrWhiteSpace(authMethod.Type) ? "agent" : authMethod.Type);
+            if (!string.IsNullOrWhiteSpace(authMethod.Description))
+            {
+                writer.WriteString("description", authMethod.Description);
+            }
+
+            AcpMetaJson.Write(writer, authMethod.Meta);
+            writer.WriteEndObject();
+        }
     }
 }

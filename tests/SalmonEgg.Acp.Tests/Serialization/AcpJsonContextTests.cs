@@ -245,4 +245,33 @@ public sealed class AcpJsonContextTests
         Assert.Equal("code", update.GetProperty("currentModeId").GetString());
         Assert.False(update.TryGetProperty("modeId", out _));
     }
+
+    [Fact]
+    public void InitializeParams_DefaultProtocolVersion_IsLatest()
+    {
+        var initializeParams = new InitializeParams();
+        Assert.Equal(AcpProtocolVersion.Latest, initializeParams.ProtocolVersion);
+    }
+
+    [Fact]
+    public void InitializeParams_SerializesV2WireShape_WithGeneratedContext()
+    {
+        var json = JsonSerializer.Serialize(
+            new InitializeParams
+            {
+                ProtocolVersion = AcpProtocolVersion.V2,
+                ClientInfo = new ClientInfo("client", "1.0.0", "Client"),
+                ClientCapabilities = ClientCapabilityDefaults.Create()
+            },
+            AcpJsonContext.Default.InitializeParams);
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.Equal(2, root.GetProperty("protocolVersion").GetInt32());
+        Assert.True(root.TryGetProperty("info", out _));
+        Assert.True(root.TryGetProperty("capabilities", out var capabilities));
+        Assert.True(capabilities.TryGetProperty("_meta", out _));
+        Assert.False(root.TryGetProperty("clientInfo", out _));
+        Assert.False(root.TryGetProperty("clientCapabilities", out _));
+    }
 }

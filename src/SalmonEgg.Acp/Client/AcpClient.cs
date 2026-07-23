@@ -71,8 +71,10 @@ namespace SalmonEgg.Acp.Client
         private string? _lastTransportErrorMessage;
 
         private bool _isInitialized;
+        private int _protocolVersion = AcpProtocolVersion.V1;
         private AgentInfo? _agentInfo;
         private AgentCapabilities? _agentCapabilities;
+        private IReadOnlyList<AuthMethodDefinition>? _authMethods;
         private ClientCapabilities? _clientCapabilities;
         private long _nextMessageId;
         private bool SupportsSessionList => _agentCapabilities?.SupportsSessionList == true;
@@ -81,7 +83,11 @@ namespace SalmonEgg.Acp.Client
         private bool SupportsSessionClose => _agentCapabilities?.SupportsSessionClose == true;
         private bool SupportsSessionDelete => _agentCapabilities?.SupportsSessionDelete == true;
         private bool SupportsSessionAdditionalDirectories => _agentCapabilities?.SupportsSessionAdditionalDirectories == true;
-        private bool SupportsLogout => _agentCapabilities?.SupportsLogout == true;
+        private bool SupportsAuthenticationSurface => _authMethods is { Count: > 0 };
+        private bool SupportsLogout =>
+            _protocolVersion == AcpProtocolVersion.V2
+                ? SupportsAuthenticationSurface
+                : _agentCapabilities?.SupportsLogout == true;
 
         /// <summary>
         /// 初始化事件。
@@ -219,7 +225,7 @@ namespace SalmonEgg.Acp.Client
             var serverVersion = initializeResponse.ProtocolVersion;
             var clientVersion = @params.ProtocolVersion;
 
-            if (serverVersion != clientVersion)
+            if (!AcpProtocolVersion.IsSupported(serverVersion) || serverVersion > clientVersion)
             {
                 throw new AcpException(
                     JsonRpcErrorCode.ProtocolVersionMismatch,
@@ -227,8 +233,10 @@ namespace SalmonEgg.Acp.Client
             }
 
             // 存储 Agent 信息
+            _protocolVersion = serverVersion;
             _agentInfo = initializeResponse.AgentInfo;
             _agentCapabilities = initializeResponse.AgentCapabilities;
+            _authMethods = initializeResponse.AuthMethods;
             _clientCapabilities = @params.ClientCapabilities;
             _isInitialized = true;
 
@@ -629,9 +637,18 @@ namespace SalmonEgg.Acp.Client
         {
             EnsureInitialized();
 
+            if (!SupportsAuthenticationSurface)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.MethodNotAllowed,
+                    "Agent does not advertise authentication methods");
+            }
+
+            var methodName = _protocolVersion == AcpProtocolVersion.V2 ? "auth/login" : "authenticate";
+
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
-                "authenticate",
+                methodName,
                 ToElement(@params, AcpJsonContext.Default.AuthenticateParams));
 
             var response = await SendRequestAsync(request, cancellationToken);
@@ -664,9 +681,11 @@ namespace SalmonEgg.Acp.Client
                     "Agent does not support logout capability");
             }
 
+            var methodName = _protocolVersion == AcpProtocolVersion.V2 ? "auth/logout" : "logout";
+
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
-                "logout",
+                methodName,
                 ToElement(@params, AcpJsonContext.Default.LogoutParams));
 
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);

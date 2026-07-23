@@ -9,7 +9,8 @@ namespace SalmonEgg.Acp.Protocol
     public class AuthenticateParams : AcpProtocolObject
     {
         /// <summary>
-        /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id).
+        /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id in v1 or
+        /// initializeResponse.authMethods[].methodId in v2).
         /// </summary>
         [JsonPropertyName("methodId")]
         public string MethodId { get; set; } = string.Empty;

@@ -47,4 +47,21 @@ public sealed class InitializeTypesTests
         Assert.True(capabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod));
         Assert.False(capabilities.SupportsExtension("interaction.ask_user"));
     }
+
+    [Fact]
+    public void AgentCapabilities_V2SessionSurface_DoesNotImplyLoadSession()
+    {
+        var capabilities = new AgentCapabilities(
+            sessionCapabilities: new SessionCapabilities
+            {
+                List = new SessionListCapabilities(),
+                Resume = new SessionResumeCapabilities(),
+                Close = new SessionCloseCapabilities()
+            });
+
+        Assert.False(capabilities.SupportsSessionLoading);
+        Assert.True(capabilities.SupportsSessionList);
+        Assert.True(capabilities.SupportsSessionResume);
+        Assert.True(capabilities.SupportsSessionClose);
+    }
 }

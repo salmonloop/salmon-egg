@@ -41,6 +41,7 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(SessionDeleteCapabilities))]
 [JsonSerializable(typeof(SessionAdditionalDirectoriesCapabilities))]
 [JsonSerializable(typeof(AuthMethodDefinition))]
+[JsonSerializable(typeof(List<AuthMethodDefinition>))]
 [JsonSerializable(typeof(SessionNewParams))]
 [JsonSerializable(typeof(SessionNewResponse))]
 [JsonSerializable(typeof(SessionModesState))]

@@ -12,6 +12,7 @@ using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Mcp;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tests.Client
 {
@@ -36,7 +37,9 @@ namespace SalmonEgg.Acp.Tests.Client
             AgentCapabilities? capabilities = null,
             ClientCapabilities? clientCapabilities = null,
             IAcpTerminalSessionManager? terminalSessionManager = null,
-            IAcpClientSessionStore? sessionStore = null)
+            IAcpClientSessionStore? sessionStore = null,
+            int protocolVersion = AcpProtocolVersion.V1,
+            List<AuthMethodDefinition>? authMethods = null)
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
@@ -44,19 +47,24 @@ namespace SalmonEgg.Acp.Tests.Client
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
-                1, // protocolVersion
+                protocolVersion,
                 new AgentInfo("TestAgent", "1.0.0"),
-                capabilities ?? new AgentCapabilities(loadSession: true)
-            );
+                capabilities ?? new AgentCapabilities(loadSession: true))
+            {
+                AuthMethods = authMethods
+            };
 
             SetupJsonRpcResponse(
                 "initialize",
-                JsonSerializer.SerializeToElement(initResponse, parser.Options),
+                JsonSerializer.SerializeToElement(initResponse, AcpJsonContext.Default.InitializeResponse),
                 parser);
 
             await client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                clientCapabilities ?? new ClientCapabilities()));
+                clientCapabilities ?? new ClientCapabilities())
+            {
+                ProtocolVersion = protocolVersion
+            });
 
             return client;
         }
@@ -78,7 +86,11 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task AuthenticateAsync_WhenAgentReturnsEmptyObject_ShouldComplete()
         {
             var parser = new MessageParser();
-            var client = await CreateInitializedClientAsync();
+            var client = await CreateInitializedClientAsync(
+                authMethods:
+                [
+                    new AuthMethodDefinition { Id = "agent-login", Name = "Agent login" }
+                ]);
 
             SetupJsonRpcResponse(
                 "authenticate",
@@ -387,7 +399,10 @@ namespace SalmonEgg.Acp.Tests.Client
 
             await client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
+                ClientCapabilityDefaults.Create())
+            {
+                ProtocolVersion = AcpProtocolVersion.V1
+            }, TestContext.Current.CancellationToken);
 
             Assert.NotNull(sentInitialize);
 
@@ -649,10 +664,10 @@ namespace SalmonEgg.Acp.Tests.Client
                         1,
                         JsonSerializer.SerializeToElement(
                             new InitializeResponse(
-                                2,
+                                AcpProtocolVersion.Latest + 1,
                                 new AgentInfo("TestAgent", "1.0.0"),
                                 new AgentCapabilities()),
-                            parser.Options));
+                            AcpJsonContext.Default.InitializeResponse));
                     _transportMock.Raise(
                         t => t.MessageReceived += null,
                         new AcpTransportMessageReceivedEventArgs(parser.SerializeMessage(response)));
@@ -661,9 +676,140 @@ namespace SalmonEgg.Acp.Tests.Client
 
             var ex = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
+                ClientCapabilityDefaults.Create())
+            {
+                ProtocolVersion = AcpProtocolVersion.Latest
+            }, TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenClientRequestsV2AndAgentAnswersV1_AcceptsNegotiatedVersion()
+        {
+            var parser = new MessageParser();
+            var client = CreateClient(parser);
+            string? sentInitialize = null;
+
+            SetupJsonRpcResponse(
+                "initialize",
+                JsonSerializer.SerializeToElement(
+                    new InitializeResponse(
+                        AcpProtocolVersion.V1,
+                        new AgentInfo("TestAgent", "1.0.0"),
+                        new AgentCapabilities(loadSession: true)),
+                    AcpJsonContext.Default.InitializeResponse),
+                parser,
+                onSend: message => sentInitialize = message);
+
+            var response = await client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                ClientCapabilityDefaults.Create())
+            {
+                ProtocolVersion = AcpProtocolVersion.Latest
+            }, TestContext.Current.CancellationToken);
+
+            Assert.True(client.IsInitialized);
+            Assert.Equal(AcpProtocolVersion.V1, response.ProtocolVersion);
+            Assert.NotNull(sentInitialize);
+            using var document = JsonDocument.Parse(sentInitialize!);
+            var @params = document.RootElement.GetProperty("params");
+            Assert.Equal(AcpProtocolVersion.Latest, @params.GetProperty("protocolVersion").GetInt32());
+            Assert.True(@params.TryGetProperty("info", out _));
+            Assert.True(@params.TryGetProperty("capabilities", out _));
+            Assert.False(@params.TryGetProperty("clientInfo", out _));
+            Assert.False(@params.TryGetProperty("clientCapabilities", out _));
+        }
+
+        [Fact]
+        public async Task InitializeAsync_WhenV2AuthMethodsAdvertised_UsesAuthLoginAndLogoutMethods()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(
+                protocolVersion: AcpProtocolVersion.V2,
+                capabilities: new AgentCapabilities(
+                    sessionCapabilities: new SessionCapabilities
+                    {
+                        Resume = new SessionResumeCapabilities()
+                    }),
+                authMethods:
+                [
+                    new AuthMethodDefinition
+                    {
+                        Id = "agent-login",
+                        Name = "Agent login",
+                        Type = "agent"
+                    }
+                ]);
+            var sentMessages = new ConcurrentQueue<string>();
+
+            SetupJsonRpcResponse(
+                "auth/login",
+                ElementFromJson("{}"),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+            await client.AuthenticateAsync(new AuthenticateParams("agent-login"), TestContext.Current.CancellationToken);
+
+            SetupJsonRpcResponse(
+                "auth/logout",
+                ElementFromJson("{}"),
+                parser,
+                onSend: message => sentMessages.Enqueue(message));
+            await client.LogoutAsync(new LogoutParams(), TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, sentMessages.Count);
+            Assert.Contains(sentMessages, message => message.Contains("\"method\":\"auth/login\"", StringComparison.Ordinal));
+            Assert.Contains(sentMessages, message => message.Contains("\"method\":\"auth/logout\"", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void InitializeResponse_V2WireShape_DoesNotSynthesizeLoadSessionOrAuthCapability()
+        {
+            var json = """
+                {
+                  "protocolVersion": 2,
+                  "info": { "name": "agent", "version": "1.0.0" },
+                  "capabilities": {
+                    "session": {
+                      "prompt": { "image": {} },
+                      "mcp": { "stdio": {}, "http": {} }
+                    }
+                  },
+                  "authMethods": [
+                    {
+                      "methodId": "agent-login",
+                      "name": "Agent login",
+                      "type": "agent"
+                    }
+                  ]
+                }
+                """;
+
+            var response = JsonSerializer.Deserialize(json, AcpJsonContext.Default.InitializeResponse);
+            Assert.NotNull(response);
+            Assert.Equal(AcpProtocolVersion.V2, response!.ProtocolVersion);
+            Assert.False(response.AgentCapabilities.SupportsSessionLoading);
+            Assert.True(response.AgentCapabilities.SupportsSessionResume);
+            Assert.True(response.AgentCapabilities.SupportsSessionList);
+            Assert.True(response.AgentCapabilities.SupportsSessionClose);
+            Assert.True(response.AgentCapabilities.SupportsImage);
+            Assert.True(response.AgentCapabilities.SupportsStdio);
+            Assert.True(response.AgentCapabilities.SupportsHttp);
+            Assert.False(response.AgentCapabilities.SupportsLogout);
+            Assert.Null(response.AgentCapabilities.Auth);
+            Assert.Equal("agent-login", Assert.Single(response.AuthMethods!).Id);
+
+            var replay = JsonSerializer.Serialize(response, AcpJsonContext.Default.InitializeResponse);
+            using var document = JsonDocument.Parse(replay);
+            var root = document.RootElement;
+            Assert.Equal(2, root.GetProperty("protocolVersion").GetInt32());
+            Assert.True(root.TryGetProperty("info", out _));
+            Assert.True(root.TryGetProperty("capabilities", out var capabilities));
+            Assert.False(capabilities.TryGetProperty("auth", out _));
+            Assert.False(root.TryGetProperty("agentInfo", out _));
+            Assert.False(root.TryGetProperty("agentCapabilities", out _));
+            Assert.Equal("agent-login", root.GetProperty("authMethods")[0].GetProperty("methodId").GetString());
+            Assert.Equal("agent", root.GetProperty("authMethods")[0].GetProperty("type").GetString());
         }
 
         [Fact]
