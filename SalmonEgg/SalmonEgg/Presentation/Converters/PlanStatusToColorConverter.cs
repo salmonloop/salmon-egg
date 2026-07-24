@@ -13,13 +13,19 @@ public class PlanStatusToColorConverter : IValueConverter
     {
         if (value is PlanEntryStatus status)
         {
-            return status switch
+            // PlanEntryStatus is an extensible value type (not a compile-time constant), so it
+            // is matched with equality against its named members rather than a switch pattern.
+            if (status == PlanEntryStatus.InProgress)
             {
-                PlanEntryStatus.InProgress => ThemeBrushConverter.Resolve("AccentBrush"),
-                PlanEntryStatus.Completed => ThemeBrushConverter.Resolve("SystemFillColorSuccessBrush"),
-                _ => ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush")
-            };
+                return ThemeBrushConverter.Resolve("AccentBrush");
+            }
+
+            if (status == PlanEntryStatus.Completed)
+            {
+                return ThemeBrushConverter.Resolve("SystemFillColorSuccessBrush");
+            }
         }
+
         return ThemeBrushConverter.Resolve("TextFillColorSecondaryBrush");
     }
 

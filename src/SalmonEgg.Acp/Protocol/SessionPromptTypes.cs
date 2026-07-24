@@ -57,7 +57,7 @@ namespace SalmonEgg.Acp.Protocol
         /// 指示 Agent 为什么停止生成响应。
         /// </summary>
         [JsonPropertyName("stopReason")]
-        public StopReason StopReason { get; set; }
+        public StopReason StopReason { get; set; } = StopReason.EndTurn;
 
         /// <summary>
         /// 协议扩展字段（_meta）。

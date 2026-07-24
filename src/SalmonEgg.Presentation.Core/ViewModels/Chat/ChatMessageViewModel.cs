@@ -596,7 +596,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         private void UpdateToolCallState()
         {
-            IsToolCallInProgress = ToolCallStatus is SalmonEgg.Acp.Tool.ToolCallStatus.InProgress or SalmonEgg.Acp.Tool.ToolCallStatus.Pending;
+            IsToolCallInProgress = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress || ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Pending;
             IsToolCallCompleted = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Completed;
             IsToolCallFailed = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Failed;
             IsToolCallCancelled = ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled;
@@ -771,23 +771,34 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         }
 
         private static string SummarizeInputObject(ToolCallKind? kind, JsonElement root)
-            => kind switch
+        {
+            if (kind == ToolCallKind.Search)
             {
-                ToolCallKind.Search => FirstNonEmpty(
+                return FirstNonEmpty(
                     TryGetString(root, "query", "Query"),
-                    TryGetString(root, "path", "Path", "SearchPath", "searchPath")),
-                ToolCallKind.Execute => BuildCommand(
+                    TryGetString(root, "path", "Path", "SearchPath", "searchPath"));
+            }
+
+            if (kind == ToolCallKind.Execute)
+            {
+                return BuildCommand(
                     TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
-                    TryGetString(root, "Arguments", "arguments", "Args", "args")),
-                ToolCallKind.Fetch => FirstNonEmpty(
-                    TryGetString(root, "query", "Query", "url", "Url", "uri", "Uri")),
-                _ => FirstNonEmpty(
-                    TryGetString(root, "path", "Path", "SearchPath", "searchPath", "TargetFile", "targetFile"),
-                    TryGetString(root, "query", "Query"),
-                    BuildCommand(
-                        TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
-                        TryGetString(root, "Arguments", "arguments", "Args", "args")))
-            };
+                    TryGetString(root, "Arguments", "arguments", "Args", "args"));
+            }
+
+            if (kind == ToolCallKind.Fetch)
+            {
+                return FirstNonEmpty(
+                    TryGetString(root, "query", "Query", "url", "Url", "uri", "Uri"));
+            }
+
+            return FirstNonEmpty(
+                TryGetString(root, "path", "Path", "SearchPath", "searchPath", "TargetFile", "targetFile"),
+                TryGetString(root, "query", "Query"),
+                BuildCommand(
+                    TryGetString(root, "CommandLine", "commandLine", "command", "Command", "cmd"),
+                    TryGetString(root, "Arguments", "arguments", "Args", "args")));
+        }
 
         private static string SummarizeInputArray(JsonElement root)
         {
@@ -914,9 +925,9 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private string _content = string.Empty;
 
         [ObservableProperty]
-        private SalmonEgg.Acp.Plan.PlanEntryStatus _status;
+        private SalmonEgg.Acp.Plan.PlanEntryStatus _status = SalmonEgg.Acp.Plan.PlanEntryStatus.Pending;
 
         [ObservableProperty]
-        private SalmonEgg.Acp.Plan.PlanEntryPriority _priority;
+        private SalmonEgg.Acp.Plan.PlanEntryPriority _priority = SalmonEgg.Acp.Plan.PlanEntryPriority.Low;
     }
 }

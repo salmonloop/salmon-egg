@@ -1545,10 +1545,15 @@ namespace SalmonEgg.Acp.Tests.Client
             Assert.Equal("session-123", @params.GetProperty("sessionId").GetString());
         }
 
+        public static TheoryData<StopReason> OfficialStopReasonValues() => new()
+        {
+            StopReason.MaxTurnRequests,
+            StopReason.Refusal,
+            StopReason.Cancelled,
+        };
+
         [Theory]
-        [InlineData(StopReason.MaxTurnRequests)]
-        [InlineData(StopReason.Refusal)]
-        [InlineData(StopReason.Cancelled)]
+        [MemberData(nameof(OfficialStopReasonValues))]
         public async Task SendPromptAsync_ParsesOfficialStopReasonValues(StopReason expected)
         {
             var parser = new MessageParser();

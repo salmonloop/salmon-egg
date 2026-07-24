@@ -47,13 +47,13 @@ namespace SalmonEgg.Acp.Plan
         /// <param name="content">条目内容</param>
         /// <param name="status">条目状态</param>
         /// <param name="priority">条目优先级</param>
-        public void AddEntry(string content, PlanEntryStatus status = PlanEntryStatus.Pending, PlanEntryPriority priority = PlanEntryPriority.Medium)
+        public void AddEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
             Entries.Add(new PlanEntry
             {
                 Content = content,
-                Status = status,
-                Priority = priority
+                Status = status ?? PlanEntryStatus.Pending,
+                Priority = priority ?? PlanEntryPriority.Medium
             });
         }
 
@@ -146,11 +146,11 @@ namespace SalmonEgg.Acp.Plan
         /// <param name="content">条目内容</param>
         /// <param name="status">条目状态</param>
         /// <param name="priority">条目优先级</param>
-        public PlanEntry(string content, PlanEntryStatus status = PlanEntryStatus.Pending, PlanEntryPriority priority = PlanEntryPriority.Medium)
+        public PlanEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
             Content = content;
-            Status = status;
-            Priority = priority;
+            Status = status ?? PlanEntryStatus.Pending;
+            Priority = priority ?? PlanEntryPriority.Medium;
         }
 
         /// <summary>
@@ -171,49 +171,140 @@ namespace SalmonEgg.Acp.Plan
     }
 
     /// <summary>
-    /// 计划条目状态枚举。
-    /// 表示计划条目的当前状态。
+    /// 计划条目状态。
     /// </summary>
+    /// <remarks>
+    /// 建模为可扩展值类型而非封闭枚举，以便无损保留并 round-trip 未知的 wire 值，对齐权威
+    /// ACP schema（<c>PlanEntryStatus</c> 为 <c>#[non_exhaustive]</c> 且带 untagged
+    /// <c>Other(String)</c> 兜底）。依据 ACP 扩展契约，不以 <c>_</c> 开头的未知值保留给未来
+    /// ACP variant，client 不得拒绝。
+    /// </remarks>
     [JsonConverter(typeof(PlanEntryStatusJsonConverter))]
-    public enum PlanEntryStatus
+    public readonly struct PlanEntryStatus : IEquatable<PlanEntryStatus>
     {
+        private readonly string? _value;
+
+        /// <summary>
+        /// 以给定 wire 值创建计划条目状态。
+        /// </summary>
+        /// <param name="value">协议字符串值。</param>
+        public PlanEntryStatus(string value)
+        {
+            _value = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
         /// <summary>
         /// 条目已创建但尚未开始。
         /// </summary>
-        Pending,
+        public static PlanEntryStatus Pending { get; } = new("pending");
 
         /// <summary>
         /// 条目正在执行中。
         /// </summary>
-        InProgress,
+        public static PlanEntryStatus InProgress { get; } = new("in_progress");
 
         /// <summary>
         /// 条目已成功完成。
         /// </summary>
-        Completed
+        public static PlanEntryStatus Completed { get; } = new("completed");
+
+        /// <summary>
+        /// 条目在完成前被取消。
+        /// </summary>
+        public static PlanEntryStatus Cancelled { get; } = new("cancelled");
+
+        /// <summary>
+        /// 此状态承载的 wire 值。
+        /// </summary>
+        public string Value => _value ?? string.Empty;
+
+        /// <inheritdoc />
+        public bool Equals(PlanEntryStatus other) => string.Equals(_value, other._value, StringComparison.Ordinal);
+
+        /// <inheritdoc />
+        public override bool Equals(object? obj) => obj is PlanEntryStatus other && Equals(other);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
+
+        /// <summary>
+        /// 判断两个状态是否承载相同 wire 值。
+        /// </summary>
+        public static bool operator ==(PlanEntryStatus left, PlanEntryStatus right) => left.Equals(right);
+
+        /// <summary>
+        /// 判断两个状态是否承载不同 wire 值。
+        /// </summary>
+        public static bool operator !=(PlanEntryStatus left, PlanEntryStatus right) => !left.Equals(right);
+
+        /// <inheritdoc />
+        public override string ToString() => Value;
     }
 
     /// <summary>
-    /// 计划条目优先级枚举。
-    /// 表示计划条目的重要程度。
+    /// 计划条目优先级。
     /// </summary>
+    /// <remarks>
+    /// 建模为可扩展值类型而非封闭枚举，以便无损保留并 round-trip 未知的 wire 值，对齐权威
+    /// ACP schema（<c>PlanEntryPriority</c> 为 <c>#[non_exhaustive]</c> 且带 untagged
+    /// <c>Other(String)</c> 兜底）。依据 ACP 扩展契约，不以 <c>_</c> 开头的未知值保留给未来
+    /// ACP variant，client 不得拒绝。
+    /// </remarks>
     [JsonConverter(typeof(PlanEntryPriorityJsonConverter))]
-    public enum PlanEntryPriority
+    public readonly struct PlanEntryPriority : IEquatable<PlanEntryPriority>
     {
+        private readonly string? _value;
+
+        /// <summary>
+        /// 以给定 wire 值创建计划条目优先级。
+        /// </summary>
+        /// <param name="value">协议字符串值。</param>
+        public PlanEntryPriority(string value)
+        {
+            _value = value ?? throw new ArgumentNullException(nameof(value));
+        }
+
         /// <summary>
         /// 低优先级。
         /// </summary>
-        Low,
+        public static PlanEntryPriority Low { get; } = new("low");
 
         /// <summary>
         /// 中等优先级。
         /// </summary>
-        Medium,
+        public static PlanEntryPriority Medium { get; } = new("medium");
 
         /// <summary>
         /// 高优先级。
         /// </summary>
-        High
+        public static PlanEntryPriority High { get; } = new("high");
+
+        /// <summary>
+        /// 此优先级承载的 wire 值。
+        /// </summary>
+        public string Value => _value ?? string.Empty;
+
+        /// <inheritdoc />
+        public bool Equals(PlanEntryPriority other) => string.Equals(_value, other._value, StringComparison.Ordinal);
+
+        /// <inheritdoc />
+        public override bool Equals(object? obj) => obj is PlanEntryPriority other && Equals(other);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
+
+        /// <summary>
+        /// 判断两个优先级是否承载相同 wire 值。
+        /// </summary>
+        public static bool operator ==(PlanEntryPriority left, PlanEntryPriority right) => left.Equals(right);
+
+        /// <summary>
+        /// 判断两个优先级是否承载不同 wire 值。
+        /// </summary>
+        public static bool operator !=(PlanEntryPriority left, PlanEntryPriority right) => !left.Equals(right);
+
+        /// <inheritdoc />
+        public override string ToString() => Value;
     }
 
     public sealed class PlanEntryStatusJsonConverter : JsonConverter<PlanEntryStatus>
@@ -225,24 +316,12 @@ namespace SalmonEgg.Acp.Plan
                 throw new JsonException("Plan entry status must be a string.");
             }
 
-            return reader.GetString() switch
-            {
-                "pending" => PlanEntryStatus.Pending,
-                "in_progress" => PlanEntryStatus.InProgress,
-                "completed" => PlanEntryStatus.Completed,
-                var value => throw new JsonException($"Unsupported plan entry status '{value}'.")
-            };
+            return new PlanEntryStatus(reader.GetString()!);
         }
 
         public override void Write(Utf8JsonWriter writer, PlanEntryStatus value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value switch
-            {
-                PlanEntryStatus.Pending => "pending",
-                PlanEntryStatus.InProgress => "in_progress",
-                PlanEntryStatus.Completed => "completed",
-                _ => throw new JsonException($"Unsupported plan entry status '{value}'.")
-            });
+            writer.WriteStringValue(value.Value);
         }
     }
 
@@ -255,24 +334,12 @@ namespace SalmonEgg.Acp.Plan
                 throw new JsonException("Plan entry priority must be a string.");
             }
 
-            return reader.GetString() switch
-            {
-                "low" => PlanEntryPriority.Low,
-                "medium" => PlanEntryPriority.Medium,
-                "high" => PlanEntryPriority.High,
-                var value => throw new JsonException($"Unsupported plan entry priority '{value}'.")
-            };
+            return new PlanEntryPriority(reader.GetString()!);
         }
 
         public override void Write(Utf8JsonWriter writer, PlanEntryPriority value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value switch
-            {
-                PlanEntryPriority.Low => "low",
-                PlanEntryPriority.Medium => "medium",
-                PlanEntryPriority.High => "high",
-                _ => throw new JsonException($"Unsupported plan entry priority '{value}'.")
-            });
+            writer.WriteStringValue(value.Value);
         }
     }
 }

@@ -244,8 +244,8 @@ namespace SalmonEgg.Domain.Models.Conversation
     {
         public string Content { get; set; } = string.Empty;
 
-        public PlanEntryStatus Status { get; set; }
+        public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
 
-        public PlanEntryPriority Priority { get; set; }
+        public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Low;
     }
 }

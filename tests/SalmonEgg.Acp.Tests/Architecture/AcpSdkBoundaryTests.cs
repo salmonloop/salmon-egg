@@ -57,7 +57,10 @@ public sealed class AcpSdkBoundaryTests
         Assert.DoesNotContain("ConnectionManager(", LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"));
         Assert.DoesNotContain("public bool Enabled", LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"));
         Assert.DoesNotContain("enum StopReason", LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"));
-        Assert.Contains("enum StopReason", LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"));
+        Assert.DoesNotContain("readonly struct StopReason", LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"));
+        // StopReason lives in the SDK as an extensible value type so unknown wire values can
+        // round-trip losslessly (ACP #[non_exhaustive] + Other(String) contract).
+        Assert.Contains("readonly struct StopReason", LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"));
         Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\JsonRpc\MessageParser.cs")));
         Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Serialization\AcpJsonContext.cs")));
         Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Client\AcpClient.cs")));

@@ -162,11 +162,16 @@ public sealed class ChatMessageViewModelToolCallTests
         Assert.Equal("{\"path\":\"C:/repo/appsettings.json\",\"query\":\"Logging\",\"arguments\":{\"line\":12}}", vm.ToolCallRawInputJson);
     }
 
+    public static TheoryData<ToolCallKind, string, string> PrimaryTargetByKindCases() => new()
+    {
+        { ToolCallKind.Read, "{\"path\":\"src/app.cs\"}", "src/app.cs" },
+        { ToolCallKind.Search, "{\"query\":\"foo\"}", "foo" },
+        { ToolCallKind.Execute, "{\"command\":\"dotnet\",\"arguments\":\"test\"}", "dotnet test" },
+        { ToolCallKind.Fetch, "{\"url\":\"https://example.com\"}", "https://example.com" },
+    };
+
     [Theory]
-    [InlineData(ToolCallKind.Read, "{\"path\":\"src/app.cs\"}", "src/app.cs")]
-    [InlineData(ToolCallKind.Search, "{\"query\":\"foo\"}", "foo")]
-    [InlineData(ToolCallKind.Execute, "{\"command\":\"dotnet\",\"arguments\":\"test\"}", "dotnet test")]
-    [InlineData(ToolCallKind.Fetch, "{\"url\":\"https://example.com\"}", "https://example.com")]
+    [MemberData(nameof(PrimaryTargetByKindCases))]
     public void ToolCallSummary_PicksPrimaryTargetByKind(ToolCallKind kind, string rawInput, string expected)
     {
         var vm = ChatMessageViewModel.CreateFromToolCall("summary", "call", rawInput, null, kind, ToolCallStatus.InProgress, null);

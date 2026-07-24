@@ -56,8 +56,9 @@ public class MessageParserTests
     }
 
     [Fact]
-    public void Options_ShouldReject_PlanUpdateWithUnsupportedStatus()
+    public void Options_ShouldPreserve_PlanUpdateWithUnknownStatus()
     {
+        // PlanEntryStatus is an open ACP enum: unknown values must be retained, not rejected.
         var json = """
         {
           "sessionId": "sess_test",
@@ -70,8 +71,15 @@ public class MessageParserTests
         }
         """;
 
-        Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams));
+        var updateParams = JsonSerializer.Deserialize(json, AcpJsonContext.Default.SessionUpdateParams);
+
+        Assert.NotNull(updateParams);
+        var plan = Assert.IsType<PlanUpdate>(updateParams!.Update);
+        Assert.NotNull(plan.Entries);
+        var entry = Assert.Single(plan.Entries!);
+        Assert.Equal(new PlanEntryStatus("failed"), entry.Status);
+        Assert.Equal("failed", entry.Status.Value);
+        Assert.Equal(PlanEntryPriority.Medium, entry.Priority);
     }
 
     [Fact]
@@ -139,12 +147,17 @@ public class MessageParserTests
         Assert.DoesNotContain("\"error\"", json, StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, StopReason> OfficialStopReasons() => new()
+    {
+        { "end_turn", StopReason.EndTurn },
+        { "max_tokens", StopReason.MaxTokens },
+        { "max_turn_requests", StopReason.MaxTurnRequests },
+        { "refusal", StopReason.Refusal },
+        { "cancelled", StopReason.Cancelled },
+    };
+
     [Theory]
-    [InlineData("end_turn", StopReason.EndTurn)]
-    [InlineData("max_tokens", StopReason.MaxTokens)]
-    [InlineData("max_turn_requests", StopReason.MaxTurnRequests)]
-    [InlineData("refusal", StopReason.Refusal)]
-    [InlineData("cancelled", StopReason.Cancelled)]
+    [MemberData(nameof(OfficialStopReasons))]
     public void Options_ShouldDeserialize_SessionPromptResponse_WithOfficialStopReasons(string stopReason, StopReason expected)
     {
         var json = $$"""

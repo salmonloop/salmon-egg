@@ -587,22 +587,48 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     }
 
     private string ResolveTaskOverviewStatusLabel(PlanEntryStatus? status)
-        => status switch
+    {
+        // PlanEntryStatus is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (status == PlanEntryStatus.Pending)
         {
-            PlanEntryStatus.Pending => ResolveResourceString("TaskOverviewPlanStatusPending.Text", "Pending"),
-            PlanEntryStatus.InProgress => ResolveResourceString("TaskOverviewPlanStatusInProgress.Text", "In progress"),
-            PlanEntryStatus.Completed => ResolveResourceString("TaskOverviewPlanStatusCompleted.Text", "Completed"),
-            _ => ResolveResourceString("TaskOverviewPlanStatusUnknown.Text", "Unknown")
-        };
+            return ResolveResourceString("TaskOverviewPlanStatusPending.Text", "Pending");
+        }
+
+        if (status == PlanEntryStatus.InProgress)
+        {
+            return ResolveResourceString("TaskOverviewPlanStatusInProgress.Text", "In progress");
+        }
+
+        if (status == PlanEntryStatus.Completed)
+        {
+            return ResolveResourceString("TaskOverviewPlanStatusCompleted.Text", "Completed");
+        }
+
+        return ResolveResourceString("TaskOverviewPlanStatusUnknown.Text", "Unknown");
+    }
 
     private string ResolveTaskOverviewPriorityLabel(PlanEntryPriority? priority)
-        => priority switch
+    {
+        // PlanEntryPriority is an extensible value type (not a compile-time constant), so it
+        // is matched with equality against its named members rather than a switch pattern.
+        if (priority == PlanEntryPriority.Low)
         {
-            PlanEntryPriority.Low => ResolveResourceString("TaskOverviewPlanPriorityLow.Text", "Low"),
-            PlanEntryPriority.Medium => ResolveResourceString("TaskOverviewPlanPriorityMedium.Text", "Medium"),
-            PlanEntryPriority.High => ResolveResourceString("TaskOverviewPlanPriorityHigh.Text", "High"),
-            _ => ResolveResourceString("TaskOverviewPlanPriorityUnknown.Text", "Unknown")
-        };
+            return ResolveResourceString("TaskOverviewPlanPriorityLow.Text", "Low");
+        }
+
+        if (priority == PlanEntryPriority.Medium)
+        {
+            return ResolveResourceString("TaskOverviewPlanPriorityMedium.Text", "Medium");
+        }
+
+        if (priority == PlanEntryPriority.High)
+        {
+            return ResolveResourceString("TaskOverviewPlanPriorityHigh.Text", "High");
+        }
+
+        return ResolveResourceString("TaskOverviewPlanPriorityUnknown.Text", "Unknown");
+    }
 
     private DataTemplate GetBottomPanelButtonIconTemplate(BottomPanelMode mode)
         => GetAuxiliaryIconTemplate(mode == BottomPanelMode.Dock

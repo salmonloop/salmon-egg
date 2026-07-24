@@ -2039,9 +2039,14 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal("hi", text.Text);
     }
 
+    public static TheoryData<StopReason> NonTerminalStopReasons() => new()
+    {
+        StopReason.Refusal,
+        StopReason.Cancelled,
+    };
+
     [Theory]
-    [InlineData(StopReason.Refusal)]
-    [InlineData(StopReason.Cancelled)]
+    [MemberData(nameof(NonTerminalStopReasons))]
     public async Task DispatchPromptToRemoteSessionAsync_PreservesPromptStopReason(StopReason expected)
     {
         var service = CreateChatService();

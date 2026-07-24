@@ -266,19 +266,20 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
             return ToolTitle;
         }
 
-        return ToolKind switch
-        {
-            ToolCallKind.Read => ResolveResourceString("ToolCallPillKindRead", "Read file"),
-            ToolCallKind.Edit => ResolveResourceString("ToolCallPillKindEdit", "Edit file"),
-            ToolCallKind.Delete => ResolveResourceString("ToolCallPillKindDelete", "Delete file"),
-            ToolCallKind.Move => ResolveResourceString("ToolCallPillKindMove", "Move file"),
-            ToolCallKind.Search => ResolveResourceString("ToolCallPillKindSearch", "Search code"),
-            ToolCallKind.Execute => ResolveResourceString("ToolCallPillKindExecute", "Run command"),
-            ToolCallKind.SwitchMode => ResolveResourceString("ToolCallPillKindSwitchMode", "Switch mode"),
-            ToolCallKind.Think => ResolveResourceString("ToolCallPillKindThink", "Thinking"),
-            ToolCallKind.Fetch => ResolveResourceString("ToolCallPillKindFetch", "Fetch data"),
-            _ => ResolveResourceString("ToolCallPillKindDefault", "Tool call")
-        };
+        // ToolCallKind is an extensible value type (not a compile-time constant), so it
+        // cannot appear as a switch pattern; compare against the named members instead
+        // to keep the wire values single-sourced in the protocol type.
+        var kind = ToolKind;
+        if (kind == ToolCallKind.Read) return ResolveResourceString("ToolCallPillKindRead", "Read file");
+        if (kind == ToolCallKind.Edit) return ResolveResourceString("ToolCallPillKindEdit", "Edit file");
+        if (kind == ToolCallKind.Delete) return ResolveResourceString("ToolCallPillKindDelete", "Delete file");
+        if (kind == ToolCallKind.Move) return ResolveResourceString("ToolCallPillKindMove", "Move file");
+        if (kind == ToolCallKind.Search) return ResolveResourceString("ToolCallPillKindSearch", "Search code");
+        if (kind == ToolCallKind.Execute) return ResolveResourceString("ToolCallPillKindExecute", "Run command");
+        if (kind == ToolCallKind.SwitchMode) return ResolveResourceString("ToolCallPillKindSwitchMode", "Switch mode");
+        if (kind == ToolCallKind.Think) return ResolveResourceString("ToolCallPillKindThink", "Thinking");
+        if (kind == ToolCallKind.Fetch) return ResolveResourceString("ToolCallPillKindFetch", "Fetch data");
+        return ResolveResourceString("ToolCallPillKindDefault", "Tool call");
     }
 
     private static string ResolveResourceString(string resourceKey, string fallback)

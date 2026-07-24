@@ -130,14 +130,22 @@ public partial class ChatViewModel
             }
             else if (e.Update is ToolCallStatusUpdate toolCallStatusUpdate)
             {
-                var phase = toolCallStatusUpdate.Status switch
+                var status = toolCallStatusUpdate.Status;
+                ChatTurnPhase phase;
+                if (status == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress)
                 {
-                    SalmonEgg.Acp.Tool.ToolCallStatus.InProgress => ChatTurnPhase.ToolRunning,
-                    SalmonEgg.Acp.Tool.ToolCallStatus.Completed => ChatTurnPhase.WaitingForAgent,
-                    SalmonEgg.Acp.Tool.ToolCallStatus.Failed => ChatTurnPhase.WaitingForAgent,
-                    SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled => ChatTurnPhase.WaitingForAgent,
-                    _ => ChatTurnPhase.ToolPending
-                };
+                    phase = ChatTurnPhase.ToolRunning;
+                }
+                else if (status == SalmonEgg.Acp.Tool.ToolCallStatus.Completed
+                    || status == SalmonEgg.Acp.Tool.ToolCallStatus.Failed
+                    || status == SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled)
+                {
+                    phase = ChatTurnPhase.WaitingForAgent;
+                }
+                else
+                {
+                    phase = ChatTurnPhase.ToolPending;
+                }
                 await AdvanceActiveTurnPhaseAsync(activeTurn, phase, toolCallStatusUpdate.ToolCallId).ConfigureAwait(true);
                 await UpdateToolCallStatusAsync(targetConversationId, toolCallStatusUpdate).ConfigureAwait(true);
                 RecordTranscriptProjectionObservation(e.SessionId);
@@ -565,24 +573,23 @@ public partial class ChatViewModel
             pendingSessionUpdateCount);
 
         ChatTurnPhase? terminalPhase = null;
-        switch (response.StopReason)
+        var stopReason = response.StopReason;
+        if (stopReason == StopReason.Cancelled)
         {
-            case StopReason.Cancelled:
-                await PreemptivelyCancelTurnAsync(conversationId, turnId).ConfigureAwait(true);
-                terminalPhase = ChatTurnPhase.Cancelled;
-                break;
-
-            case StopReason.Refusal:
-                await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, StopReason.Refusal.ToString())).ConfigureAwait(true);
-                terminalPhase = ChatTurnPhase.Failed;
-                break;
-
-            case StopReason.EndTurn:
-            case StopReason.MaxTokens:
-            case StopReason.MaxTurnRequests:
-                await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId)).ConfigureAwait(true);
-                terminalPhase = ChatTurnPhase.Completed;
-                break;
+            await PreemptivelyCancelTurnAsync(conversationId, turnId).ConfigureAwait(true);
+            terminalPhase = ChatTurnPhase.Cancelled;
+        }
+        else if (stopReason == StopReason.Refusal)
+        {
+            await _chatStore.Dispatch(new FailTurnAction(conversationId, turnId, StopReason.Refusal.ToString())).ConfigureAwait(true);
+            terminalPhase = ChatTurnPhase.Failed;
+        }
+        else if (stopReason == StopReason.EndTurn
+            || stopReason == StopReason.MaxTokens
+            || stopReason == StopReason.MaxTurnRequests)
+        {
+            await _chatStore.Dispatch(new CompleteTurnAction(conversationId, turnId)).ConfigureAwait(true);
+            terminalPhase = ChatTurnPhase.Completed;
         }
 
         if (terminalPhase.HasValue)
@@ -2399,9 +2406,9 @@ public partial class ChatViewModel
             .Where(message =>
                 string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
                 && !string.IsNullOrWhiteSpace(message.ToolCallId)
-                && message.ToolCallStatus is null
-                    or SalmonEgg.Acp.Tool.ToolCallStatus.Pending
-                    or SalmonEgg.Acp.Tool.ToolCallStatus.InProgress)
+                && (message.ToolCallStatus is null
+                    || message.ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Pending
+                    || message.ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress))
             .ToArray();
 
         foreach (var existing in pendingToolCalls)
