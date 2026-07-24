@@ -2340,6 +2340,53 @@ public sealed class StartViewModelTests
     }
 
     [Fact]
+    public async Task StartAgentSelection_WhenExplicitProfileIsSelectedAgain_DoesNotRefreshSelectorProjections()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Agent One",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://127.0.0.1:3010/"
+            });
+            await chat.DispatchConnectionAsync(new SetSelectedProfileIntentAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+            await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+            await WaitForConditionAsync(() =>
+                string.Equals(chat.ViewModel.SelectedAcpProfile?.Id, "profile-1", StringComparison.Ordinal)
+                && string.Equals(chat.ViewModel.SelectedProfileIntentId, "profile-1", StringComparison.Ordinal));
+
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, Mock.Of<IChatLaunchWorkflow>());
+            var selectedAgentItem = Assert.Single(
+                startViewModel.StartAgentSelectorItems,
+                item => string.Equals(item.SemanticValue, "profile-1", StringComparison.Ordinal));
+            var changedProperties = new List<string?>();
+            startViewModel.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
+
+            startViewModel.SelectStartAgentDisplayCommand.Execute(selectedAgentItem);
+
+            Assert.Equal("profile-1", chat.ViewModel.SelectedAcpProfile?.Id);
+            Assert.Equal("profile-1", chat.ViewModel.SelectedProfileIntentId);
+            Assert.DoesNotContain(nameof(StartViewModel.StartAgentSelectorProjection), changedProperties);
+            Assert.DoesNotContain(nameof(StartViewModel.ComposerSelectorSlots), changedProperties);
+            Assert.DoesNotContain(nameof(StartViewModel.StartProjectSelectorProjection), changedProperties);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task StartModeSelector_WhenConnectionFailsWithoutDraftError_SeparatesSelectorStatusFromErrorMessage()
     {
         var originalContext = SynchronizationContext.Current;

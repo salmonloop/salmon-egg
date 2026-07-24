@@ -56,6 +56,9 @@ public sealed partial class StartViewModel : ObservableObject
     private Task _composerUnloadCleanupObservationTask = Task.CompletedTask;
     private bool _isNewSessionDraftRefreshPending;
     private bool _isComposerLoaded;
+#if DEBUG
+    private int _startAgentProjectionDebugSequence;
+#endif
 
     private string? _startLaunchFailureMessage;
     private string? _startLaunchFailureResourceKey;
@@ -423,19 +426,85 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void SelectStartAgentDisplay(ComposerSelectorItemViewModel? item)
     {
+#if DEBUG
+        _logger.LogInformation(
+            "Start agent selector command requested. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+            item?.Kind,
+            item?.Identity,
+            item?.SemanticValue,
+            item?.IsPlaceholder,
+            item?.IsSelectable,
+            StartAgentSelectorItems.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId);
+#endif
         if (!CanCommitSelectorItem(item, ComposerSelectorKind.Agent, StartAgentSelectorItems))
         {
+#if DEBUG
+            _logger.LogInformation(
+                "Start agent selector command rejected by current projection. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount}",
+                item?.Kind,
+                item?.Identity,
+                item?.SemanticValue,
+                item?.IsPlaceholder,
+                item?.IsSelectable,
+                StartAgentSelectorItems.Count);
+#endif
             return;
         }
 
         var agent = Chat.AcpProfileList.FirstOrDefault(candidate =>
             string.Equals(candidate.Id, item!.SemanticValue, StringComparison.Ordinal));
-        if (agent is not null)
+        if (agent is null)
         {
-            Chat.SelectProfileForUserIntent(agent);
-            RefreshStartProjectOptions();
+#if DEBUG
+            _logger.LogInformation(
+                "Start agent selector command rejected because profile was not found. ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} AcpProfileCount={AcpProfileCount}",
+                item?.Identity,
+                item?.SemanticValue,
+                Chat.AcpProfileList.Count);
+#endif
+            return;
         }
+
+        if (IsCurrentExplicitStartAgentSelection(item!.SemanticValue))
+        {
+#if DEBUG
+            _logger.LogInformation(
+                "Start agent selector command skipped because profile is already the explicit selection. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+                item.SemanticValue,
+                Chat.SelectedAcpProfile?.Id,
+                Chat.SelectedProfileIntentId,
+                Chat.ConnectionInstanceId);
+#endif
+            return;
+        }
+
+#if DEBUG
+        _logger.LogInformation(
+            "Start agent selector profile selection applying. ProfileId={ProfileId} PreviousProfileId={PreviousProfileId} PreviousProfileIntentId={PreviousProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
+            agent.Id,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId);
+#endif
+        Chat.SelectProfileForUserIntent(agent);
+        RefreshStartProjectOptions();
+#if DEBUG
+        _logger.LogInformation(
+            "Start agent selector profile selection applied. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ProjectOptionCount={ProjectOptionCount}",
+            agent.Id,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            StartProjectOptions.Count);
+#endif
     }
+
+    private bool IsCurrentExplicitStartAgentSelection(string? profileId)
+        => !string.IsNullOrWhiteSpace(profileId)
+            && string.Equals(Chat.SelectedAcpProfile?.Id, profileId, StringComparison.Ordinal)
+            && string.Equals(Chat.SelectedProfileIntentId, profileId, StringComparison.Ordinal);
 
     private void SelectStartProjectDisplay(ComposerSelectorItemViewModel? item)
     {
@@ -643,7 +712,7 @@ public sealed partial class StartViewModel : ObservableObject
             !hasAgentSlot || (Chat.SelectedAcpProfile is not null && Chat.IsConnected),
             ResolveAgentSelectorPlaceholderLabels()));
 
-        return _selectorProjectionPresenter.Present(new SelectorProjectionInput(
+        var projection = _selectorProjectionPresenter.Present(new SelectorProjectionInput(
             ComposerSelectorKind.Agent,
             policy.RealItems,
             policy.SelectedSemanticValue,
@@ -651,6 +720,30 @@ public sealed partial class StartViewModel : ObservableObject
             policy.ReplaceSelectionWithPlaceholder,
             policy.DisableRealItems,
             policy.SelectorEnabled && IsInputEnabled));
+#if DEBUG
+        _logger.LogInformation(
+            "Start agent selector projection resolved. Sequence={Sequence} AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsConnecting={IsConnecting} IsInitializing={IsInitializing} IsConnected={IsConnected} HasConnectionError={HasConnectionError} HasAgentSlot={HasAgentSlot} PolicyRealItemCount={PolicyRealItemCount} DisplayItemCount={DisplayItemCount} SelectedKind={SelectedKind} SelectedIdentity={SelectedIdentity} SelectedSemanticValue={SelectedSemanticValue} SelectedIsPlaceholder={SelectedIsPlaceholder} IsEnabled={IsEnabled} IsSubmitBlocked={IsSubmitBlocked} PlaceholderKind={PlaceholderKind}",
+            ++_startAgentProjectionDebugSequence,
+            Chat.AcpProfileList.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId,
+            Chat.IsConnecting,
+            Chat.IsInitializing,
+            Chat.IsConnected,
+            Chat.HasConnectionError,
+            hasAgentSlot,
+            policy.RealItems.Count,
+            projection.DisplayItems.Count,
+            projection.SelectedDisplayItem?.Kind,
+            projection.SelectedDisplayItem?.Identity,
+            projection.SelectedDisplayItem?.SemanticValue,
+            projection.SelectedDisplayItem?.IsPlaceholder,
+            projection.IsEnabled,
+            projection.IsSubmitBlocked,
+            projection.PlaceholderKind);
+#endif
+        return projection;
     }
 
     private SelectorProjectionResult ResolveStartModeSelectorProjection()
@@ -770,6 +863,19 @@ public sealed partial class StartViewModel : ObservableObject
 
     private void RefreshAllSelectorProjections()
     {
+#if DEBUG
+        _logger.LogInformation(
+            "Refreshing start selector projections. AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsStarting={IsStarting} IsInputEnabled={IsInputEnabled} ModeOptionCount={ModeOptionCount} ModelOptionCount={ModelOptionCount} ProjectOptionCount={ProjectOptionCount}",
+            Chat.AcpProfileList.Count,
+            Chat.SelectedAcpProfile?.Id,
+            Chat.SelectedProfileIntentId,
+            Chat.ConnectionInstanceId,
+            IsStarting,
+            IsInputEnabled,
+            StartModeOptions.Count,
+            StartModelOptions.Count,
+            StartProjectOptions.Count);
+#endif
         OnPropertyChanged(nameof(StartAgentSelectorProjection));
         OnPropertyChanged(nameof(StartModeSelectorProjection));
         OnPropertyChanged(nameof(StartModelSelectorProjection));

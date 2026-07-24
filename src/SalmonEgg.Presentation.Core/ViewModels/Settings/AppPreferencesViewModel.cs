@@ -204,12 +204,30 @@ public partial class AppPreferencesViewModel : ObservableObject
         var markLoaded = true;
         var previousLanguage = "System";
         var nextLanguage = "System";
+#if DEBUG
+        _logger.LogInformation(
+            "App settings load started. ReloadShellOnLanguageChange={ReloadShellOnLanguageChange} IsInitialized={IsInitialized} IsLoaded={IsLoaded} CurrentLanguage={CurrentLanguage} AppliedLanguage={AppliedLanguage}",
+            reloadShellOnLanguageChange,
+            _isInitialized,
+            IsLoaded,
+            Language,
+            _appliedLanguage);
+#endif
         try
         {
             _suppressSave = true;
             cancellationToken.ThrowIfCancellationRequested();
             var settings = await _appSettingsService.LoadAsync();
             var launchOnStartup = settings.LaunchOnStartup;
+#if DEBUG
+            _logger.LogInformation(
+                "App settings file loaded. SettingsLanguage={SettingsLanguage} SettingsTheme={SettingsTheme} LastSelectedServerId={LastSelectedServerId} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount}",
+                settings.Language,
+                settings.Theme,
+                settings.LastSelectedServerId,
+                settings.Projects.Count,
+                settings.AgentRemoteDirectories.Count);
+#endif
 
             try
             {
@@ -292,12 +310,41 @@ public partial class AppPreferencesViewModel : ObservableObject
                     KeyBindings.Add(new KeyBindingPairViewModel(kvp.Key, kvp.Value));
                 }
             }).ConfigureAwait(false);
+#if DEBUG
+            _logger.LogInformation(
+                "App settings UI projection completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount} NavigationRemoteDirectoryIdCount={NavigationRemoteDirectoryIdCount} KeyBindingCount={KeyBindingCount}",
+                previousLanguage,
+                nextLanguage,
+                Projects.Count,
+                AgentRemoteDirectories.Count,
+                NavigationRemoteDirectoryIds.Count,
+                KeyBindings.Count);
+#endif
 
             cancellationToken.ThrowIfCancellationRequested();
+#if DEBUG
+            _logger.LogInformation(
+                "Applying language override from app settings. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ReloadShellOnLanguageChange={ReloadShellOnLanguageChange}",
+                previousLanguage,
+                nextLanguage,
+                reloadShellOnLanguageChange);
+#endif
             await _languageService.ApplyLanguageOverrideAsync(nextLanguage).ConfigureAwait(false);
+#if DEBUG
+            _logger.LogInformation(
+                "Language override from app settings completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                previousLanguage,
+                nextLanguage);
+#endif
             if (reloadShellOnLanguageChange &&
                 !string.Equals(previousLanguage, nextLanguage, StringComparison.Ordinal))
             {
+#if DEBUG
+                _logger.LogInformation(
+                    "Reloading shell after app settings language change. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                    previousLanguage,
+                    nextLanguage);
+#endif
                 _uiRuntime.ReloadShell();
             }
         }
@@ -309,6 +356,13 @@ public partial class AppPreferencesViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load app settings");
+#if DEBUG
+            _logger.LogInformation(
+                "Surfacing app settings load failure. MarkLoaded={MarkLoaded} PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
+                markLoaded,
+                previousLanguage,
+                nextLanguage);
+#endif
             try
             {
                 await _ui.ShowInfoAsync(_localizer["General_AppSettingsLoadFailed"]).ConfigureAwait(false);
@@ -328,6 +382,13 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
 
                 _suppressSave = false;
+#if DEBUG
+                _logger.LogInformation(
+                    "App settings load finalized. MarkLoaded={MarkLoaded} IsLoaded={IsLoaded} SuppressSave={SuppressSave}",
+                    markLoaded,
+                    IsLoaded,
+                    _suppressSave);
+#endif
             }).ConfigureAwait(false);
         }
     }
