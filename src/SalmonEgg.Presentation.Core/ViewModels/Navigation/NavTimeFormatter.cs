@@ -92,8 +92,10 @@ public static class NavTimeFormatter
             return fallback;
         }
 
+        // localizer[key] may return null for incomplete/mocked localizers; fall back rather
+        // than throw so navigation tree rebuild cannot be aborted by relative-time labels.
         var localized = localizer[key];
-        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+        return localized is null || localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
             ? fallback
             : localized.Value;
     }

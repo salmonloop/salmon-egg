@@ -2650,7 +2650,7 @@ public sealed class MainNavigationViewModelSelectionTests
             presenter,
             new ProjectAffinityResolver(),
             uiDispatcher,
-            localizerOverride ?? Mock.Of<IStringLocalizer<CoreStrings>>(),
+            localizerOverride ?? new TestCoreStringLocalizer(),
             languageService: languageServiceOverride,
             addProjectCoordinator: addProjectCoordinatorOverride);
     }
