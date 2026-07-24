@@ -422,7 +422,10 @@ namespace SalmonEgg.Acp.Mcp
             {
                 Name = ReadRequiredString(root, "name"),
                 Url = ReadRequiredString(root, "url"),
-                Headers = ReadRequiredNameValueArray<McpHttpHeader>(
+                // headers 在 schema 中为可选（V2 required 仅 [name,url]，Rust 标注
+                // skip_serializing_if=Vec::is_empty）：缺省不再抛，读为空列表。
+                // 但类型契约不放宽——一旦提供却非数组 / 条目缺 name|value 仍抛。
+                Headers = ReadOptionalNameValueArray<McpHttpHeader>(
                     root,
                     "headers",
                     (name, value, meta) => new McpHttpHeader(name, value) { Meta = meta }),
@@ -436,7 +439,8 @@ namespace SalmonEgg.Acp.Mcp
             {
                 Name = ReadRequiredString(root, "name"),
                 Url = ReadRequiredString(root, "url"),
-                Headers = ReadRequiredNameValueArray<McpHttpHeader>(
+                // headers 同 http：schema 可选，缺省读为空列表而非抛；类型契约不放宽。
+                Headers = ReadOptionalNameValueArray<McpHttpHeader>(
                     root,
                     "headers",
                     (name, value, meta) => new McpHttpHeader(name, value) { Meta = meta }),
@@ -615,11 +619,14 @@ namespace SalmonEgg.Acp.Mcp
         private static void WriteCustom(Utf8JsonWriter writer, CustomMcpServer custom)
         {
             // 前向兼容透传：原样写回读入时保留的 raw payload，不重排字段、不丢弃未知属性，
-            // 由 Agent 而非 client 决定接受或拒绝该 transport。若 RawPayload 为空（如手工构造），
-            // 退化为按已知字段最小写出，仍携带原始 type 值。
+            // 由 Agent 而非 client 决定接受或拒绝该 transport。RawPayload 是 Custom transport 的
+            // 唯一权威事实源（含其 _meta），故此处不叠加写出 custom.Meta，避免第二套状态 owner。
+            // 用 WriteRawValue(GetRawText()) 而非 WriteTo：与 AcpProtocolObject 一致，
+            // 避免 WriteTo 对转义/数字 token 形态的 re-encode，实现字节级保真。
+            // 若 RawPayload 为空（如手工构造），退化为按已知字段最小写出，仍携带原始 type 值。
             if (custom.RawPayload.ValueKind == JsonValueKind.Object)
             {
-                custom.RawPayload.WriteTo(writer);
+                writer.WriteRawValue(custom.RawPayload.GetRawText());
                 return;
             }
 

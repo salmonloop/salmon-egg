@@ -291,6 +291,64 @@ public sealed class SessionNewTypesTests
     }
 
     [Fact]
+    public void McpServer_HttpWithoutHeaders_Should_Deserialize_WithEmptyHeaders()
+    {
+        // schema 中 http 的 headers 为可选（V2 required 仅 [name,url]，Rust 标注
+        // skip_serializing_if=Vec::is_empty）；缺省不得被 client 反向收紧为必填抛错。
+        var json = """
+        {
+          "type": "http",
+          "name": "http-api",
+          "url": "https://api.example.com/mcp"
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        var http = Assert.IsType<HttpMcpServer>(server);
+        Assert.Equal("http-api", http.Name);
+        Assert.Equal("https://api.example.com/mcp", http.Url);
+        Assert.NotNull(http.Headers);
+        Assert.Empty(http.Headers);
+    }
+
+    [Fact]
+    public void McpServer_SseWithoutHeaders_Should_Deserialize_WithEmptyHeaders()
+    {
+        // sse 的 headers 同 http：schema 可选，缺省不得反向收紧为必填抛错。
+        var json = """
+        {
+          "type": "sse",
+          "name": "sse-events",
+          "url": "https://events.example.com/mcp"
+        }
+        """;
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+
+        var sse = Assert.IsType<SseMcpServer>(server);
+        Assert.Equal("sse-events", sse.Name);
+        Assert.NotNull(sse.Headers);
+        Assert.Empty(sse.Headers);
+    }
+
+    [Fact]
+    public void McpServer_HttpWithNonArrayHeaders_Should_NotDeserialize()
+    {
+        // 类型契约不放宽：headers 一旦提供却非数组，仍视为协议违规抛出，不做反向过度容忍。
+        var json = """
+        {
+          "type": "http",
+          "name": "http-api",
+          "url": "https://api.example.com/mcp",
+          "headers": "Authorization: Bearer x"
+        }
+        """;
+
+        Assert.Throws<JsonException>((Action)(() => JsonSerializer.Deserialize<McpServer>(json)));
+    }
+
+    [Fact]
     public void SessionNewParams_McpServers_Should_Serialize_As_Array()
     {
         // Given: A SessionNewParams with MCP servers
@@ -439,5 +497,36 @@ public sealed class SessionNewTypesTests
         Assert.Equal(custom.Transport, clone.Transport);
         Assert.Equal(custom.Name, clone.Name);
         Assert.Equal("grpc://future.example.com", clone.RawPayload.GetProperty("endpoint").GetString());
+    }
+
+    [Fact]
+    public void CustomMcpServer_Should_RoundTrip_EscapesAndFieldOrder_ByteFaithful()
+    {
+        // preserve raw payload 要求字节级保真：转义形态（你）、数字 token 形态（1.2300e+02）、
+        // 字段顺序、未知嵌套结构都不得被 re-encode。用 WriteRawValue(GetRawText()) 而非 WriteTo。
+        var json =
+            "{\"type\":\"_experimental-grpc\",\"name\":\"future-server\",\"label\":\"\\u4f60\\u597d\"," +
+            "\"scale\":1.2300e+02,\"nested\":{\"b\":2,\"a\":[1,2,3]}}";
+
+        var server = JsonSerializer.Deserialize<McpServer>(json);
+        var reserialized = JsonSerializer.Serialize(server);
+
+        // 原始 payload 的字节应原样透传（不重排字段、不改转义/数字形态）。
+        Assert.Contains("\\u4f60\\u597d", reserialized);
+        Assert.Contains("1.2300e+02", reserialized);
+        Assert.Contains("\"nested\":{\"b\":2,\"a\":[1,2,3]}", reserialized);
+    }
+
+    [Fact]
+    public void CustomMcpServer_WithoutRawPayload_Should_Write_MinimalShape()
+    {
+        // 手工构造（RawPayload 为空/非 Object）时退化为按已知字段最小写出，仍携带原始 type。
+        var custom = new CustomMcpServer("hand-built", "_experimental-grpc", default);
+
+        var reserialized = JsonSerializer.Serialize<McpServer>(custom);
+        var parsed = JsonDocument.Parse(reserialized);
+
+        Assert.Equal("_experimental-grpc", parsed.RootElement.GetProperty("type").GetString());
+        Assert.Equal("hand-built", parsed.RootElement.GetProperty("name").GetString());
     }
 }
