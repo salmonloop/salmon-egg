@@ -41,11 +41,13 @@
 ### 2.2 冲突检测（严谨定义）
 `local != synced && remote != synced && local != remote`。即两侧都相对上次同步基线变过且内容不一致。
 
-### 2.3 冲突解决：LWW（时间戳新者胜）— 已确认取舍
-- **本地时间戳**：本地 config 的最近修改时间。取所有被打包 config 文件的 `UpdatedAtUtc`（`app.yaml`/`mcp.yaml`/`server-*.yaml` 均有该字段，UTC "O"）的最大值；缺失则回退文件系统 `LastWriteTimeUtc`。
-- **远端时间戳**：优先远端包 `manifest.CreatedAtUtc`（打包=上传时刻，UTC "O"，`CloudConfigSyncModels.cs:13`），回退 HTTP `Last-Modified`（已在 `CloudConfigRemoteFile.LastModifiedUtc`）。
-- **裁决**：远端时间戳 > 本地时间戳 → restore（`ConflictRemoteApplied`）；否则 → 上传（`Uploaded`）。
-- **取舍标注（必须写入代码注释与交付说明）**：LWW 依赖可信时钟，跨设备 skew 时可能误判赢家并静默丢掉输的一边。全项目时间戳统一 UTC + "O"，已消除时区歧义；skew 属残余风险，本方案接受。
+### 2.3 冲突解决：fail-closed + 显式 first-adopt 策略（取代 LWW）
+- **真冲突**（两侧相对基线都变且内容不同）：**永不静默覆盖**。`FailClosedConflict` → `CloudTransferPhase.Failed` + `CloudSyncFailureKind.RemoteConflict`，本地 config 与 `SyncedFingerprint` 保持不变；远端包 + 本地快照落入 `config-conflict-artifacts/`（路径写入 `CloudSyncFailure.ArtifactPath`）。
+- **基线未知（首次采用）**：禁止时钟启发式。由调用方传入 `CloudSyncFirstAdoptPolicy`：
+  - `SyncNow` / 自动同步 → `RequireManual`（与真冲突相同 fail-closed）。
+  - `ApplyAndActivate` → `PreferRemote`（连接已有云配置时 restore）。
+- **方向判定纯函数**：`CloudSyncContentDecisionMaker.Decide`（Domain，无 IO/时钟）；Coordinator 只取指纹并执行副作用。
+- **废弃**：时间戳 LWW、`ConflictRemoteApplied` 成功路径（枚举值仅历史兼容保留）。
 
 ### 2.4 关键陷阱：规范化指纹必须剔除易变字段
 直接 hash 会每次都 dirty，必须剔除：
@@ -64,20 +66,21 @@
 - `SchemaVersion` 保持 1（新增字段可选，老状态读入即 baseline 未知，安全）。
 
 ### 3.2 新增 `ConfigContentFingerprint`（Infrastructure/Storage）
-- `Task<string> ComputeLocalAsync(bool includeSecrets, CancellationToken)`：对本地 config 目录规范化后哈希。
-- `string ComputeFromPackage(byte[] package, bool includeSecrets)`：对远端/本地包字节规范化后哈希（复用打包解包逻辑，剔除 manifest 时间戳）。
-- `DateTimeOffset? ExtractLocalTimestamp()` / `ExtractPackageTimestamp(byte[])`：LWW 时间源提取。
+- `Task<string> ComputeLocalAsync(...)` / `string ComputeFromPackage(...)`：规范化内容哈希。
+- 不暴露时间戳 API；方向判定不依赖时钟。
 - 纯计算，无文件系统副作用触发（构造/DI 不落盘，遵守缓存与持久化边界规则）。
 
-### 3.3 重写 `SynchronizeAsync`（`CloudConfigSyncCoordinator.cs:526-579`）
-按 2.1 表判定。分支产出维持既有 `CloudTransferOutcome`（`Uploaded`/`Restored`/`ConflictRemoteApplied`），新增内部无操作时不改 UI 语义。
+### 3.3 Domain：`CloudSyncContentDecisionMaker`
+- 输入：local/remote/synced 指纹 + `BaselineKnown` + `FirstAdoptPolicy`。
+- 输出：`RefreshBaseline` / `UploadLocal` / `RestoreRemote` / `FailClosedConflict`。
 
-### 3.4 `UploadLocalAsync` / `RestoreRemoteAsync`
-同步成功后写入 `SyncedFingerprint`（= 本次实际落地内容的规范化哈希），而非依赖 ETag。ETag 仍存，仅用于下次上传的 `If-Match` 乐观并发。
+### 3.4 重写 `SynchronizeAsync`
+按 2.1 表 + 2.3 策略执行。成功 outcome：`Uploaded` / `Restored` / `None`；冲突 → Failed + `RemoteConflict`。
 
-### 3.5 上传/下载的乐观并发（ETag 退位后仍保留）
-- `UploadLocalAsync` 的 `If-Match` 逻辑保留：仅防止 clobber，不做方向判定。
-- 预条件失败（`PreconditionFailed`）时重新下载并走 3-way，而非无条件 restore。
+### 3.5 `UploadLocalAsync` / `RestoreRemoteAsync` / `FailClosedConflictAsync`
+- 成功路径写入 `SyncedFingerprint`。
+- 冲突路径调用 `ConfigSyncPackageService.PersistConflictArtifactsAsync`，不改 config、不改 baseline。
+- `PreconditionFailed` 后重新 3-way（最多一次）；若变成真冲突则 fail-closed。
 
 ## 4. 单一状态链路与边界（遵守 AGENTS.md 硬约束）
 - 方向判定与基线写入全部收敛在 `CloudConfigSyncCoordinator` + `ConfigContentFingerprint`，不新增第二套状态 owner。
@@ -90,11 +93,11 @@
 2. **上传后远端不返回 ETag，二次同步不回退**（根治第 4 类缺陷）。
 3. **仅远端变化 → restore**。
 4. **两侧收敛（内容相同）→ no-op，不重复上传**。
-5. **真冲突且远端更新 → LWW restore**。
-6. **真冲突且本地更新 → LWW upload**。
-7. **易变字段（UpdatedAtUtc/CreatedAtUtc）单独变化不触发 dirty 误判**（指纹规范化用例）。
-8. **老 sync state（无 SyncedFingerprint）读入 → baseline 未知 → 首次同步不静默吞本地**。
-新增 `ConfigContentFingerprintTests`：规范化剔除易变字段、包与本地一致性、secrets 纳入/排除。
+5. **真冲突 → fail-closed，本地与 baseline 不变，工件落盘**。
+6. **基线未知 + SyncNow → fail-closed**；**基线未知 + ApplyAndActivate → PreferRemote restore**。
+7. **易变字段单独变化不触发 dirty 误判**。
+8. **老 sync state（无 SyncedFingerprint）→ 不静默吞本地**。
+新增 `CloudSyncContentDecisionMakerTests`（纯函数全分支）与 `ConfigContentFingerprintTests`。
 
 ## 6. 验证
 - `dotnet test`（Infrastructure.Tests、相关 Core 测试）全绿。
@@ -102,6 +105,6 @@
 - 属于状态机 + 数据处理实质改动，非文档 only，必须跑测试门禁。
 
 ## 7. 交付说明要点
-- 明确 LWW 的时钟依赖与残余 skew 风险。
-- 明确 ETag 从方向判定退位、指纹成为唯一方向事实源。
-- 列出修改文件与原因。
+- ETag 从方向判定退位；指纹 + 纯函数决策是唯一方向事实源。
+- 真冲突 / 首次采用（SyncNow）fail-closed；Activate 显式 PreferRemote。
+- 无时钟 LWW；残余工作：统一 content projection、typed canonical fingerprint、上传后 ETag reconcile、冲突 UI 决策入口。

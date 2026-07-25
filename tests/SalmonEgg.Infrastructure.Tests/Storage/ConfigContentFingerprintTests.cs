@@ -90,28 +90,6 @@ public sealed class ConfigContentFingerprintTests : IDisposable
             _fingerprint.ComputeFromPackage(late, includeSecrets: false));
     }
 
-    [Fact]
-    public void ExtractPackageTimestamp_ReadsManifestCreatedAtUtc()
-    {
-        var created = DateTimeOffset.Parse("2026-01-15T12:00:00.0000000Z");
-        var package = CreatePackageWithManifestTime("theme: Dark", created);
-
-        var extracted = _fingerprint.ExtractPackageTimestamp(package);
-
-        Assert.Equal(created, extracted);
-    }
-
-    [Fact]
-    public async Task ExtractLocalTimestamp_UsesUpdatedAtUtcFromConfigFiles()
-    {
-        await _appSettings.SaveAsync(new AppSettings { Theme = "Dark" });
-        var stamp = _fingerprint.ExtractLocalTimestamp();
-
-        Assert.NotNull(stamp);
-        Assert.True(stamp!.Value <= DateTimeOffset.UtcNow.AddMinutes(1));
-        Assert.True(stamp.Value >= DateTimeOffset.UtcNow.AddMinutes(-5));
-    }
-
     private static byte[] CreatePackageWithManifestTime(string appYamlBody, DateTimeOffset createdAtUtc)
     {
         using var stream = new MemoryStream();

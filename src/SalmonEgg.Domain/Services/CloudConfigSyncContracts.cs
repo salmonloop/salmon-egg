@@ -49,7 +49,24 @@ public enum CloudTransferOutcome
     None,
     Uploaded,
     Restored,
+    /// <summary>
+    /// 历史兼容：旧实现在 LWW 下静默应用远端冲突。
+    /// 新实现真冲突 fail-closed，不再产生该 outcome；保留枚举值以免破坏已序列化/绑定分支。
+    /// </summary>
     ConflictRemoteApplied
+}
+
+/// <summary>
+/// 基线未知（首次采用）时的显式策略。不使用时钟启发式。
+/// SyncNow 默认 RequireManual；ApplyAndActivate 使用 PreferRemote（连接已有云配置）。
+/// </summary>
+public enum CloudSyncFirstAdoptPolicy
+{
+    /// <summary>基线未知且两侧内容不同 → fail-closed，不覆盖本地。</summary>
+    RequireManual = 0,
+
+    /// <summary>基线未知且两侧内容不同 → 采用远端（激活已有云配置）。</summary>
+    PreferRemote = 1
 }
 
 public enum CloudSyncOperationKind
@@ -90,7 +107,10 @@ public sealed record CloudSecretUpdate(CloudSecretUpdateKind Kind, string? Value
     public static CloudSecretUpdate Clear() => new(CloudSecretUpdateKind.Clear);
 }
 
-public sealed record CloudSyncFailure(CloudSyncFailureKind Kind, string Message);
+public sealed record CloudSyncFailure(
+    CloudSyncFailureKind Kind,
+    string Message,
+    string? ArtifactPath = null);
 
 public sealed record CloudSyncConfiguration(
     bool Enabled,

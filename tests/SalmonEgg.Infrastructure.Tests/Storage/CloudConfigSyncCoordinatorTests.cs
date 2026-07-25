@@ -192,39 +192,41 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task SyncNowAsync_WhenRemoteExistsWithoutState_RestoresRemoteAndBacksUpLocalConfig()
+    public async Task SyncNowAsync_WhenRemoteExistsWithoutBaseline_FailsClosedAndKeepsLocal()
     {
+        // SyncNow 默认 RequireManual：基线未知且内容不同 → fail-closed，不覆盖本地。
         await SaveEnabledSettingsAsync();
         await File.WriteAllTextAsync(Path.Combine(_appData.ConfigRootPath, "local-only.yaml"), "value: local", TestContext.Current.CancellationToken);
-        // 基线未知 + 远端时间戳更新 → LWW restore（首次采用不静默吞本地的反向：远端更新则仍可 restore）。
+        var settings = await _appSettings.LoadAsync();
+        settings.Theme = "Light";
+        await _appSettings.SaveAsync(settings);
+
         var provider = new FakeProvider
         {
             Session =
             {
-                Remote = new CloudConfigRemoteFile(
-                    CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(5)),
-                    "remote-etag",
-                    DateTimeOffset.UtcNow.AddMinutes(5))
+                Remote = new CloudConfigRemoteFile(CreateRemotePackage("theme: Dark"), "remote-etag", DateTimeOffset.UtcNow)
             }
         };
         using var coordinator = CreateCoordinator(provider);
 
         await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
-        var restored = await _appSettings.LoadAsync();
+        var local = await _appSettings.LoadAsync();
 
-        Assert.Equal(CloudTransferOutcome.Restored, coordinator.Current.Transfer.LastSuccess?.Outcome);
-        Assert.Equal("Dark", restored.Theme);
-        var backupPath = coordinator.Current.Transfer.LastSuccess?.BackupPath;
-        Assert.NotNull(backupPath);
-        Assert.True(File.Exists(Path.Combine(backupPath!, "local-only.yaml")));
+        Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
+        Assert.Equal("Light", local.Theme);
+        Assert.True(File.Exists(Path.Combine(_appData.ConfigRootPath, "local-only.yaml")));
+        Assert.False(string.IsNullOrWhiteSpace(coordinator.Current.Transfer.Failure?.ArtifactPath));
+        Assert.True(File.Exists(Path.Combine(coordinator.Current.Transfer.Failure!.ArtifactPath!, "remote.package.zip")));
+        Assert.True(File.Exists(Path.Combine(coordinator.Current.Transfer.Failure.ArtifactPath!, "local", "local-only.yaml")));
+        Assert.Null(provider.Session.UploadedContent);
     }
 
     [Fact]
-    public async Task SyncNowAsync_WhenRemoteRestoresCloudConfiguration_PublishesRestoredConfiguration()
+    public async Task ApplyAndActivateAsync_WhenRemoteExistsWithoutBaseline_PrefersRemoteAndPublishesConfiguration()
     {
-        await SaveEnabledSettingsAsync(
-            "webdav",
-            new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/old.zip" });
+        // ApplyAndActivate 显式 PreferRemote：连接已有云配置时 restore。
         var remoteAppYaml = string.Join(
             Environment.NewLine,
             "cloud_config_sync:",
@@ -239,28 +241,32 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
         {
             Session =
             {
-                Remote = new CloudConfigRemoteFile(
-                    CreateRemotePackage(remoteAppYaml, createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(5)),
-                    "remote-etag",
-                    DateTimeOffset.UtcNow.AddMinutes(5))
+                Remote = new CloudConfigRemoteFile(CreateRemotePackage(remoteAppYaml), "remote-etag", DateTimeOffset.UtcNow)
             }
         };
         using var coordinator = CreateCoordinator(provider);
 
-        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+        await coordinator.ApplyAndActivateAsync(
+            new CloudProviderDraft(
+                "webdav",
+                new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/old.zip" },
+                new Dictionary<string, CloudSecretUpdate>()),
+            TestContext.Current.CancellationToken);
 
+        // PreferRemote 先 restore 远端；Activate 提交阶段再叠 draft 配置（revision 单调递增）。
         Assert.Equal(CloudTransferOutcome.Restored, coordinator.Current.Transfer.LastSuccess?.Outcome);
         Assert.Equal("webdav", coordinator.Current.Configuration.ProviderId);
-        Assert.Equal(42, coordinator.Current.Configuration.Revision);
-        Assert.Equal("https://dav.example.test/restored.zip", coordinator.Current.Configuration.Options["file_url"]);
+        Assert.True(coordinator.Current.Configuration.Revision >= 42);
+        Assert.Equal("https://dav.example.test/old.zip", coordinator.Current.Configuration.Options["file_url"]);
+        Assert.True((await _appSettings.LoadAsync()).CloudConfigSync.Enabled);
     }
 
     [Fact]
-    public async Task SyncNowAsync_WhenUploadPreconditionFails_ReResolvesByContentAndAppliesRemote()
+    public async Task SyncNowAsync_WhenUploadPreconditionFails_ReResolvesByContentAndFailsClosedOnConflict()
     {
         await SaveEnabledSettingsAsync();
         // 建立基线：synced == 当前远端包指纹；本地随后改脏 → 仅本地 dirty → 上传。
-        var baselinePackage = CreateRemotePackage("theme: System", createdAtUtc: DateTimeOffset.UtcNow.AddHours(-2));
+        var baselinePackage = CreateRemotePackage("theme: System");
         var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
         await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
         {
@@ -275,27 +281,26 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
         settings.Theme = "Light";
         await _appSettings.SaveAsync(settings);
 
-        // 上传 If-Match 失败后，重下拿到的是并发写入的远端新内容（更新）。
-        var concurrentRemote = CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(1));
+        // 上传 If-Match 失败后，重下拿到并发远端（相对基线也变）→ 真冲突 fail-closed。
+        var concurrentRemote = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
             Session =
             {
                 Remote = new CloudConfigRemoteFile(baselinePackage, "old-etag", DateTimeOffset.UtcNow.AddHours(-2)),
-                RemoteAfterPrecondition = new CloudConfigRemoteFile(
-                    concurrentRemote,
-                    "new-etag",
-                    DateTimeOffset.UtcNow.AddMinutes(1)),
+                RemoteAfterPrecondition = new CloudConfigRemoteFile(concurrentRemote, "new-etag", DateTimeOffset.UtcNow),
                 UploadResult = CloudConfigUploadResult.PreconditionFailed("Remote changed.")
             }
         };
         using var coordinator = CreateCoordinator(provider);
 
         await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
-        var restored = await _appSettings.LoadAsync();
+        var local = await _appSettings.LoadAsync();
 
-        Assert.Equal(CloudTransferOutcome.ConflictRemoteApplied, coordinator.Current.Transfer.LastSuccess?.Outcome);
-        Assert.Equal("Dark", restored.Theme);
+        Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
+        Assert.Equal("Light", local.Theme);
+        Assert.False(string.IsNullOrWhiteSpace(coordinator.Current.Transfer.Failure?.ArtifactPath));
     }
 
     [Fact]
@@ -379,7 +384,7 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             LastSyncUtc = DateTimeOffset.UtcNow.AddHours(-1).ToString("O")
         }, TestContext.Current.CancellationToken);
 
-        var remotePackage = CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow);
+        var remotePackage = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
             Session = { Remote = new CloudConfigRemoteFile(remotePackage, "etag-2", DateTimeOffset.UtcNow) }
@@ -421,10 +426,10 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task SyncNowAsync_WhenTrueConflictAndRemoteNewer_AppliesRemote()
+    public async Task SyncNowAsync_WhenTrueConflict_FailsClosedAndPreservesLocal()
     {
         await SaveEnabledSettingsAsync();
-        var baselinePackage = CreateRemotePackage("theme: System", createdAtUtc: DateTimeOffset.UtcNow.AddHours(-3));
+        var baselinePackage = CreateRemotePackage("theme: System");
         var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
         await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
         {
@@ -438,63 +443,29 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
         settings.Theme = "Light";
         await _appSettings.SaveAsync(settings);
 
-        var remotePackage = CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(5));
+        var remotePackage = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
-            Session =
-            {
-                Remote = new CloudConfigRemoteFile(remotePackage, "etag-2", DateTimeOffset.UtcNow.AddMinutes(5))
-            }
-        };
-        using var coordinator = CreateCoordinator(provider);
-
-        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
-        var restored = await _appSettings.LoadAsync();
-
-        Assert.Equal(CloudTransferOutcome.ConflictRemoteApplied, coordinator.Current.Transfer.LastSuccess?.Outcome);
-        Assert.Equal("Dark", restored.Theme);
-    }
-
-    [Fact]
-    public async Task SyncNowAsync_WhenTrueConflictAndLocalNewer_UploadsLocal()
-    {
-        await SaveEnabledSettingsAsync();
-        var baselinePackage = CreateRemotePackage("theme: System", createdAtUtc: DateTimeOffset.UtcNow.AddHours(-3));
-        var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
-        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
-        {
-            ProviderId = "onedrive",
-            RemoteETag = "etag-1",
-            SyncedFingerprint = baselineFingerprint,
-            LastSyncUtc = DateTimeOffset.UtcNow.AddHours(-3).ToString("O")
-        }, TestContext.Current.CancellationToken);
-
-        var settings = await _appSettings.LoadAsync();
-        settings.Theme = "Light";
-        await _appSettings.SaveAsync(settings);
-
-        var remotePackage = CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow.AddHours(-1));
-        var provider = new FakeProvider
-        {
-            Session =
-            {
-                Remote = new CloudConfigRemoteFile(remotePackage, "etag-2", DateTimeOffset.UtcNow.AddHours(-1))
-            }
+            Session = { Remote = new CloudConfigRemoteFile(remotePackage, "etag-2", DateTimeOffset.UtcNow) }
         };
         using var coordinator = CreateCoordinator(provider);
 
         await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
         var local = await _appSettings.LoadAsync();
+        var state = await new CloudConfigSyncStateStore(_fileStore, _appData).LoadAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
         Assert.Equal("Light", local.Theme);
-        Assert.NotNull(provider.Session.UploadedContent);
+        Assert.Equal(baselineFingerprint, state.SyncedFingerprint);
+        Assert.Null(provider.Session.UploadedContent);
+        Assert.True(Directory.Exists(coordinator.Current.Transfer.Failure?.ArtifactPath));
     }
 
     [Fact]
-    public async Task SyncNowAsync_WhenLegacyStateLacksFingerprint_DoesNotSilentlyDropLocal()
+    public async Task SyncNowAsync_WhenLegacyStateLacksFingerprint_FailsClosedWithoutDroppingLocal()
     {
-        // 老 sync state：无 SyncedFingerprint。本地更新、远端较旧 → 首次采用走 LWW 上传，不静默吞本地。
+        // 老 sync state：无 SyncedFingerprint。SyncNow RequireManual → fail-closed，不静默吞本地。
         await SaveEnabledSettingsAsync();
         var settings = await _appSettings.LoadAsync();
         settings.Theme = "Light";
@@ -508,21 +479,20 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             LastSyncUtc = DateTimeOffset.UtcNow.AddDays(-1).ToString("O")
         }, TestContext.Current.CancellationToken);
 
-        var remotePackage = CreateRemotePackage("theme: Dark", createdAtUtc: DateTimeOffset.UtcNow.AddDays(-1));
+        var remotePackage = CreateRemotePackage("theme: Dark");
         var provider = new FakeProvider
         {
-            Session =
-            {
-                Remote = new CloudConfigRemoteFile(remotePackage, "legacy-etag", DateTimeOffset.UtcNow.AddDays(-1))
-            }
+            Session = { Remote = new CloudConfigRemoteFile(remotePackage, "legacy-etag", DateTimeOffset.UtcNow.AddDays(-1)) }
         };
         using var coordinator = CreateCoordinator(provider);
 
         await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
         var local = await _appSettings.LoadAsync();
 
-        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
         Assert.Equal("Light", local.Theme);
+        Assert.Null(provider.Session.UploadedContent);
     }
 
     [Fact]
@@ -570,16 +540,12 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     [Fact]
     public async Task ApplyAndActivateAsync_WhenRemoteSettingsAreRestored_PreservesRestoredValuesDuringCommit()
     {
-        // ApplyAndActivate 带 settingsOverride → 本地时间戳≈现在；远端必须严格更新才能 LWW restore。
-        var remoteTs = DateTimeOffset.UtcNow.AddMinutes(5);
+        // ApplyAndActivate 使用 PreferRemote：基线未知时 restore 远端。
         var provider = new FakeProvider("webdav")
         {
             Session =
             {
-                Remote = new CloudConfigRemoteFile(
-                    CreateRemotePackage("theme: Dark", createdAtUtc: remoteTs),
-                    "remote-etag",
-                    remoteTs)
+                Remote = new CloudConfigRemoteFile(CreateRemotePackage("theme: Dark"), "remote-etag", DateTimeOffset.UtcNow)
             }
         };
         using var coordinator = CreateCoordinator(provider);
@@ -600,7 +566,6 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
     [Fact]
     public async Task ApplyAndActivateAsync_WhenRemoteRestoreCanReplaceSecrets_CommitsFrozenCandidateCredential()
     {
-        var remoteTs = DateTimeOffset.UtcNow.AddMinutes(5);
         var provider = new FakeProvider("webdav")
         {
             ResolvedSecrets = new Dictionary<string, CloudSecretUpdate>(StringComparer.OrdinalIgnoreCase)
@@ -609,10 +574,7 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             },
             Session =
             {
-                Remote = new CloudConfigRemoteFile(
-                    CreateRemotePackage("theme: Dark", createdAtUtc: remoteTs),
-                    "remote-etag",
-                    remoteTs)
+                Remote = new CloudConfigRemoteFile(CreateRemotePackage("theme: Dark"), "remote-etag", DateTimeOffset.UtcNow)
             }
         };
         using var coordinator = CreateCoordinator(provider);
@@ -923,16 +885,15 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
         });
     }
 
-    private static byte[] CreateRemotePackage(string appYaml, DateTimeOffset? createdAtUtc = null)
+    private static byte[] CreateRemotePackage(string appYaml)
     {
-        var created = (createdAtUtc ?? DateTimeOffset.UtcNow).ToString("O");
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             WriteEntry(
                 archive,
                 "manifest.json",
-                $$"""{"schemaVersion":1,"appId":"SalmonEgg","createdAtUtc":"{{created}}","files":["app.yaml"]}""");
+                """{"schemaVersion":1,"appId":"SalmonEgg","createdAtUtc":"2026-01-01T00:00:00.0000000Z","files":["app.yaml"]}""");
             WriteEntry(archive, "files/config/app.yaml", $"schema_version: 2{Environment.NewLine}{appYaml}{Environment.NewLine}");
         }
 

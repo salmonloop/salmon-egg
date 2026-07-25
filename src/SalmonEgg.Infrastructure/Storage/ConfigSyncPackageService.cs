@@ -154,6 +154,30 @@ public sealed class ConfigSyncPackageService
         return backupPath;
     }
 
+    /// <summary>
+    /// 冲突 fail-closed 工件：本地 config 快照 + 远端包字节。
+    /// 不修改当前 config，不发 Restored 信号；仅落盘供人工/后续 UI 决策。
+    /// </summary>
+    public async Task<string> PersistConflictArtifactsAsync(
+        byte[] remotePackage,
+        CancellationToken cancellationToken = default)
+    {
+        if (remotePackage is null) throw new ArgumentNullException(nameof(remotePackage));
+
+        var artifactRoot = Path.Combine(_appData.AppDataRootPath, "config-conflict-artifacts");
+        var artifactPath = Path.Combine(artifactRoot, DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff"));
+        Directory.CreateDirectory(artifactPath);
+
+        if (Directory.Exists(_appData.ConfigRootPath))
+        {
+            CopyDirectory(_appData.ConfigRootPath, Path.Combine(artifactPath, "local"));
+        }
+
+        var remotePackagePath = Path.Combine(artifactPath, "remote.package.zip");
+        await File.WriteAllBytesAsync(remotePackagePath, remotePackage, cancellationToken).ConfigureAwait(false);
+        return artifactPath;
+    }
+
     private IEnumerable<string> GetConfigFiles()
     {
         if (!Directory.Exists(_appData.ConfigRootPath))
