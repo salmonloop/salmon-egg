@@ -107,4 +107,5 @@
 ## 7. 交付说明要点
 - ETag 从方向判定退位；指纹 + 纯函数决策是唯一方向事实源。
 - 真冲突 / 首次采用（SyncNow）fail-closed；Activate 显式 PreferRemote。
-- 无时钟 LWW；残余工作：统一 content projection、typed canonical fingerprint、上传后 ETag reconcile、冲突 UI 决策入口。
+- 无时钟 LWW。
+- 闭环已补齐：本地指纹经 `CreatePackageAsync` 单一投影；`SyncedIncludeSecrets` 防策略翻转误判；上传后空 ETag reconcile；`ResolveConflictAsync(KeepLocal|ApplyRemote)` + 设置页显式操作入口。

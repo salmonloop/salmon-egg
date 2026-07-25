@@ -39,7 +39,7 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             secrets,
             _configChangeSignal,
             new NoOpFileSystemPersistence());
-        _fingerprint = new ConfigContentFingerprint(_appData, secrets);
+        _fingerprint = new ConfigContentFingerprint(_packageService);
     }
 
     public void Dispose()
@@ -491,8 +491,148 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
 
         Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
         Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
+        Assert.Equal(CloudProviderReadiness.Ready, coordinator.Current.Readiness);
         Assert.Equal("Light", local.Theme);
         Assert.Null(provider.Session.UploadedContent);
+    }
+
+    [Fact]
+    public async Task ResolveConflictAsync_KeepLocal_UploadsLocalAndClearsConflict()
+    {
+        await SaveEnabledSettingsAsync();
+        var baselinePackage = CreateRemotePackage("theme: System");
+        var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "onedrive",
+            RemoteETag = "etag-1",
+            SyncedFingerprint = baselineFingerprint,
+            SyncedIncludeSecrets = true,
+            LastSyncUtc = DateTimeOffset.UtcNow.AddHours(-3).ToString("O")
+        }, TestContext.Current.CancellationToken);
+
+        var settings = await _appSettings.LoadAsync();
+        settings.Theme = "Light";
+        await _appSettings.SaveAsync(settings);
+
+        var provider = new FakeProvider
+        {
+            Session = { Remote = new CloudConfigRemoteFile(CreateRemotePackage("theme: Dark"), "etag-2", DateTimeOffset.UtcNow) }
+        };
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.LastFailure?.Kind);
+
+        await coordinator.ResolveConflictAsync(CloudSyncConflictResolution.KeepLocal, TestContext.Current.CancellationToken);
+        var local = await _appSettings.LoadAsync();
+        var state = await new CloudConfigSyncStateStore(_fileStore, _appData).LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(CloudTransferPhase.Succeeded, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Null(coordinator.Current.LastFailure);
+        Assert.Equal("Light", local.Theme);
+        Assert.NotNull(provider.Session.UploadedContent);
+        Assert.False(string.IsNullOrWhiteSpace(state.SyncedFingerprint));
+        Assert.True(state.SyncedIncludeSecrets);
+    }
+
+    [Fact]
+    public async Task ResolveConflictAsync_ApplyRemote_RestoresRemoteAndClearsConflict()
+    {
+        await SaveEnabledSettingsAsync();
+        var baselinePackage = CreateRemotePackage("theme: System");
+        var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "onedrive",
+            RemoteETag = "etag-1",
+            SyncedFingerprint = baselineFingerprint,
+            SyncedIncludeSecrets = true,
+            LastSyncUtc = DateTimeOffset.UtcNow.AddHours(-3).ToString("O")
+        }, TestContext.Current.CancellationToken);
+
+        var settings = await _appSettings.LoadAsync();
+        settings.Theme = "Light";
+        await _appSettings.SaveAsync(settings);
+
+        var remotePackage = CreateRemotePackage("theme: Dark");
+        var provider = new FakeProvider
+        {
+            Session = { Remote = new CloudConfigRemoteFile(remotePackage, "etag-2", DateTimeOffset.UtcNow) }
+        };
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.LastFailure?.Kind);
+
+        await coordinator.ResolveConflictAsync(CloudSyncConflictResolution.ApplyRemote, TestContext.Current.CancellationToken);
+        var restored = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudTransferPhase.Succeeded, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudTransferOutcome.Restored, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Null(coordinator.Current.LastFailure);
+        Assert.Equal("Dark", restored.Theme);
+        Assert.NotNull(coordinator.Current.Transfer.LastSuccess?.BackupPath);
+    }
+
+    [Fact]
+    public async Task SyncNowAsync_WhenIncludeSecretsPolicyFlips_TreatsBaselineAsUnknown()
+    {
+        // 基线在 includeSecrets=true 下写入；当前改为 false → 旧指纹不可比 → SyncNow fail-closed。
+        await SaveEnabledSettingsAsync();
+        var baselinePackage = await _packageService.CreatePackageAsync(includeSecrets: true, TestContext.Current.CancellationToken);
+        var baselineFingerprint = _fingerprint.ComputeFromPackage(baselinePackage, includeSecrets: true);
+        await new CloudConfigSyncStateStore(_fileStore, _appData).SaveAsync(new CloudConfigSyncState
+        {
+            ProviderId = "onedrive",
+            RemoteETag = "etag-1",
+            SyncedFingerprint = baselineFingerprint,
+            SyncedIncludeSecrets = true,
+            LastSyncUtc = DateTimeOffset.UtcNow.AddHours(-1).ToString("O")
+        }, TestContext.Current.CancellationToken);
+
+        var settings = await _appSettings.LoadAsync();
+        settings.CloudConfigSync.IncludeSecrets = false;
+        settings.Theme = "Light";
+        await _appSettings.SaveAsync(settings);
+
+        var provider = new FakeProvider
+        {
+            Session = { Remote = new CloudConfigRemoteFile(CreateRemotePackage("theme: Dark"), "etag-2", DateTimeOffset.UtcNow) }
+        };
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+        var local = await _appSettings.LoadAsync();
+
+        Assert.Equal(CloudTransferPhase.Failed, coordinator.Current.Transfer.Phase);
+        Assert.Equal(CloudSyncFailureKind.RemoteConflict, coordinator.Current.Transfer.Failure?.Kind);
+        Assert.Equal("Light", local.Theme);
+    }
+
+    [Fact]
+    public async Task SyncNowAsync_WhenUploadReturnsEmptyETagButHeadHasMatchingContent_ReconcilesETag()
+    {
+        await SaveEnabledSettingsAsync();
+        var provider = new FakeProvider
+        {
+            Session =
+            {
+                UploadResult = CloudConfigUploadResult.Uploaded(etag: null),
+                // 上传后 reconcile 用第二次下载补 ETag；内容与刚上传包一致。
+                ProvideRemoteFromLastUpload = true,
+                RemoteETagAfterUpload = "reconciled-etag"
+            }
+        };
+        using var coordinator = CreateCoordinator(provider);
+
+        await coordinator.SyncNowAsync(TestContext.Current.CancellationToken);
+        var state = await new CloudConfigSyncStateStore(_fileStore, _appData).LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
+        Assert.Equal("reconciled-etag", state.RemoteETag);
+        Assert.Equal("reconciled-etag", coordinator.Current.Transfer.LastSuccess?.RemoteETag);
     }
 
     [Fact]
@@ -1037,6 +1177,13 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
         /// </summary>
         public CloudConfigRemoteFile? RemoteAfterPrecondition { get; set; }
 
+        /// <summary>
+        /// 上传后 reconcile：用刚上传内容 + RemoteETagAfterUpload 构造下载结果。
+        /// </summary>
+        public bool ProvideRemoteFromLastUpload { get; set; }
+
+        public string? RemoteETagAfterUpload { get; set; }
+
         public byte[]? UploadedContent { get; set; }
 
         public CloudConfigUploadResult UploadResult { get; set; } = CloudConfigUploadResult.Uploaded("new-etag");
@@ -1057,9 +1204,25 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             }
 
             var count = Interlocked.Increment(ref _downloadCount);
+            if (ProvideRemoteFromLastUpload && UploadedContent is not null && count > 0 && Remote is null)
+            {
+                return new CloudConfigRemoteFile(
+                    UploadedContent,
+                    RemoteETagAfterUpload,
+                    DateTimeOffset.UtcNow);
+            }
+
             if (count > 1 && RemoteAfterPrecondition is not null)
             {
                 return RemoteAfterPrecondition;
+            }
+
+            if (ProvideRemoteFromLastUpload && UploadedContent is not null && count > 1)
+            {
+                return new CloudConfigRemoteFile(
+                    UploadedContent,
+                    RemoteETagAfterUpload,
+                    DateTimeOffset.UtcNow);
             }
 
             return Remote;

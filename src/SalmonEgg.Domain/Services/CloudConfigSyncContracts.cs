@@ -69,6 +69,18 @@ public enum CloudSyncFirstAdoptPolicy
     PreferRemote = 1
 }
 
+/// <summary>
+/// 用户显式解决 fail-closed 冲突时的选择。禁止静默默认。
+/// </summary>
+public enum CloudSyncConflictResolution
+{
+    /// <summary>保留本地：无条件上传本地包，覆盖远端。</summary>
+    KeepLocal = 0,
+
+    /// <summary>采用远端：重新下载并 restore，覆盖本地（先备份）。</summary>
+    ApplyRemote = 1
+}
+
 public enum CloudSyncOperationKind
 {
     Initialize,
@@ -271,6 +283,13 @@ public interface ICloudConfigSyncCoordinator
     Task ApplyAndActivateAsync(CloudProviderDraft draft, CancellationToken cancellationToken = default);
 
     Task SyncNowAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 解决当前 fail-closed 冲突。仅在最近一次失败为 RemoteConflict 且云同步已启用时有效。
+    /// </summary>
+    Task ResolveConflictAsync(
+        CloudSyncConflictResolution resolution,
+        CancellationToken cancellationToken = default);
 
     Task DisableAsync(CancellationToken cancellationToken = default);
 

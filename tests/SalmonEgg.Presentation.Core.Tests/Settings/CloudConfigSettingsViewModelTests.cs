@@ -299,6 +299,61 @@ public sealed class CloudConfigSettingsViewModelTests
     }
 
     [Fact]
+    public void StatusProjection_WhenRemoteConflictPending_ExposesResolutionActionsAndBlocksSync()
+    {
+        var snapshot = CreateSnapshot(
+            enabled: true,
+            providerId: "webdav",
+            options: new Dictionary<string, string> { ["file_url"] = "https://dav.example.test/config.zip" },
+            transfer: new CloudTransferState(
+                CloudTransferPhase.Failed,
+                Failure: new CloudSyncFailure(
+                    CloudSyncFailureKind.RemoteConflict,
+                    "true conflict",
+                    ArtifactPath: "/tmp/conflict")),
+            readiness: CloudProviderReadiness.Ready) with
+        {
+            LastFailure = new CloudSyncFailure(
+                CloudSyncFailureKind.RemoteConflict,
+                "true conflict",
+                ArtifactPath: "/tmp/conflict")
+        };
+        var localizer = new TestCoreStringLocalizer();
+        var viewModel = CreateViewModel(new FakeCoordinator(snapshot), localizer: localizer);
+
+        Assert.True(viewModel.HasPendingConflict);
+        Assert.True(viewModel.CanResolveConflict);
+        Assert.False(viewModel.CanSync);
+        Assert.Equal(localizer["DataStorage_CloudSyncConflictNeedsResolution"], viewModel.ErrorText);
+        Assert.Equal(localizer["DataStorage_CloudSyncKeepLocal"], viewModel.KeepLocalConflictText);
+        Assert.Equal(localizer["DataStorage_CloudSyncApplyRemote"], viewModel.ApplyRemoteConflictText);
+    }
+
+    [Fact]
+    public async Task KeepLocalConflictCommand_WhenPending_InvokesCoordinatorWithKeepLocal()
+    {
+        var snapshot = CreateSnapshot(
+            enabled: true,
+            providerId: "webdav",
+            options: new Dictionary<string, string>(),
+            transfer: new CloudTransferState(
+                CloudTransferPhase.Failed,
+                Failure: new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "true conflict")),
+            readiness: CloudProviderReadiness.Ready) with
+        {
+            LastFailure = new CloudSyncFailure(CloudSyncFailureKind.RemoteConflict, "true conflict")
+        };
+        var coordinator = new FakeCoordinator(snapshot);
+        var viewModel = CreateViewModel(coordinator);
+
+        await viewModel.KeepLocalConflictCommand.ExecuteAsync(null);
+
+        Assert.Equal(CloudSyncConflictResolution.KeepLocal, coordinator.LastConflictResolution);
+        Assert.False(viewModel.HasPendingConflict);
+        Assert.Equal(CloudTransferOutcome.Uploaded, coordinator.Current.Transfer.LastSuccess?.Outcome);
+    }
+
+    [Fact]
     public void ColdStart_WithStoredWebDavCredential_ShowsAvailableCredentialWithoutRequestingPassword()
     {
         var coordinator = new FakeCoordinator(CreateReadySnapshot(
@@ -678,6 +733,29 @@ public sealed class CloudConfigSettingsViewModelTests
         }
 
         public Task SyncNowAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public CloudSyncConflictResolution? LastConflictResolution { get; private set; }
+
+        public Task ResolveConflictAsync(
+            CloudSyncConflictResolution resolution,
+            CancellationToken cancellationToken = default)
+        {
+            LastConflictResolution = resolution;
+            Current = Current with
+            {
+                Transfer = new CloudTransferState(
+                    CloudTransferPhase.Succeeded,
+                    new CloudTransferSuccess(
+                        resolution == CloudSyncConflictResolution.KeepLocal
+                            ? CloudTransferOutcome.Uploaded
+                            : CloudTransferOutcome.Restored,
+                        DateTimeOffset.UtcNow)),
+                Operation = null,
+                LastFailure = null
+            };
+            SnapshotChanged?.Invoke(this, Current);
+            return Task.CompletedTask;
+        }
 
         public Task DisableAsync(CancellationToken cancellationToken = default)
         {

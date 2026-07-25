@@ -48,6 +48,10 @@ public sealed class CloudConfigSyncState
     // 缺省空串表示「基线未建立」，老状态读入即视为首次采用。
     public string SyncedFingerprint { get; set; } = string.Empty;
 
+    // 写入 SyncedFingerprint 时使用的 IncludeSecrets 策略。
+    // 与当前设置不一致时，旧指纹不可比，按基线未知处理（避免 secrets 策略翻转误判）。
+    public bool SyncedIncludeSecrets { get; set; } = true;
+
     public string LastSyncUtc { get; set; } = string.Empty;
 }
 

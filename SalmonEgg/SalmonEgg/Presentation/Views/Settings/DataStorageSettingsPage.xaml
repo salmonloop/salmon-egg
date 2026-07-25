@@ -129,6 +129,19 @@
 
                                 <StackPanel Orientation="Horizontal"
                                             Spacing="8"
+                                            Visibility="{x:Bind ViewModel.CloudConfig.HasPendingConflict, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Button AutomationProperties.AutomationId="DataStorage.CloudSync.KeepLocal"
+                                            Content="{x:Bind ViewModel.CloudConfig.KeepLocalConflictText, Mode=OneWay}"
+                                            Command="{x:Bind ViewModel.CloudConfig.KeepLocalConflictCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanResolveConflict, Mode=OneWay}"/>
+                                    <Button AutomationProperties.AutomationId="DataStorage.CloudSync.ApplyRemote"
+                                            Content="{x:Bind ViewModel.CloudConfig.ApplyRemoteConflictText, Mode=OneWay}"
+                                            Command="{x:Bind ViewModel.CloudConfig.ApplyRemoteConflictCommand}"
+                                            IsEnabled="{x:Bind ViewModel.CloudConfig.CanResolveConflict, Mode=OneWay}"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
                                             Visibility="{x:Bind ViewModel.CloudConfig.IsEditing, Mode=OneWay, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                     <Button x:Uid="DataStorage_CloudSyncNow"
                                             AutomationProperties.AutomationId="DataStorage.CloudSync.SyncNow"

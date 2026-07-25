@@ -962,6 +962,12 @@
   <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>云服务拒绝了登录信息。请更新后重试。</value></data>
   <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>无法连接云服务。请检查网络后重试。</value></data>
   <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>无法解决云端配置冲突。本地配置未被替换。</value></data>
+  <data name="DataStorage_CloudSyncConflictNeedsResolution" xml:space="preserve"><value>本地与云端配置都已变更。请选择保留本地并上传，或采用云端覆盖本地。本地配置尚未被替换。</value></data>
+  <data name="DataStorage_CloudSyncKeepLocal" xml:space="preserve"><value>保留本地并上传</value></data>
+  <data name="DataStorage_CloudSyncApplyRemote" xml:space="preserve"><value>采用云端配置</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteTitle" xml:space="preserve"><value>采用云端配置？</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteMessage" xml:space="preserve"><value>这将用云端配置覆盖本机当前配置。覆盖前会自动备份本机配置。</value></data>
+  <data name="DataStorage_CloudSyncApplyRemotePrimary" xml:space="preserve"><value>采用云端</value></data>
   <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>无法创建或应用配置同步包。</value></data>
   <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>此版本未配置 OneDrive。请选择其他云服务。</value></data>
   <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>移除此设备上的 {0} 同步设置？</value></data>

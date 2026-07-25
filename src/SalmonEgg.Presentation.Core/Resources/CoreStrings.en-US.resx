@@ -956,6 +956,12 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncAuthenticationRejected" xml:space="preserve"><value>The cloud service rejected the sign-in details. Update them and try again.</value></data>
   <data name="DataStorage_CloudSyncNetworkUnavailable" xml:space="preserve"><value>The cloud provider could not be reached. Check your network and try again.</value></data>
   <data name="DataStorage_CloudSyncConflictFailed" xml:space="preserve"><value>The cloud configuration conflict could not be resolved. Local configuration was not replaced.</value></data>
+  <data name="DataStorage_CloudSyncConflictNeedsResolution" xml:space="preserve"><value>Local and cloud configurations both changed. Keep local and upload, or apply the cloud copy. Local configuration has not been replaced.</value></data>
+  <data name="DataStorage_CloudSyncKeepLocal" xml:space="preserve"><value>Keep local and upload</value></data>
+  <data name="DataStorage_CloudSyncApplyRemote" xml:space="preserve"><value>Apply cloud configuration</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteTitle" xml:space="preserve"><value>Apply cloud configuration?</value></data>
+  <data name="DataStorage_CloudSyncApplyRemoteMessage" xml:space="preserve"><value>This replaces the current local configuration with the cloud copy. A local backup is created first.</value></data>
+  <data name="DataStorage_CloudSyncApplyRemotePrimary" xml:space="preserve"><value>Apply cloud</value></data>
   <data name="DataStorage_CloudSyncLocalPackageFailed" xml:space="preserve"><value>The configuration sync package could not be created or applied.</value></data>
   <data name="DataStorage_CloudSyncOneDriveUnavailable" xml:space="preserve"><value>OneDrive is not configured in this build. Choose another provider.</value></data>
   <data name="DataStorage_CloudSyncForgetTitle" xml:space="preserve"><value>Remove {0} sync setup from this device?</value></data>
