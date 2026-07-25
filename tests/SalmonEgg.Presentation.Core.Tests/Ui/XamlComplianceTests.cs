@@ -1724,10 +1724,13 @@ public sealed class XamlComplianceTests
         var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");
         var chatInputCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml.cs");
 
+        // 原生 hit-test 契约：不靠 IsEnabled 禁用 ComboBoxItem（会吞指针），用 Opacity 表达不可选；
+        // 命令执行路径必须门控 IsSelectable；选择事实来自原生 AddedItems/SelectedIndex。
         Assert.DoesNotContain("ItemContainerStyle=\"{StaticResource ComposerSelectorComboBoxItemStyle}\"", chatInputXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("<Setter Property=\"IsEnabled\" Value=\"{Binding IsSelectable}\"", chatInputXaml, StringComparison.Ordinal);
         Assert.Contains("Opacity=\"{x:Bind IsSelectable, Mode=OneWay, Converter={StaticResource BoolToOpacityConverter}}\"", chatInputXaml, StringComparison.Ordinal);
-        Assert.Contains("|| !item.IsSelectable", chatInputCodeBehind, StringComparison.Ordinal);
+        // 门控形态可以是独立 early-return（当前）或历史复合条件；关键是执行前拒绝不可选项。
+        Assert.Contains("!item.IsSelectable", chatInputCodeBehind, StringComparison.Ordinal);
         Assert.Contains("e.AddedItems", chatInputCodeBehind, StringComparison.Ordinal);
         Assert.Contains("comboBox.SelectedIndex", chatInputCodeBehind, StringComparison.Ordinal);
         Assert.Contains("DataContext: ComposerSelectorItemViewModel", chatInputCodeBehind, StringComparison.Ordinal);

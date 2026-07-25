@@ -322,8 +322,15 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("RawGameControllerFaceButtonLayoutResolver.Resolve", reader, StringComparison.Ordinal);
         Assert.Contains("BrowserGamepadInputReadingMapper.GetInputReading", reader, StringComparison.Ordinal);
         Assert.Contains("StandardGamepadInputReadingMapper.GetInputReading", LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Input\BrowserGamepadInputReadingMapper.cs"), StringComparison.Ordinal);
-        Assert.Contains("GamepadIntentProcessor.GetActiveIntents", reader, StringComparison.Ordinal);
-        Assert.Contains("GamepadDiagnosticsInputSource.Gamepad", reader, StringComparison.Ordinal);
+        // 平台 host 只采集 reading；ActiveIntents 由 Core projector 单一拥有（thin host 架构）。
+        Assert.Contains("GamepadDiagnosticsActiveReadingProjector.Project", reader, StringComparison.Ordinal);
+        Assert.DoesNotContain("GamepadIntentProcessor.GetActiveIntents", reader, StringComparison.Ordinal);
+        Assert.Contains(
+            "GamepadIntentProcessor.GetActiveIntents",
+            LoadFile(@"src\SalmonEgg.Presentation.Core\Services\Input\GamepadDiagnosticsActiveReadingProjector.cs"),
+            StringComparison.Ordinal);
+        // InputSource 由 projector 选择结果给出，不再在 WASM reader 内硬编码。
+        Assert.Contains("InputSource: active.InputSource", reader, StringComparison.Ordinal);
         Assert.Contains("ConnectedRawControllerCount: 0", reader, StringComparison.Ordinal);
         Assert.Contains("[SupportedOSPlatform(\"browser\")]", inputService, StringComparison.Ordinal);
         Assert.Contains("WasmGamepadSnapshotReader.ReadInputReadings()", inputService, StringComparison.Ordinal);
