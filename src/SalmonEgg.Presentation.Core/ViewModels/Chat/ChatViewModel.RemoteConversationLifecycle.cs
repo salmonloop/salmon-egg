@@ -2467,37 +2467,95 @@ public partial class ChatViewModel
             return false;
         }
 
-        if (!IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId))
+        // Binding and connection identity were validated above, so a completed session/load is a
+        // legitimate warm result for this conversation whether or not the activation that started it
+        // is still the foreground owner. The two branches below differ only in their buffering-scope
+        // reason/log and in the stale-supersession guard the background branch adds.
+        var isForegroundProjectionOwner = IsCurrentRemoteSessionRecoveryProjectionOwner(request, conversationId);
+        if (isForegroundProjectionOwner)
         {
-            Logger.LogInformation(
-                "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                conversationId,
-                expectedBinding.RemoteSessionId);
-            var backgroundBufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+            var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
                 adapter,
                 hydrationAttemptId,
-                "RemoteSessionRecoveryBackgroundCompleted");
-            if (backgroundBufferingCompleted)
+                "RemoteSessionRecoveryCompleted");
+            if (!bufferingCompleted)
             {
-                await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+                Logger.LogWarning(
+                    "Discarding remote session recovery projection because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                    conversationId,
+                    expectedBinding.RemoteSessionId);
+                return false;
             }
 
-            return backgroundBufferingCompleted;
+            await PromoteRemoteSessionRecoveryToWarmAsync(
+                    conversationId,
+                    currentBinding,
+                    expectedConnectionInstanceId,
+                    projection,
+                    hydrationAttemptId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return true;
         }
 
-        var bufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
+        // The activation that started this recovery was superseded. Binding and connection identity
+        // still match (validated above), so the completed session/load is a legitimate warm result
+        // for this conversation. Promote it to authoritative Warm so returning to the conversation is
+        // a zero-round-trip warm reuse instead of another slow session/load. The work is
+        // conversationId-scoped and never touches the foreground (HydratedConversationId / overlays
+        // stay owned by the newest activation).
+        Logger.LogInformation(
+            "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+            conversationId,
+            expectedBinding.RemoteSessionId);
+
+        var backgroundBufferingCompleted = CompleteRemoteSessionRecoveryBufferingScope(
             adapter,
             hydrationAttemptId,
-            "RemoteSessionRecoveryCompleted");
-        if (!bufferingCompleted)
+            "RemoteSessionRecoveryBackgroundCompleted");
+        if (!backgroundBufferingCompleted)
         {
-            Logger.LogWarning(
-                "Discarding remote session recovery projection because buffering attempt is stale. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
-                conversationId,
-                expectedBinding.RemoteSessionId);
             return false;
         }
 
+        // If a newer activation for this same conversation is already mid-flight it will have reset
+        // the runtime to an earlier pending phase (Selecting/Selected/RemoteConnectionReady). That
+        // activation owns hydration and must drive its own authoritative session/load, so this stale
+        // background completion must not promote to Warm or land its projection. Only promote when the
+        // runtime is still the RemoteHydrating phase this recovery established (or already Warm).
+        var currentRuntime = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false))
+            .ResolveRuntimeState(conversationId);
+        var newerActivationOwnsHydration = currentRuntime is
+        {
+            Phase: ConversationRuntimePhase.Selecting
+                or ConversationRuntimePhase.Selected
+                or ConversationRuntimePhase.RemoteConnectionReady
+        };
+        if (newerActivationOwnsHydration)
+        {
+            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+            return true;
+        }
+
+        await PromoteRemoteSessionRecoveryToWarmAsync(
+                conversationId,
+                currentBinding,
+                expectedConnectionInstanceId,
+                projection,
+                hydrationAttemptId,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    private async Task PromoteRemoteSessionRecoveryToWarmAsync(
+        string conversationId,
+        ConversationBindingSlice currentBinding,
+        string? expectedConnectionInstanceId,
+        AcpSessionRecoveryProjection projection,
+        long? hydrationAttemptId,
+        CancellationToken cancellationToken)
+    {
         await ApplySessionLoadResponseAsync(conversationId, projection.SessionLoadResponse).ConfigureAwait(true);
         await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
         await SetConversationRuntimeStateAsync(
@@ -2508,7 +2566,6 @@ public partial class ChatViewModel
                 cancellationToken,
                 connectionInstanceId: expectedConnectionInstanceId)
             .ConfigureAwait(false);
-        return true;
     }
 
     private async Task ObserveRemoteSessionRecoveryTransportTaskAsync<TResponse>(

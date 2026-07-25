@@ -1148,6 +1148,144 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SwitchConversationAsync_WhenSupersededBackgroundHydrationCompletes_PromotesConversationToAuthoritativeWarm()
+    {
+        // Evidence chain:
+        // 1) Fast switching supersedes the previous activation (BeginActivation cancels the prior context),
+        //    but the background recovery task keeps running on the request token (decoupled from activation).
+        // 2) When that superseded background session/load completes, PublishRemoteSessionRecoveryProjectionAsync
+        //    hits the "no longer projection owner" branch. It must still promote the conversation to authoritative
+        //    Warm (SessionLoadCompleted) and land the projection, without touching the foreground session.
+        // 3) Otherwise the passed-over conversation stays RemoteHydrating forever, so returning to it always
+        //    denies warm reuse (RuntimeStateNotWarm) and re-runs a slow session/load — the observed stutter.
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.GetSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.TryGetValue(id, out var session) ? session : null);
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .Returns<string, string?>((id, cwd) =>
+            {
+                var session = new Session(id, cwd);
+                sessions[id] = session;
+                return Task.FromResult(session);
+            });
+        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
+            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
+            {
+                if (!sessions.TryGetValue(id, out var session))
+                {
+                    return false;
+                }
+
+                update(session);
+                if (updateActivity)
+                {
+                    session.UpdateActivity();
+                }
+
+                return true;
+            });
+        sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
+            .Returns<string>(id => sessions.Remove(id));
+
+        await sessionManager.Object.CreateSessionAsync("conv-a", @"C:\repo\a");
+        await sessionManager.Object.CreateSessionAsync("conv-b", @"C:\repo\b");
+
+        var aLoadStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowALoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var aLoadCount = 0;
+        var bLoadCount = 0;
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.IsAny<SessionLoadParams>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (parameters, cancellationToken) =>
+            {
+                if (string.Equals(parameters.SessionId, "remote-a", StringComparison.Ordinal))
+                {
+                    Interlocked.Increment(ref aLoadCount);
+                    aLoadStarted.TrySetResult(null);
+                    await allowALoadCompletion.Task.WaitAsync(cancellationToken);
+                    return SessionLoadResponse.Completed;
+                }
+
+                if (string.Equals(parameters.SessionId, "remote-b", StringComparison.Ordinal))
+                {
+                    Interlocked.Increment(ref bLoadCount);
+                    return SessionLoadResponse.Completed;
+                }
+
+                throw new InvalidOperationException($"Unexpected remote session id: {parameters.SessionId}");
+            });
+
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-a",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 0, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-b",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-a",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-a", new ConversationBindingSlice("conv-a", "remote-a", "profile-1"))
+                .Add("conv-b", new ConversationBindingSlice("conv-b", "remote-b", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+
+        var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
+
+        // Switch to A; its session/load starts and hangs in the background.
+        var switchA = switcher.SwitchConversationAsync("conv-a", TestContext.Current.CancellationToken);
+        await aLoadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        // Switch to B before A finishes; this supersedes A's activation. B completes quickly.
+        var switchB = switcher.SwitchConversationAsync("conv-b", TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() =>
+        {
+            return Task.FromResult(string.Equals(fixture.ViewModel.CurrentSessionId, "conv-b", StringComparison.Ordinal));
+        }, timeoutMilliseconds: 5000);
+
+        // Let A's superseded background load finish.
+        allowALoadCompletion.TrySetResult(null);
+        await switchA;
+        await switchB;
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetStateAsync();
+            return state.ResolveRuntimeState("conv-a")?.Phase == ConversationRuntimePhase.Warm;
+        }, timeoutMilliseconds: 5000);
+
+        var finalState = await fixture.GetStateAsync();
+        var runtimeA = finalState.ResolveRuntimeState("conv-a");
+        Assert.NotNull(runtimeA);
+        Assert.Equal(ConversationRuntimePhase.Warm, runtimeA!.Value.Phase);
+        Assert.Equal(ConversationRuntimeReasons.SessionLoadCompleted, runtimeA.Value.Reason);
+        // Superseded background completion must not steal the foreground session.
+        Assert.Equal("conv-b", finalState.HydratedConversationId);
+        Assert.Equal(1, Volatile.Read(ref aLoadCount));
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_WhenSameRemoteSessionMovesToNewConnectionInstance_CancelsOldRecoveryAndStartsNewLoad()
     {
         var syncContext = new ImmediateSynchronizationContext();
