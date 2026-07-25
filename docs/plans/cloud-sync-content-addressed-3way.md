@@ -1,0 +1,107 @@
+# 云配置同步「保存即回退」修复方案：内容寻址 3-way + LWW
+
+## 1. 问题与根因（已确认）
+
+### 症状
+用户在设置中心改动并保存后，设置立刻被远端旧值覆盖回退。
+
+### 触发闭环（全链路确认）
+1. 保存设置 → `AppSettingsService.SaveAsync` → `FileSystemAppFileStore.WriteAllTextAsync` 发 `ConfigChangeSignal.NotifyChanged(Written)`（`FileSystemAppFileStore.cs:56`）。
+2. `CloudConfigSyncCoordinator.OnConfigChanged` 响应，2s debounce 调度自动同步（`CloudConfigSyncCoordinator.cs:886-902`）。
+3. debounce 后 `SyncNowCoreAsync` → `SynchronizeAsync`。
+4. `SynchronizeAsync` 判定「远端赢」→ `RestorePackageAsync` 用旧远端覆盖本地 `app.yaml`，发 `Restored` 信号（`ConfigSyncPackageService.cs:153`）。
+5. `ConfigProjectionReloadCoordinator` 收 `Restored` 重投影 VM（`ConfigProjectionReloadCoordinator.cs:53-86`）→ UI 回退。
+
+### 根因：方向判定误用 ETag 相等性
+`SynchronizeAsync`（`CloudConfigSyncCoordinator.cs:526-579`）只比较远端 ETag，没有本地变更事实源：
+- `CloudConfigSyncState`（`CloudConfigSyncModels.cs:36-47`）只存 `RemoteETag`，不记录上次同步的内容基线，无法区分本地 dirty / clean。
+- ETag 不一致一律判「远端领先」→ 无条件 restore。
+- 最致命：`UploadLocalAsync` 执行 `state.RemoteETag = upload.ETag ?? string.Empty`（`cs:642`）。WebDAV PUT 按 RFC 4918 不强制返回 ETag，很多服务器不返回 → RemoteETag 变空 → 下一次同步进入「RemoteETag 为空 → RestoreRemote」分支，用旧远端覆盖刚上传的本地。**单设备也会稳定复现。**
+
+## 2. 方案：内容寻址 3-way 方向判定，ETag 退位为并发保护
+
+### 2.1 核心：三个内容指纹
+每次同步计算三个规范化内容哈希（canonical hash）：
+- `syncedFingerprint`：上次同步成功时的内容基线（存入 sync state）。
+- `localFingerprint`：当前本地 config 的规范化哈希。
+- `remoteFingerprint`：本次拉到的远端包的规范化哈希。
+
+方向判定表：
+
+| local vs synced | remote vs synced | 判定 |
+|---|---|---|
+| 相同 | 相同 | 无操作（no-op） |
+| 不同 | 相同 | **上传**（当前被误判为回退的路径） |
+| 相同 | 不同 | **restore** |
+| 不同 | 不同，且 local==remote | 已收敛，仅刷新基线 |
+| 不同 | 不同，且 local!=remote | **真冲突 → LWW** |
+
+首次采用（`syncedFingerprint` 为空）：视为 baseline 未建立。若远端存在且与本地内容不同，按真冲突走 LWW（避免静默吞本地）。
+
+### 2.2 冲突检测（严谨定义）
+`local != synced && remote != synced && local != remote`。即两侧都相对上次同步基线变过且内容不一致。
+
+### 2.3 冲突解决：LWW（时间戳新者胜）— 已确认取舍
+- **本地时间戳**：本地 config 的最近修改时间。取所有被打包 config 文件的 `UpdatedAtUtc`（`app.yaml`/`mcp.yaml`/`server-*.yaml` 均有该字段，UTC "O"）的最大值；缺失则回退文件系统 `LastWriteTimeUtc`。
+- **远端时间戳**：优先远端包 `manifest.CreatedAtUtc`（打包=上传时刻，UTC "O"，`CloudConfigSyncModels.cs:13`），回退 HTTP `Last-Modified`（已在 `CloudConfigRemoteFile.LastModifiedUtc`）。
+- **裁决**：远端时间戳 > 本地时间戳 → restore（`ConflictRemoteApplied`）；否则 → 上传（`Uploaded`）。
+- **取舍标注（必须写入代码注释与交付说明）**：LWW 依赖可信时钟，跨设备 skew 时可能误判赢家并静默丢掉输的一边。全项目时间戳统一 UTC + "O"，已消除时区歧义；skew 属残余风险，本方案接受。
+
+### 2.4 关键陷阱：规范化指纹必须剔除易变字段
+直接 hash 会每次都 dirty，必须剔除：
+- `app.yaml` 的 `UpdatedAtUtc`（`AppSettingsService.cs:99`）。
+- `manifest.json` 的 `CreatedAtUtc`（`CloudConfigSyncModels.cs:13`）——本就不进内容指纹。
+- `mcp.yaml` / `server-*.yaml` 的 `UpdatedAtUtc`（`McpSettingsYamlV1.cs:10`、`ServerConfigurationYaml.cs:10`、`ConfigurationManager.cs:208`）。
+
+**规范化策略**：指纹只覆盖 `files/config/` 下条目，对每个文件做「反序列化→剔除易变元数据→重新规范序列化→拼接 (相对路径, 规范内容) 有序列表→SHA-256」。secrets 是否纳入指纹由 `IncludeSecrets` 决定（避免仅密钥变更时的误判需一致处理）。指纹计算集中到一个新的 `ConfigContentFingerprint` 服务，作为唯一 owner，禁止在 coordinator 里散落 hash 逻辑。
+
+## 3. 改动范围
+
+### 3.1 状态模型 `CloudConfigSyncState`（`CloudConfigSyncModels.cs`）
+新增字段（保持 YAML 向后兼容，缺省即「基线未知」）：
+- `SyncedFingerprint`（string）：上次同步成功的规范化内容哈希。
+- 保留 `RemoteETag`，语义降级为「乐观并发令牌」，不再参与方向判定。
+- `SchemaVersion` 保持 1（新增字段可选，老状态读入即 baseline 未知，安全）。
+
+### 3.2 新增 `ConfigContentFingerprint`（Infrastructure/Storage）
+- `Task<string> ComputeLocalAsync(bool includeSecrets, CancellationToken)`：对本地 config 目录规范化后哈希。
+- `string ComputeFromPackage(byte[] package, bool includeSecrets)`：对远端/本地包字节规范化后哈希（复用打包解包逻辑，剔除 manifest 时间戳）。
+- `DateTimeOffset? ExtractLocalTimestamp()` / `ExtractPackageTimestamp(byte[])`：LWW 时间源提取。
+- 纯计算，无文件系统副作用触发（构造/DI 不落盘，遵守缓存与持久化边界规则）。
+
+### 3.3 重写 `SynchronizeAsync`（`CloudConfigSyncCoordinator.cs:526-579`）
+按 2.1 表判定。分支产出维持既有 `CloudTransferOutcome`（`Uploaded`/`Restored`/`ConflictRemoteApplied`），新增内部无操作时不改 UI 语义。
+
+### 3.4 `UploadLocalAsync` / `RestoreRemoteAsync`
+同步成功后写入 `SyncedFingerprint`（= 本次实际落地内容的规范化哈希），而非依赖 ETag。ETag 仍存，仅用于下次上传的 `If-Match` 乐观并发。
+
+### 3.5 上传/下载的乐观并发（ETag 退位后仍保留）
+- `UploadLocalAsync` 的 `If-Match` 逻辑保留：仅防止 clobber，不做方向判定。
+- 预条件失败（`PreconditionFailed`）时重新下载并走 3-way，而非无条件 restore。
+
+## 4. 单一状态链路与边界（遵守 AGENTS.md 硬约束）
+- 方向判定与基线写入全部收敛在 `CloudConfigSyncCoordinator` + `ConfigContentFingerprint`，不新增第二套状态 owner。
+- `Revision` 语义保持不变（云连接设置自身修订号），不参与内容方向判定，避免作用域错配。
+- 时间戳一律 UTC + "O"，进入判定前无需时区换算。
+
+## 5. 测试计划（Core，跨平台可运行）
+扩展 `CloudConfigSyncCoordinatorTests`：
+1. **保存后仅本地 dirty → 上传，不回退**（回归当前 bug 的核心用例）。
+2. **上传后远端不返回 ETag，二次同步不回退**（根治第 4 类缺陷）。
+3. **仅远端变化 → restore**。
+4. **两侧收敛（内容相同）→ no-op，不重复上传**。
+5. **真冲突且远端更新 → LWW restore**。
+6. **真冲突且本地更新 → LWW upload**。
+7. **易变字段（UpdatedAtUtc/CreatedAtUtc）单独变化不触发 dirty 误判**（指纹规范化用例）。
+8. **老 sync state（无 SyncedFingerprint）读入 → baseline 未知 → 首次同步不静默吞本地**。
+新增 `ConfigContentFingerprintTests`：规范化剔除易变字段、包与本地一致性、secrets 纳入/排除。
+
+## 6. 验证
+- `dotnet test`（Infrastructure.Tests、相关 Core 测试）全绿。
+- 构建通过。
+- 属于状态机 + 数据处理实质改动，非文档 only，必须跑测试门禁。
+
+## 7. 交付说明要点
+- 明确 LWW 的时钟依赖与残余 skew 风险。
+- 明确 ETag 从方向判定退位、指纹成为唯一方向事实源。
+- 列出修改文件与原因。

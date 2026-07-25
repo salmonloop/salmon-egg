@@ -327,6 +327,7 @@ public static class DependencyInjection
         services.AddSingleton<ConfigurationSecretSnapshotService>();
         services.AddSingleton<ConfigSyncPackageService>();
         services.AddSingleton<CloudConfigSyncStateStore>();
+        services.AddSingleton<ConfigContentFingerprint>();
         services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, WebDavCloudConfigStorageProvider>();
         services.AddSingleton<ICloudConfigStorageProvider, S3CloudConfigStorageProvider>();

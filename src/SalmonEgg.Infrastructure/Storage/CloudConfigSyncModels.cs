@@ -41,7 +41,12 @@ public sealed class CloudConfigSyncState
 
     public string ProviderId { get; set; } = string.Empty;
 
+    // 乐观并发令牌，仅用于上传时的 If-Match 防 clobber；不再参与同步方向判定。
     public string RemoteETag { get; set; } = string.Empty;
+
+    // 上次同步成功时落地内容的规范化指纹（内容寻址 3-way 判定的基线）。
+    // 缺省空串表示「基线未建立」，老状态读入即视为首次采用。
+    public string SyncedFingerprint { get; set; } = string.Empty;
 
     public string LastSyncUtc { get; set; } = string.Empty;
 }
