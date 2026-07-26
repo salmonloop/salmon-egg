@@ -483,14 +483,24 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         var chatService = sink.CurrentChatService;
         if (chatService != null)
         {
-            await chatService.DisconnectAsync().ConfigureAwait(false);
+            try
+            {
+                await chatService.DisconnectAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // 断连失败不得中断后续 dispose/pool/sink/连接态的收尾,否则留下半拆的协调器状态
+                // (旧服务仍挂在 sink、pool 里还留着已死连接、连接身份未清)。
+                _logger.LogDebug(ex, "Failed to disconnect ACP chat service cleanly during disconnect.");
+            }
+
             try
             {
                 chatService.Dispose();
             }
             catch (Exception ex)
             {
-                // 释放失败不得中断后续 pool/sink/连接态的收尾,否则留下半拆的协调器状态。
+                // 释放失败同样不得中断收尾,否则留下半拆的协调器状态。
                 _logger.LogDebug(ex, "Failed to dispose ACP chat service cleanly during disconnect.");
             }
 
@@ -1102,16 +1112,26 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
 
         public void Dispose()
         {
+            bool ownsScopeCts;
             lock (_owner._applyScopeLock)
             {
-                if (ReferenceEquals(_owner._activeApplyScopeCts, _scopeCts))
+                // 仍是活跃 scope 才由本 scope 负责作废并释放 _scopeCts;若已被后续 EnterApplyScope
+                // 顶替,则该 CTS 的 Cancel() 与 Dispose() 归顶替者独占(它已在入口处同步完成)。
+                // 锁把「归属判定」串行化,保证任一 CTS 的取消/释放只被单一线程触碰;否则本 scope
+                // 与顶替者会在锁外交错释放同一 CTS,顶替者的 Cancel() 可能撞上已释放实例并以
+                // ObjectDisposedException 炸掉新的 apply 请求。
+                ownsScopeCts = ReferenceEquals(_owner._activeApplyScopeCts, _scopeCts);
+                if (ownsScopeCts)
                 {
                     _owner._activeApplyScopeCts = null;
                 }
             }
 
             _linkedCts.Dispose();
-            _scopeCts.Dispose();
+            if (ownsScopeCts)
+            {
+                _scopeCts.Dispose();
+            }
         }
     }
 

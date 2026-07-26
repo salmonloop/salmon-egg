@@ -51,10 +51,12 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
             !session.Service.IsConnected
             || !session.Service.IsInitialized);
 
+        // RemoveWhere 已把这些会话从注册表批量摘除,再无任何持有者;此后必须无条件全部释放。
+        // 若在此循环中响应取消,剩余的已摘除会话就成了无主的泄漏连接(进程/套接字/HttpClient)。
+        // 取消只应在摘除之前(方法入口)或仍查询注册表的淘汰选择阶段起作用。
         var disposeFailureCount = 0;
         foreach (var session in removed)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             if (ReferenceEquals(activeService, session.Service))
             {
                 continue;

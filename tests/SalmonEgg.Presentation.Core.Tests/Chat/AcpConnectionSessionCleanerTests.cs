@@ -69,6 +69,42 @@ public sealed class AcpConnectionSessionCleanerTests
     }
 
     [Fact]
+    public async Task CleanupStaleAsync_WhenCancelledMidStaleDisposal_StillReleasesAllDetachedSessions()
+    {
+        // RemoveWhere 已把全部失效会话从注册表批量摘除；此后它们再无持有者，必须无条件全部释放。
+        // 取消令牌不得在摘除后中断循环，否则剩余会话成为无主泄漏连接（进程/套接字/HttpClient）。
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        var logger = new Mock<ILogger<AcpConnectionSessionCleaner>>();
+        var cleaner = CreateCleaner(registry, logger.Object);
+
+        var staleA = CreateChatService(isConnected: false, isInitialized: true);
+        var staleB = CreateChatService(isConnected: false, isInitialized: true);
+        var staleC = CreateChatService(isConnected: false, isInitialized: true);
+
+        registry.Upsert(new AcpConnectionSession("stale-a", WrapAdapter(staleA.Object), CreateInitializeResponse("a"), CreateReuseKey("sig-a")));
+        registry.Upsert(new AcpConnectionSession("stale-b", WrapAdapter(staleB.Object), CreateInitializeResponse("b"), CreateReuseKey("sig-b")));
+        registry.Upsert(new AcpConnectionSession("stale-c", WrapAdapter(staleC.Object), CreateInitializeResponse("c"), CreateReuseKey("sig-c")));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // 入口的 ThrowIfCancellationRequested 在摘除之前起作用，故取消须在摘除后触发才暴露泄漏；
+        // 已取消令牌恰好覆盖「摘除后循环内取消」这条路径：入口若抛，会话根本没被摘除，也不泄漏。
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => cleaner.CleanupStaleAsync(activeService: null, cancellationToken: cts.Token));
+
+        // 若已摘除，则必须已释放：注册表不再持有它们，唯有循环负责归还底层资源。
+        // 若入口先抛（未摘除），会话仍在注册表里，未释放也不算泄漏。二者互斥，断言据实际状态择一。
+        foreach (var (profile, mock) in new[] { ("stale-a", staleA), ("stale-b", staleB), ("stale-c", staleC) })
+        {
+            if (!registry.TryGetByProfile(profile, out _))
+            {
+                mock.Verify(x => x.DisconnectAsync(), Times.Once);
+            }
+        }
+    }
+
+    [Fact]
     public async Task CleanupStaleAsync_WhenPolicyEnabled_EvictsOnlyUnpinnedWarmSessions()
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();

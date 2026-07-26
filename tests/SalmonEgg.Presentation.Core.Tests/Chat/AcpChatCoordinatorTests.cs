@@ -2371,6 +2371,46 @@ public sealed class AcpChatCoordinatorTests
     }
 
     [Fact]
+    public async Task DisconnectAsync_WhenServiceDisconnectThrows_StillCompletesTeardown()
+    {
+        // 断连失败不得半拆协调器状态:sink 替换、绑定清理与连接态复位都必须照常执行,
+        // 否则残留一个指向已死服务的协调器,后续激活全部错乱。
+        var service = CreateChatService();
+        service
+            .Setup(x => x.DisconnectAsync())
+            .ThrowsAsync(new InvalidOperationException("disconnect failure"));
+        var sink = new FakeSink
+        {
+            CurrentChatService = service.Object,
+            IsConnected = true,
+            IsInitialized = true,
+            CurrentSessionId = "local-session-1",
+            CurrentRemoteSessionId = "remote-session-3"
+        };
+        var factory = new Mock<IAcpChatServiceFactory>();
+        var logger = new Mock<ILogger<AcpChatCoordinator>>();
+        var connectionCoordinator = new Mock<IAcpConnectionCoordinator>();
+        var resetCalls = 0;
+        connectionCoordinator
+            .Setup(x => x.ResetAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => resetCalls++)
+            .Returns(Task.CompletedTask);
+        var sut = CreateCoordinator(
+            factory.Object,
+            logger.Object,
+            connectionCoordinator: connectionCoordinator.Object,
+            transportSupportPolicy: CreateTransportSupportPolicy(),
+            mcpServerProvider: EmptyMcpServerProvider);
+
+        await sut.DisconnectAsync(sink, TestContext.Current.CancellationToken);
+
+        Assert.Null(sink.CurrentChatService);
+        Assert.Null(sink.CurrentRemoteSessionId);
+        Assert.Equal(1, sink.BindingCommands.ClearCalls);
+        Assert.Equal(1, resetCalls);
+    }
+
+    [Fact]
     public async Task ApplyTransportConfigurationAsync_BufferOverflow_DelegatesResyncToConnectionCoordinator()
     {
         var transport = new FakeTransportConfiguration
