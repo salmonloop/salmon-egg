@@ -12,7 +12,7 @@ using SalmonEgg.Presentation.Core.Services.Shortcuts;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public sealed partial class ShortcutsSettingsViewModel : ObservableObject
+public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisposable
 {
     private readonly AppPreferencesViewModel _preferences;
     private readonly IStringLocalizer<CoreStrings> _localizer;
@@ -80,6 +80,20 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject
         if (_languageService is not null)
         {
             _languageService.LanguageChanged += OnLanguageChanged;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_languageService is not null)
+        {
+            _languageService.LanguageChanged -= OnLanguageChanged;
+        }
+
+        Shortcuts.CollectionChanged -= OnShortcutsCollectionChanged;
+        foreach (var shortcut in Shortcuts)
+        {
+            shortcut.PropertyChanged -= OnShortcutPropertyChanged;
         }
     }
 

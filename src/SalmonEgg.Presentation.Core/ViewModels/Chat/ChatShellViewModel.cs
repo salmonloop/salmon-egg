@@ -15,7 +15,7 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
-public sealed partial class ChatShellViewModel : ObservableObject
+public sealed partial class ChatShellViewModel : ObservableObject, IDisposable
 {
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
     private readonly MainNavigationViewModel _navigationViewModel;
@@ -240,5 +240,11 @@ public sealed partial class ChatShellViewModel : ObservableObject
         }
 
         return builder.ToString();
+    }
+
+    public void Dispose()
+    {
+        Chat.PropertyChanged -= OnChatPropertyChanged;
+        _conversationCatalog.PropertyChanged -= OnConversationCatalogPropertyChanged;
     }
 }

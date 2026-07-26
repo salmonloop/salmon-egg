@@ -3520,7 +3520,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         try { _remoteConnectionRecoveryCts?.Dispose(); } catch { }
         try { _disposeCts.Dispose(); } catch { }
         try { _conversationActivationOrchestrator.Dispose(); } catch { }
-        try { _ = _localTerminalPanelCoordinator?.DisposeAsync().AsTask(); } catch { }
+        try
+        {
+            var terminalDisposal = _localTerminalPanelCoordinator?.DisposeAsync().AsTask();
+            _ = terminalDisposal?.ContinueWith(
+                static (task, state) => ((ILogger)state!).LogDebug(
+                    task.Exception,
+                    "Local terminal panel coordinator async disposal faulted during ChatViewModel dispose."),
+                Logger,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                TaskScheduler.Default);
+        }
+        catch
+        {
+        }
         try { _remoteConversationActivationGate.Dispose(); } catch { }
         try { _newSessionDraftGate.Dispose(); } catch { }
 
