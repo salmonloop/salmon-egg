@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 
@@ -23,17 +26,20 @@ public sealed class ConfigSyncPackageService
     private readonly ConfigurationSecretSnapshotService _secrets;
     private readonly IConfigChangeSignal _configChangeSignal;
     private readonly IFileSystemPersistence _persistence;
+    private readonly ILogger<ConfigSyncPackageService> _logger;
 
     public ConfigSyncPackageService(
         IAppDataService appData,
         ConfigurationSecretSnapshotService secrets,
         IConfigChangeSignal configChangeSignal,
-        IFileSystemPersistence persistence)
+        IFileSystemPersistence persistence,
+        ILogger<ConfigSyncPackageService> logger)
     {
         _appData = appData ?? throw new ArgumentNullException(nameof(appData));
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
         _configChangeSignal = configChangeSignal ?? throw new ArgumentNullException(nameof(configChangeSignal));
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<byte[]> CreatePackageAsync(bool includeSecrets, CancellationToken cancellationToken = default)
@@ -337,25 +343,84 @@ public sealed class ConfigSyncPackageService
             Directory.CreateDirectory(stagingPath);
         }
 
-        if (Directory.Exists(configRoot))
-        {
-            Directory.Delete(configRoot, recursive: true);
-        }
-
         try
         {
+            // Windows 上被占用/只读的文件常让递归删除中途失败并留下半删目录,
+            // 因此删除与换入必须同处一个回滚保护窗,而不能只保护 Move 的后半窗。
+            if (Directory.Exists(configRoot))
+            {
+                Directory.Delete(configRoot, recursive: true);
+            }
+
             Directory.Move(stagingPath, configRoot);
         }
-        catch
+        catch (Exception swapFailure)
         {
-            // 删除与换入之间的窄窗失败:从本次 backup 拷回,避免 config root 消失。
+            _logger.LogWarning(
+                swapFailure,
+                "Config root swap failed during restore; rolling back from backup. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+                configRoot,
+                backupPath);
+            RollBackConfigRoot(configRoot, backupPath, swapFailure);
+        }
+    }
+
+    [DoesNotReturn]
+    private void RollBackConfigRoot(string configRoot, string backupPath, Exception swapFailure)
+    {
+        try
+        {
+            // 半删残留里往往正是导致换入失败的只读文件;先清属性删残留、再从 backup 整拷,
+            // 保证回滚后 config root 与 backup 完全一致,而不是新旧混合状态。
+            DeleteDirectoryClearingReadOnly(configRoot);
             if (Directory.Exists(backupPath))
             {
                 CopyDirectory(backupPath, configRoot);
             }
-
-            throw;
         }
+        catch (Exception rollbackFailure)
+        {
+            _logger.LogError(
+                rollbackFailure,
+                "Config root rollback failed after a failed swap; restore manually from backup. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+                configRoot,
+                backupPath);
+
+            // 回滚失败不得吞掉/顶替原始换入异常:两者都进 AggregateException,
+            // 消息携带 backup 路径供用户手动恢复。
+            throw new AggregateException(
+                $"Config restore failed and rolling back the config root also failed. Restore it manually from the backup at '{backupPath}'.",
+                swapFailure,
+                rollbackFailure);
+        }
+
+        _logger.LogWarning(
+            "Config root rolled back from backup after a failed swap; local config is preserved. ConfigRoot: {ConfigRoot}, Backup: {BackupPath}",
+            configRoot,
+            backupPath);
+
+        // 回滚成功:本地配置未损,原样重抛原始异常(保留类型与堆栈)表达"恢复操作失败"。
+        ExceptionDispatchInfo.Capture(swapFailure).Throw();
+    }
+
+    private static void DeleteDirectoryClearingReadOnly(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(directory, FileAttributes.Directory);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+
+        Directory.Delete(path, recursive: true);
     }
 
     private static void TryDeleteDirectory(string path)

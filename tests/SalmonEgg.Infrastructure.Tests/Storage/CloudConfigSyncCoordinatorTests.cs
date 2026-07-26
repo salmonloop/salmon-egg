@@ -38,7 +38,8 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             _appData,
             secrets,
             _configChangeSignal,
-            new NoOpFileSystemPersistence());
+            new NoOpFileSystemPersistence(),
+            NullLogger<ConfigSyncPackageService>.Instance);
         _fingerprint = new ConfigContentFingerprint(_packageService);
     }
 
@@ -931,7 +932,8 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
             _appData,
             new ConfigurationSecretSnapshotService(_secureStorage, _fileStore, _appData),
             _configChangeSignal,
-            persistence);
+            persistence,
+            NullLogger<ConfigSyncPackageService>.Instance);
 
         await packageService.RestorePackageAsync(CreateRemotePackage("theme: Dark"), TestContext.Current.CancellationToken);
 

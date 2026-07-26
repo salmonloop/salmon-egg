@@ -28,7 +28,12 @@ public sealed class ConfigContentFingerprintTests : IDisposable
         _appSettings = new AppSettingsService(_fileStore, _appData, NullLogger<AppSettingsService>.Instance);
         var secureStorage = new PlainTextFileSecureStorage(_fileStore, _appData);
         var secrets = new ConfigurationSecretSnapshotService(secureStorage, _fileStore, _appData);
-        _packageService = new ConfigSyncPackageService(_appData, secrets, signal, new NoOpFileSystemPersistence());
+        _packageService = new ConfigSyncPackageService(
+            _appData,
+            secrets,
+            signal,
+            new NoOpFileSystemPersistence(),
+            NullLogger<ConfigSyncPackageService>.Instance);
         _fingerprint = new ConfigContentFingerprint(_packageService);
     }
 
