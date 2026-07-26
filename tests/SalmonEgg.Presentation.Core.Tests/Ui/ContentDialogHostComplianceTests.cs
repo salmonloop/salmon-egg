@@ -24,8 +24,9 @@ public sealed class ContentDialogHostComplianceTests
     {
         var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Presentation\Services\UiInteractionService.cs"));
 
+        // 只守护「不得重新引入手动 XamlRoot/主题覆写」的回归;不锁调用次数——
+        // 次数是实现摆放断言(§5.5),新增一个合法对话框也会误报。
         Assert.Contains("ContentDialogHost.AttachToXamlRoot", code, StringComparison.Ordinal);
-        Assert.Equal(5, CountOccurrences(code, "ContentDialogHost.AttachToXamlRoot"));
         Assert.DoesNotContain("XamlRoot = xamlRoot", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme =", code, StringComparison.Ordinal);
     }
@@ -36,7 +37,6 @@ public sealed class ContentDialogHostComplianceTests
         var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml.cs"));
 
         Assert.Contains("ContentDialogHost.AttachToElement", code, StringComparison.Ordinal);
-        Assert.Equal(3, CountOccurrences(code, "ContentDialogHost.AttachToElement"));
         Assert.DoesNotContain("XamlRoot = XamlRoot", code, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme =", code, StringComparison.Ordinal);
     }
@@ -59,19 +59,6 @@ public sealed class ContentDialogHostComplianceTests
         Assert.DoesNotContain("MinWidth =", method, StringComparison.Ordinal);
         Assert.Contains("ContentDialogHost.AttachToXamlRoot", method, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedTheme =", method, StringComparison.Ordinal);
-    }
-
-        private static int CountOccurrences(string haystack, string needle)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += needle.Length;
-        }
-
-        return count;
     }
 
     private static string GetRepoPath(string relativePath)
