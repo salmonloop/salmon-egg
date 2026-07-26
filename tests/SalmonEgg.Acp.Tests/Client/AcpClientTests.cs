@@ -1734,6 +1734,92 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task LoadSessionThenSendPrompt_RegistersLoadedSession_SoPromptIsNotLocallyRejected()
+        {
+            // load 成功后 client 必须把会话登记进本地 store,否则 SendPromptAsync 的存在性
+            // 快速失败会把官方 load→prompt 主流程本地拦成 SessionNotFound(P1-2)。
+            var parser = new MessageParser();
+            var sessionStore = new RecordingAcpClientSessionStore();
+            var client = await CreateInitializedClientAsync(sessionStore: sessionStore);
+
+            SetupJsonRpcResponse(
+                "session/load",
+                JsonSerializer.SerializeToElement(new SessionLoadResponse(), parser.Options),
+                parser);
+
+            await client.LoadSessionAsync(new SessionLoadParams("remote-1", AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            // load 成功即应登记,不需要手动预置 store。
+            Assert.True(sessionStore.ContainsSession("remote-1"));
+
+            SetupJsonRpcResponse(
+                "session/prompt",
+                JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options),
+                parser);
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hi") }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
+        public async Task ResumeSessionThenSendPrompt_RegistersResumedSession_SoPromptIsNotLocallyRejected()
+        {
+            // resume 与 load 对称:成功后同样登记会话,使后续 prompt 不被本地存在性门拦截(P1-2)。
+            var parser = new MessageParser();
+            var sessionStore = new RecordingAcpClientSessionStore();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(
+                    loadSession: true,
+                    sessionCapabilities: new SessionCapabilities { Resume = new SessionResumeCapabilities() }),
+                sessionStore: sessionStore);
+
+            SetupJsonRpcResponse(
+                "session/resume",
+                JsonSerializer.SerializeToElement(new SessionResumeResponse(), parser.Options),
+                parser);
+
+            await client.ResumeSessionAsync(new SessionResumeParams("remote-2", AbsoluteCwd), TestContext.Current.CancellationToken);
+
+            Assert.True(sessionStore.ContainsSession("remote-2"));
+
+            SetupJsonRpcResponse(
+                "session/prompt",
+                JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options),
+                parser);
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams("remote-2", new List<ContentBlock> { new TextContentBlock("hi") }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
+        public async Task Dispose_FaultsPendingRequests_SoInFlightCallersDoNotHangForever()
+        {
+            // Dispose 必须了结挂起请求,否则正在 await 响应的调用方永久悬挂(P1-1)。
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            // session/prompt 发出后不安排任何响应,请求会一直挂着,直到 Dispose 了结它。
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()))
+                .Returns(Task.FromResult(true));
+
+            var pending = client.SendPromptAsync(
+                new SessionPromptParams("remote-1", new List<ContentBlock> { new TextContentBlock("hi") }),
+                TestContext.Current.CancellationToken);
+
+            client.Dispose();
+
+            // 不得永挂:Dispose 后挂起请求应以取消或异常了结。
+            await Assert.ThrowsAnyAsync<Exception>(() => pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
         public async Task CancelSessionAsync_WhenPermissionPromptIsPending_SendsCancelledOutcomeImmediately()
         {
             var parser = new MessageParser();

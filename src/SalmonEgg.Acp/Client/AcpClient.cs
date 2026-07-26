@@ -322,6 +322,10 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
+            // session/load 成功即代表 Agent 已确认该会话;注册进本地 store,否则后续
+            // session/prompt 的存在性快速失败会把官方 load→prompt 主流程本地拦截为 SessionNotFound。
+            await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
+
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
@@ -366,6 +370,10 @@ namespace SalmonEgg.Acp.Client
             {
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
+
+            // Agent 已确认恢复该会话:注册本地追踪条目,使后续 session/prompt 的存在性
+            // 快速失败门(SendPromptAsync)不会把 resume→prompt 官方主流程误判为 SessionNotFound。
+            await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
 
             if (!response.Result.HasValue ||
                 response.Result.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -903,6 +911,21 @@ namespace SalmonEgg.Acp.Client
             {
                 _pendingRequests.TryRemove(requestIdStr, out _);
             }
+        }
+
+        /// <summary>
+        /// 幂等注册本地会话追踪条目。session/new 与 session/load、session/resume 成功后都要登记,
+        /// 使 SendPromptAsync 的存在性快速失败门不会误拦官方 load/resume→prompt 主流程。
+        /// 本地条目只是可选的快速失败优化,存在性事实源仍在 Agent(未声明能力时不收紧)。
+        /// </summary>
+        private async Task RegisterSessionAsync(string sessionId, string? cwd)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || _sessionStore.ContainsSession(sessionId))
+            {
+                return;
+            }
+
+            await _sessionStore.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
         }
 
         private void CancelPendingRequests(string? transportErrorMessage = null)
@@ -1959,10 +1982,18 @@ namespace SalmonEgg.Acp.Client
 
             _disposed = true;
             _messageLoopCts?.Cancel();
-            _terminalSessionManager.Dispose();
-            _ = _transport.DisconnectAsync();
+
+            // 先解绑传输事件,避免 DisconnectAsync 期间的回调重入已释放的处理器;
+            // 再 fault 所有挂起请求,否则正在 await tcs.Task 的调用方在 Dispose 路径
+            // 永久悬挂(看门狗的取消只覆盖显式 DisconnectAsync,Dispose 无人负责)。
             _transport.MessageReceived -= OnMessageReceived;
             _transport.ErrorOccurred -= OnTransportError;
+            CancelPendingRequests(_lastTransportErrorMessage ?? "The ACP client was disposed.");
+
+            _terminalSessionManager.Dispose();
+            _ = _transport.DisconnectAsync();
+            _messageLoopCts?.Dispose();
+            _messageLoopCts = null;
             GC.SuppressFinalize(this);
         }
     }
