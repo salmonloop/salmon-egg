@@ -121,6 +121,30 @@ public sealed class StreamableHttpTransportTests : IDisposable
         Assert.Equal(ConnectionId, _server.Deletes.Single());
     }
 
+    [Fact]
+    public async Task ConnectionStream_WhenItRepeatedlyFailsWithoutProgress_MarksTransportErrored()
+    {
+        var states = new ConcurrentQueue<TransportState>();
+        _transport.StateChanges.Subscribe(states.Enqueue);
+        _server.FailStreamRequests = true;
+
+        await _transport.ConnectAsync(Endpoint, TestContext.Current.CancellationToken);
+        await _transport.SendAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}", TestContext.Current.CancellationToken);
+
+        // 连接流对每次 GET 立即失败,达到失败预算后传输必须进入 Error,而不是无限重连。
+        await WaitForAsync(() => states.Contains(TransportState.Error), timeoutSeconds: 30);
+    }
+
+    [Fact]
+    public async Task Disconnect_WhenTerminateHangs_DoesNotBlockTeardown()
+    {
+        await InitializeAsync();
+        _server.HangDeleteRequests = true;
+
+        // DELETE 无响应时,有界的终止超时必须让断开在合理时间内返回而非永久阻塞。
+        await _transport.DisconnectAsync().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+    }
+
     public void Dispose()
     {
         _transport.Dispose();
@@ -134,9 +158,9 @@ public sealed class StreamableHttpTransportTests : IDisposable
         await WaitForAsync(() => _server.ConnectionStreamRequests.Count == 1);
     }
 
-    private static async Task WaitForAsync(Func<bool> condition)
+    private static async Task WaitForAsync(Func<bool> condition, int timeoutSeconds = 5)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(timeoutSeconds);
         while (!condition())
         {
             if (DateTime.UtcNow > deadline)
@@ -164,6 +188,10 @@ public sealed class StreamableHttpTransportTests : IDisposable
 
         public bool OmitConnectionIdOnInitialize { get; set; }
 
+        public bool FailStreamRequests { get; set; }
+
+        public bool HangDeleteRequests { get; set; }
+
         public ConcurrentQueue<PostRequest> Posts { get; } = new();
 
         public ConcurrentQueue<StreamRequest> ConnectionStreamRequests { get; } = new();
@@ -188,6 +216,12 @@ public sealed class StreamableHttpTransportTests : IDisposable
                 if (connectionId is not null)
                 {
                     Deletes.Enqueue(connectionId);
+                }
+
+                if (HangDeleteRequests)
+                {
+                    // 模拟服务器对 DELETE 永不响应:若终止未加有界超时,teardown 会永久阻塞。
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
                 }
 
                 return new HttpResponseMessage(HttpStatusCode.Accepted);
@@ -219,6 +253,22 @@ public sealed class StreamableHttpTransportTests : IDisposable
 
             var accept = string.Join(",", request.Headers.Accept.Select(header => header.ToString()));
             var streamRequest = new StreamRequest(connectionId, sessionId, accept);
+
+            if (FailStreamRequests)
+            {
+                // 模拟 SSE 流持续无法建立(服务端 5xx):驱动传输的有界重试预算耗尽路径。
+                if (sessionId is null)
+                {
+                    ConnectionStreamRequests.Enqueue(streamRequest);
+                }
+                else
+                {
+                    SessionStreamRequests.Enqueue(streamRequest);
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
             Pipe pipe;
             if (sessionId is null)
             {

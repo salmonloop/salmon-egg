@@ -24,12 +24,22 @@ namespace SalmonEgg.Infrastructure.Network
         private const string ConnectionIdHeader = "Acp-Connection-Id";
         private const string SessionIdHeader = "Acp-Session-Id";
         private static readonly TimeSpan StreamReconnectDelay = TimeSpan.FromSeconds(1);
+        // 断流重连的有限预算:草案无流恢复语义,持续重试只会掩盖已死的连接。
+        // 预算耗尽即把传输标记为 Error,让上层看门狗 fault 挂起请求而不是无限悬挂。
+        private const int MaxConsecutiveStreamFailures = 5;
+        // DELETE 终止与 InfiniteTimeSpan 的 HttpClient 组合会在服务器无响应时永久阻塞
+        // teardown;给终止一个有界超时,超时后交由服务器自行回收连接。
+        private static readonly TimeSpan TerminateTimeout = TimeSpan.FromSeconds(5);
 
         private readonly ILogger _logger;
         private readonly HttpClient _httpClient;
         private readonly bool _ownsHttpClient;
         private readonly Subject<string> _messagesSubject = new();
         private readonly BehaviorSubject<TransportState> _stateSubject = new(TransportState.Disconnected);
+        // 连接级流、各会话级流与 POST 内联正文是并发生产者;下游(ChatService 顺序管道)
+        // 依赖 ITransport.Messages 的到达序单线程契约。所有出站发布必须经此闸串行化,
+        // 保证严格的先来先发布,消除跨流的 OnNext 竞态。
+        private readonly object _deliveryGate = new();
 
         // 出站请求 id → (method, params.sessionId):用于在响应回流时识别
         // session/new(会话 id 在 result)与 session/load(会话 id 在请求参数)以开启会话级流。
@@ -39,7 +49,7 @@ namespace SalmonEgg.Infrastructure.Network
         // (如权限响应)按草案须带 Acp-Session-Id,而响应体本身不携带 sessionId。
         private readonly ConcurrentDictionary<string, string> _inboundRequestSessions = new();
 
-        private readonly ConcurrentDictionary<string, Task> _sessionStreams = new();
+        private readonly ConcurrentDictionary<string, Lazy<Task>> _sessionStreams = new();
 
         private Uri? _endpoint;
         private CancellationTokenSource? _connectionCts;
@@ -199,7 +209,7 @@ namespace SalmonEgg.Infrastructure.Network
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(body))
             {
-                _messagesSubject.OnNext(body);
+                HandleInboundMessage(body, streamSessionId: null);
             }
 
             StartConnectionStream();
@@ -293,24 +303,31 @@ namespace SalmonEgg.Infrastructure.Network
                 return;
             }
 
-            _sessionStreams.GetOrAdd(
+            // GetOrAdd 的值工厂在并发竞争同一 key 时可能对败者也执行一次;若在工厂内直接
+            // Task.Run,败者启动的重复 SSE 流会泄漏并造成双重投递。用 Lazy<Task> 把 Task.Run
+            // 推迟到 .Value 首次读取,只有字典真正采纳的那一个条目才会开流。
+            var token = cts.Token;
+            var lazyStream = _sessionStreams.GetOrAdd(
                 sessionId,
-                (id, state) => Task.Run(() => state.Self.ReceiveStreamLoopAsync(id, state.Token), state.Token),
-                (Self: this, Token: cts.Token));
+                id => new Lazy<Task>(() => Task.Run(() => ReceiveStreamLoopAsync(id, token), token)));
+            _ = lazyStream.Value;
         }
 
         private async Task ReceiveStreamLoopAsync(string? sessionId, CancellationToken ct)
         {
-            // 草案 v1 无流恢复语义,断流期间的消息不会重放;重连是实现方职责,
-            // 这里以固定退避持续重开,存活性最终由上层协议看门狗裁决。
+            // 草案 v1 无流恢复语义,断流期间的消息不会重放;重连是实现方职责。
+            // 有界重试:连续失败(fault 或未送达任何消息的空流)达到预算即放弃并把传输标记为
+            // Error,让上层看门狗 fault 挂起请求,而不是无限重连掩盖已死的连接。任何一次成功
+            // 送达都重置预算——健康流被服务器正常关闭后应重新开流,而非计入失败。
+            var scope = sessionId is null ? "connection" : "session";
+            var consecutiveFailures = 0;
             while (!ct.IsCancellationRequested)
             {
+                var madeProgress = false;
                 try
                 {
-                    await ReceiveStreamOnceAsync(sessionId, ct).ConfigureAwait(false);
-                    _logger.Information(
-                        "Streamable HTTP SSE stream ended. Scope={Scope}",
-                        sessionId is null ? "connection" : "session");
+                    madeProgress = await ReceiveStreamOnceAsync(sessionId, ct).ConfigureAwait(false);
+                    _logger.Information("Streamable HTTP SSE stream ended. Scope={Scope}", scope);
                 }
                 catch (OperationCanceledException)
                 {
@@ -318,10 +335,21 @@ namespace SalmonEgg.Infrastructure.Network
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(
-                        ex,
-                        "Streamable HTTP SSE stream faulted; retrying. Scope={Scope}",
-                        sessionId is null ? "connection" : "session");
+                    _logger.Warning(ex, "Streamable HTTP SSE stream faulted. Scope={Scope}", scope);
+                }
+
+                if (madeProgress)
+                {
+                    consecutiveFailures = 0;
+                }
+                else if (++consecutiveFailures >= MaxConsecutiveStreamFailures)
+                {
+                    _logger.Error(
+                        "Streamable HTTP SSE stream failed {FailureCount} times without progress; marking transport as errored. Scope={Scope}",
+                        consecutiveFailures,
+                        scope);
+                    MarkTransportErrored();
+                    return;
                 }
 
                 try
@@ -335,7 +363,19 @@ namespace SalmonEgg.Infrastructure.Network
             }
         }
 
-        private async Task ReceiveStreamOnceAsync(string? sessionId, CancellationToken ct)
+        private void MarkTransportErrored()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // 标记 Error 后取消其余流:连接已判定为死,继续重连只会拖延看门狗对挂起请求的 fault。
+            _stateSubject.OnNext(TransportState.Error);
+            _connectionCts?.Cancel();
+        }
+
+        private async Task<bool> ReceiveStreamOnceAsync(string? sessionId, CancellationToken ct)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, _endpoint)
             {
@@ -361,19 +401,23 @@ namespace SalmonEgg.Infrastructure.Network
             using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var reader = new StreamReader(stream, Encoding.UTF8);
             var accumulator = new SseEventAccumulator();
+            var deliveredAny = false;
             while (!ct.IsCancellationRequested)
             {
                 var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
                 if (line is null)
                 {
-                    return;
+                    return deliveredAny;
                 }
 
                 if (accumulator.TryAppendLine(line, out var data) && !string.IsNullOrWhiteSpace(data))
                 {
                     HandleInboundMessage(data!, sessionId);
+                    deliveredAny = true;
                 }
             }
+
+            return deliveredAny;
         }
 
         private void HandleInboundMessage(string message, string? streamSessionId)
@@ -399,7 +443,12 @@ namespace SalmonEgg.Infrastructure.Network
                 _inboundRequestSessions[peek.Id] = streamSessionId;
             }
 
-            _messagesSubject.OnNext(message);
+            // 多个 SSE 流与 POST 内联正文并发到达;串行化发布以维持下游依赖的到达序单线程契约。
+            // OnNext 只是同步转发给适配器,不阻塞,持锁窗口极短。
+            lock (_deliveryGate)
+            {
+                _messagesSubject.OnNext(message);
+            }
         }
 
         private async Task AwaitStreamsBestEffortAsync()
@@ -418,9 +467,14 @@ namespace SalmonEgg.Infrastructure.Network
 
             foreach (var stream in _sessionStreams.Values)
             {
+                if (!stream.IsValueCreated)
+                {
+                    continue;
+                }
+
                 try
                 {
-                    await stream.ConfigureAwait(false);
+                    await stream.Value.ConfigureAwait(false);
                 }
                 catch
                 {
@@ -435,6 +489,9 @@ namespace SalmonEgg.Infrastructure.Network
                 return;
             }
 
+            // 终止是尽力而为:HttpClient 配的是 InfiniteTimeSpan,若不给有界取消,
+            // 服务器无响应时 teardown 会永久阻塞。超时后放弃,交由服务器自行回收连接。
+            using var terminateCts = new CancellationTokenSource(TerminateTimeout);
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Delete, _endpoint)
@@ -443,7 +500,7 @@ namespace SalmonEgg.Infrastructure.Network
                     VersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
                 };
                 request.Headers.Add(ConnectionIdHeader, _connectionId);
-                using var response = await _httpClient.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+                using var response = await _httpClient.SendAsync(request, terminateCts.Token).ConfigureAwait(false);
                 _logger.Information(
                     "Streamable HTTP connection terminate returned {StatusCode}",
                     (int)response.StatusCode);
