@@ -41,7 +41,7 @@ namespace SalmonEgg.Domain.Models
             Transport switch
             {
                 TransportType.Stdio => "Stdio (subprocess)",
-                TransportType.HttpSse => "HTTP SSE",
+                TransportType.HttpSse => "Streamable HTTP",
                 _ => "WebSocket"
             };
 

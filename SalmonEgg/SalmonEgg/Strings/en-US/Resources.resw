@@ -643,7 +643,7 @@
     <value>WebSocket</value>
   </data>
   <data name="Conn_TransportHttpSse.Content" xml:space="preserve">
-    <value>HTTP SSE</value>
+    <value>Streamable HTTP</value>
   </data>
   <data name="Conn_StdioCommand.Header" xml:space="preserve">
     <value>Command</value>

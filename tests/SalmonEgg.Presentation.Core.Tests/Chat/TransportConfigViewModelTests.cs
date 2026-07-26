@@ -63,7 +63,7 @@ public sealed class TransportConfigViewModelTests
         var result = viewModel.Validate();
 
         Assert.False(result.IsValid);
-        Assert.Equal("HTTP SSE URL must start with http:// or https://.", result.ErrorMessage);
+        Assert.Equal("Streamable HTTP URL must start with http:// or https://.", result.ErrorMessage);
     }
 
     [Fact]

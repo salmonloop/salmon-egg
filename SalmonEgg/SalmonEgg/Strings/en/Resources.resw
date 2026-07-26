@@ -1405,7 +1405,7 @@
     <value>Connection and services</value>
   </data>
   <data name="Conn_TransportHttpSse.Content" xml:space="preserve">
-    <value>HTTP SSE</value>
+    <value>Streamable HTTP</value>
   </data>
   <data name="Conn_TransportLabel.Text" xml:space="preserve">
     <value>Transport</value>

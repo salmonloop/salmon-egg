@@ -25,7 +25,7 @@ public static class AcpTransportLocalization
         => transport switch
         {
             TransportType.Stdio => "Stdio (subprocess)",
-            TransportType.HttpSse => "HTTP SSE",
+            TransportType.HttpSse => "Streamable HTTP",
             _ => "WebSocket"
         };
 

@@ -107,7 +107,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
                     !RemoteUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                     !RemoteUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (false, "HTTP SSE URL must start with http:// or https://.");
+                    return (false, "Streamable HTTP URL must start with http:// or https://.");
                 }
 
                 return (true, null);

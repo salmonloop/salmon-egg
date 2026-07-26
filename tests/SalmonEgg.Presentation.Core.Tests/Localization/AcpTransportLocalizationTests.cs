@@ -8,7 +8,7 @@ public sealed class AcpTransportLocalizationTests
     [Theory]
     [InlineData(TransportType.Stdio, AcpTransportLocalization.StdioResourceKey, "Stdio (subprocess)")]
     [InlineData(TransportType.WebSocket, AcpTransportLocalization.WebSocketResourceKey, "WebSocket")]
-    [InlineData(TransportType.HttpSse, AcpTransportLocalization.HttpSseResourceKey, "HTTP SSE")]
+    [InlineData(TransportType.HttpSse, AcpTransportLocalization.HttpSseResourceKey, "Streamable HTTP")]
     public void ResolveResourceKeyAndFallback_MatchCanonicalLabels(
         TransportType transport,
         string resourceKey,

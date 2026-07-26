@@ -729,7 +729,7 @@ Create the corresponding Markdown file in:
     <value>WebSocket</value>
   </data>
   <data name="AcpConnection_TransportHttpSse" xml:space="preserve">
-    <value>HTTP SSE</value>
+    <value>Streamable HTTP</value>
   </data>
   <data name="AcpConnection_HydrationStrictReplayName" xml:space="preserve">
     <value>Strict replay</value>
