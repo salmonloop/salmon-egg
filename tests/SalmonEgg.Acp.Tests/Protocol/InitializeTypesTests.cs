@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tests.Protocol;
 
@@ -46,6 +48,75 @@ public sealed class InitializeTypesTests
 
         Assert.True(capabilities.SupportsExtension(ClientCapabilityMetadata.AskUserExtensionMethod));
         Assert.False(capabilities.SupportsExtension("interaction.ask_user"));
+    }
+
+    // ACP v2 规范锚点:「Agents that support the session method surface MUST support
+    // session/list / session/resume / session/close」——基线方法由 session 对象本身的
+    // presence 隐含,不存在 session.list/resume/close 嵌套标记;不得反向收紧为逐项门控。
+    // https://agentclientprotocol.com/protocol/v2/session-setup.md
+    [Fact]
+    public void InitializeResponseV2_EmptySessionSurface_ImpliesBaselineListResumeClose()
+    {
+        var response = JsonSerializer.Deserialize(
+            """
+            {
+              "protocolVersion": 2,
+              "info": { "name": "agent", "version": "1.0.0" },
+              "capabilities": { "session": {} }
+            }
+            """,
+            AcpJsonContext.Default.InitializeResponse);
+
+        Assert.NotNull(response);
+        var capabilities = response!.AgentCapabilities;
+        Assert.True(capabilities.SupportsSessionList);
+        Assert.True(capabilities.SupportsSessionResume);
+        Assert.True(capabilities.SupportsSessionClose);
+        Assert.False(capabilities.SupportsSessionDelete);
+        Assert.False(capabilities.SupportsSessionAdditionalDirectories);
+        Assert.False(capabilities.SupportsSessionLoading);
+    }
+
+    [Fact]
+    public void InitializeResponseV2_DeleteMarkerPresent_GatesDeleteWithoutNarrowingBaseline()
+    {
+        var response = JsonSerializer.Deserialize(
+            """
+            {
+              "protocolVersion": 2,
+              "info": { "name": "agent", "version": "1.0.0" },
+              "capabilities": { "session": { "delete": {} } }
+            }
+            """,
+            AcpJsonContext.Default.InitializeResponse);
+
+        Assert.NotNull(response);
+        var capabilities = response!.AgentCapabilities;
+        Assert.True(capabilities.SupportsSessionDelete);
+        Assert.True(capabilities.SupportsSessionList);
+        Assert.True(capabilities.SupportsSessionResume);
+        Assert.True(capabilities.SupportsSessionClose);
+    }
+
+    [Fact]
+    public void InitializeResponseV2_MissingSessionSurface_ReportsSessionMethodsUnsupported()
+    {
+        var response = JsonSerializer.Deserialize(
+            """
+            {
+              "protocolVersion": 2,
+              "info": { "name": "agent", "version": "1.0.0" },
+              "capabilities": {}
+            }
+            """,
+            AcpJsonContext.Default.InitializeResponse);
+
+        Assert.NotNull(response);
+        var capabilities = response!.AgentCapabilities;
+        Assert.False(capabilities.SupportsSessionList);
+        Assert.False(capabilities.SupportsSessionResume);
+        Assert.False(capabilities.SupportsSessionClose);
+        Assert.False(capabilities.SupportsSessionDelete);
     }
 
     [Fact]
