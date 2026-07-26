@@ -5,22 +5,22 @@ namespace SalmonEgg.Infrastructure.Tests.Architecture;
 
 public sealed class SecureStorageRegistrationContractTests
 {
+    // §5.6 回归护栏:各平台 secure storage 及 plaintext 回退链不得从组合根被移除。
+    // Infrastructure.Tests 无法引用应用头程序集做容器级断言,故保留源文件检查,
+    // 但只断言名称级存在(格式不敏感),不锁具体语法形态(§5.5)。
     [Fact]
     public void DependencyInjection_RegistersPlainTextFallbackSecureStorage()
     {
         var source = LoadText("SalmonEgg/SalmonEgg/DependencyInjection.cs");
 
-        Assert.True(File.Exists(Path.Combine(FindRepoRoot(), "src/SalmonEgg.Infrastructure/Storage/PlainTextFileSecureStorage.cs")));
-        Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.Linux)", source, StringComparison.Ordinal);
-        Assert.Contains("new LinuxSecretServiceSecureStorage()", source, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)", source, StringComparison.Ordinal);
-        Assert.Contains("RuntimeInformation.IsOSPlatform(OSPlatform.OSX)", source, StringComparison.Ordinal);
-        Assert.Contains("new MacOSKeychainSecureStorage()", source, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", source, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", source, StringComparison.Ordinal);
+        Assert.Contains("PlainTextFileSecureStorage", source, StringComparison.Ordinal);
+        Assert.Contains("OSPlatform.Linux", source, StringComparison.Ordinal);
+        Assert.Contains("LinuxSecretServiceSecureStorage", source, StringComparison.Ordinal);
+        Assert.Contains("OSPlatform.OSX", source, StringComparison.Ordinal);
+        Assert.Contains("MacOSKeychainSecureStorage", source, StringComparison.Ordinal);
+        Assert.Contains("FallbackSecureStorage", source, StringComparison.Ordinal);
+        Assert.Contains("AndroidKeyStoreSecureStorage", source, StringComparison.Ordinal);
+        Assert.Contains("IosKeychainSecureStorage", source, StringComparison.Ordinal);
     }
 
     private static string LoadText(string relativePath)
