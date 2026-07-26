@@ -22,6 +22,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
     private readonly SalmonEgg.Domain.Services.IAppMaintenanceService? _maintenanceService;
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
+    private readonly ILogger<App>? _startupLogger;
 
     // Diagnostic-only boot trail. Conditional so Release does not evaluate message
     // arguments or retain call sites; body remains DEBUG-gated for the file write.
@@ -75,6 +76,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         // Resolve DI dependencies before InitializeComponent() so x:Bind has stable inputs.
         _maintenanceService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
         _windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();
+        _startupLogger = ServiceProvider.GetService<ILogger<App>>();
 
         this.InitializeComponent();
 
@@ -140,8 +142,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             uiRuntimeService?.InitializeAnimations();
             BootLog("OnLaunched: motion policy initialized");
         }
-        catch
+        catch (Exception ex)
         {
+            // 启动韧性:初始化失败不阻断启动,但 Release 下也必须留下可诊断的日志。
+            _startupLogger?.LogWarning(ex, "Failed to initialize motion policy during launch.");
             BootLog("OnLaunched: failed to initialize motion policy");
         }
 
@@ -155,8 +159,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 BootLog("OnLaunched: cloud config sync initialized");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Cloud config sync initialization failed during launch.");
             BootLog("OnLaunched: cloud config sync initialization failed");
         }
 
@@ -179,8 +184,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 BootLog("OnLaunched: config projection reload coordinator initialized");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Failed to initialize preferences during launch.");
             BootLog("OnLaunched: failed to initialize preferences");
         }
 
@@ -189,8 +195,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             _windowBackdropService?.Attach(MainWindow);
             BootLog("OnLaunched: backdrop service attached");
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Window backdrop service attach failed during launch.");
             BootLog("OnLaunched: backdrop service attach failed");
         }
 
@@ -212,14 +219,16 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                     {
                         await _maintenanceService.CleanupCacheAsync(cacheRetentionDays).ConfigureAwait(false);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        _startupLogger?.LogWarning(ex, "Background cache cleanup failed.");
                     }
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _startupLogger?.LogWarning(ex, "Failed to schedule cache cleanup during launch.");
         }
 
         // Applies the Uno.Resizetizer-generated window icon to the native window (Desktop/Windows).
