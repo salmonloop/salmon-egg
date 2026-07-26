@@ -25,6 +25,7 @@ namespace SalmonEgg.Application.Services.Chat
         private string? _currentSessionId;
         private Plan? _currentPlan;
         private SessionModeState? _currentMode;
+        private Task _sessionUpdatePump = Task.CompletedTask;
 
         public string? CurrentSessionId => _currentSessionId;
         public bool IsInitialized => _acpClient.IsInitialized;
@@ -76,35 +77,37 @@ namespace SalmonEgg.Application.Services.Chat
             return await _sessionManager.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
         }
 
-        private async void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
+        private void OnSessionUpdateReceived(object? sender, SessionUpdateEventArgs e)
         {
-            if (e.Update != null)
+            // 事件由传输读线程按到达序同步触发;若直接用 async void,session 首建等待点之后的
+            // 续体可能与后续事件交错,打乱 history 追加与事件转发次序。链式管道保证严格串行,
+            // 且链头读改写只发生在同一触发线程上,无需加锁。
+            _sessionUpdatePump = ProcessSessionUpdateSequentiallyAsync(_sessionUpdatePump, e);
+        }
+
+        private async Task ProcessSessionUpdateSequentiallyAsync(Task previous, SessionUpdateEventArgs e)
+        {
+            try
             {
-                var entry = CreateSessionUpdateEntry(e.Update, e.SessionId);
-                if (entry != null)
+                await previous.ConfigureAwait(false);
+            }
+            catch
+            {
+                // 每个环节自行记录失败;链头只负责排序,前环故障不得毒化后续更新。
+            }
+
+            try
+            {
+                if (e.Update != null)
                 {
-                    try
-                    {
-                        var session = await GetOrCreateSessionAsync(e.SessionId).ConfigureAwait(false);
-                        session.AddHistoryEntry(entry);
-                    }
-                    catch
-                    {
-                        // Ignore session tracking failures; UI will still receive SessionUpdateReceived.
-                    }
+                    var entry = CreateSessionUpdateEntry(e.Update, e.SessionId);
+                    var session = await GetOrCreateSessionAsync(e.SessionId).ConfigureAwait(false);
+                    session.AddHistoryEntry(entry);
 
                     // CRITICAL PATH: Syncing Agent's internal state (Plan, Mode) with our local variables.
                     // This allows the ViewModel to access the latest state without parsing history.
                     switch (e.Update)
                     {
-                        case AgentMessageUpdate messageUpdate:
-                            break;
-                        case AgentThoughtUpdate thoughtUpdate:
-                            break;
-                        case ToolCallUpdate toolCallUpdate:
-                            break;
-                        case ToolCallStatusUpdate toolCallStatusUpdate:
-                            break;
                         case PlanUpdate planUpdate:
                             if (planUpdate.Entries != null
                                 && string.Equals(_currentSessionId, e.SessionId, StringComparison.Ordinal))
@@ -128,8 +131,33 @@ namespace SalmonEgg.Application.Services.Chat
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                // Session tracking failures must not break event forwarding, but they may not be silent either.
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "Session update tracking failed",
+                    ex.Message,
+                    ErrorSeverity.Warning,
+                    nameof(OnSessionUpdateReceived),
+                    e.SessionId,
+                    ex));
+            }
 
-            SessionUpdateReceived?.Invoke(this, e);
+            try
+            {
+                SessionUpdateReceived?.Invoke(this, e);
+            }
+            catch (Exception ex)
+            {
+                // 订阅者异常在旧 async void 形态下会击穿进程,这里落日志并阻断传播。
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "Session update handler failed",
+                    ex.Message,
+                    ErrorSeverity.Error,
+                    nameof(OnSessionUpdateReceived),
+                    e.SessionId,
+                    ex));
+            }
         }
 
         private void OnPermissionRequestReceived(object? sender, PermissionRequestEventArgs e)
