@@ -137,16 +137,16 @@ namespace SalmonEgg.Infrastructure.Transport
                 _stdout = _process.StandardOutput;
                 _stderr = _process.StandardError;
 
+                // 读循环必须在启动观察窗之前开始消费两条管道:
+                // 子进程启动即写满 stdout/stderr 管道缓冲时会阻塞在写端,
+                // 既无法继续启动也无法退出,观察窗判定与快速失败诊断都会失真。
+                _ = ReadLoopAsync(_readCts.Token);
+                _ = ReadErrorLoopAsync(_readCts.Token);
+
                 await Task.Delay(StartupObservationTimeout, cancellationToken).ConfigureAwait(false);
 
                 if (!_process.HasExited)
                 {
-                    _logger.Information("[StdioTransport.Connect] Starting read loops");
-
-                    // 启动读取循环
-                    _ = ReadLoopAsync(_readCts.Token);
-                    _ = ReadErrorLoopAsync(_readCts.Token);
-
                     IsConnected = true;
 
                     _logger.Information("[StdioTransport.Connect] Connected. PID={Pid}", _process.Id);
@@ -155,7 +155,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 else
                 {
                     _logger.Warning("[StdioTransport.Connect] Process exited. ExitCode={ExitCode}", _process.ExitCode);
-                    await DrainExitedProcessErrorAsync().ConfigureAwait(false);
                     OnErrorOccurred(new TransportErrorEventArgs(
                         $"Process exited immediately after start. ExitCode={_process.ExitCode}",
                         kind: TransportErrorKind.ProcessStartFailed));
@@ -198,52 +197,44 @@ namespace SalmonEgg.Infrastructure.Transport
         }
 
         /// <summary>
-        /// 断开与 Agent 的连接。
+        /// 断开与 Agent 的连接。状态声明在锁内完成,kill/等待/释放等阻塞 IO 移出锁,
+        /// 避免持锁做进程 IO 与 Send/Connect 路径互相卡死。
         /// </summary>
         public async Task<bool> DisconnectAsync()
         {
-            lock (_lock)
+            if (!TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr))
             {
-                if (!IsConnected)
-                {
-                    return true;
-                }
-                try
-                {
-                    // 取消读取操作
-                    _readCts?.Cancel();
-                    // 关闭标准输入
-                    _stdin?.Flush();
-                    _stdin?.Close();
-                    _stdin?.Dispose();
-                    // 等待进程退出
-                    if (_process != null && !_process.HasExited)
-                    {
-                        try
-                        {
-                            _process.Kill();
-                            _process.WaitForExit();
-                        }
-                        catch
-                        {
-                            // 如果进程无法终止，继续执行
-                        }
-                    }
-                    _stdout?.Dispose();
-                    _stderr?.Dispose();
-                    _process?.Dispose();
+                return true;
+            }
 
-                    IsConnected = false;
-                    return true;
-                }
-                catch (Exception ex)
+            try
+            {
+                CloseStandardInput(stdin);
+                if (process is { HasExited: false })
                 {
-                    OnErrorOccurred(new TransportErrorEventArgs(
-                        $"Error while disconnecting: {ex.Message}",
-                        ex,
-                        TransportErrorKind.DisconnectFailed));
-                    return false;
+                    try
+                    {
+                        process.Kill();
+                        await process.WaitForExitAsync().ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // 如果进程无法终止，继续执行
+                    }
                 }
+
+                stdout?.Dispose();
+                stderr?.Dispose();
+                process?.Dispose();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                OnErrorOccurred(new TransportErrorEventArgs(
+                    $"Error while disconnecting: {ex.Message}",
+                    ex,
+                    TransportErrorKind.DisconnectFailed));
+                return false;
             }
         }
 
@@ -478,40 +469,13 @@ namespace SalmonEgg.Infrastructure.Transport
             ];
         }
 
-        private async Task DrainExitedProcessErrorAsync()
-        {
-            if (_stderr == null)
-            {
-                return;
-            }
-
-            while (true)
-            {
-                var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
-                if (line == null)
-                {
-                    break;
-                }
-
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
-
-                _logger.Warning("[StdioTransport.Connect] Fast-exit process stderr is non-empty. Length={Length}", line.Length);
-                OnErrorOccurred(new TransportErrorEventArgs(
-                    $"Process error: {line}",
-                    kind: TransportErrorKind.AgentStderr));
-            }
-        }
-
         /// <summary>
-        /// 进程退出事件处理。
+        /// 进程退出事件处理。不取消读循环:让其自然读到 EOF,
+        /// 否则崩溃前最后写入的 stdout/stderr(通常是失败原因)会被截断。
         /// </summary>
         private void OnProcessExited(object? sender, EventArgs e)
         {
             IsConnected = false;
-            _readCts?.Cancel();
             OnErrorOccurred(new TransportErrorEventArgs(
                 "Agent process exited",
                 kind: TransportErrorKind.ProcessExited));
@@ -534,7 +498,8 @@ namespace SalmonEgg.Infrastructure.Transport
         }
 
         /// <summary>
-        /// 释放资源。
+        /// 释放资源。Dispose 是同步契约:同步终止进程并释放句柄,不 fire-and-forget
+        /// 在途异步断开;需要优雅等待退出的调用方应先 await <see cref="DisconnectAsync"/>。
         /// </summary>
         public void Dispose()
         {
@@ -544,8 +509,61 @@ namespace SalmonEgg.Infrastructure.Transport
             }
 
             _disposed = true;
-            _ = DisconnectAsync();
+            var began = TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr);
+            CloseStandardInput(stdin);
+            if (began && process is { HasExited: false })
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch
+                {
+                    // 进程可能已在退出途中。
+                }
+            }
+
+            stdout?.Dispose();
+            stderr?.Dispose();
+            process?.Dispose();
             GC.SuppressFinalize(this);
+        }
+
+        private bool TryBeginTeardown(
+            out Process? process,
+            out StreamWriter? stdin,
+            out StreamReader? stdout,
+            out StreamReader? stderr)
+        {
+            lock (_lock)
+            {
+                process = _process;
+                stdin = _stdin;
+                stdout = _stdout;
+                stderr = _stderr;
+                if (!IsConnected)
+                {
+                    return false;
+                }
+
+                IsConnected = false;
+                _readCts?.Cancel();
+                return true;
+            }
+        }
+
+        private static void CloseStandardInput(StreamWriter? stdin)
+        {
+            try
+            {
+                stdin?.Flush();
+                stdin?.Close();
+                stdin?.Dispose();
+            }
+            catch
+            {
+                // teardown 阶段管道可能已断,关闭失败无碍。
+            }
         }
     }
 }
