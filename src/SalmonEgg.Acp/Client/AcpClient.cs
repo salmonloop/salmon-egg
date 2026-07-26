@@ -240,9 +240,9 @@ namespace SalmonEgg.Acp.Client
             _clientCapabilities = @params.ClientCapabilities;
             _isInitialized = true;
 
-            // 启动消息接收循环
+            // 启动传输断连看门狗
             _messageLoopCts = new CancellationTokenSource();
-            _ = ProcessMessageLoopAsync(_messageLoopCts.Token);
+            _ = MonitorTransportConnectionAsync(_messageLoopCts.Token);
 
             // 触发事件
             Initialized?.Invoke(this, initializeResponse);
@@ -709,13 +709,8 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 响应权限请求。
         /// </summary>
-        public async Task<bool> RespondToPermissionRequestAsync(object? messageId, string outcome, string? optionId = null)
+        public async Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         {
-            if (messageId == null)
-            {
-                return false;
-            }
-
             return await TrySendPermissionOutcomeResponseAsync(messageId, outcome, optionId).ConfigureAwait(false);
         }
 
@@ -1821,13 +1816,28 @@ namespace SalmonEgg.Acp.Client
             => "ACP request failed because the transport disconnected: " + transportErrorMessage;
 
         /// <summary>
-        /// 处理消息循环。
+        /// 监视传输连接状态。传输可能在不触发 ErrorOccurred 的情况下静默断开
+        /// (或在错误事件时刻仍短暂报告已连接),此看门狗兜底 fault 所有挂起请求,
+        /// 避免调用方在 <see cref="SendRequestAsync"/> 上永久悬挂。
         /// </summary>
-        private async Task ProcessMessageLoopAsync(CancellationToken cancellationToken)
+        private async Task MonitorTransportConnectionAsync(CancellationToken cancellationToken)
         {
-            while (!cancellationToken.IsCancellationRequested && _transport.IsConnected)
+            try
             {
-                await Task.Delay(100, cancellationToken);
+                while (!cancellationToken.IsCancellationRequested && _transport.IsConnected)
+                {
+                    await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 显式 DisconnectAsync 已负责取消挂起请求。
+                return;
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                CancelPendingRequests(_lastTransportErrorMessage ?? "The transport is no longer connected.");
             }
         }
 

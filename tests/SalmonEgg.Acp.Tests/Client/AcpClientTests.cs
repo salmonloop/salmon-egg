@@ -699,6 +699,46 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task CreateSessionAsync_WhenTransportDiesSilentlyWithoutErrorEvent_FaultsPendingRequest()
+        {
+            // 看门狗契约:传输不触发 ErrorOccurred 而静默断开时,挂起请求必须被 fault 而非永久悬挂。
+            var parser = new MessageParser();
+            var isConnected = true;
+            _transportMock.SetupGet(t => t.IsConnected).Returns(() => isConnected);
+            var client = await CreateInitializedClientAsync();
+            var sessionNewSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsRegex("session/new"), It.IsAny<CancellationToken>()))
+                .Callback(() => sessionNewSent.TrySetResult(null))
+                .ReturnsAsync(true);
+
+            using var cts = new CancellationTokenSource();
+            var createTask = client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), cts.Token);
+
+            try
+            {
+                await sessionNewSent.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                isConnected = false;
+
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                    async () => await createTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+                Assert.Contains("transport disconnected", ex.Message, StringComparison.Ordinal);
+            }
+            finally
+            {
+                cts.Cancel();
+                try
+                {
+                    await createTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        [Fact]
         public async Task InitializeAsync_WhenServerProtocolIsNewer_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
