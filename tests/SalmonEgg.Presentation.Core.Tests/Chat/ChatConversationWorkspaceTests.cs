@@ -3307,7 +3307,7 @@ public sealed class ChatConversationWorkspaceTests
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
 
-        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
             {

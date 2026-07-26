@@ -598,7 +598,7 @@ namespace SalmonEgg.Application.Services.Chat
 
             try
             {
-                _sessionManager.GetOrCreateSession(@params.SessionId, @params.Cwd);
+                _sessionManager.GetOrCreateTrackingSlot(@params.SessionId, @params.Cwd);
 
                 // Clear history before loading to ensure we don't have duplicate entries
                 // if the server replays the history during the load process.
@@ -701,7 +701,7 @@ namespace SalmonEgg.Application.Services.Chat
 
             try
             {
-                _sessionManager.GetOrCreateSession(@params.SessionId, @params.Cwd);
+                _sessionManager.GetOrCreateTrackingSlot(@params.SessionId, @params.Cwd);
                 _sessionManager.UpdateSession(
                     @params.SessionId,
                     s => s.Cwd = @params.Cwd,

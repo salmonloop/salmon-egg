@@ -60,14 +60,18 @@ namespace SalmonEgg.Infrastructure.Services
         }
 
         /// <summary>
-        /// 原子地获取或创建会话。并发调用同一 ID 只会创建一个实例、都拿到同一引用、绝不抛错，
-        /// 消除调用方 check-then-act(先 Get 后 Create)与 <see cref="CreateSessionAsync"/> 的
-        /// TryAdd-即抛在并发下"一方必抛"的竞态。
+        /// 原子地获取或创建本地运行时追踪槽（tracking slot）。这里返回的 <see cref="Session"/>
+        /// 是当前连接上会话的**运行时投影容器**，不是历史会话的事实源：历史正文由 Agent 在
+        /// session/load(V1) 或 resume+replayFrom(V2) 时通过 session/update 重放写入，本槽只是
+        /// 承接重放的落地对象（调用方随即 History.Clear 洗净再接收权威重放）。因此"创建"绝不等于
+        /// 伪造一个查不到的历史会话——仅是为即将到来的权威加载准备一个空容器。
+        /// 并发调用同一 ID 只会创建一个实例、都拿到同一引用、绝不抛错，消除调用方 check-then-act
+        /// (先 Get 后 Create)与 <see cref="CreateSessionAsync"/> 的 TryAdd-即抛在并发下"一方必抛"的竞态。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
-        /// <param name="cwd">工作目录（仅在本调用实际创建会话时生效）</param>
-        /// <returns>已存在或新建的会话对象</returns>
-        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        /// <param name="cwd">工作目录（仅在本调用实际创建追踪槽时生效）</param>
+        /// <returns>已存在或新建的运行时追踪槽</returns>
+        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {

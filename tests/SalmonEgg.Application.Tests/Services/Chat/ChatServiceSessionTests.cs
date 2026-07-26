@@ -771,9 +771,9 @@ public sealed class ChatServiceSessionTests
     }
 
     [Fact]
-    public async Task SessionManager_GetOrCreateSession_IsAtomicUnderConcurrency()
+    public async Task SessionManager_GetOrCreateTrackingSlot_IsAtomicUnderConcurrency()
     {
-        // GetOrCreateSession 原子:并发对同一 id 调用只建一个实例、都拿到同一引用、不抛。
+        // GetOrCreateTrackingSlot 原子:并发对同一 id 调用只建一个实例、都拿到同一引用、不抛。
         var sessionManager = new SessionManager();
         const string sessionId = "concurrent";
 
@@ -782,7 +782,7 @@ public sealed class ChatServiceSessionTests
             .Select(_ => Task.Run(async () =>
             {
                 await start.Task.ConfigureAwait(false);
-                return sessionManager.GetOrCreateSession(sessionId, Environment.CurrentDirectory);
+                return sessionManager.GetOrCreateTrackingSlot(sessionId, Environment.CurrentDirectory);
             }))
             .ToArray();
 

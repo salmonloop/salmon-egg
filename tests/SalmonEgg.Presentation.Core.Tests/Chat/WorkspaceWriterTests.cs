@@ -1135,7 +1135,7 @@ public sealed class WorkspaceWriterTests
 
         public bool RemoveSession(string sessionId) => false;
 
-        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
             => new(sessionId, cwd);
 
         public System.Collections.Generic.IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)

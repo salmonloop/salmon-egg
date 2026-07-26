@@ -1343,7 +1343,7 @@ public sealed class ConversationActivationCoordinatorTests
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
-        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
         {
             if (_sessions.TryGetValue(sessionId, out var existing))
             {

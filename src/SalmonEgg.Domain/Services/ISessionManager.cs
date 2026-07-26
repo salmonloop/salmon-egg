@@ -27,14 +27,18 @@ namespace SalmonEgg.Domain.Services
         Session? GetSession(string sessionId);
 
         /// <summary>
-        /// 原子地获取或创建会话。已存在则返回现有实例，否则新建。
-        /// 相比先 <see cref="GetSession"/> 再 <see cref="CreateSessionAsync"/> 的
-        /// check-then-act，此方法在并发下不会因竞态而抛"已存在"异常或丢失更新。
+        /// 原子地获取或创建会话的<b>运行时追踪容器</b>（tracking slot），已存在则复用、否则新建空容器。
+        /// 这里的 <see cref="Session"/> 是当前连接上会话状态的内存投影落地点，<b>不是</b>历史会话的事实源：
+        /// 历史正文始终来自 Agent 通过 <c>session/load</c>（V1）或 <c>resume + replayFrom</c>（V2）重放的
+        /// <c>session/update</c>。本方法只保证有一个可供重放写入的容器，绝不伪造查不到的历史内容——
+        /// 调用方在权威重放前应先 <see cref="UpdateSession"/> 清空该容器。
+        /// 相比先 <see cref="GetSession"/> 再 <see cref="CreateSessionAsync"/> 的 check-then-act，
+        /// 此方法在并发下不会因竞态而抛"已存在"异常或丢失更新。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
-        /// <param name="cwd">工作目录（仅新建时使用）</param>
-        /// <returns>现有或新创建的会话对象</returns>
-        Session GetOrCreateSession(string sessionId, string? cwd = null);
+        /// <param name="cwd">工作目录（仅本调用实际新建容器时生效）</param>
+        /// <returns>现有或新创建的运行时追踪容器</returns>
+        Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null);
 
         /// <summary>
         /// 在会话锁下拷贝历史记录，返回快照。
