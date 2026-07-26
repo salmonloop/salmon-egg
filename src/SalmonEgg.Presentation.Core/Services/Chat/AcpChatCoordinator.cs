@@ -484,9 +484,14 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
         if (chatService != null)
         {
             await chatService.DisconnectAsync().ConfigureAwait(false);
-            if (chatService is IDisposable disposable)
+            try
             {
-                disposable.Dispose();
+                chatService.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // 释放失败不得中断后续 pool/sink/连接态的收尾,否则留下半拆的协调器状态。
+                _logger.LogDebug(ex, "Failed to dispose ACP chat service cleanly during disconnect.");
             }
 
             _connectionPoolManager.RemoveByService(chatService, out _);
@@ -983,17 +988,31 @@ public sealed class AcpChatCoordinator : IAcpConnectionCommands
             : agentInfo.Title;
     }
 
-    private static async Task DisposeServiceAsync(IChatService? service)
+    private async Task DisposeServiceAsync(IChatService? service)
     {
         if (service == null)
         {
             return;
         }
 
-        await service.DisconnectAsync().ConfigureAwait(false);
-        if (service is IDisposable disposable)
+        // 该 helper 多数从 catch 清理路径调用(superseded/faulted candidate),
+        // 释放失败若上抛会顶替真正的取消/连接异常,必须 best-effort 落日志。
+        try
         {
-            disposable.Dispose();
+            await service.DisconnectAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to disconnect ACP chat service cleanly during cleanup.");
+        }
+
+        try
+        {
+            service.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to dispose ACP chat service cleanly during cleanup.");
         }
     }
 

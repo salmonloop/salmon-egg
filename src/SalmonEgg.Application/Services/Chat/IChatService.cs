@@ -14,9 +14,11 @@ namespace SalmonEgg.Application.Services.Chat
 {
     /// <summary>
     /// Chat 服务接口
-    /// 提供与 ACP 协议相关的聊天功能，包括会话管理、消息发送、权限处理等
+    /// 提供与 ACP 协议相关的聊天功能，包括会话管理、消息发送、权限处理等。
+    /// 实现持有 ACP 事件订阅,释放契约是接口的一部分:装饰器必须转发 Dispose,
+    /// 否则 delayed-load 等包装路径会永久泄漏事件订阅。
     /// </summary>
-    public interface IChatService
+    public interface IChatService : IDisposable
     {
         /// <summary>
         /// 当前会话 ID

@@ -6026,6 +6026,10 @@ public partial class ChatViewModelTests
 
     private sealed class ReplayLoadChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId { get; private set; }
 
         public bool IsInitialized => true;
@@ -6157,6 +6161,10 @@ public partial class ChatViewModelTests
 
     private sealed class ContinuityTrackingChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         private readonly HashSet<string> _knownRemoteSessions = new(StringComparer.Ordinal);
         private int _nextRecoveredSessionId = 1;
         private event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceivedCore;

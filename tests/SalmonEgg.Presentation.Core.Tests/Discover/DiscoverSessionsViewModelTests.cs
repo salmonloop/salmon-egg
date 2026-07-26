@@ -1697,6 +1697,10 @@ public sealed class DiscoverSessionsViewModelTests
 
 private sealed class FakeChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId => null;
 
         public bool IsInitialized => true;

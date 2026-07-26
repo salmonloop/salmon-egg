@@ -1429,7 +1429,9 @@ public sealed class NavigationCoordinatorTests
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-2", selection.SessionId);
 
-            await WaitForConditionAsync(() => !chat.ViewModel.IsOverlayVisible);
+            // 等待断言的真实信号(失败投影完成),而非其代理(overlay 隐藏可能先于失败投影)。
+            await WaitForConditionAsync(() =>
+                chat.ViewModel.HasSessionActivationFailure && !chat.ViewModel.IsOverlayVisible);
             Assert.True(chat.ViewModel.HasSessionActivationFailure);
             Assert.False(string.IsNullOrWhiteSpace(chat.ViewModel.SessionActivationFailureMessage));
             selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
@@ -1507,6 +1509,9 @@ public sealed class NavigationCoordinatorTests
             var firstActivation = coordinator.ActivateSessionAsync("session-2", "project-1");
 
             await firstActivation;
+            // 重试前必须等首次失败完整投影(含恢复请求清理),否则重试可能复用未清理的
+            // 失败恢复请求而不发起第二次 session/load,导致下方 loadAttempts==2 永远不满足。
+            await WaitForConditionAsync(() => chat.ViewModel.HasSessionActivationFailure);
             await WaitForConditionAsync(() =>
                 !runtimeState.IsSessionActivationInProgress,
                 maxAttempts: 100,
@@ -2157,6 +2162,10 @@ public sealed class NavigationCoordinatorTests
 
     private sealed class FakeDiscoverChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId => null;
         public bool IsInitialized => true;
         public bool IsConnected => true;

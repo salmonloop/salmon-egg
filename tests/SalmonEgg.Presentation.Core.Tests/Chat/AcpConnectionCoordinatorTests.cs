@@ -1253,6 +1253,10 @@ public sealed class AcpConnectionCoordinatorTests
 
     private class FakeChatService : IChatService
     {
+        public void Dispose()
+        {
+        }
+
         public string? CurrentSessionId => null;
 
         public bool IsInitialized => true;

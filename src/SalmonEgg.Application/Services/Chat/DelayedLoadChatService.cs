@@ -135,6 +135,8 @@ public sealed class DelayedLoadChatService : IChatService
     public Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         => _inner.RespondToPermissionRequestAsync(messageId, outcome, optionId);
 
+    public void Dispose() => _inner.Dispose();
+
     public Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null)
         => _inner.RespondToFileSystemRequestAsync(messageId, success, content, message);
 

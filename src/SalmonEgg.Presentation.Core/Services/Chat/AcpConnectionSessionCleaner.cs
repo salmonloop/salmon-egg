@@ -72,19 +72,16 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
                     "Failed to dispose stale cached ACP session. profileId={ProfileId}",
                     session.ProfileId);
 
-                if (session.Service is IDisposable disposable)
+                try
                 {
-                    try
-                    {
-                        disposable.Dispose();
-                    }
-                    catch (Exception disposeEx)
-                    {
-                        _logger.LogDebug(
-                            disposeEx,
-                            "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
-                            session.ProfileId);
-                    }
+                    session.Service.Dispose();
+                }
+                catch (Exception disposeEx)
+                {
+                    _logger.LogDebug(
+                        disposeEx,
+                        "Failed to release stale cached ACP session after disconnect failure. profileId={ProfileId}",
+                        session.ProfileId);
                 }
             }
         }
@@ -170,10 +167,6 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
     {
         ArgumentNullException.ThrowIfNull(service);
         await service.DisconnectAsync().ConfigureAwait(false);
-
-        if (service is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
+        service.Dispose();
     }
 }

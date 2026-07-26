@@ -283,9 +283,14 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
             _logger.LogDebug(ex, "Failed to disconnect Discover ACP browse service cleanly");
         }
 
-        if (chatService is IDisposable disposable)
+        try
         {
-            disposable.Dispose();
+            chatService.Dispose();
+        }
+        catch (Exception ex)
+        {
+            // 清理路径的释放失败不得逃逸:在 catch 分支里 rethrow 会顶替真正的连接异常。
+            _logger.LogDebug(ex, "Failed to dispose Discover ACP browse service cleanly");
         }
     }
 
