@@ -21,21 +21,56 @@ namespace SalmonEgg.Application.Services.Chat
         private readonly IAcpClient _acpClient;
         private readonly IErrorLogger _errorLogger;
         private readonly ISessionManager _sessionManager;
+        // 保护下列四个共享可变态的所有读写:pump 线程(传输读线程续体)与请求-响应续体
+        // (线程池)并发触碰它们。锁内只做同步内存读写与 HashSet 操作,绝不跨 await、
+        // 绝不在锁内做协议 I/O 或调用可能重入的 _sessionManager 路径。
+        private readonly object _stateGate = new();
         private readonly HashSet<string> _configAuthoritativeSessionIds = new(StringComparer.Ordinal);
         private string? _currentSessionId;
         private Plan? _currentPlan;
         private SessionModeState? _currentMode;
         private Task _sessionUpdatePump = Task.CompletedTask;
 
-        public string? CurrentSessionId => _currentSessionId;
+        public string? CurrentSessionId
+        {
+            get { lock (_stateGate) { return _currentSessionId; } }
+        }
+
         public bool IsInitialized => _acpClient.IsInitialized;
         public bool IsConnected => _acpClient.IsConnected;
         public AgentInfo? AgentInfo => _acpClient.AgentInfo;
         public AgentCapabilities? AgentCapabilities => _acpClient.AgentCapabilities;
-        public IReadOnlyList<SessionUpdateEntry> SessionHistory =>
-            (IReadOnlyList<SessionUpdateEntry>?)GetSession(_currentSessionId)?.History ?? Array.Empty<SessionUpdateEntry>();
-        public Plan? CurrentPlan => _currentPlan;
-        public SessionModeState? CurrentMode => _currentMode;
+
+        // 返回快照而非 live List:pump 会并发向同一 Session.History 追加,直接把内部 List
+        // 交给 UI 枚举会触发并发修改异常。SnapshotHistory 在 SessionManager 锁下拷贝。
+        public IReadOnlyList<SessionUpdateEntry> SessionHistory
+        {
+            get
+            {
+                string? sessionId;
+                lock (_stateGate)
+                {
+                    sessionId = _currentSessionId;
+                }
+
+                if (string.IsNullOrWhiteSpace(sessionId))
+                {
+                    return Array.Empty<SessionUpdateEntry>();
+                }
+
+                return _sessionManager.SnapshotHistory(sessionId);
+            }
+        }
+
+        public Plan? CurrentPlan
+        {
+            get { lock (_stateGate) { return _currentPlan; } }
+        }
+
+        public SessionModeState? CurrentMode
+        {
+            get { lock (_stateGate) { return _currentMode; } }
+        }
 
         public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
         public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
@@ -106,28 +141,32 @@ namespace SalmonEgg.Application.Services.Chat
 
                     // CRITICAL PATH: Syncing Agent's internal state (Plan, Mode) with our local variables.
                     // This allows the ViewModel to access the latest state without parsing history.
-                    switch (e.Update)
+                    // 共享态的判定与写入必须在 _stateGate 内:pump 与请求路径续体真并发触碰同一字段。
+                    lock (_stateGate)
                     {
-                        case PlanUpdate planUpdate:
-                            if (planUpdate.Entries != null
-                                && string.Equals(_currentSessionId, e.SessionId, StringComparison.Ordinal))
-                            {
-                                _currentPlan = new Plan { Entries = planUpdate.Entries };
-                            }
-                            break;
-                        case CurrentModeUpdate modeChange:
-                            if (!string.IsNullOrEmpty(modeChange.ModeId)
-                                && !_configAuthoritativeSessionIds.Contains(e.SessionId))
-                            {
-                                ApplyCurrentModeId(e.SessionId, modeChange.ModeId);
-                            }
-                            break;
-                        case ConfigOptionUpdate configOption:
-                            if (configOption.ConfigOptions is not null)
-                            {
-                                MarkConfigOptionsAuthoritative(e.SessionId);
-                            }
-                            break;
+                        switch (e.Update)
+                        {
+                            case PlanUpdate planUpdate:
+                                if (planUpdate.Entries != null
+                                    && string.Equals(_currentSessionId, e.SessionId, StringComparison.Ordinal))
+                                {
+                                    _currentPlan = new Plan { Entries = planUpdate.Entries };
+                                }
+                                break;
+                            case CurrentModeUpdate modeChange:
+                                if (!string.IsNullOrEmpty(modeChange.ModeId)
+                                    && !_configAuthoritativeSessionIds.Contains(e.SessionId))
+                                {
+                                    ApplyCurrentModeId(e.SessionId, modeChange.ModeId);
+                                }
+                                break;
+                            case ConfigOptionUpdate configOption:
+                                if (configOption.ConfigOptions is not null)
+                                {
+                                    MarkConfigOptionsAuthoritative(e.SessionId);
+                                }
+                                break;
+                        }
                     }
                 }
             }
@@ -248,6 +287,10 @@ namespace SalmonEgg.Application.Services.Chat
                 _ => "unknown"
             };
 
+        // 以下 Apply*/Capture*/Restore* 系列约定:调用方必须已持 _stateGate。
+        // 它们读改写 _currentMode/_currentSessionId/_configAuthoritativeSessionIds 并可能
+        // 调用 _sessionManager(走 SessionManager 自己的独立锁,单向嵌套 _stateGate→_lock,
+        // SessionManager 从不回调本类,故无死锁)。
         private void ApplySessionResponseModeState(
             string sessionId,
             SessionModesState? modes,
@@ -488,16 +531,29 @@ namespace SalmonEgg.Application.Services.Chat
             try
             {
                 var response = await _acpClient.CreateSessionAsync(@params);
-                _currentSessionId = response.SessionId;
-                _currentPlan = null;
-                _currentMode = null;
 
                 if (!string.IsNullOrWhiteSpace(response.SessionId))
                 {
-                    var session = await GetOrCreateSessionAsync(response.SessionId, @params.Cwd).ConfigureAwait(false);
-                    session.History.Clear();
-                    session.State = SessionState.Active;
-                    ApplySessionResponseModeState(response.SessionId, response.Modes, response.ConfigOptions);
+                    await GetOrCreateSessionAsync(response.SessionId, @params.Cwd).ConfigureAwait(false);
+                    _sessionManager.UpdateSession(
+                        response.SessionId,
+                        session =>
+                        {
+                            session.History.Clear();
+                            session.State = SessionState.Active;
+                        },
+                        updateActivity: false);
+                }
+
+                lock (_stateGate)
+                {
+                    _currentSessionId = response.SessionId;
+                    _currentPlan = null;
+                    _currentMode = null;
+                    if (!string.IsNullOrWhiteSpace(response.SessionId))
+                    {
+                        ApplySessionResponseModeState(response.SessionId, response.Modes, response.ConfigOptions);
+                    }
                 }
 
                 return response;
@@ -521,33 +577,55 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         {
-            var previousSessionId = _currentSessionId;
-            var previousPlan = ClonePlan(_currentPlan);
-            var previousMode = CloneModeState(_currentMode);
-            var targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
-
-            try
+            SessionSnapshot targetSnapshot;
+            string? previousSessionId;
+            Plan? previousPlan;
+            SessionModeState? previousMode;
+            lock (_stateGate)
             {
-                // CRITICAL: We update _currentSessionId *before* LoadSessionAsync 
-                // because the loading process triggers Replay events, which must be 
+                previousSessionId = _currentSessionId;
+                previousPlan = ClonePlan(_currentPlan);
+                previousMode = CloneModeState(_currentMode);
+                targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
+
+                // CRITICAL: We update _currentSessionId *before* LoadSessionAsync
+                // because the loading process triggers Replay events, which must be
                 // associated with the new session ID immediately.
                 _currentSessionId = @params.SessionId;
                 _currentPlan = null;
                 _currentMode = null;
+            }
 
-                var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
-                session.Cwd = @params.Cwd;
+            try
+            {
+                _sessionManager.GetOrCreateSession(@params.SessionId, @params.Cwd);
 
-                // Clear history before loading to ensure we don't have duplicate entries 
+                // Clear history before loading to ensure we don't have duplicate entries
                 // if the server replays the history during the load process.
-                _sessionManager.UpdateSession(@params.SessionId, s => s.History.Clear());
+                _sessionManager.UpdateSession(
+                    @params.SessionId,
+                    s =>
+                    {
+                        s.Cwd = @params.Cwd;
+                        s.History.Clear();
+                    },
+                    updateActivity: false);
 
                 var response = await _acpClient.LoadSessionAsync(@params, cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    session.Cwd = @params.Cwd;
-                    session.State = SessionState.Active;
-                    ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
+                    _sessionManager.UpdateSession(
+                        @params.SessionId,
+                        s =>
+                        {
+                            s.Cwd = @params.Cwd;
+                            s.State = SessionState.Active;
+                        },
+                        updateActivity: false);
+                    lock (_stateGate)
+                    {
+                        ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
+                    }
                 }
                 catch
                 {
@@ -557,20 +635,12 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (OperationCanceledException)
             {
-                RestoreSessionSnapshot(targetSnapshot);
-
-                _currentSessionId = previousSessionId;
-                _currentPlan = previousPlan;
-                _currentMode = previousMode;
+                RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
                 throw;
             }
             catch (Exception ex)
             {
-                RestoreSessionSnapshot(targetSnapshot);
-
-                _currentSessionId = previousSessionId;
-                _currentPlan = previousPlan;
-                _currentMode = previousMode;
+                RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
 
                 var entry = new ErrorLogEntry(
                     "LoadSessionAsync failed",
@@ -584,47 +654,82 @@ namespace SalmonEgg.Application.Services.Chat
             }
         }
 
+        // 失败回滚必须带 latest-intent 门控:同一 ChatService 上可能已有更新的 Load/Resume
+        // 请求接管并写入了自己的 _currentSessionId。旧请求失败时只有在"当前指针仍指向本请求的
+        // 会话"时才回滚全局指针,否则会砸掉新请求已建立的最新意图(硬约束 §8.1.2)。会话级
+        // snapshot 恢复始终执行——它按 conversationId 隔离,只撤销本请求对目标会话造成的副作用。
+        private void RollBackAfterFailedRecovery(
+            string sessionId,
+            SessionSnapshot targetSnapshot,
+            string? previousSessionId,
+            Plan? previousPlan,
+            SessionModeState? previousMode)
+        {
+            lock (_stateGate)
+            {
+                RestoreSessionSnapshot(targetSnapshot);
+
+                if (string.Equals(_currentSessionId, sessionId, StringComparison.Ordinal))
+                {
+                    _currentSessionId = previousSessionId;
+                    _currentPlan = previousPlan;
+                    _currentMode = previousMode;
+                }
+            }
+        }
+
         public Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params)
             => ResumeSessionAsync(@params, CancellationToken.None);
 
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
         {
-            var previousSessionId = _currentSessionId;
-            var previousPlan = ClonePlan(_currentPlan);
-            var previousMode = CloneModeState(_currentMode);
-            var targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
-
-            try
+            SessionSnapshot targetSnapshot;
+            string? previousSessionId;
+            Plan? previousPlan;
+            SessionModeState? previousMode;
+            lock (_stateGate)
             {
+                previousSessionId = _currentSessionId;
+                previousPlan = ClonePlan(_currentPlan);
+                previousMode = CloneModeState(_currentMode);
+                targetSnapshot = CaptureSessionSnapshot(@params.SessionId);
+
                 _currentSessionId = @params.SessionId;
                 _currentPlan = null;
                 _currentMode = null;
+            }
 
-                var session = await GetOrCreateSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
-                session.Cwd = @params.Cwd;
+            try
+            {
+                _sessionManager.GetOrCreateSession(@params.SessionId, @params.Cwd);
+                _sessionManager.UpdateSession(
+                    @params.SessionId,
+                    s => s.Cwd = @params.Cwd,
+                    updateActivity: false);
 
                 var response = await _acpClient.ResumeSessionAsync(@params, cancellationToken).ConfigureAwait(false);
-                session.Cwd = @params.Cwd;
-                session.State = SessionState.Active;
-                ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
+                _sessionManager.UpdateSession(
+                    @params.SessionId,
+                    s =>
+                    {
+                        s.Cwd = @params.Cwd;
+                        s.State = SessionState.Active;
+                    },
+                    updateActivity: false);
+                lock (_stateGate)
+                {
+                    ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
+                }
                 return response;
             }
             catch (OperationCanceledException)
             {
-                RestoreSessionSnapshot(targetSnapshot);
-
-                _currentSessionId = previousSessionId;
-                _currentPlan = previousPlan;
-                _currentMode = previousMode;
+                RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
                 throw;
             }
             catch (Exception ex)
             {
-                RestoreSessionSnapshot(targetSnapshot);
-
-                _currentSessionId = previousSessionId;
-                _currentPlan = previousPlan;
-                _currentMode = previousMode;
+                RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
 
                 var entry = new ErrorLogEntry(
                     "ResumeSessionAsync failed",
@@ -645,13 +750,16 @@ namespace SalmonEgg.Application.Services.Chat
                 var response = await _acpClient.CloseSessionAsync(@params, cancellationToken).ConfigureAwait(false);
                 _sessionManager.RemoveSession(@params.SessionId);
 
-                if (string.Equals(_currentSessionId, @params.SessionId, StringComparison.Ordinal))
+                lock (_stateGate)
                 {
-                    _currentSessionId = null;
-                    _currentPlan = null;
-                    _currentMode = null;
+                    if (string.Equals(_currentSessionId, @params.SessionId, StringComparison.Ordinal))
+                    {
+                        _currentSessionId = null;
+                        _currentPlan = null;
+                        _currentMode = null;
+                    }
+                    _configAuthoritativeSessionIds.Remove(@params.SessionId);
                 }
-                _configAuthoritativeSessionIds.Remove(@params.SessionId);
 
                 return response;
             }
@@ -718,7 +826,10 @@ namespace SalmonEgg.Application.Services.Chat
                 var response = await _acpClient.SetSessionModeAsync(@params);
                 if (!string.IsNullOrEmpty(@params.ModeId))
                 {
-                    ApplyCurrentModeId(@params.SessionId, @params.ModeId);
+                    lock (_stateGate)
+                    {
+                        ApplyCurrentModeId(@params.SessionId, @params.ModeId);
+                    }
                 }
                 return response;
             }
@@ -865,10 +976,13 @@ namespace SalmonEgg.Application.Services.Chat
         {
             try
             {
-                _currentSessionId = null;
-                _currentPlan = null;
-                _currentMode = null;
-                _configAuthoritativeSessionIds.Clear();
+                lock (_stateGate)
+                {
+                    _currentSessionId = null;
+                    _currentPlan = null;
+                    _currentMode = null;
+                    _configAuthoritativeSessionIds.Clear();
+                }
 
                 return await _acpClient.DisconnectAsync();
             }
@@ -890,13 +1004,16 @@ namespace SalmonEgg.Application.Services.Chat
         {
             try
             {
-                if (string.IsNullOrEmpty(_currentSessionId))
+                lock (_stateGate)
                 {
-                    return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(null);
-                }
+                    if (string.IsNullOrEmpty(_currentSessionId))
+                    {
+                        return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(null);
+                    }
 
-                return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(
-                    _currentMode is null ? null : ToProtocolModes(_currentMode));
+                    return Task.FromResult<List<SalmonEgg.Acp.Protocol.SessionMode>?>(
+                        _currentMode is null ? null : ToProtocolModes(_currentMode));
+                }
             }
             catch (Exception ex)
             {
@@ -914,12 +1031,18 @@ namespace SalmonEgg.Application.Services.Chat
 
         public void ClearHistory()
         {
-            if (!string.IsNullOrWhiteSpace(_currentSessionId))
+            string? sessionId;
+            lock (_stateGate)
             {
-                _sessionManager.UpdateSession(_currentSessionId, s => s.History.Clear());
+                sessionId = _currentSessionId;
+                _currentPlan = null;
+                _currentMode = null;
             }
-            _currentPlan = null;
-            _currentMode = null;
+
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                _sessionManager.UpdateSession(sessionId, s => s.History.Clear());
+            }
         }
 
         public void Dispose()

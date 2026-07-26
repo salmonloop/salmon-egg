@@ -60,6 +60,51 @@ namespace SalmonEgg.Infrastructure.Services
         }
 
         /// <summary>
+        /// 原子地获取或创建会话。并发调用同一 ID 只会创建一个实例、都拿到同一引用、绝不抛错，
+        /// 消除调用方 check-then-act(先 Get 后 Create)与 <see cref="CreateSessionAsync"/> 的
+        /// TryAdd-即抛在并发下"一方必抛"的竞态。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <param name="cwd">工作目录（仅在本调用实际创建会话时生效）</param>
+        /// <returns>已存在或新建的会话对象</returns>
+        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                throw new ArgumentException("Session ID cannot be empty.", nameof(sessionId));
+            }
+
+            return _sessions.GetOrAdd(sessionId, static (id, arg) =>
+            {
+                var session = new Session(id, arg)
+                {
+                    DisplayName = SessionNamePolicy.CreateDefault(id)
+                };
+                return session;
+            }, cwd);
+        }
+
+        /// <summary>
+        /// 在写锁下拷贝会话历史，返回快照。用于把 live <see cref="Session.History"/> 与并发的
+        /// <see cref="Session.AddHistoryEntry"/> 隔离，避免调用方枚举 live 列表时被并发修改破坏。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <returns>历史快照；会话不存在时返回空列表</returns>
+        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId)
+                || !_sessions.TryGetValue(sessionId, out var session))
+            {
+                return Array.Empty<SessionUpdateEntry>();
+            }
+
+            lock (_lock)
+            {
+                return session.History.ToArray();
+            }
+        }
+
+        /// <summary>
         /// 更新会话。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>

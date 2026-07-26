@@ -1342,6 +1342,26 @@ public sealed class ConversationActivationCoordinatorTests
 
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
+
+        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        {
+            if (_sessions.TryGetValue(sessionId, out var existing))
+            {
+                return existing;
+            }
+
+            var session = new Session(sessionId, cwd)
+            {
+                DisplayName = sessionId
+            };
+            _sessions[sessionId] = session;
+            return session;
+        }
+
+        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
+            => _sessions.TryGetValue(sessionId, out var session)
+                ? session.History.ToList()
+                : Array.Empty<SessionUpdateEntry>();
     }
 
     private sealed class ControlledConversationSessionSwitcher : IConversationSessionSwitcher

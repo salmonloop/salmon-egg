@@ -691,6 +691,109 @@ public sealed class ChatServiceSessionTests
         Assert.Same(transport, acpClient.CreatedForTransport);
     }
 
+    [Fact]
+    public async Task LoadSessionAsync_WhenSupersededByNewerLoad_FailedRollbackDoesNotClobberNewerCurrentSession()
+    {
+        // latest-intent 门控:旧 Load 在途被新 Load supersede(新请求已写入 _currentSessionId),
+        // 旧 Load 随后失败回滚时不得把当前指针写回旧值——否则 CurrentSessionId 指向错误会话。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+
+        acpClient.SetupGet(c => c.IsInitialized).Returns(true);
+        acpClient.SetupGet(c => c.IsConnected).Returns(true);
+
+        var oldLoadReached = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowOldLoadToFail = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "old"), It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, _) =>
+            {
+                oldLoadReached.TrySetResult(null);
+                await allowOldLoadToFail.Task.ConfigureAwait(false);
+                throw new InvalidOperationException("old load failed");
+            });
+        acpClient
+            .Setup(c => c.LoadSessionAsync(It.Is<SessionLoadParams>(p => p.SessionId == "new"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionLoadResponse());
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        // 旧 Load 启动并挂在协议往返里。
+        var oldLoad = sut.LoadSessionAsync(new SessionLoadParams("old", Environment.CurrentDirectory), CancellationToken.None);
+        await oldLoadReached.Task;
+
+        // 新 Load 接管,写入自己的 _currentSessionId。
+        await sut.LoadSessionAsync(new SessionLoadParams("new", Environment.CurrentDirectory), TestContext.Current.CancellationToken);
+        Assert.Equal("new", sut.CurrentSessionId);
+
+        // 放行旧 Load 失败:回滚必须被 latest-intent 门控挡住,当前指针仍是 "new"。
+        allowOldLoadToFail.TrySetResult(null);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => oldLoad);
+
+        Assert.Equal("new", sut.CurrentSessionId);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SessionHistory_ReturnsSnapshot_NotLiveList()
+    {
+        // SessionHistory 必须返回快照:取用后 pump 继续追加不得影响已返回的列表,
+        // 也不得让 UI 枚举撞上并发修改。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        acpClient
+            .Setup(c => c.CreateSessionAsync(It.IsAny<SessionNewParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionNewResponse { SessionId = "s1" });
+
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+        await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("s1", new AgentMessageUpdate(new TextContentBlock("first"))));
+
+        var snapshot = sut.SessionHistory;
+        var snapshotCount = snapshot.Count;
+
+        acpClient.Raise(
+            c => c.SessionUpdateReceived += null,
+            new SessionUpdateEventArgs("s1", new AgentMessageUpdate(new TextContentBlock("second"))));
+
+        // 先前拿到的快照不随后续追加变化。
+        Assert.Equal(snapshotCount, snapshot.Count);
+        // 新取一次能看到追加后的条目。
+        Assert.Equal(snapshotCount + 1, sut.SessionHistory.Count);
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task SessionManager_GetOrCreateSession_IsAtomicUnderConcurrency()
+    {
+        // GetOrCreateSession 原子:并发对同一 id 调用只建一个实例、都拿到同一引用、不抛。
+        var sessionManager = new SessionManager();
+        const string sessionId = "concurrent";
+
+        var start = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(async () =>
+            {
+                await start.Task.ConfigureAwait(false);
+                return sessionManager.GetOrCreateSession(sessionId, Environment.CurrentDirectory);
+            }))
+            .ToArray();
+
+        start.TrySetResult(null);
+        var results = await Task.WhenAll(tasks);
+
+        var first = results[0];
+        Assert.All(results, session => Assert.Same(first, session));
+        Assert.Same(first, sessionManager.GetSession(sessionId));
+    }
+
     private sealed class StubAcpClientFactory(ScriptedAcpClient client) : IAcpClientFactory
     {
         public IAcpClient CreateClient(ITransport transport)

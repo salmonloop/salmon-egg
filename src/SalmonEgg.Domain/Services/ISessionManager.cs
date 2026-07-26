@@ -27,6 +27,24 @@ namespace SalmonEgg.Domain.Services
         Session? GetSession(string sessionId);
 
         /// <summary>
+        /// 原子地获取或创建会话。已存在则返回现有实例，否则新建。
+        /// 相比先 <see cref="GetSession"/> 再 <see cref="CreateSessionAsync"/> 的
+        /// check-then-act，此方法在并发下不会因竞态而抛"已存在"异常或丢失更新。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <param name="cwd">工作目录（仅新建时使用）</param>
+        /// <returns>现有或新创建的会话对象</returns>
+        Session GetOrCreateSession(string sessionId, string? cwd = null);
+
+        /// <summary>
+        /// 在会话锁下拷贝历史记录，返回快照。
+        /// 供 UI 枚举，避免把 live 列表暴露给与写入线程并发的读取方。
+        /// </summary>
+        /// <param name="sessionId">会话 ID</param>
+        /// <returns>历史记录快照；会话不存在时返回空列表</returns>
+        IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId);
+
+        /// <summary>
         /// 更新会话。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>

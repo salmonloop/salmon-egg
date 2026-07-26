@@ -3306,6 +3306,22 @@ public sealed class ChatConversationWorkspaceTests
 
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
+
+        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var session))
+            {
+                session = new Session(sessionId, cwd);
+                _sessions[sessionId] = session;
+            }
+
+            return session;
+        }
+
+        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
+            => _sessions.TryGetValue(sessionId, out var session)
+                ? session.History.ToList()
+                : Array.Empty<SessionUpdateEntry>();
     }
 
 }

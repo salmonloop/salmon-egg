@@ -654,6 +654,23 @@ public sealed class ChatLaunchWorkflowTests
 
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
+
+        public Session GetOrCreateSession(string sessionId, string? cwd = null)
+        {
+            if (_sessions.TryGetValue(sessionId, out var existing))
+            {
+                return existing;
+            }
+
+            var session = new Session(sessionId, cwd);
+            _sessions[sessionId] = session;
+            return session;
+        }
+
+        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
+            => _sessions.TryGetValue(sessionId, out var session)
+                ? session.History.ToList()
+                : Array.Empty<SessionUpdateEntry>();
     }
 
     private static ChatConversationWorkspace CreateWorkspace(
