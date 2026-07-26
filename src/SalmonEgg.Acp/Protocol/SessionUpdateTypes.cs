@@ -12,6 +12,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Update 通知的参数。
     /// 用于 Agent 向客户端发送会话更新。
     /// </summary>
+    [JsonConverter(typeof(SessionUpdateParamsJsonConverter))]
     public class SessionUpdateParams : AcpProtocolObject
     {
         /// <summary>
@@ -67,6 +68,81 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
     public class SessionUpdate : AcpProtocolObject
     {
+        /// <summary>
+        /// 未绑定到已知契约的前向兼容字段(含未知 sessionUpdate 判别值的完整 payload)。
+        /// 协议要求未知更新原样保留并可 round-trip,client 不解释也不丢弃,
+        /// 语义由 Agent 决定(AGENTS.md「协议宽松度不得反向收紧」)。
+        /// </summary>
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
+        /// <summary>
+        /// 未知更新类型的原始判别值;仅当此实例是未识别判别值回落的基类实例时非空。
+        /// </summary>
+        [JsonIgnore]
+        public string? UnknownUpdateKind =>
+            ExtensionData is not null
+                && ExtensionData.TryGetValue("sessionUpdate", out var kind)
+                && kind.ValueKind == JsonValueKind.String
+            ? kind.GetString()
+            : null;
+    }
+
+    /// <summary>
+    /// session/update 参数的读写。已知更新完全委托多态契约;未知判别值回落基类时
+    /// STJ 会把判别值当多态元数据丢弃,这里把它补回 <see cref="SessionUpdate.ExtensionData"/>,
+    /// 保证未知更新原样 round-trip 而不是被 client 静默降级。
+    /// </summary>
+    public sealed class SessionUpdateParamsJsonConverter : JsonConverter<SessionUpdateParams>
+    {
+        public override SessionUpdateParams? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("session/update params must be a JSON object.");
+            }
+
+            var sessionId = root.TryGetProperty("sessionId", out var sessionIdElement)
+                    && sessionIdElement.ValueKind == JsonValueKind.String
+                ? sessionIdElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            SessionUpdate? update = null;
+            if (root.TryGetProperty("update", out var updateElement) && updateElement.ValueKind == JsonValueKind.Object)
+            {
+                update = updateElement.Deserialize<SessionUpdate>(options);
+                if (update is not null
+                    && update.GetType() == typeof(SessionUpdate)
+                    && updateElement.TryGetProperty("sessionUpdate", out var kindElement))
+                {
+                    update.ExtensionData ??= new Dictionary<string, JsonElement>();
+                    update.ExtensionData["sessionUpdate"] = kindElement.Clone();
+                }
+            }
+
+            return new SessionUpdateParams
+            {
+                SessionId = sessionId,
+                Update = update!,
+                Meta = AcpMetaJson.Read(root)
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, SessionUpdateParams value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("sessionId", value.SessionId);
+            if (value.Update is not null)
+            {
+                writer.WritePropertyName("update");
+                JsonSerializer.Serialize(writer, value.Update, options);
+            }
+
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
     }
 
     public abstract class ContentChunkUpdate : SessionUpdate

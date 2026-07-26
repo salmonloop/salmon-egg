@@ -28,13 +28,15 @@ public sealed class SessionUpdatePolymorphismTests
 
         var update = (CurrentModeUpdate)parsed.Update!;
         Assert.Equal("mode_123", update.ModeId);
+        // 协议要求未知字段保留而非丢弃:非标准的 title 不绑定强类型契约,但必须原样 round-trip。
         Assert.Null(typeof(CurrentModeUpdate).GetProperty("Title"));
         var serialized = JsonSerializer.Serialize(parsed, CreateJsonOptions());
-        Assert.DoesNotContain("title", serialized, StringComparison.Ordinal);
+        Assert.Contains("\"title\"", serialized, StringComparison.Ordinal);
+        Assert.Contains("non-standard title", serialized, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Deserialize_NonStandardConfigOptionsUpdate_FallsBackWithoutReplayingPayload()
+    public void Deserialize_UnknownSessionUpdate_FallsBackToBaseAndPreservesPayloadForRoundTrip()
     {
         var json = """
         {
@@ -48,11 +50,13 @@ public sealed class SessionUpdatePolymorphismTests
 
         var parsed = JsonSerializer.Deserialize<SessionUpdateParams>(json, CreateJsonOptions());
 
+        // client 不解释未知判别值(回落基类,不冒充任何标准更新),但 payload 必须原样保留可 round-trip。
         Assert.NotNull(parsed);
-        Assert.IsType<SessionUpdate>(parsed!.Update);
+        var update = Assert.IsType<SessionUpdate>(parsed!.Update);
+        Assert.Equal("config_options_update", update.UnknownUpdateKind);
         var serialized = JsonSerializer.Serialize(parsed, CreateJsonOptions());
-        Assert.DoesNotContain("config_options_update", serialized, StringComparison.Ordinal);
-        Assert.DoesNotContain("configOptions", serialized, StringComparison.Ordinal);
+        Assert.Contains("config_options_update", serialized, StringComparison.Ordinal);
+        Assert.Contains("configOptions", serialized, StringComparison.Ordinal);
     }
 
     [Fact]
