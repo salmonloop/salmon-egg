@@ -2504,6 +2504,36 @@ public partial class ChatViewModel
         // a zero-round-trip warm reuse instead of another slow session/load. The work is
         // conversationId-scoped and never touches the foreground (HydratedConversationId / overlays
         // stay owned by the newest activation).
+        //
+        // Exception: if a newer activation for this same conversation is already mid-flight it will
+        // have reset the runtime to an earlier pending phase (Selecting/Selected/RemoteConnectionReady).
+        // That activation owns hydration and must drive its own authoritative session/load, so this
+        // stale completion must neither land its projection nor report a publication — waiters
+        // attached to this request must observe WasPublished=false and recover on their own. This
+        // read is only a fast-fail optimization; the authoritative, race-free gate is the reducer
+        // guard behind PromoteConversationRuntimeToWarmAction at dispatch time.
+        var currentRuntime = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false))
+            .ResolveRuntimeState(conversationId);
+        var newerActivationOwnsHydration = currentRuntime is
+        {
+            Phase: ConversationRuntimePhase.Selecting
+                or ConversationRuntimePhase.Selected
+                or ConversationRuntimePhase.RemoteConnectionReady
+        };
+        if (newerActivationOwnsHydration)
+        {
+            Logger.LogInformation(
+                "Discarding superseded remote session recovery completion because a newer activation owns hydration. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
+                conversationId,
+                expectedBinding.RemoteSessionId);
+            ReleaseBufferedUpdatesAfterInterruptedHydration(
+                adapter,
+                hydrationAttemptId,
+                ownsHydrationScope: true,
+                "RemoteSessionRecoverySupersededByNewerActivation");
+            return false;
+        }
+
         Logger.LogInformation(
             "Completing superseded remote session recovery in background. ConversationId={ConversationId} RemoteSessionId={RemoteSessionId}",
             conversationId,
@@ -2516,26 +2546,6 @@ public partial class ChatViewModel
         if (!backgroundBufferingCompleted)
         {
             return false;
-        }
-
-        // If a newer activation for this same conversation is already mid-flight it will have reset
-        // the runtime to an earlier pending phase (Selecting/Selected/RemoteConnectionReady). That
-        // activation owns hydration and must drive its own authoritative session/load, so this stale
-        // background completion must not promote to Warm or land its projection. This read is only a
-        // fast-fail optimization that skips the projection work; the authoritative, race-free gate is
-        // the reducer guard behind PromoteConversationRuntimeToWarmAction at dispatch time.
-        var currentRuntime = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false))
-            .ResolveRuntimeState(conversationId);
-        var newerActivationOwnsHydration = currentRuntime is
-        {
-            Phase: ConversationRuntimePhase.Selecting
-                or ConversationRuntimePhase.Selected
-                or ConversationRuntimePhase.RemoteConnectionReady
-        };
-        if (newerActivationOwnsHydration)
-        {
-            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
-            return true;
         }
 
         await PromoteRemoteSessionRecoveryToWarmAsync(

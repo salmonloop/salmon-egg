@@ -1,4 +1,5 @@
 using SalmonEgg.Presentation.Core.Mvux.Chat;
+using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Domain.Models.Conversation;
 using System.Collections.Immutable;
 using Xunit;
@@ -92,12 +93,55 @@ public class ChatReducerTests
         // Act
         var next = ChatReducer.Reduce(
             state,
-            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "SessionLoadCompleted")));
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, reason: ConversationRuntimeReasons.SessionLoadCompleted)));
 
         // Assert
         var runtime = next.ResolveRuntimeState("conv-1");
         Assert.Equal(ConversationRuntimePhase.Warm, runtime?.Phase);
-        Assert.Equal("SessionLoadCompleted", runtime?.Reason);
+        Assert.Equal(ConversationRuntimeReasons.SessionLoadCompleted, runtime?.Reason);
+    }
+
+    [Fact]
+    public void GivenHydratingRuntimeOnDifferentConnection_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:同会话更新激活已在新连接身份上重建 RemoteHydrating(case study
+        // 「后台恢复完成的权威晋升」验证场景 3),旧身份的过时完成不得先戳 Warm。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.RemoteHydrating, connectionInstanceId: "conn-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-old")));
+
+        // Assert
+        Assert.Equal(ConversationRuntimePhase.RemoteHydrating, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
+    public void GivenHydratingRuntimeOnDifferentRemoteSession_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:同会话 rebind 后以新 remote session 身份重建 RemoteHydrating,
+        // 旧 remote session 的过时完成不得晋升。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.RemoteHydrating, remoteSessionId: "remote-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, remoteSessionId: "remote-old")));
+
+        // Assert
+        Assert.Equal(ConversationRuntimePhase.RemoteHydrating, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
     }
 
     [Theory]
@@ -1285,12 +1329,13 @@ public class ChatReducerTests
     private static ConversationRuntimeSlice CreateRuntime(
         ConversationRuntimePhase phase,
         string connectionInstanceId = "conn-1",
+        string remoteSessionId = "remote-1",
         string? reason = null)
         => new(
             ConversationId: "conv-1",
             Phase: phase,
             ConnectionInstanceId: connectionInstanceId,
-            RemoteSessionId: "remote-1",
+            RemoteSessionId: remoteSessionId,
             ProfileId: "profile-1",
             Reason: reason,
             UpdatedAtUtc: DateTime.UtcNow);

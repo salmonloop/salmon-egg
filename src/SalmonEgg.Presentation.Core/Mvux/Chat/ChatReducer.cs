@@ -388,10 +388,15 @@ public static class ChatReducer
         // 守卫必须在 reducer 内原子判定:后台恢复完成与同会话更新激活竞争 runtime。
         // 更新激活把 phase 重置为更早 pending 阶段(或已 Stale/Faulted)后,过时完成的
         // Warm 不得覆盖——由最新激活驱动自己的权威恢复;调用方的预检只是快速失败优化。
-        var promotable = existing.Phase == ConversationRuntimePhase.RemoteHydrating
-            || (existing.Phase == ConversationRuntimePhase.Warm
-                && string.Equals(existing.ConnectionInstanceId, runtimeState.ConnectionInstanceId, StringComparison.Ordinal)
-                && string.Equals(existing.RemoteSessionId, runtimeState.RemoteSessionId, StringComparison.Ordinal));
+        // RemoteHydrating 与 Warm 两个可晋升阶段都要求连接实例与远端会话身份等值:
+        // 同会话更新激活若已以新身份重建 hydrating,旧身份的过时完成不得先戳 Warm
+        // (否则新完成反而会因身份不匹配被拒,恰好反转正确结果);attach 复用的合法
+        // 晋升身份天然等值,不受影响。
+        var identityMatches =
+            string.Equals(existing.ConnectionInstanceId, runtimeState.ConnectionInstanceId, StringComparison.Ordinal)
+            && string.Equals(existing.RemoteSessionId, runtimeState.RemoteSessionId, StringComparison.Ordinal);
+        var promotable = identityMatches
+            && existing.Phase is ConversationRuntimePhase.RemoteHydrating or ConversationRuntimePhase.Warm;
         if (!promotable)
         {
             return current;
