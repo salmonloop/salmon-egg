@@ -325,7 +325,7 @@ public sealed class TransportFactoryTests
             factory.CreateTransport(TransportType.HttpSse, url: " "));
 
         Assert.Equal("url", ex.ParamName);
-        Assert.Contains("HTTP SSE transport requires a URL", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Streamable HTTP transport requires a URL", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

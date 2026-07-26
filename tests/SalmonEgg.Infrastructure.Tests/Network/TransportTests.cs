@@ -166,10 +166,10 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
+        public async Task StreamableHttpTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -177,21 +177,21 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
+        public async Task StreamableHttpTransport_DisconnectAsync_ShouldNotThrow_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await transport.DisconnectAsync();
-            _mockLogger.Verify(x => x.Warning("HTTP SSE is not connected"), Times.Once);
+            _mockLogger.Verify(x => x.Warning("Streamable HTTP transport is not connected"), Times.Once);
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
+        public async Task StreamableHttpTransport_SendAsync_ShouldThrowInvalidOperationException_WhenNotConnected()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -199,10 +199,10 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public async Task HttpSseTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
+        public async Task StreamableHttpTransport_SendAsync_ShouldThrowArgumentException_WhenMessageIsEmpty()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
 
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() =>
@@ -224,29 +224,26 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
-        public void HttpSseTransport_Dispose_ShouldCleanupResources()
+        public void StreamableHttpTransport_Dispose_ShouldBeIdempotent()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            var transport = new StreamableHttpTransport(_mockLogger.Object);
 
-            // Act
+            // Act & Assert: double dispose must not throw.
             transport.Dispose();
-
-            // Assert
-            // Verify that dispose methods were called
-            _mockLogger.Verify(x => x.Debug("HttpSseTransport disposed"), Times.Once);
+            transport.Dispose();
         }
 
         [Fact]
-        public async Task HttpSseTransport_ConnectAsync_ShouldHandleCancellation()
+        public async Task StreamableHttpTransport_ConnectAsync_ShouldHandleCancellation()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var cts = new CancellationTokenSource();
             cts.Cancel(); // Cancel immediately
 
             // Act & Assert
-            await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 transport.ConnectAsync("http://localhost:8080", cts.Token));
         }
 
@@ -313,13 +310,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport state changes
+        /// Tests Streamable HTTP transport state changes
         /// </summary>
         [Fact]
-        public void HttpSseTransport_StateChanges_ShouldEmitCorrectStates()
+        public void StreamableHttpTransport_StateChanges_ShouldEmitCorrectStates()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var stateChanges = new List<TransportState>();
             transport.StateChanges.Subscribe(state => stateChanges.Add(state));
 
@@ -343,13 +340,13 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         /// <summary>
-        /// Tests HTTP SSE transport message reception
+        /// Tests Streamable HTTP transport message reception
         /// </summary>
         [Fact]
-        public void HttpSseTransport_Messages_ShouldEmitReceivedMessages()
+        public void StreamableHttpTransport_Messages_ShouldEmitReceivedMessages()
         {
             // Arrange
-            var transport = new HttpSseTransport(_mockLogger.Object);
+            using var transport = new StreamableHttpTransport(_mockLogger.Object);
             var receivedMessages = new List<string>();
             transport.Messages.Subscribe(message => receivedMessages.Add(message));
 

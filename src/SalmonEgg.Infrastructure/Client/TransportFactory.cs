@@ -92,7 +92,9 @@ public class TransportFactory : ITransportFactory
         {
             TransportType.Stdio => CreateStdioTransport(command, arguments),
             TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
-            TransportType.HttpSse => CreateHttpSseTransport(url),
+            // 配置枚举名 HttpSse 保持不变以兼容既有 profile;实现对齐官方
+            // Streamable HTTP 草案(单端点 POST + 连接/会话级 SSE 流)。
+            TransportType.HttpSse => CreateStreamableHttpTransport(url),
             _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
         };
     }
@@ -155,27 +157,26 @@ public class TransportFactory : ITransportFactory
     }
 
     /// <summary>
-    /// 创建 HTTP SSE 传输实例。
+    /// 创建 Streamable HTTP 传输实例(ACP 官方草案 RFD)。
     /// </summary>
-    /// <param name="url">HTTP SSE URL</param>
-    /// <returns>HTTP SSE 传输实例</returns>
+    /// <param name="url">Streamable HTTP 端点 URL</param>
+    /// <returns>Streamable HTTP 传输实例</returns>
     /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateHttpSseTransport(string? url)
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStreamableHttpTransport(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            throw new ArgumentException("HTTP SSE transport requires a URL.", nameof(url));
+            throw new ArgumentException("Streamable HTTP transport requires a URL.", nameof(url));
         }
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out _))
         {
-            throw new ArgumentException($"Invalid HTTP SSE URL: {url}", nameof(url));
+            throw new ArgumentException($"Invalid Streamable HTTP URL: {url}", nameof(url));
         }
 
-        _logger.Information("Creating HTTP SSE transport. Url={Url}", url);
+        _logger.Information("Creating Streamable HTTP transport. Url={Url}", url);
 
-        var logger = _logger;
-        var inner = new SalmonEgg.Infrastructure.Network.HttpSseTransport(logger);
+        var inner = new SalmonEgg.Infrastructure.Network.StreamableHttpTransport(_logger);
         return new NetworkTransportAdapter(inner, url.Trim());
     }
 }
