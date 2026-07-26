@@ -175,6 +175,10 @@ public sealed class AcpChatServiceAdapter : IChatService, IAcpSessionUpdateBuffe
 
         _disposed = true;
         _inner.SessionUpdateReceived -= OnInnerSessionUpdateReceived;
+
+        // 本适配器是链最外层装饰器，独占其内层 IChatService（进而独占 ACP 客户端/传输）。
+        // 释放沿所有权链下传；优雅断连由调用方在 Dispose 前先行 await 的 DisconnectAsync 负责。
+        _inner.Dispose();
     }
 
     private void OnInnerSessionUpdateReceived(object? sender, SessionUpdateEventArgs args)

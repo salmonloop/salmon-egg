@@ -30,6 +30,7 @@ namespace SalmonEgg.Application.Services.Chat
         private Plan? _currentPlan;
         private SessionModeState? _currentMode;
         private Task _sessionUpdatePump = Task.CompletedTask;
+        private bool _disposed;
 
         public string? CurrentSessionId
         {
@@ -1047,6 +1048,12 @@ namespace SalmonEgg.Application.Services.Chat
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
             _acpClient.SessionUpdateReceived -= OnSessionUpdateReceived;
             _acpClient.PermissionRequestReceived -= OnPermissionRequestReceived;
             _acpClient.FileSystemRequestReceived -= OnFileSystemRequestReceived;
@@ -1054,6 +1061,23 @@ namespace SalmonEgg.Application.Services.Chat
             _acpClient.TerminalStateChangedReceived -= OnTerminalStateChangedReceived;
             _acpClient.AskUserRequestReceived -= OnAskUserRequestReceived;
             _acpClient.ErrorOccurred -= OnErrorOccurred;
+
+            // 本服务独占其 ACP 客户端（进而独占传输/进程/套接字/CTS），释放沿所有权链下传。
+            // 优雅的协议级断连由显式 DisconnectAsync 负责，调用方已在 Dispose 前先行 await。
+            try
+            {
+                _acpClient.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // 清理路径的释放失败不得逃逸，否则会顶替真正的业务异常并挂死调用栈。
+                _errorLogger.LogError(new ErrorLogEntry(
+                    "CHAT_SERVICE_CLIENT_DISPOSE_FAILED",
+                    "Failed to dispose ACP client during chat service disposal.",
+                    ErrorSeverity.Warning,
+                    nameof(Dispose),
+                    exception: ex));
+            }
         }
 
         private void OnTerminalRequestReceived(object? sender, TerminalRequestEventArgs e)

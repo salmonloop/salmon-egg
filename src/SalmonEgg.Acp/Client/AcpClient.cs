@@ -1983,15 +1983,30 @@ namespace SalmonEgg.Acp.Client
             _disposed = true;
             _messageLoopCts?.Cancel();
 
-            // 先解绑传输事件,避免 DisconnectAsync 期间的回调重入已释放的处理器;
+            // 先解绑传输事件,避免 teardown 期间的回调重入已释放的处理器;
             // 再 fault 所有挂起请求,否则正在 await tcs.Task 的调用方在 Dispose 路径
             // 永久悬挂(看门狗的取消只覆盖显式 DisconnectAsync,Dispose 无人负责)。
             _transport.MessageReceived -= OnMessageReceived;
             _transport.ErrorOccurred -= OnTransportError;
             CancelPendingRequests(_lastTransportErrorMessage ?? "The ACP client was disposed.");
 
-            _terminalSessionManager.Dispose();
-            _ = _transport.DisconnectAsync();
+            // 传输是本客户端独占的资源(进程/套接字/HttpClient/Rx subject),Dispose 是其
+            // 权威释放路径(优雅的协议级断连由显式 DisconnectAsync 负责,已在调用方先行 await)。
+            // 终端会话管理器是跨连接共享的单例,由 DI 容器拥有,本客户端不得释放它。
+            try
+            {
+                _transport.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // 清理路径的释放失败不得逃逸,否则会顶替真正的业务异常并挂死调用栈。
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "TRANSPORT_DISPOSE_FAILED",
+                    "Failed to dispose transport during ACP client disposal.",
+                    exception: ex);
+            }
+
             _messageLoopCts?.Dispose();
             _messageLoopCts = null;
             GC.SuppressFinalize(this);

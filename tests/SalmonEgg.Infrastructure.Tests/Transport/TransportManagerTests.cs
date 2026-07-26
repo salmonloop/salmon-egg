@@ -225,5 +225,9 @@ public sealed class TransportManagerTests
 
         public void RaiseErrorOccurred(TransportErrorEventArgs args)
             => ErrorOccurred?.Invoke(this, args);
+
+        public void Dispose()
+        {
+        }
     }
 }

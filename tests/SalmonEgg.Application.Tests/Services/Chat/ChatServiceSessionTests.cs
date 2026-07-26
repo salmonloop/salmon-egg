@@ -794,6 +794,54 @@ public sealed class ChatServiceSessionTests
         Assert.Same(first, sessionManager.GetSession(sessionId));
     }
 
+    [Fact]
+    public void Dispose_CascadesToOwnedAcpClient()
+    {
+        // 本服务独占其 ACP 客户端(进而独占传输/进程/套接字/CTS),Dispose 必须沿所有权链下传,
+        // 否则每连接的资源全部泄漏。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        sut.Dispose();
+
+        acpClient.Verify(c => c.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public void Dispose_WhenAcpClientDisposeThrows_DoesNotEscape()
+    {
+        // 清理路径的释放失败必须 best-effort 化:抛出会顶替真正的业务异常并挂死调用栈。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        acpClient.Setup(c => c.Dispose()).Throws(new InvalidOperationException("client dispose failed"));
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        var exception = Record.Exception(() => sut.Dispose());
+
+        Assert.Null(exception);
+        errorLogger.Verify(
+            l => l.LogError(It.Is<ErrorLogEntry>(e => e.ErrorCode == "CHAT_SERVICE_CLIENT_DISPOSE_FAILED")),
+            Times.Once);
+    }
+
+    [Fact]
+    public void Dispose_IsIdempotent()
+    {
+        // 重复 Dispose 只下传一次释放,避免二次释放底层资源。
+        var acpClient = new Mock<IAcpClient>(MockBehavior.Loose);
+        var errorLogger = new Mock<IErrorLogger>(MockBehavior.Loose);
+        var sessionManager = new SessionManager();
+        var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
+
+        sut.Dispose();
+        sut.Dispose();
+
+        acpClient.Verify(c => c.Dispose(), Times.Once);
+    }
+
     private sealed class StubAcpClientFactory(ScriptedAcpClient client) : IAcpClientFactory
     {
         public IAcpClient CreateClient(ITransport transport)
@@ -893,6 +941,10 @@ public sealed class ChatServiceSessionTests
             _ = ErrorOccurred;
             return Task.FromResult(true);
         }
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class ScriptedTransport : ITransport
@@ -945,6 +997,10 @@ public sealed class ChatServiceSessionTests
             }
 
             return Task.FromResult(true);
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

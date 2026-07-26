@@ -4,7 +4,11 @@ using System.Threading.Tasks;
 
 namespace SalmonEgg.Acp.Client
 {
-    public interface IAcpTransport
+    /// <summary>
+    /// ACP 传输契约。持有底层传输独占的进程/套接字/HttpClient 资源，
+    /// 生命周期由 <see cref="AcpClient"/> 拥有，故继承 <see cref="IDisposable"/>。
+    /// </summary>
+    public interface IAcpTransport : IDisposable
     {
         event EventHandler<AcpTransportMessageReceivedEventArgs>? MessageReceived;
 

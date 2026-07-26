@@ -1820,6 +1820,58 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task Dispose_ReleasesOwnedTransport()
+        {
+            // 传输是客户端独占的资源(进程/套接字/HttpClient),释放沿所有权链下传。
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            client.Dispose();
+
+            _transportMock.Verify(t => t.Dispose(), Times.Once);
+        }
+
+        [Fact]
+        public async Task Dispose_DoesNotReleaseSharedTerminalSessionManager()
+        {
+            // 血泪教训守卫:终端会话管理器是跨连接共享的 DI 单例,客户端不拥有它;
+            // Dispose 若释放它会把管理器从其它在用连接下抽走。strict mock 未安排 Dispose,
+            // 一旦被调用即抛 MockException,测试红。
+            var parser = new MessageParser();
+            var terminalSessionManager = new Mock<IAcpTerminalSessionManager>(MockBehavior.Strict);
+            var client = await CreateInitializedClientAsync(
+                sessionStore: new RecordingAcpClientSessionStore(),
+                terminalSessionManager: terminalSessionManager.Object);
+
+            client.Dispose();
+
+            terminalSessionManager.Verify(t => t.Dispose(), Times.Never);
+        }
+
+        [Fact]
+        public async Task Dispose_WhenTransportDisposeThrows_DoesNotEscape()
+        {
+            // 清理路径的释放失败必须 best-effort 化:抛出会顶替真正的业务异常并挂死调用栈。
+            var parser = new MessageParser();
+            _transportMock
+                .Setup(t => t.Dispose())
+                .Throws(new InvalidOperationException("transport dispose failed"));
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            var exception = Record.Exception(() => client.Dispose());
+
+            Assert.Null(exception);
+            _loggerMock.Verify(
+                l => l.Log(
+                    AcpClientLogLevel.Warning,
+                    "TRANSPORT_DISPOSE_FAILED",
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<Exception?>()),
+                Times.Once);
+        }
+
+        [Fact]
         public async Task CancelSessionAsync_WhenPermissionPromptIsPending_SendsCancelledOutcomeImmediately()
         {
             var parser = new MessageParser();

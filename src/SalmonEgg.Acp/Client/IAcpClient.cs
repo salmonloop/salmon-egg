@@ -10,8 +10,11 @@ namespace SalmonEgg.Acp.Client
     /// <summary>
     /// ACP 客户端接口。
     /// 定义了与 Agent 通信的核心方法。
+    /// 客户端独占其传输（进程/套接字/HttpClient）与消息循环 CTS，生命周期由持有者
+    /// （ChatService）拥有，故契约包含 <see cref="IDisposable"/>：断连只停止流量，
+    /// 释放才归还底层资源。
     /// </summary>
-    public interface IAcpClient
+    public interface IAcpClient : IDisposable
     {
         /// <summary>
         /// 初始化事件。当初始化完成时触发。

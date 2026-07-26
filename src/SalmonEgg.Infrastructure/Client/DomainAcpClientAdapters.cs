@@ -11,6 +11,7 @@ namespace SalmonEgg.Infrastructure.Client;
 internal sealed class DomainAcpTransportAdapter : IAcpTransport
 {
     private readonly ITransport _inner;
+    private bool _disposed;
 
     public DomainAcpTransportAdapter(ITransport inner)
     {
@@ -33,6 +34,21 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
 
     public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
         => _inner.SendMessageAsync(message, cancellationToken);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _inner.MessageReceived -= OnMessageReceived;
+        _inner.ErrorOccurred -= OnErrorOccurred;
+
+        // 适配器 1:1 包裹底层 Domain 传输，其生命周期随适配器归还。
+        _inner.Dispose();
+    }
 
     private void OnMessageReceived(object? sender, MessageReceivedEventArgs e)
     {
