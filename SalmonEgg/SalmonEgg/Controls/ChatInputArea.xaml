@@ -14,8 +14,7 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <!-- BoolToVisibility/InverseBoolToVisibility 由 ChatStyles(App 级合并)全局提供,不在控件重复注册 -->
         <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter"/>
         <x:Double x:Key="ComposerProfileSelectorMinWidth">160</x:Double>
         <x:Double x:Key="ComposerProfileSelectorMaxWidth">320</x:Double>

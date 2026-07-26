@@ -26,8 +26,7 @@
     KeyboardAcceleratorPlacementMode="Hidden">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <!-- BoolToVisibility/InverseBoolToVisibility 由 ChatStyles(App 级合并)全局提供,不在页面重复注册 -->
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:PlanStatusToColorConverter x:Key="PlanStatusToColorConverter" />
         <converters:PlanStatusLabelConverter x:Key="PlanStatusLabelConverter" />

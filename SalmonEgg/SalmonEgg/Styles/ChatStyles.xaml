@@ -8,7 +8,7 @@
 
     <!-- SSOT Common Chat Converters -->
     <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-    <converters:InverseBoolConverter x:Key="InverseBoolToVisibilityConverter"/>
+    <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
     <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
 
