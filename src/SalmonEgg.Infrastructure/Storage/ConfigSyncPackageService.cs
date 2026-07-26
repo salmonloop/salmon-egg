@@ -106,30 +106,37 @@ public sealed class ConfigSyncPackageService
 
             ValidateArchive(archive);
 
-            if (Directory.Exists(_appData.ConfigRootPath))
+            // 先在同卷 staging 目录完整展开,成功后再整体换入:
+            // 解包中途取消或 IO 失败不得让 config root 停在半删/半写状态。
+            var stagingPath = _appData.ConfigRootPath + ".restore-" + Guid.NewGuid().ToString("N");
+            try
             {
-                Directory.Delete(_appData.ConfigRootPath, recursive: true);
+                foreach (var entry in archive.Entries)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
+                    if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var destination = ResolveEntryPath(stagingPath, relative);
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    using var input = entry.Open();
+                    using var output = File.Create(destination);
+                    await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
+                }
+
+                SwapConfigRoot(stagingPath, backupPath);
             }
-
-            foreach (var entry in archive.Entries)
+            finally
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!entry.FullName.StartsWith(ConfigEntryPrefix, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var relative = entry.FullName.Substring(ConfigEntryPrefix.Length);
-                if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith("/", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var destination = ResolveConfigPath(relative);
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                using var input = entry.Open();
-                using var output = File.Create(destination);
-                await input.CopyToAsync(output, BufferSize, cancellationToken).ConfigureAwait(false);
+                TryDeleteDirectory(stagingPath);
             }
 
             var secretsEntry = archive.GetEntry(SecretsEntryName);
@@ -295,6 +302,9 @@ public sealed class ConfigSyncPackageService
     }
 
     private string ResolveConfigPath(string zipRelativePath)
+        => ResolveEntryPath(_appData.ConfigRootPath, zipRelativePath);
+
+    private static string ResolveEntryPath(string rootPath, string zipRelativePath)
     {
         if (string.IsNullOrWhiteSpace(zipRelativePath))
         {
@@ -307,8 +317,8 @@ public sealed class ConfigSyncPackageService
             throw new InvalidDataException("Cloud config package contains an absolute path.");
         }
 
-        var fullPath = Path.GetFullPath(Path.Combine(_appData.ConfigRootPath, normalized));
-        var root = Path.GetFullPath(_appData.ConfigRootPath);
+        var fullPath = Path.GetFullPath(Path.Combine(rootPath, normalized));
+        var root = Path.GetFullPath(rootPath);
         if (!fullPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
             !string.Equals(fullPath, root, StringComparison.Ordinal))
         {
@@ -316,6 +326,51 @@ public sealed class ConfigSyncPackageService
         }
 
         return fullPath;
+    }
+
+    private void SwapConfigRoot(string stagingPath, string backupPath)
+    {
+        var configRoot = _appData.ConfigRootPath;
+        if (!Directory.Exists(stagingPath))
+        {
+            // 包内可以不含任何 config 条目,换入等价的空目录以保持原先"删除后重建"的语义。
+            Directory.CreateDirectory(stagingPath);
+        }
+
+        if (Directory.Exists(configRoot))
+        {
+            Directory.Delete(configRoot, recursive: true);
+        }
+
+        try
+        {
+            Directory.Move(stagingPath, configRoot);
+        }
+        catch
+        {
+            // 删除与换入之间的窄窗失败:从本次 backup 拷回,避免 config root 消失。
+            if (Directory.Exists(backupPath))
+            {
+                CopyDirectory(backupPath, configRoot);
+            }
+
+            throw;
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // 残留 staging 目录只是垃圾,不影响正确性,不因清理失败掩盖真实异常。
+        }
     }
 
     private string GetRelativeConfigPath(string path)
