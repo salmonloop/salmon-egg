@@ -57,7 +57,7 @@ public sealed class AcpSessionNewCwdResolverTests
     [Fact]
     public void Resolve_RemoteWithWindowsAbsoluteCwd_TrustsRemotePath()
     {
-        var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.HttpSse };
+        var profile = new ServerConfiguration { Id = "profile-1", Transport = TransportType.StreamableHttp };
 
         var result = AcpSessionNewCwdResolver.Resolve(
             requestedCwd: @"C:\agent\worktree",

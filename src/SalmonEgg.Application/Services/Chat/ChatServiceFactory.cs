@@ -49,7 +49,7 @@ public class ChatServiceFactory
     /// <param name="transportType">传输类型</param>
     /// <param name="command">命令（仅用于 Stdio）</param>
     /// <param name="arguments">命令行参数（仅用于 Stdio）</param>
-    /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse）</param>
+    /// <param name="url">连接 URL（用于 WebSocket 和 StreamableHttp）</param>
     /// <returns>新创建的 <see cref="IChatService"/> 实例</returns>
     /// <exception cref="InvalidOperationException">当必要参数缺失时抛出</exception>
     public IChatService CreateChatService(

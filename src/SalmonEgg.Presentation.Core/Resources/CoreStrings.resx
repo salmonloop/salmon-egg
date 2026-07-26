@@ -734,7 +734,7 @@
   <data name="AcpConnection_TransportWebSocket" xml:space="preserve">
     <value>WebSocket</value>
   </data>
-  <data name="AcpConnection_TransportHttpSse" xml:space="preserve">
+  <data name="AcpConnection_TransportStreamableHttp" xml:space="preserve">
     <value>Streamable HTTP</value>
   </data>
   <data name="AcpConnection_HydrationStrictReplayName" xml:space="preserve">

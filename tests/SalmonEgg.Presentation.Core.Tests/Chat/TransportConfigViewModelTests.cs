@@ -52,11 +52,11 @@ public sealed class TransportConfigViewModelTests
     }
 
     [Fact]
-    public void Validate_WhenHttpSseUrlUsesWsScheme_ShouldReject()
+    public void Validate_WhenStreamableHttpUrlUsesWsScheme_ShouldReject()
     {
         var viewModel = new TransportConfigViewModel
         {
-            SelectedTransportType = TransportType.HttpSse,
+            SelectedTransportType = TransportType.StreamableHttp,
             RemoteUrl = "ws://example.com/sse"
         };
 

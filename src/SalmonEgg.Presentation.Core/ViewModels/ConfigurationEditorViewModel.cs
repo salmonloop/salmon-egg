@@ -57,7 +57,7 @@ public partial class ConfigurationEditorViewModel(
 
     public bool IsStdio => Transport == TransportType.Stdio;
 
-    public bool IsRemote => Transport == TransportType.WebSocket || Transport == TransportType.HttpSse;
+    public bool IsRemote => Transport == TransportType.WebSocket || Transport == TransportType.StreamableHttp;
 
     public bool IsCustomProxy => ProxyMode == ProxyMode.Custom;
 
@@ -332,7 +332,7 @@ public partial class ConfigurationEditorViewModel(
         }
 
         options.Add(new TransportOption(TransportType.WebSocket, localizer[AcpTransportLocalization.WebSocketResourceKey]));
-        options.Add(new TransportOption(TransportType.HttpSse, localizer[AcpTransportLocalization.HttpSseResourceKey]));
+        options.Add(new TransportOption(TransportType.StreamableHttp, localizer[AcpTransportLocalization.StreamableHttpResourceKey]));
         return options;
     }
 

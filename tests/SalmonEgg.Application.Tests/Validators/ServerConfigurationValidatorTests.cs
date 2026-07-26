@@ -78,7 +78,7 @@ public sealed class ServerConfigurationValidatorTests
 
     [Theory]
     [InlineData(TransportType.WebSocket)]
-    [InlineData(TransportType.HttpSse)]
+    [InlineData(TransportType.StreamableHttp)]
     public void Validate_WhenServerUrlMissingForNetworkTransport_ShouldHaveError(TransportType transport)
     {
         var configuration = new ServerConfiguration { Transport = transport, ServerUrl = "" };

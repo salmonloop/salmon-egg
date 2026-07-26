@@ -36,7 +36,7 @@ public sealed class ConfigurationEditorViewModelTests
             {
                 localizer["AcpConnection_TransportStdio"].Value,
                 localizer["AcpConnection_TransportWebSocket"].Value,
-                localizer["AcpConnection_TransportHttpSse"].Value
+                localizer["AcpConnection_TransportStreamableHttp"].Value
             },
             viewModel.TransportOptions.Select(option => option.Name).ToArray());
     }

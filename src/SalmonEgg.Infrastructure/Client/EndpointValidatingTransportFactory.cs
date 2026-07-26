@@ -25,7 +25,7 @@ public sealed class EndpointValidatingTransportFactory : ITransportFactory
         IReadOnlyList<string>? arguments = null,
         string? url = null)
     {
-        if (transportType is TransportType.WebSocket or TransportType.HttpSse)
+        if (transportType is TransportType.WebSocket or TransportType.StreamableHttp)
         {
             var result = _endpointAccessPolicy.Validate(transportType, url);
             if (!result.IsAllowed)
@@ -47,7 +47,7 @@ public sealed class EndpointValidatingTransportFactory : ITransportFactory
             throw new ArgumentNullException(nameof(configuration));
         }
 
-        if (configuration.Transport is TransportType.WebSocket or TransportType.HttpSse)
+        if (configuration.Transport is TransportType.WebSocket or TransportType.StreamableHttp)
         {
             var endpoint = configuration.Transport == TransportType.Stdio
                 ? null

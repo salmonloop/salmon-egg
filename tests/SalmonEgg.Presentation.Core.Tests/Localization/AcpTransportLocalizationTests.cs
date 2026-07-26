@@ -8,7 +8,7 @@ public sealed class AcpTransportLocalizationTests
     [Theory]
     [InlineData(TransportType.Stdio, AcpTransportLocalization.StdioResourceKey, "Stdio (subprocess)")]
     [InlineData(TransportType.WebSocket, AcpTransportLocalization.WebSocketResourceKey, "WebSocket")]
-    [InlineData(TransportType.HttpSse, AcpTransportLocalization.HttpSseResourceKey, "Streamable HTTP")]
+    [InlineData(TransportType.StreamableHttp, AcpTransportLocalization.StreamableHttpResourceKey, "Streamable HTTP")]
     public void ResolveResourceKeyAndFallback_MatchCanonicalLabels(
         TransportType transport,
         string resourceKey,
@@ -21,12 +21,12 @@ public sealed class AcpTransportLocalizationTests
     [Fact]
     public void TryResolveTransport_FromServerConfiguration_UsesTransportProperty()
     {
-        var configuration = new ServerConfiguration { Transport = TransportType.HttpSse };
+        var configuration = new ServerConfiguration { Transport = TransportType.StreamableHttp };
 
         var resolved = AcpTransportLocalization.TryResolveTransport(configuration, out var transport);
 
         Assert.True(resolved);
-        Assert.Equal(TransportType.HttpSse, transport);
+        Assert.Equal(TransportType.StreamableHttp, transport);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
 /// <summary>
-/// 传输配置 ViewModel，用于在 UI 中管理不同的传输方式（Stdio, WebSocket, HTTP SSE）。
+/// 传输配置 ViewModel，用于在 UI 中管理不同的传输方式（Stdio, WebSocket, Streamable HTTP）。
 /// </summary>
 public partial class TransportConfigViewModel : ObservableObject, IAcpTransportConfiguration
 {
@@ -26,7 +26,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsStdio))]
     [NotifyPropertyChangedFor(nameof(IsWebSocket))]
-    [NotifyPropertyChangedFor(nameof(IsHttpSse))]
+    [NotifyPropertyChangedFor(nameof(IsStreamableHttp))]
     private TransportType _selectedTransportType;
 
     /// <summary>
@@ -40,9 +40,9 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     public bool IsWebSocket => SelectedTransportType == TransportType.WebSocket;
 
     /// <summary>
-    /// 是否为 HTTP SSE 传输
+    /// 是否为 Streamable HTTP 传输
     /// </summary>
-    public bool IsHttpSse => SelectedTransportType == TransportType.HttpSse;
+    public bool IsStreamableHttp => SelectedTransportType == TransportType.StreamableHttp;
 
     /// <summary>
     /// Stdio 命令 (例如：agent-command 或 ssh)
@@ -63,7 +63,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
     }
 
     /// <summary>
-    /// WebSocket 或 HTTP SSE 的 URL
+    /// WebSocket 或 Streamable HTTP 的 URL
     /// </summary>
     [ObservableProperty]
     private string _remoteUrl = string.Empty;
@@ -84,7 +84,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
                 return (true, null);
 
             case TransportType.WebSocket:
-            case TransportType.HttpSse:
+            case TransportType.StreamableHttp:
                 if (string.IsNullOrWhiteSpace(RemoteUrl))
                 {
                     return (false, "Remote transport requires a URL.");
@@ -103,7 +103,7 @@ public partial class TransportConfigViewModel : ObservableObject, IAcpTransportC
                     return (false, "WebSocket URL must start with ws:// or wss://.");
                 }
 
-                if (SelectedTransportType == TransportType.HttpSse &&
+                if (SelectedTransportType == TransportType.StreamableHttp &&
                     !RemoteUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                     !RemoteUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {

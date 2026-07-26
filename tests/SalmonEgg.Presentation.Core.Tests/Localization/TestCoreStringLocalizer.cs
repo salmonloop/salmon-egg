@@ -12,7 +12,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Nav_Settings"] = "Settings",
         ["AcpConnection_TransportStdio"] = "Stdio (subprocess)",
         ["AcpConnection_TransportWebSocket"] = "WebSocket",
-        ["AcpConnection_TransportHttpSse"] = "Streamable HTTP",
+        ["AcpConnection_TransportStreamableHttp"] = "Streamable HTTP",
         ["AcpConnection_HydrationStrictReplayName"] = "Strict replay",
         ["AcpConnection_HydrationStrictReplayDescription"] = "Complete hydration after replay projection reaches a stable state.",
         ["AcpConnection_HydrationLoadResponseName"] = "Load response",

@@ -304,7 +304,7 @@ public sealed partial class AcpConnectionSettingsViewModel : ObservableObject, I
         }
 
         options.Add(new TransportOptionViewModel(TransportType.WebSocket, localizer[AcpTransportLocalization.WebSocketResourceKey]));
-        options.Add(new TransportOptionViewModel(TransportType.HttpSse, localizer[AcpTransportLocalization.HttpSseResourceKey]));
+        options.Add(new TransportOptionViewModel(TransportType.StreamableHttp, localizer[AcpTransportLocalization.StreamableHttpResourceKey]));
         return options;
     }
 

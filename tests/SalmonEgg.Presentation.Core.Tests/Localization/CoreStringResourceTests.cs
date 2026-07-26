@@ -198,7 +198,7 @@ public sealed class CoreStringResourceTests
     [InlineData("AgentProfileEditor_ProxyModeCustom")]
     [InlineData("AcpConnection_TransportStdio")]
     [InlineData("AcpConnection_TransportWebSocket")]
-    [InlineData("AcpConnection_TransportHttpSse")]
+    [InlineData("AcpConnection_TransportStreamableHttp")]
     public void CoreMessages_ArePresentInAllCoreStringResources(string key)
     {
         foreach (var relativePath in CoreStringResourcePaths)

@@ -965,7 +965,7 @@ public sealed partial class StartViewModel : ObservableObject
     }
 
     private bool IsSelectedProfileRemote()
-        => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.HttpSse;
+        => Chat.SelectedAcpProfile?.Transport is TransportType.WebSocket or TransportType.StreamableHttp;
 
     private StartProjectOptionViewModel? ResolveSelectedProjectOption()
     {

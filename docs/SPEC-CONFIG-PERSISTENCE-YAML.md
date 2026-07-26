@@ -64,7 +64,7 @@ updated_at_utc: "2026-03-08T13:20:00Z"
 
 id: "agent-local"
 name: "Local Agent"
-transport: "websocket"   # websocket | stdio | http_sse（全部使用 snake_case）
+transport: "websocket"   # websocket | stdio | streamable_http（全部使用 snake_case;旧值 http_sse 兼容读取,写出一律 canonical）
 server_url: "ws://127.0.0.1:8080"
 
 connection_timeout_seconds: 120

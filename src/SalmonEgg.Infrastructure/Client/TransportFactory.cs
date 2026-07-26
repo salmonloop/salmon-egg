@@ -40,10 +40,10 @@ public class TransportFactory : ITransportFactory
     /// <summary>
     /// 根据指定的传输类型创建新的传输实例。
     /// </summary>
-    /// <param name="transportType">传输类型（Stdio, WebSocket, HttpSse）</param>
+    /// <param name="transportType">传输类型（Stdio, WebSocket, StreamableHttp）</param>
     /// <param name="command">命令（仅用于 Stdio 传输）</param>
     /// <param name="arguments">命令行参数（仅用于 Stdio 传输）</param>
-    /// <param name="url">连接 URL（用于 WebSocket 和 HttpSse 传输）</param>
+    /// <param name="url">连接 URL（用于 WebSocket 和 StreamableHttp 传输）</param>
     /// <returns>新创建的 <see cref="ITransport"/> 实例</returns>
     /// <exception cref="ArgumentException">当传输类型不支持或必要参数缺失时抛出</exception>
     /// <exception cref="NotSupportedException">当指定的传输类型未实现时抛出</exception>
@@ -92,9 +92,7 @@ public class TransportFactory : ITransportFactory
         {
             TransportType.Stdio => CreateStdioTransport(command, arguments),
             TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
-            // 配置枚举名 HttpSse 保持不变以兼容既有 profile;实现对齐官方
-            // Streamable HTTP 草案(单端点 POST + 连接/会话级 SSE 流)。
-            TransportType.HttpSse => CreateStreamableHttpTransport(url),
+            TransportType.StreamableHttp => CreateStreamableHttpTransport(url),
             _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
         };
     }

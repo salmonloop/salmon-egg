@@ -155,11 +155,11 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
-    public void CreateTransport_HttpSse_Should_Return_NetworkTransportAdapter()
+    public void CreateTransport_StreamableHttp_Should_Return_NetworkTransportAdapter()
     {
         var factory = CreateFactory();
 
-        var transport = factory.CreateTransport(TransportType.HttpSse, url: "https://example.com/events");
+        var transport = factory.CreateTransport(TransportType.StreamableHttp, url: "https://example.com/events");
 
         Assert.IsType<NetworkTransportAdapter>(transport);
     }
@@ -317,12 +317,12 @@ public sealed class TransportFactoryTests
     }
 
     [Fact]
-    public void CreateTransport_HttpSse_Should_Throw_When_Url_Empty()
+    public void CreateTransport_StreamableHttp_Should_Throw_When_Url_Empty()
     {
         var factory = CreateFactory();
 
         var ex = Assert.Throws<ArgumentException>(() =>
-            factory.CreateTransport(TransportType.HttpSse, url: " "));
+            factory.CreateTransport(TransportType.StreamableHttp, url: " "));
 
         Assert.Equal("url", ex.ParamName);
         Assert.Contains("Streamable HTTP transport requires a URL", ex.Message, StringComparison.Ordinal);

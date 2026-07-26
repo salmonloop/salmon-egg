@@ -2051,7 +2051,7 @@ public sealed class StartViewModelTests
                 RemotePath = "/remote/alpha"
             });
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.HttpSse, ServerUrl = "https://example.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent One", Transport = TransportType.StreamableHttp, ServerUrl = "https://example.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
             var chatService = CreateConnectedChatService();
             chatService
@@ -2447,8 +2447,8 @@ public sealed class StartViewModelTests
             await WaitForConditionAsync(() => startViewModel.StartModeOptions.Count == 2);
             Assert.True(startViewModel.IsStartModeSelectorEnabled);
 
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.HttpSse, ServerUrl = "https://example-1.test" });
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-1.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-2.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[1];
 
             Assert.False(startViewModel.IsStartModeSelectorEnabled);
@@ -2672,8 +2672,8 @@ public sealed class StartViewModelTests
         {
             var preferences = CreatePreferences();
             await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.HttpSse, ServerUrl = "https://example-1.test" });
-            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.HttpSse, ServerUrl = "https://example-2.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-1", Name = "Agent 1", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-1.test" });
+            chat.ViewModel.AcpProfileList.Add(new ServerConfiguration { Id = "profile-2", Name = "Agent 2", Transport = TransportType.StreamableHttp, ServerUrl = "https://example-2.test" });
             chat.ViewModel.SelectedAcpProfile = chat.ViewModel.AcpProfileList[0];
 
             var workflow = new Mock<IChatLaunchWorkflow>();

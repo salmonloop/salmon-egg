@@ -11,13 +11,13 @@ public static class AcpTransportLocalization
 {
     public const string StdioResourceKey = "AcpConnection_TransportStdio";
     public const string WebSocketResourceKey = "AcpConnection_TransportWebSocket";
-    public const string HttpSseResourceKey = "AcpConnection_TransportHttpSse";
+    public const string StreamableHttpResourceKey = "AcpConnection_TransportStreamableHttp";
 
     public static string ResolveResourceKey(TransportType transport)
         => transport switch
         {
             TransportType.Stdio => StdioResourceKey,
-            TransportType.HttpSse => HttpSseResourceKey,
+            TransportType.StreamableHttp => StreamableHttpResourceKey,
             _ => WebSocketResourceKey
         };
 
@@ -25,7 +25,7 @@ public static class AcpTransportLocalization
         => transport switch
         {
             TransportType.Stdio => "Stdio (subprocess)",
-            TransportType.HttpSse => "Streamable HTTP",
+            TransportType.StreamableHttp => "Streamable HTTP",
             _ => "WebSocket"
         };
 

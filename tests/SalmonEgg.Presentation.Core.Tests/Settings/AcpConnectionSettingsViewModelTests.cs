@@ -108,14 +108,14 @@ public sealed class AcpConnectionSettingsViewModelTests
             localizer.Object,
             new ImmediateUiDispatcher(),
             languageService.Object);
-        viewModel.SelectedTransport = viewModel.TransportOptions.Single(option => option.Type == TransportType.HttpSse);
+        viewModel.SelectedTransport = viewModel.TransportOptions.Single(option => option.Type == TransportType.StreamableHttp);
         viewModel.SelectedHydrationCompletionMode = viewModel.HydrationCompletionModeOptions.Single(option => option.Value == "LoadResponse");
 
         languagePrefix = "en";
         languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
 
-        Assert.Equal(TransportType.HttpSse, viewModel.SelectedTransport?.Type);
-        Assert.Equal("en:AcpConnection_TransportHttpSse", viewModel.SelectedTransportName);
+        Assert.Equal(TransportType.StreamableHttp, viewModel.SelectedTransport?.Type);
+        Assert.Equal("en:AcpConnection_TransportStreamableHttp", viewModel.SelectedTransportName);
         Assert.Equal("LoadResponse", viewModel.SelectedHydrationCompletionMode?.Value);
         Assert.Equal(
             "en:AcpConnection_HydrationLoadResponseDescription",

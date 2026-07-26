@@ -16,7 +16,8 @@ public enum TransportType
     WebSocket,
 
     /// <summary>
-    /// HTTP Server-Sent Events (SSE) 传输 - 用于远程 Agent
+    /// Streamable HTTP 传输(ACP 官方草案:单端点 POST + 连接/会话级 SSE 流)- 用于远程 Agent。
+    /// 持久化 canonical token 为 streamable_http,旧值 http_sse 兼容读取。
     /// </summary>
-    HttpSse
+    StreamableHttp
 }

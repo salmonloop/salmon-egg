@@ -327,7 +327,7 @@ public sealed class ConfigurationManager : IConfigurationService
         transport switch
         {
             TransportType.Stdio => "stdio",
-            TransportType.HttpSse => "http_sse",
+            TransportType.StreamableHttp => "streamable_http",
             _ => "websocket"
         };
 
@@ -337,7 +337,9 @@ public sealed class ConfigurationManager : IConfigurationService
         return value switch
         {
             "stdio" => TransportType.Stdio,
-            "http_sse" => TransportType.HttpSse,
+            "streamable_http" => TransportType.StreamableHttp,
+            // 旧安装持久化的 legacy token,读取兼容;写出一律 canonical streamable_http。
+            "http_sse" => TransportType.StreamableHttp,
             "websocket" => TransportType.WebSocket,
             _ => TransportType.WebSocket
         };
