@@ -291,12 +291,9 @@ namespace SalmonEgg.Infrastructure.Network
             {
                 try
                 {
-                    // Disconnect if still connected
-                    if (_client != null && _client.IsRunning)
-                    {
-                        _ = DisconnectAsync();
-                    }
-
+                    // Dispose 是同步契约:直接释放客户端(Websocket.Client 的 Dispose 会关闭底层连接),
+                    // 不再 fire-and-forget 优雅断开与资源释放竞态;需要 NormalClosure 优雅关闭的
+                    // 调用方应先 await DisconnectAsync()。
                     DisposeClient();
 
                     // Complete the subjects
