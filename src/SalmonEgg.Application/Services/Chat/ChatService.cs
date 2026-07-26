@@ -187,7 +187,7 @@ namespace SalmonEgg.Application.Services.Chat
             AskUserRequestReceived?.Invoke(this, e);
         }
 
-        private SessionUpdateEntry? CreateSessionUpdateEntry(SessionUpdate update, string sessionId)
+        private static SessionUpdateEntry CreateSessionUpdateEntry(SessionUpdate update, string sessionId)
         {
             var entry = new SessionUpdateEntry
             {
