@@ -2521,8 +2521,9 @@ public partial class ChatViewModel
         // If a newer activation for this same conversation is already mid-flight it will have reset
         // the runtime to an earlier pending phase (Selecting/Selected/RemoteConnectionReady). That
         // activation owns hydration and must drive its own authoritative session/load, so this stale
-        // background completion must not promote to Warm or land its projection. Only promote when the
-        // runtime is still the RemoteHydrating phase this recovery established (or already Warm).
+        // background completion must not promote to Warm or land its projection. This read is only a
+        // fast-fail optimization that skips the projection work; the authoritative, race-free gate is
+        // the reducer guard behind PromoteConversationRuntimeToWarmAction at dispatch time.
         var currentRuntime = (await _chatStore.GetCurrentStateAsync().ConfigureAwait(false))
             .ResolveRuntimeState(conversationId);
         var newerActivationOwnsHydration = currentRuntime is
@@ -2543,7 +2544,8 @@ public partial class ChatViewModel
                 expectedConnectionInstanceId,
                 projection,
                 hydrationAttemptId,
-                cancellationToken)
+                cancellationToken,
+                isSupersededCompletion: true)
             .ConfigureAwait(false);
         return true;
     }
@@ -2554,10 +2556,25 @@ public partial class ChatViewModel
         string? expectedConnectionInstanceId,
         AcpSessionRecoveryProjection projection,
         long? hydrationAttemptId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isSupersededCompletion = false)
     {
         await ApplySessionLoadResponseAsync(conversationId, projection.SessionLoadResponse).ConfigureAwait(true);
         await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+        if (isSupersededCompletion)
+        {
+            // 被 supersede 的完成必须走 reducer 内的原子守卫:与同会话更新激活竞争时,
+            // dispatch 时刻 phase 已被重置的过时 Warm 会被拒绝,而不是覆盖最新激活。
+            await PromoteConversationRuntimeToWarmGuardedAsync(
+                    conversationId,
+                    currentBinding,
+                    projection.CompletedRuntimeReason,
+                    cancellationToken,
+                    connectionInstanceId: expectedConnectionInstanceId)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await SetConversationRuntimeStateAsync(
                 conversationId,
                 ConversationRuntimePhase.Warm,
@@ -2946,6 +2963,60 @@ public partial class ChatViewModel
             return;
         }
 
+        var runtimeState = await BuildConversationRuntimeSliceAsync(
+                conversationId,
+                phase,
+                binding,
+                reason,
+                connectionInstanceId)
+            .ConfigureAwait(false);
+        await _chatStore.Dispatch(new SetConversationRuntimeStateAction(runtimeState)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
+            conversationId,
+            phase,
+            runtimeState.ConnectionInstanceId,
+            runtimeState.RemoteSessionId,
+            runtimeState.ProfileId,
+            reason);
+    }
+
+    private async Task PromoteConversationRuntimeToWarmGuardedAsync(
+        string conversationId,
+        ConversationBindingSlice? binding,
+        string? reason,
+        CancellationToken cancellationToken,
+        string? connectionInstanceId)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+
+        var runtimeState = await BuildConversationRuntimeSliceAsync(
+                conversationId,
+                ConversationRuntimePhase.Warm,
+                binding,
+                reason,
+                connectionInstanceId)
+            .ConfigureAwait(false);
+        await _chatStore.Dispatch(new PromoteConversationRuntimeToWarmAction(runtimeState)).ConfigureAwait(false);
+        Logger.LogInformation(
+            "Superseded conversation runtime warm promotion dispatched. ConversationId={ConversationId} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} Reason={Reason}",
+            conversationId,
+            runtimeState.ConnectionInstanceId,
+            runtimeState.RemoteSessionId,
+            reason);
+    }
+
+    private async Task<ConversationRuntimeSlice> BuildConversationRuntimeSliceAsync(
+        string conversationId,
+        ConversationRuntimePhase phase,
+        ConversationBindingSlice? binding,
+        string? reason,
+        string? connectionInstanceId)
+    {
         var currentState = await _chatStore.GetCurrentStateAsync();
         var existingRuntime = currentState.ResolveRuntimeState(conversationId);
         var preserveExistingConnectionInstanceId =
@@ -2970,7 +3041,7 @@ public partial class ChatViewModel
             profileId ??= existingRuntime?.ProfileId ?? currentState.ResolveBinding(conversationId)?.ProfileId;
         }
 
-        var runtimeState = new ConversationRuntimeSlice(
+        return new ConversationRuntimeSlice(
             ConversationId: conversationId,
             Phase: phase,
             ConnectionInstanceId: effectiveConnectionInstanceId,
@@ -2978,15 +3049,6 @@ public partial class ChatViewModel
             ProfileId: profileId,
             Reason: reason,
             UpdatedAtUtc: DateTime.UtcNow);
-        await _chatStore.Dispatch(new SetConversationRuntimeStateAction(runtimeState)).ConfigureAwait(false);
-        Logger.LogInformation(
-            "Conversation runtime stage transitioned. ConversationId={ConversationId} Stage={Stage} ConnectionInstanceId={ConnectionInstanceId} RemoteSessionId={RemoteSessionId} ProfileId={ProfileId} Reason={Reason}",
-            conversationId,
-            phase,
-            effectiveConnectionInstanceId,
-            remoteSessionId,
-            profileId,
-            reason);
     }
 
     private bool ShouldOwnRemoteHydrationUi(string conversationId, long? activationVersion)

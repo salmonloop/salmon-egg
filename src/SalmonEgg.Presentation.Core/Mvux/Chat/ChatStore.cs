@@ -37,6 +37,9 @@ public sealed class ChatStore : IChatStore
     private readonly IWorkspaceWriter? _workspaceWriter;
     private readonly SemaphoreSlim _dispatchGate = new(1, 1);
     private long _lastProjectedGeneration = long.MinValue;
+
+    // 写入只发生在 _dispatchGate 内,但 GetCurrentStateAsync 无锁读,
+    // 后台线程(如 superseded 晋升预检)必须经 Volatile 读到最新引用。
     private ChatState? _cachedState;
 
     public IState<ChatState> State { get; }
@@ -52,9 +55,9 @@ public sealed class ChatStore : IChatStore
         await _dispatchGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            var currentState = _cachedState ?? await State ?? ChatState.Empty;
+            var currentState = Volatile.Read(ref _cachedState) ?? await State ?? ChatState.Empty;
             var updatedState = ChatReducer.Reduce(currentState, action);
-            _cachedState = updatedState;
+            Volatile.Write(ref _cachedState, updatedState);
 
             await State.Update(_ => updatedState, CancellationToken.None).ConfigureAwait(false);
 
@@ -77,7 +80,7 @@ public sealed class ChatStore : IChatStore
     }
 
     public async ValueTask<ChatState> GetCurrentStateAsync()
-        => _cachedState ?? await State ?? ChatState.Empty;
+        => Volatile.Read(ref _cachedState) ?? await State ?? ChatState.Empty;
 
     private bool TryAdvanceProjectedGeneration(long generation)
     {

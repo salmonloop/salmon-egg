@@ -28,6 +28,12 @@ public static class ChatReducer
             {
                 RuntimeStates = UpdateRuntimeStates(current.RuntimeStates, setRuntimeState.RuntimeState)
             }),
+            PromoteConversationRuntimeToWarmAction promoteRuntimeState when string.IsNullOrWhiteSpace(promoteRuntimeState.RuntimeState.ConversationId)
+                => current,
+            PromoteConversationRuntimeToWarmAction promoteRuntimeState => Mutate(current, current with
+            {
+                RuntimeStates = PromoteRuntimeStateToWarm(current.RuntimeStates, promoteRuntimeState.RuntimeState)
+            }),
             ClearConversationRuntimeStateAction clearRuntimeState when string.IsNullOrWhiteSpace(clearRuntimeState.ConversationId)
                 => current,
             ClearConversationRuntimeStateAction clearRuntimeState => Mutate(current, current with
@@ -366,6 +372,31 @@ public static class ChatReducer
         }
 
         var current = runtimeStates ?? ImmutableDictionary<string, ConversationRuntimeSlice>.Empty;
+        return current.SetItem(runtimeState.ConversationId, runtimeState);
+    }
+
+    private static IImmutableDictionary<string, ConversationRuntimeSlice> PromoteRuntimeStateToWarm(
+        IImmutableDictionary<string, ConversationRuntimeSlice>? runtimeStates,
+        ConversationRuntimeSlice runtimeState)
+    {
+        var current = runtimeStates ?? ImmutableDictionary<string, ConversationRuntimeSlice>.Empty;
+        if (!current.TryGetValue(runtimeState.ConversationId, out var existing))
+        {
+            return current;
+        }
+
+        // 守卫必须在 reducer 内原子判定:后台恢复完成与同会话更新激活竞争 runtime。
+        // 更新激活把 phase 重置为更早 pending 阶段(或已 Stale/Faulted)后,过时完成的
+        // Warm 不得覆盖——由最新激活驱动自己的权威恢复;调用方的预检只是快速失败优化。
+        var promotable = existing.Phase == ConversationRuntimePhase.RemoteHydrating
+            || (existing.Phase == ConversationRuntimePhase.Warm
+                && string.Equals(existing.ConnectionInstanceId, runtimeState.ConnectionInstanceId, StringComparison.Ordinal)
+                && string.Equals(existing.RemoteSessionId, runtimeState.RemoteSessionId, StringComparison.Ordinal));
+        if (!promotable)
+        {
+            return current;
+        }
+
         return current.SetItem(runtimeState.ConversationId, runtimeState);
     }
 

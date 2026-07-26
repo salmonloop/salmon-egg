@@ -82,6 +82,98 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenRemoteHydratingRuntime_WhenPromoteToWarm_ThenRuntimeBecomesWarm()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(ConversationRuntimePhase.RemoteHydrating)));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "SessionLoadCompleted")));
+
+        // Assert
+        var runtime = next.ResolveRuntimeState("conv-1");
+        Assert.Equal(ConversationRuntimePhase.Warm, runtime?.Phase);
+        Assert.Equal("SessionLoadCompleted", runtime?.Reason);
+    }
+
+    [Theory]
+    [InlineData(ConversationRuntimePhase.Selecting)]
+    [InlineData(ConversationRuntimePhase.Selected)]
+    [InlineData(ConversationRuntimePhase.RemoteConnectionReady)]
+    [InlineData(ConversationRuntimePhase.Stale)]
+    [InlineData(ConversationRuntimePhase.Faulted)]
+    public void GivenRuntimeResetByNewerActivation_WhenStalePromoteToWarm_ThenPromotionIsRejected(
+        ConversationRuntimePhase currentPhase)
+    {
+        // Arrange:同会话更新激活已把 runtime 重置到更早/终态阶段(case study「后台恢复完成的权威晋升」唯一例外)。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(currentPhase)));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm)));
+
+        // Assert
+        Assert.Equal(currentPhase, next.ResolveRuntimeState("conv-1")?.Phase);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
+    public void GivenMissingRuntime_WhenPromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Act
+        var next = ChatReducer.Reduce(
+            ChatState.Empty,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm)));
+
+        // Assert
+        Assert.Null(next.ResolveRuntimeState("conv-1"));
+    }
+
+    [Fact]
+    public void GivenWarmRuntimeWithSameIdentity_WhenPromoteToWarm_ThenRestampIsApplied()
+    {
+        // Arrange
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "old")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(CreateRuntime(ConversationRuntimePhase.Warm, reason: "new")));
+
+        // Assert
+        Assert.Equal("new", next.ResolveRuntimeState("conv-1")?.Reason);
+    }
+
+    [Fact]
+    public void GivenWarmRuntimeOnDifferentConnection_WhenStalePromoteToWarm_ThenPromotionIsRejected()
+    {
+        // Arrange:更新激活已在新连接上完成权威 Warm,过时完成不得改写其身份。
+        var state = ChatReducer.Reduce(
+            ChatState.Empty,
+            new SetConversationRuntimeStateAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-newer")));
+
+        // Act
+        var next = ChatReducer.Reduce(
+            state,
+            new PromoteConversationRuntimeToWarmAction(
+                CreateRuntime(ConversationRuntimePhase.Warm, connectionInstanceId: "conn-old")));
+
+        // Assert
+        Assert.Equal("conn-newer", next.ResolveRuntimeState("conv-1")?.ConnectionInstanceId);
+        Assert.Same(state, next);
+    }
+
+    [Fact]
     public void GivenState_WhenRuntimeMutationOccurs_ThenGenerationIncrements()
     {
         // Arrange
@@ -1189,4 +1281,17 @@ public class ChatReducerTests
         Assert.Equal("Hello world", message.TextContent);
         Assert.Equal(originalTime, message.Timestamp);
     }
+
+    private static ConversationRuntimeSlice CreateRuntime(
+        ConversationRuntimePhase phase,
+        string connectionInstanceId = "conn-1",
+        string? reason = null)
+        => new(
+            ConversationId: "conv-1",
+            Phase: phase,
+            ConnectionInstanceId: connectionInstanceId,
+            RemoteSessionId: "remote-1",
+            ProfileId: "profile-1",
+            Reason: reason,
+            UpdatedAtUtc: DateTime.UtcNow);
 }

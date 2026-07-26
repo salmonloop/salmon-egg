@@ -41,6 +41,15 @@ public sealed record ApplyBindingUpdateAction(
 
 public sealed record SetConversationRuntimeStateAction(ConversationRuntimeSlice RuntimeState) : ChatAction;
 
+/// <summary>
+/// Conditional warm promotion for superseded background recovery completions. Unlike
+/// <see cref="SetConversationRuntimeStateAction"/> the reducer only applies it while the
+/// conversation runtime is still in the RemoteHydrating phase that recovery established
+/// (or an identity-matching Warm re-stamp); a newer in-flight activation that reset the
+/// runtime to an earlier pending phase atomically wins.
+/// </summary>
+public sealed record PromoteConversationRuntimeToWarmAction(ConversationRuntimeSlice RuntimeState) : ChatAction;
+
 public sealed record ClearConversationRuntimeStateAction(string ConversationId) : ChatAction;
 
 public sealed record ResetConversationRuntimeStatesAction : ChatAction;
