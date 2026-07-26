@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
@@ -17,6 +18,7 @@ public sealed class AppSettingsService : IAppSettingsService
     private readonly IAppFileStore _fileStore;
     private readonly ILogger<AppSettingsService> _logger;
     private readonly string _appYamlPath;
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     public AppSettingsService(IAppFileStore fileStore, IAppDataService appData, ILogger<AppSettingsService> logger)
     {
@@ -84,9 +86,19 @@ public sealed class AppSettingsService : IAppSettingsService
     {
         if (settings is null) throw new ArgumentNullException(nameof(settings));
 
-        await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
+        // SPEC-CONFIG-PERSISTENCE §5.3:写入期间持有进程内互斥,防止多写入方
+        // 的 schema 检查与落盘交错撕坏 app.yaml。
+        await _writeGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
 
-        await _fileStore.WriteAllTextAsync(_appYamlPath, Serialize(settings)).ConfigureAwait(false);
+            await _fileStore.WriteAllTextAsync(_appYamlPath, Serialize(settings)).ConfigureAwait(false);
+        }
+        finally
+        {
+            _writeGate.Release();
+        }
     }
 
     internal static string Serialize(AppSettings settings)
