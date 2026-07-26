@@ -7,68 +7,32 @@ namespace SalmonEgg.Acp.Tests.Architecture;
 
 public sealed class AcpSdkBoundaryTests
 {
+    // 本文件只保留 AGENTS.md §5.6 允许的架构回归护栏(依赖方向、开放枚举形态、Domain 纯度)。
+    // 「使用未引用工程的类型」由编译器保证,不用源码扫描重复;
+    // 「已移除文件不得复活」的摆放断言属 §5.5 禁止的实现摆放清单,已删除——
+    // 其意图由依赖方向锁 + DomainAssemblyBoundaryTests 反射边界共同承担。
+
     [Fact]
     public void AcpSdkProject_RemainsIndependentFromSalmonEggBusinessProjects()
     {
         var project = XDocument.Parse(LoadFile(@"src\SalmonEgg.Acp\SalmonEgg.Acp.csproj"));
 
         Assert.Empty(project.Descendants("ProjectReference"));
-        Assert.DoesNotContain(Directory.EnumerateFiles(RepoPath(@"src\SalmonEgg.Acp"), "*.cs", SearchOption.AllDirectories)
-            .Select(File.ReadAllText), item => item?.Contains("SalmonEgg.Domain", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(Directory.EnumerateFiles(RepoPath(@"src\SalmonEgg.Acp"), "*.cs", SearchOption.AllDirectories)
-            .Select(File.ReadAllText), item => item?.Contains("SalmonEgg.Application", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(Directory.EnumerateFiles(RepoPath(@"src\SalmonEgg.Acp"), "*.cs", SearchOption.AllDirectories)
-            .Select(File.ReadAllText), item => item?.Contains("SalmonEgg.Infrastructure", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(Directory.EnumerateFiles(RepoPath(@"src\SalmonEgg.Acp"), "*.cs", SearchOption.AllDirectories)
-            .Select(File.ReadAllText), item => item?.Contains("SalmonEgg.Presentation", StringComparison.Ordinal) == true);
     }
 
     [Fact]
-    public void DomainReferencesAcpSdkInsteadOfOwningProtocolPathRules()
+    public void DomainReferencesAcpSdkAndKeepsStopReasonAsExtensibleValueType()
     {
         var domainProject = XDocument.Parse(LoadFile(@"src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"));
 
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Protocol\ProtocolPathRules.cs")));
-        Assert.Empty(EnumerateFilesIfDirectoryExists(@"src\SalmonEgg.Domain\Models\Protocol", "*.cs"));
-        Assert.False(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\JsonRpc")));
-        Assert.False(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Content")));
-        Assert.False(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Plan")));
-        Assert.False(Directory.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Tool")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Interfaces\IMessageParser.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Interfaces\IMessageValidator.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\MessageParser.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\MessageValidator.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\AcpJsonContext.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\IAcpClient.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\ICapabilityManager.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\Security\PermissionOption.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerConfig.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\Mcp\McpServerSupportPolicy.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\AcpMessage.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Models\AcpError.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\IAcpProtocolService.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Services\IConnectionManager.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Client\AcpClient.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Serialization\AcpMessageParser.cs")));
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Network\ConnectionManager.cs")));
-        Assert.DoesNotContain("IAcpProtocolService", LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"));
-        Assert.DoesNotContain("IConnectionManager", LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"));
-        Assert.DoesNotContain("AcpMessageParser", LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"));
-        Assert.DoesNotContain("ConnectionManager(", LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs"));
-        Assert.DoesNotContain("public bool Enabled", LoadFile(@"src\SalmonEgg.Acp\Mcp\McpServerConfig.cs"));
+        Assert.Contains(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj", domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")));
+
+        // StopReason lives in the SDK as an extensible value type so unknown wire values can
+        // round-trip losslessly (ACP #[non_exhaustive] + Other(String) contract). 禁止回退为
+        // Domain 私有 closed enum——那会破坏协议宽松度契约。
         Assert.DoesNotContain("enum StopReason", LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"));
         Assert.DoesNotContain("readonly struct StopReason", LoadFile(@"src\SalmonEgg.Domain\Models\Session\SessionTypes.cs"));
-        // StopReason lives in the SDK as an extensible value type so unknown wire values can
-        // round-trip losslessly (ACP #[non_exhaustive] + Other(String) contract).
         Assert.Contains("readonly struct StopReason", LoadFile(@"src\SalmonEgg.Acp\Protocol\StopReasonTypes.cs"));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\JsonRpc\MessageParser.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Serialization\AcpJsonContext.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Client\AcpClient.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Client\IAcpClient.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Client\ICapabilityManager.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Mcp\McpServerSupportPolicy.cs")));
-        Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Acp\Protocol\PermissionOption.cs")));
-        Assert.Contains(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj", domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")));
     }
 
     [Fact]
@@ -79,7 +43,6 @@ public sealed class AcpSdkBoundaryTests
             .Select(File.ReadAllText)
             .ToArray();
 
-        Assert.False(File.Exists(RepoPath(@"src\SalmonEgg.Domain\Utilities\PathResolver.cs")));
         Assert.DoesNotContain(domainSources, source => source.Contains("RuntimeInformation", StringComparison.Ordinal));
         Assert.DoesNotContain(domainSources, source => source.Contains("OSPlatform.", StringComparison.Ordinal));
         Assert.DoesNotContain(domainSources, source => source.Contains("Environment.CurrentDirectory", StringComparison.Ordinal));
@@ -89,14 +52,6 @@ public sealed class AcpSdkBoundaryTests
 
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
-
-    private static string[] EnumerateFilesIfDirectoryExists(string relativePath, string searchPattern)
-    {
-        var path = RepoPath(relativePath);
-        return Directory.Exists(path)
-            ? Directory.EnumerateFiles(path, searchPattern, SearchOption.AllDirectories).ToArray()
-            : [];
-    }
 
     private static string RepoPath(string relativePath)
         => Path.Combine(FindRepoRoot(), relativePath.Replace('\\', Path.DirectorySeparatorChar));
