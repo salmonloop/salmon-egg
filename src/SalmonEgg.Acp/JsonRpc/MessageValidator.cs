@@ -162,15 +162,9 @@ namespace SalmonEgg.Acp.JsonRpc
                     errors.Add("Error 'message' field cannot be empty");
                 }
 
-                // 验证错误码是有效的 JSON-RPC 错误码范围
-                if (error.Code > -32768 || error.Code < -32000)
-                {
-                    // 允许 ACP 扩展错误码（-32099 到 -32000）
-                    if (error.Code < -32099 && !JsonRpcErrorCode.IsStandardErrorCode(error.Code))
-                    {
-                        errors.Add($"Invalid error code: {error.Code}. Must be in range -32768 to -32000, or -32099 to -32000 for ACP extensions");
-                    }
-                }
+                // 不校验错误码取值:JSON-RPC 2.0 只是把 -32768..-32000 保留给预定义语义,
+                // 应用可用范围外任意整数码;保留区间内未知码属未来规范由 Agent 决定,
+                // client 按码值拒绝响应即协议外反向收紧。
             }
 
             if (errors.Count > 0)
