@@ -49,6 +49,15 @@ public sealed partial class MainPage
         _trayIcon = null;
     }
 
+    partial void DetachAppWindowClosing()
+    {
+        var window = App.MainWindowInstance;
+        if (window?.AppWindow != null)
+        {
+            window.AppWindow.Closing -= OnAppWindowClosing;
+        }
+    }
+
     private void EnsureTrayIcon()
     {
         if (_trayIcon != null)
@@ -83,8 +92,10 @@ public sealed partial class MainPage
         {
             window.AppWindow?.Show();
         }
-        catch
+        catch (Exception ex)
         {
+            // Restoring from tray is best-effort, but the failure must stay diagnosable.
+            _logger.LogWarning(ex, "Failed to show main window from tray.");
         }
     }
 

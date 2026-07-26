@@ -15,7 +15,6 @@
     Background="Transparent">
 
     <Page.Resources>
-        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <DataTemplate x:Key="HeroSuggestionItemTemplate"
                       x:DataType="local_vm:QuickSuggestionViewModel">
             <start_views:HeroSuggestionCard Suggestion="{x:Bind Mode=OneWay}"

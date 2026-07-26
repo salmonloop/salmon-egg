@@ -684,10 +684,10 @@ public class UiConventionsTests
         Assert.Equal("{StaticResource TitleBarReturnToMainWindowIconTemplate}", GetAttributeValueByLocalName(miniReturnButton, "ContentTemplate"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(bottomButton, "Style"));
         Assert.Equal("{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(bottomButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
+        Assert.Equal("{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dock}", GetAttributeValueByLocalName(bottomButton, "IsChecked"));
         Assert.Equal("{StaticResource TitleBarToggleButtonStyle}", GetAttributeValueByLocalName(taskOverviewButton, "Style"));
         Assert.Equal("{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}", GetAttributeValueByLocalName(taskOverviewButton, "ContentTemplate"));
-        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}", GetAttributeValueByLocalName(taskOverviewButton, "IsChecked"));
+        Assert.Equal("{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=TaskOverview}", GetAttributeValueByLocalName(taskOverviewButton, "IsChecked"));
 
         var allAttributeValues = mainPage
             .Descendants()

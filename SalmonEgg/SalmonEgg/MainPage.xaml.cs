@@ -46,7 +46,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private const double NavPaneMinWidth = 240;
     private const double NavPaneMaxWidth = 480;
-    private const double NavPaneAnimationDurationMs = 180;
     private const double RightPanelMinWidth = 240;
     private const double RightPanelMaxWidth = 520;
     private bool _isResizingRightPanel;
@@ -56,9 +55,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private double _leftNavResizeStartX;
     private double _leftNavResizeStartWidth;
 
-    private readonly DeferredActionGate<string> _archiveOnFlyoutClosed = new(StringComparer.Ordinal);
     private readonly Dictionary<KeyboardAccelerator, string> _appShortcutActions = new();
-    private string? _pendingArchiveSessionId;
 #if WINDOWS
     // Title bar hosting/interactive-region state is encapsulated by MainWindowTitleBarAdapter.
 #endif
@@ -156,18 +153,30 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        var selectedSessionId = (MainNavView.SelectedItem as SessionNavItemViewModel)?.SessionId
-            ?? ((MainNavView.SelectedItem as NavigationViewItem)?.DataContext is SessionNavItemViewModel navSession
-                ? navSession.SessionId
-                : null)
-            ?? _chatViewModel.CurrentSessionId;
-
-        if (string.IsNullOrWhiteSpace(selectedSessionId))
+        var session = TryResolveAutomationArchiveSession();
+        if (session is null || session.IsPlaceholder || string.IsNullOrWhiteSpace(session.SessionId))
         {
             return;
         }
 
-        _ = await _chatViewModel.ArchiveConversationAsync(selectedSessionId).ConfigureAwait(true);
+        // Single archive path: automation invokes the exact per-session command the
+        // session context menu uses, so both flows share one behavior contract.
+        await session.ArchiveCommand.ExecuteAsync(null);
+    }
+
+    private SessionNavItemViewModel? TryResolveAutomationArchiveSession()
+    {
+        if (MainNavView.SelectedItem is SessionNavItemViewModel selectedSession)
+        {
+            return selectedSession;
+        }
+
+        if ((MainNavView.SelectedItem as NavigationViewItem)?.DataContext is SessionNavItemViewModel containerSession)
+        {
+            return containerSession;
+        }
+
+        return TryResolveSessionItemById(_chatViewModel.CurrentSessionId);
     }
 
     [Conditional("DEBUG")]
@@ -190,17 +199,13 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
+        // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
+        // Navigation-scoped unsubscriptions live in OnNavigatedFrom.
         DetachGamepadInput();
         DetachDebugKeyLogging();
-        Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
-        Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
-        NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
-        NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
-        LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
         _metricsProvider.Detach();
-        _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
-        _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
         _titleBarAdapter.Detach();
+        DetachAppWindowClosing();
         DisposePlatformTray();
     }
 
@@ -427,22 +432,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         }
 
         BootLogDebug($"Session archive command scheduled: sessionId={session.SessionId}.");
-        _pendingArchiveSessionId = null;
         _ = DispatcherQueue.TryEnqueue(() =>
         {
             _ = session.ArchiveCommand.ExecuteAsync(null);
         });
-    }
-
-    private void OnSessionNavFlyoutClosed(object sender, object e)
-    {
-        if (!string.IsNullOrWhiteSpace(_pendingArchiveSessionId))
-        {
-            var sessionId = _pendingArchiveSessionId;
-            _pendingArchiveSessionId = null;
-            _archiveOnFlyoutClosed.TryConsume(sessionId);
-        }
-
     }
 
     private async ValueTask<ShellNavigationResult> EnsureChatContentAsync(long? activationToken = null)
@@ -1262,12 +1255,16 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             sessionId = currentSession.SessionId;
         }
 
+        return TryResolveSessionItemById(sessionId);
+    }
+
+    private SessionNavItemViewModel? TryResolveSessionItemById(string? sessionId)
+    {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             return null;
         }
 
-        // Try to find the session item in the navigation view model
         return NavVM.Items
             .OfType<ProjectNavItemViewModel>()
             .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
@@ -1402,6 +1399,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
     partial void DisposePlatformTray();
 
+    partial void DetachAppWindowClosing();
+
     partial void AttachDebugKeyLogging();
 
     partial void DetachDebugKeyLogging();
@@ -1414,11 +1413,16 @@ public sealed partial class MainPage
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        // Navigation-scoped teardown: constructor-time subscriptions against singleton
+        // view models and the content-frame adapter end when the shell leaves navigation.
+        // Loaded/Unloaded must NOT be removed here — WinUI raises OnNavigatedFrom before
+        // Unloaded, so detaching them would permanently skip the tree-scoped cleanup in
+        // OnMainPageUnloaded on every shell reload (e.g. language switch).
         Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        Preferences.ShortcutConfigurationChanged -= OnShortcutConfigurationChanged;
+        NavVM.PropertyChanged -= OnNavigationViewModelPropertyChanged;
+        NavVM.TreeRebuilt -= OnNavigationTreeRebuilt;
         LayoutVM.PropertyChanged -= OnLayoutViewModelPropertyChanged;
-
-        Loaded -= OnMainPageLoaded;
-        Unloaded -= OnMainPageUnloaded;
         _contentNavigation.NavigationCompleted -= OnContentFrameNavigationCompleted;
         _contentNavigation.NavigationFailed -= OnContentFrameNavigationFailed;
     }

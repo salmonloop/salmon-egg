@@ -14,6 +14,10 @@ public sealed partial class MainPage
     {
     }
 
+    partial void DetachAppWindowClosing()
+    {
+    }
+
     partial void AttachDebugKeyLogging()
     {
     }

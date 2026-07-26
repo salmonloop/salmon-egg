@@ -32,9 +32,9 @@
         <converters:PlanStatusLabelConverter x:Key="PlanStatusLabelConverter" />
         <converters:PlanPriorityLabelConverter x:Key="PlanPriorityLabelConverter" />
         <converters:TaskOverviewChangeKindLabelConverter x:Key="TaskOverviewChangeKindLabelConverter" />
-        <converters:EnumToBooleanConverter x:Key="EnumToBoolConverter" />
+        <converters:EnumToBooleanConverter x:Key="EnumToBooleanConverter" />
         <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
-        <converters:LayoutPaddingConverter x:Key="PaddingConverter" />
+        <converters:LayoutPaddingConverter x:Key="LayoutPaddingConverter" />
         <converters:GridLengthConverter x:Key="GridLengthConverter" />
 
         <x:Double x:Key="NavCompactPaneLength">72</x:Double>
@@ -213,7 +213,7 @@
                 </NavigationViewItem.Content>
 
                 <NavigationViewItem.ContextFlyout>
-                    <MenuFlyout Closed="OnSessionNavFlyoutClosed">
+                    <MenuFlyout>
                         <MenuFlyoutItem x:Uid="SessionNavArchiveItem"
                                         AutomationProperties.AutomationId="MainNav.Session.Context.Archive"
                                         Click="OnSessionArchiveMenuItemClick"
@@ -364,7 +364,7 @@
             <Grid x:Name="AppTitleBarLayoutRoot">
                 <Grid x:Name="TitleBarDragRegion" Background="Transparent" />
                 <Grid x:Name="AppTitleBarContent"
-                      Padding="{x:Bind LayoutVM.TitleBarPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}">
+                      Padding="{x:Bind LayoutVM.TitleBarPadding, Mode=OneWay, Converter={StaticResource LayoutPaddingConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -484,7 +484,7 @@
                                        Content="Icon"
                                        Command="{x:Bind LayoutVM.ToggleBottomPanelCommand}"
                                        ContentTemplate="{x:Bind GetBottomPanelButtonIconTemplate(LayoutVM.BottomPanelMode), Mode=OneWay}"
-                                       IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dock}" />
+                                       IsChecked="{x:Bind LayoutVM.BottomPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Dock}" />
                         <ToggleButton x:Name="TaskOverviewPanelButton"
                                       x:Uid="TaskOverviewPanelButton"
                                       AutomationProperties.AutomationId="TitleBar.TaskOverviewPanel"
@@ -497,7 +497,7 @@
                                       Content="Icon"
                                       Command="{x:Bind LayoutVM.ToggleTaskOverviewPanelCommand}"
                                       ContentTemplate="{x:Bind GetTaskOverviewPanelButtonIconTemplate(LayoutVM.RightPanelMode), Mode=OneWay}"
-                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=TaskOverview}" />
+                                      IsChecked="{x:Bind LayoutVM.RightPanelMode, Mode=OneWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=TaskOverview}" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -521,7 +521,7 @@
                             IsSettingsVisible="False"
                             AlwaysShowHeader="False"
                             SelectedItem="{x:Bind NavVM.ProjectedControlSelectedItem, Mode=OneWay}"
-                            Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource PaddingConverter}}"
+                            Padding="{x:Bind LayoutVM.NavViewPadding, Mode=OneWay, Converter={StaticResource LayoutPaddingConverter}}"
                             MenuItemsSource="{x:Bind NavVM.Items, Mode=OneWay}"
                             FooterMenuItemsSource="{x:Bind NavVM.FooterItems, Mode=OneWay}"
                             MenuItemTemplateSelector="{StaticResource MainNavItemTemplateSelector}"

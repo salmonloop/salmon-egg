@@ -10,7 +10,7 @@
     <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <converters:TimeFormatConverter x:Key="TimeFormatConverter"/>
-    <converters:MessageDirectionToAlignmentConverter x:Key="HorizontalAlignmentConverter"/>
+    <converters:MessageDirectionToAlignmentConverter x:Key="MessageDirectionToAlignmentConverter"/>
 
     <!-- Shared Style for AI left-reference line -->
     <Style x:Key="IncomingMessageBorderStyle" TargetType="Border">
@@ -21,7 +21,7 @@
 
     <DataTemplate x:Key="IncomingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
-              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
+              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
                 <Border.ContextFlyout>
                     <MenuFlyout>
@@ -95,7 +95,7 @@
 
     <DataTemplate x:Key="OutgoingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
-              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
+              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
             <Border CornerRadius="12,12,0,12"
                     Padding="16,10"
                     BorderThickness="0">
@@ -131,7 +131,7 @@
 
     <DataTemplate x:Key="ToolCallMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
-              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource HorizontalAlignmentConverter}}">
+              HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
                 <StackPanel>
                     <!-- Header Metadata: only shown when the message carries an authoritative time. -->

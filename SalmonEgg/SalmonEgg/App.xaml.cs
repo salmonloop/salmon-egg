@@ -24,6 +24,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     private readonly Presentation.Services.WindowBackdropService? _windowBackdropService;
     private readonly ILogger<App>? _startupLogger;
 
+    // Set once the shell completes its first navigation; drives the unhandled-exception
+    // policy (startup failures must exit with logs instead of hanging a blank window).
+    private volatile bool _isShellFirstFrameReady;
+
     // Diagnostic-only boot trail. Conditional so Release does not evaluate message
     // arguments or retain call sites; body remains DEBUG-gated for the file write.
     [Conditional("DEBUG")]
@@ -62,8 +66,11 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 }
             });
         }
-        catch
+        catch (Exception ex)
         {
+            // Shell reload is best-effort, but the failure must stay visible in release logs.
+            (Current as App)?._startupLogger?.LogError(ex, "Failed to schedule main shell reload.");
+            BootLog("ReloadMainShell failed: " + ex);
         }
     }
 
@@ -88,15 +95,28 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
         this.UnhandledException += (_, e) =>
         {
+            // Log first: release builds must never swallow a crash silently.
+            _startupLogger?.LogCritical(
+                e.Exception,
+                "Unhandled UI exception. ShellFirstFrameReady={ShellFirstFrameReady}",
+                _isShellFirstFrameReady);
             BootLog("App.UnhandledException: " + e.Exception);
-            e.Handled = true;
+            // Before the first shell frame is ready, swallowing leaves a blank hung window;
+            // let the process exit with logs instead. Afterwards keep the shell alive so a
+            // single stray exception cannot take down the whole app.
+            e.Handled = _isShellFirstFrameReady;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
+            _startupLogger?.LogCritical(
+                e.ExceptionObject as Exception,
+                "Unhandled AppDomain exception. IsTerminating={IsTerminating}",
+                e.IsTerminating);
             BootLog("AppDomain.UnhandledException: " + e.ExceptionObject);
         };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            _startupLogger?.LogError(e.Exception, "Unobserved task exception.");
             BootLog("TaskScheduler.UnobservedTaskException: " + e.Exception);
             e.SetObserved();
         };
@@ -132,6 +152,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             rootFrame = new Frame { AllowDrop = false };
             MainWindow.Content = rootFrame;
             rootFrame.NavigationFailed += OnNavigationFailed;
+            rootFrame.Navigated += OnRootFrameFirstNavigated;
             BootLog("OnLaunched: root frame created");
         }
 
@@ -242,6 +263,18 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
     {
         throw new InvalidOperationException($"Failed to load {e.SourcePageType.FullName}: {e.Exception}");
+    }
+
+    private void OnRootFrameFirstNavigated(object sender, NavigationEventArgs e)
+    {
+        // One-shot: only the first successful shell navigation flips the crash policy.
+        if (sender is Frame frame)
+        {
+            frame.Navigated -= OnRootFrameFirstNavigated;
+        }
+
+        _isShellFirstFrameReady = true;
+        BootLog("OnLaunched: first shell frame ready");
     }
 
     public static void InitializeLogging()
