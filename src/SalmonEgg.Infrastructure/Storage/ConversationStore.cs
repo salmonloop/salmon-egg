@@ -49,28 +49,8 @@ public sealed class ConversationStore : IConversationStore
             throw new ArgumentNullException(nameof(document));
         }
 
-        var path = GetDocumentPath();
-        var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrWhiteSpace(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
-
-        var tmp = path + ".tmp";
-        await using (var stream = File.Create(tmp))
-        {
-            await JsonSerializer.SerializeAsync(stream, document, ConversationDocumentJsonType, cancellationToken).ConfigureAwait(false);
-        }
-
-        // Atomic replace best-effort (cross-platform).
-        try
-        {
-            File.Copy(tmp, path, overwrite: true);
-        }
-        finally
-        {
-            try { File.Delete(tmp); } catch { }
-        }
+        var json = JsonSerializer.Serialize(document, ConversationDocumentJsonType);
+        await AtomicFile.WriteUtf8AtomicAsync(GetDocumentPath(), json, cancellationToken).ConfigureAwait(false);
     }
 
     private string GetDocumentPath()
