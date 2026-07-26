@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -265,6 +265,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -330,6 +331,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             var message = CreateTextMessage("m-1", "hello");
             message.ProtocolMessageId = "protocol-1";
 
@@ -371,6 +373,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -627,6 +630,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -662,6 +666,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-old",
@@ -715,6 +720,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -768,6 +774,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -852,6 +859,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1031,6 +1039,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         await workspace.RegisterConversationAsync("session-1", cancellationToken: TestContext.Current.CancellationToken);
         workspace.UpdateProjectAffinityOverride("session-1", "project-override");
@@ -1142,6 +1151,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1173,6 +1183,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1243,6 +1254,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -1374,6 +1386,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1407,6 +1420,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1441,6 +1455,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1495,6 +1510,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1532,6 +1548,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1576,6 +1593,7 @@ public sealed class ChatConversationWorkspaceTests
         session.DisplayName = "Original remote title";
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1620,6 +1638,7 @@ public sealed class ChatConversationWorkspaceTests
         session.DisplayName = "User chosen title";
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1659,6 +1678,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1712,6 +1732,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -1754,6 +1775,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1795,6 +1817,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1831,6 +1854,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1870,6 +1894,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -1910,6 +1935,7 @@ public sealed class ChatConversationWorkspaceTests
         var preferences = CreatePreferences(syncContext);
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -2191,6 +2217,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("remote-1", @"C:\repo\one");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -2260,6 +2287,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
                 Transcript: [],
@@ -2319,6 +2347,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2349,6 +2378,7 @@ public sealed class ChatConversationWorkspaceTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -2618,6 +2648,7 @@ public sealed class ChatConversationWorkspaceTests
 
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
                 Transcript: [CreateTextMessage("m-1", "alpha")],
@@ -2913,6 +2944,7 @@ public sealed class ChatConversationWorkspaceTests
         await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
@@ -3046,6 +3078,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -3062,6 +3095,38 @@ public sealed class ChatConversationWorkspaceTests
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         Assert.Contains("session-1", saved.DeletedConversationIds);
         Assert.DoesNotContain(saved.Conversations, c => c.ConversationId == "session-1");
+    }
+
+    [Fact]
+    public async Task SaveAsync_BeforeRestore_RefusesToOverwriteStore()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.SaveAsync(TestContext.Current.CancellationToken));
+
+        Assert.Null(store.LastSavedDocument);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AfterFailedRestore_KeepsRefusingToPersist()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new LoadFailingConversationStore(new IOException("disk busy"));
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(workspace.IsConversationListLoading);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => workspace.SaveAsync(TestContext.Current.CancellationToken));
+        Assert.Null(store.LastSavedDocument);
     }
 
     private static ChatConversationWorkspace CreateWorkspace(
@@ -3156,6 +3221,27 @@ public sealed class ChatConversationWorkspaceTests
 
         public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(LoadResult);
+
+        public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
+        {
+            LastSavedDocument = document;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class LoadFailingConversationStore : IConversationStore
+    {
+        private readonly Exception _exception;
+
+        public LoadFailingConversationStore(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public ConversationDocument? LastSavedDocument { get; private set; }
+
+        public Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromException<ConversationDocument>(_exception);
 
         public Task SaveAsync(ConversationDocument document, CancellationToken cancellationToken = default)
         {

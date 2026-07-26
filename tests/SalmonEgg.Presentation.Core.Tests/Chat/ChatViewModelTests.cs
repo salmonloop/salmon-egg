@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Immutable;
@@ -3033,6 +3033,7 @@ public partial class ChatViewModelTests
         var chatService = CreateConnectedChatService();
         var syncContext = new ImmediateSynchronizationContext();
         await using var fixture = CreateViewModel(syncContext);
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
         WireViewModelCoordinatorIntoFacade(fixture.ViewModel);
 
         await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken);
@@ -3070,6 +3071,7 @@ public partial class ChatViewModelTests
     public async Task OpenDiscoveredRemoteSessionAsync_PersistsAuthoritativeCwdAndOrderedAdditionalDirectories()
     {
         await using var fixture = CreateViewModel();
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
         var switcher = (IConversationSessionSwitcher)fixture.ViewModel;
         var sourceDirectories = new List<string>
         {
@@ -10116,6 +10118,7 @@ public partial class ChatViewModelTests
             .ReturnsAsync(SessionLoadResponse.Completed);
 
         await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await DispatchConnectedAsync(fixture, "profile-1");
 
@@ -10733,6 +10736,7 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
+            await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
             fixture.Workspace.UpdateRemoteBinding("conv-1", "remote-1", "profile-1");
@@ -10912,6 +10916,7 @@ public partial class ChatViewModelTests
         fixture = CreateViewModel(syncContext, sessionManager: sessionManager, acpConnectionCommands: commands.Object);
         await using (fixture)
         {
+            await fixture.Workspace.RestoreAsync(TestContext.Current.CancellationToken);
             fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
             fixture.ViewModel.ReplaceChatService(chatService.Object);
             fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(

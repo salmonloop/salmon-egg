@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
@@ -34,6 +34,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -72,6 +73,7 @@ public sealed class BindingCoordinatorTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         await sessionManager.CreateSessionAsync("session-2", @"C:\repo\two");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript:
@@ -243,6 +245,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(
             new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
@@ -381,6 +384,7 @@ public sealed class BindingCoordinatorTests
         var sessionManager = new FakeSessionManager();
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using var workspace = CreateWorkspace(workspaceStore, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
             ConversationId: "session-1",
             Transcript: [],
@@ -581,6 +585,7 @@ public sealed class BindingCoordinatorTests
         await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
         using (var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext))
         {
+            await workspace.RestoreAsync(TestContext.Current.CancellationToken);
             workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
                 ConversationId: "session-1",
                 Transcript: [],

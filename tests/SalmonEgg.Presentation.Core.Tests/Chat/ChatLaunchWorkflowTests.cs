@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -299,6 +299,7 @@ public sealed class ChatLaunchWorkflowTests
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(lastSelectedProjectId: null);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
         using var catalogFacade = new ConversationCatalogFacade(
             workspace,
             Mock.Of<IConversationActivationCoordinator>(),

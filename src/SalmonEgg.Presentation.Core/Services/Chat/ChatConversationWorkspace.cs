@@ -30,6 +30,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly HashSet<string> _deletedConversationTombstones = new(StringComparer.Ordinal);
     private CancellationTokenSource? _saveCts;
     private bool _disposed;
+    private bool _recoveryDocumentRestored;
     private bool _isConversationListLoading = true;
     private int _conversationListVersion;
     private string? _lastActiveConversationId;
@@ -82,7 +83,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to restore conversation workspace");
+            _logger.LogError(
+                ex,
+                "Failed to restore conversation workspace; persistence stays disabled to protect the stored history");
             await PostToContextAsync(() => IsConversationListLoading = false, cancellationToken).ConfigureAwait(false);
             return;
         }
@@ -859,7 +862,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Scheduled workspace save failed");
+                _logger.LogWarning(ex, "Scheduled workspace save failed");
             }
         }, token);
     }
@@ -885,6 +888,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         string[] deletedConversationIds;
         lock (_stateGate)
         {
+            if (!_recoveryDocumentRestored)
+            {
+                // The in-memory catalog is only authoritative after a successful restore.
+                // Persisting before that would overwrite the stored history with unhydrated state.
+                throw new InvalidOperationException(
+                    "Conversation workspace has not restored the persisted document; refusing to save.");
+            }
+
             deletedConversationIds = _deletedConversationTombstones
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Distinct(StringComparer.Ordinal)
@@ -1099,14 +1110,17 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             if (!string.IsNullOrWhiteSpace(lastActiveConversationId) && _conversationBindings.ContainsKey(lastActiveConversationId))
             {
                 LastActiveConversationId = lastActiveConversationId;
-                return;
+            }
+            else
+            {
+                LastActiveConversationId = _conversationBindings.Values
+                    .OrderByDescending(binding => binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt)
+                    .ThenByDescending(binding => binding.LastUpdatedAt)
+                    .Select(binding => binding.ConversationId)
+                    .FirstOrDefault();
             }
 
-            LastActiveConversationId = _conversationBindings.Values
-                .OrderByDescending(binding => binding.LastAccessedAt == default ? binding.LastUpdatedAt : binding.LastAccessedAt)
-                .ThenByDescending(binding => binding.LastUpdatedAt)
-                .Select(binding => binding.ConversationId)
-                .FirstOrDefault();
+            _recoveryDocumentRestored = true;
         }
     }
 

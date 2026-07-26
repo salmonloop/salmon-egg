@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
 
@@ -15,29 +16,42 @@ public sealed class ConversationStore : IConversationStore
         ConversationJsonContext.Default.ConversationDocument;
 
     private readonly IAppDataService _appData;
+    private readonly ILogger<ConversationStore> _logger;
 
-    public ConversationStore(IAppDataService appData)
+    public ConversationStore(IAppDataService appData, ILogger<ConversationStore> logger)
     {
         _appData = appData ?? throw new ArgumentNullException(nameof(appData));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<ConversationDocument> LoadAsync(CancellationToken cancellationToken = default)
     {
+        var path = GetDocumentPath();
+        string json;
         try
         {
-            var path = GetDocumentPath();
-            if (!File.Exists(path))
-            {
-                return new ConversationDocument();
-            }
-
-            await using var stream = File.OpenRead(path);
-            var doc = await JsonSerializer.DeserializeAsync(stream, ConversationDocumentJsonType, cancellationToken).ConfigureAwait(false);
-            return doc ?? new ConversationDocument();
+            json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch (FileNotFoundException)
         {
-            // Corrupted file or schema changes: do not crash the app, just start fresh.
+            return new ConversationDocument();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return new ConversationDocument();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, ConversationDocumentJsonType) ?? new ConversationDocument();
+        }
+        catch (JsonException ex)
+        {
+            // A corrupted document can never become readable again, so quarantine it for
+            // manual recovery and start fresh. Transient failures (IO, cancellation) propagate
+            // instead: reporting an empty document there would let the next save overwrite the
+            // real history.
+            QuarantineCorruptedDocument(path, ex);
             return new ConversationDocument();
         }
     }
@@ -51,6 +65,26 @@ public sealed class ConversationStore : IConversationStore
 
         var json = JsonSerializer.Serialize(document, ConversationDocumentJsonType);
         await AtomicFile.WriteUtf8AtomicAsync(GetDocumentPath(), json, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void QuarantineCorruptedDocument(string path, JsonException error)
+    {
+        var quarantinePath = path + ".corrupt";
+        try
+        {
+            File.Move(path, quarantinePath, overwrite: true);
+            _logger.LogWarning(
+                error,
+                "Conversation document is corrupted; quarantined to {QuarantinePath} and starting fresh",
+                quarantinePath);
+        }
+        catch (Exception moveError)
+        {
+            _logger.LogWarning(
+                moveError,
+                "Conversation document is corrupted and quarantine failed; starting fresh (DocumentPath={DocumentPath})",
+                path);
+        }
     }
 
     private string GetDocumentPath()

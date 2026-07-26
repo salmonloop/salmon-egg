@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
@@ -115,8 +117,106 @@ public sealed class ConversationStoreTests : IDisposable
         Assert.Equal("\"\\u4f60\\u597d\"", Assert.IsType<JsonElement>(reloadedMeta["escaped"]).GetRawText());
     }
 
+    [Fact]
+    public async Task SaveAsync_WithMessages_RoundTripsDocument()
+    {
+        var sut = CreateStore();
+        var document = new ConversationDocument
+        {
+            Version = 1,
+            LastActiveConversationId = "c1",
+            Conversations =
+            {
+                new ConversationRecord
+                {
+                    ConversationId = "c1",
+                    DisplayName = "My Session",
+                    Messages =
+                    {
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "m1",
+                            IsOutgoing = true,
+                            ContentType = "text",
+                            TextContent = "hi"
+                        }
+                    }
+                }
+            }
+        };
+
+        await sut.SaveAsync(document, TestContext.Current.CancellationToken);
+        var loaded = await sut.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("c1", loaded.LastActiveConversationId);
+        var conversation = Assert.Single(loaded.Conversations);
+        Assert.Equal("My Session", conversation.DisplayName);
+        Assert.Equal("hi", Assert.Single(conversation.Messages).TextContent);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenDocumentMissing_ReturnsEmptyDocument()
+    {
+        var sut = CreateStore();
+
+        var loaded = await sut.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(loaded.Conversations);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenDocumentCorrupted_QuarantinesFileAndReturnsEmptyDocument()
+    {
+        var sut = CreateStore();
+        var path = GetDocumentPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "{ not json !!", TestContext.Current.CancellationToken);
+
+        var loaded = await sut.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(loaded.Conversations);
+        Assert.False(File.Exists(path));
+        var quarantinePath = path + ".corrupt";
+        Assert.True(File.Exists(quarantinePath));
+        Assert.Equal("{ not json !!", await File.ReadAllTextAsync(quarantinePath, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenDocumentLocked_PropagatesIoFailure()
+    {
+        var sut = CreateStore();
+        var path = GetDocumentPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "{}", TestContext.Current.CancellationToken);
+        using var exclusiveLock = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        await Assert.ThrowsAsync<IOException>(
+            () => sut.LoadAsync(TestContext.Current.CancellationToken));
+
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenCancelled_PropagatesCancellation()
+    {
+        var sut = CreateStore();
+        var path = GetDocumentPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "{}", TestContext.Current.CancellationToken);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => sut.LoadAsync(cancelled.Token));
+
+        Assert.True(File.Exists(path));
+    }
+
+    private string GetDocumentPath()
+        => Path.Combine(_root, "conversations", "conversations.v1.json");
+
     private ConversationStore CreateStore()
-        => new(new TestAppDataService(_root));
+        => new(new TestAppDataService(_root), NullLogger<ConversationStore>.Instance);
 
     private sealed class TestAppDataService : IAppDataService
     {
