@@ -229,7 +229,7 @@ namespace SalmonEgg.Acp.Client
     /// <summary>
     /// 会话更新事件参数。
     /// </summary>
-    public class SessionUpdateEventArgs : EventArgs
+    public sealed class SessionUpdateEventArgs : EventArgs
     {
         /// <summary>
         /// 会话 ID。
@@ -263,7 +263,7 @@ namespace SalmonEgg.Acp.Client
     /// <summary>
     /// 权限请求事件参数。
     /// </summary>
-    public class PermissionRequestEventArgs : EventArgs
+    public sealed class PermissionRequestEventArgs : EventArgs
     {
         /// <summary>
         /// 原始请求的消息 ID。
@@ -329,7 +329,7 @@ namespace SalmonEgg.Acp.Client
     /// <summary>
     /// 文件系统请求事件参数。
     /// </summary>
-    public class FileSystemRequestEventArgs : EventArgs
+    public sealed class FileSystemRequestEventArgs : EventArgs
     {
         /// <summary>
         /// 原始请求的消息 ID。

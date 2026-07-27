@@ -233,7 +233,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Event arguments for terminal request events.
     /// </summary>
-    public class TerminalRequestEventArgs : EventArgs
+    public sealed class TerminalRequestEventArgs : EventArgs
     {
         /// <summary>
         /// Original request message ID.
@@ -300,7 +300,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Event arguments for client-owned terminal state snapshots.
     /// </summary>
-    public class TerminalStateChangedEventArgs : EventArgs
+    public sealed class TerminalStateChangedEventArgs : EventArgs
     {
         public string SessionId { get; set; } = string.Empty;
 
