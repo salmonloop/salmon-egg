@@ -1617,6 +1617,175 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public async Task SendPromptAsync_WhenImageCapabilityNotAdvertised_RejectsImageContentBeforeSending()
+        {
+            // spec MUST:client 须按协商的 promptCapabilities 限制发送的 content 类型。
+            // 默认能力未声明 image,发送图片内容必须在打到线上前快速失败。
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.SendPromptAsync(
+                new SessionPromptParams(
+                    createResult.SessionId,
+                    new List<ContentBlock> { new ImageContentBlock { Data = "AAAA", MimeType = "image/png" } }),
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task SendPromptAsync_WhenImageCapabilityAdvertised_SendsImageContent()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(
+                capabilities: new AgentCapabilities(
+                    loadSession: true,
+                    promptCapabilities: new PromptCapabilities(image: true)));
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            SetupJsonRpcResponse(
+                "session/prompt",
+                JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options),
+                parser);
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams(
+                    createResult.SessionId,
+                    new List<ContentBlock> { new ImageContentBlock { Data = "AAAA", MimeType = "image/png" } }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
+        public async Task SendPromptAsync_TextAndResourceLinkContent_AreAlwaysAllowed()
+        {
+            // text 与 resource_link 是无条件基线,即使 Agent 未声明任何 prompt 能力也必须放行。
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            SetupJsonRpcResponse(
+                "session/prompt",
+                JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options),
+                parser);
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams(
+                    createResult.SessionId,
+                    new List<ContentBlock>
+                    {
+                        new TextContentBlock("hi"),
+                        new ResourceLinkContentBlock { Uri = "file:///tmp/a.txt" }
+                    }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
+        public async Task SendPromptAsync_WhenAudioCapabilityNotAdvertised_RejectsAudioContentBeforeSending()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.SendPromptAsync(
+                new SessionPromptParams(
+                    createResult.SessionId,
+                    new List<ContentBlock> { new AudioContentBlock { Data = "AAAA", MimeType = "audio/wav" } }),
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task SendPromptAsync_WhenEmbeddedContextCapabilityNotAdvertised_RejectsResourceContentBeforeSending()
+        {
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync(sessionStore: new RecordingAcpClientSessionStore());
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            var ex = await Assert.ThrowsAsync<AcpException>(() => client.SendPromptAsync(
+                new SessionPromptParams(
+                    createResult.SessionId,
+                    new List<ContentBlock>
+                    {
+                        new ResourceContentBlock
+                        {
+                            Resource = new EmbeddedResource { Uri = "file:///tmp/a.txt", MimeType = "text/plain", Text = "x" }
+                        }
+                    }),
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, ex.ErrorCode);
+            _transportMock.Verify(
+                t => t.SendMessageAsync(It.IsRegex("session/prompt"), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task SendPromptAsync_UnknownContentType_IsNotReverseTightened()
+        {
+            // 未知判别值走 passthrough,由 Agent 而非 client 裁决;门控不得反向收紧未知类型。
+            var parser = new MessageParser();
+            var client = await CreateInitializedClientAsync();
+
+            SetupJsonRpcResponse(
+                "session/new",
+                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
+                parser);
+            var createResult = await client.CreateSessionAsync(new SessionNewParams(AbsoluteCwd, null), TestContext.Current.CancellationToken);
+
+            SetupJsonRpcResponse(
+                "session/prompt",
+                JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), parser.Options),
+                parser);
+
+            var unknown = JsonSerializer.Deserialize(
+                """{"type":"future_media","payload":"x"}""",
+                AcpJsonContext.Default.ContentBlock)!;
+
+            var result = await client.SendPromptAsync(
+                new SessionPromptParams(createResult.SessionId, new List<ContentBlock> { unknown }),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(StopReason.EndTurn, result.StopReason);
+        }
+
+        [Fact]
         public async Task SendPromptAsync_WhenSameSessionStreamingContinues_CompletesWhenResponseEventuallyArrives()
         {
             var parser = new MessageParser();

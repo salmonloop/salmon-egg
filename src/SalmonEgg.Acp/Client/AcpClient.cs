@@ -527,6 +527,8 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(JsonRpcErrorCode.SessionNotFound, $"Session '{@params.SessionId}' not found");
             }
 
+            EnsurePromptContentAllowed(@params);
+
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "session/prompt",
@@ -548,6 +550,38 @@ namespace SalmonEgg.Acp.Client
             }
 
             return promptResponse;
+        }
+
+        // spec MUST:client 须按 initialize 协商的 promptCapabilities 限制发送的 content 类型
+        // (image→SupportsImage、audio→SupportsAudio、resource→SupportsEmbeddedContext)。
+        // text 与 resource_link 是无条件基线,始终允许;未知判别值走 passthrough 由 Agent 裁决,
+        // 不在此反向收紧。发送前快速失败,避免把 Agent 明确不支持的内容打到线上。
+        private void EnsurePromptContentAllowed(SessionPromptParams @params)
+        {
+            var prompt = @params.Prompt;
+            if (prompt == null)
+            {
+                return;
+            }
+
+            foreach (var block in prompt)
+            {
+                switch (block)
+                {
+                    case ImageContentBlock when !(_agentCapabilities?.SupportsImage ?? false):
+                        throw new AcpException(
+                            JsonRpcErrorCode.InvalidParams,
+                            "Agent did not advertise the image prompt capability; image content cannot be sent.");
+                    case AudioContentBlock when !(_agentCapabilities?.SupportsAudio ?? false):
+                        throw new AcpException(
+                            JsonRpcErrorCode.InvalidParams,
+                            "Agent did not advertise the audio prompt capability; audio content cannot be sent.");
+                    case ResourceContentBlock when !(_agentCapabilities?.SupportsEmbeddedContext ?? false):
+                        throw new AcpException(
+                            JsonRpcErrorCode.InvalidParams,
+                            "Agent did not advertise the embeddedContext prompt capability; embedded resource content cannot be sent.");
+                }
+            }
         }
 
         /// <summary>
