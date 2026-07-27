@@ -6,25 +6,40 @@
     <LangVersion>latest</LangVersion>
     <IsPackable>true</IsPackable>
 
-    <!-- SDK 硬约束：AOT/trim 安全 + 零警告门禁。协议序列化全走源生成 (AcpJsonContext)，
-         多态转换器已改用 GetTypeInfo，故 AOT/trim 干净；两开关让后续的 AOT/警告退化当场变红。 -->
+    <!-- SDK hard gates: AOT/trim safety + zero-warning builds. Protocol serialization is
+         source-generated (AcpJsonContext); polymorphic converters use GetTypeInfo. -->
     <IsAotCompatible>true</IsAotCompatible>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnablePackageValidation>true</EnablePackageValidation>
+
     <PackageId>SalmonEgg.Acp</PackageId>
+    <Version>1.0.0</Version>
     <Title>SalmonEgg ACP SDK</Title>
-    <Description>ACP protocol contracts and SDK primitives used by SalmonEgg.</Description>
+    <Description>Agent Client Protocol (ACP) contracts and client primitives for .NET.</Description>
     <Authors>SalmonEgg</Authors>
+    <Company>SalmonEgg</Company>
+    <Copyright>Copyright (c) 2026 SalmonEgg contributors</Copyright>
+    <PackageTags>acp;agent-client-protocol;json-rpc;sdk;aot</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://agentclientprotocol.com/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/salmon-egg/salmon-egg</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Public surface XML docs are mixed language today; keep missing-doc noise from blocking AOT/warn-as-error. -->
+    <NoWarn>$(NoWarn);CS1591;CS1572;CS1573</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
-
-  <!-- 内部实现细节（JsonRpc 信封、消息解析/校验、源生成上下文）对 SDK 自有测试工程开放，
-       其余消费者只经由 public 契约（IAcpClient / DTO / 宿主接缝）访问。 -->
+<!-- Internals remain available to first-party contract tests. External consumers use the public surface. -->
   <ItemGroup>
     <InternalsVisibleTo Include="SalmonEgg.Acp.Tests" />
     <InternalsVisibleTo Include="SalmonEgg.Application.Tests" />

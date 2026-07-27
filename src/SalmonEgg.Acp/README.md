@@ -1,7 +1,22 @@
-# SalmonEgg ACP SDK
+# SalmonEgg.Acp
 
-SalmonEgg.Acp contains Agent Client Protocol contracts and SDK primitives that are independent from the SalmonEgg application, UI, storage, and platform services.
+.NET 10 Agent Client Protocol (ACP) SDK: wire contracts, client primitives, and source-generated serialization.
 
-Current primitives include JSON-RPC message/error types, JSON-RPC parser/validator contracts, ACP client/capability contracts, content blocks, tool call payloads, plan payloads, MCP server payloads, protocol request/response/update DTOs, permission options, terminal and ask-user callback payloads, stop reasons, source-generated protocol serialization, and protocol path rules.
+## What is public
 
-This package is being extracted incrementally. The public surface is not final yet.
+- Protocol / content / tool / plan / MCP wire DTOs (`AcpProtocolObject` hierarchy)
+- `IAcpClient` / `AcpClient` and host seams (`IAcpTransport`, logger, session store, terminal manager)
+- `AcpJsonContext` source-generated serialization entry point
+- Host helpers: `AcpMetaJson`, `McpServerSnapshots`, `ProtocolPathRules`, capability defaults
+- `AcpException` / `JsonRpcErrorCode`
+
+JSON-RPC envelopes, message parser/validator, and most converters are assembly-internal implementation details.
+
+## Requirements
+
+- .NET 10 (`net10.0`)
+- Zero package dependencies; AOT/trim compatible (`IsAotCompatible`)
+
+## License
+
+MIT
