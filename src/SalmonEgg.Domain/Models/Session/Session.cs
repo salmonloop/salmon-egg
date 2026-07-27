@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Models.Session
 {
@@ -175,12 +176,6 @@ namespace SalmonEgg.Domain.Models.Session
         public string? ToolCallId { get; set; }
 
         /// <summary>
-        /// 工具调用数据（用于 tool_call 类型的更新）。
-        /// </summary>
-        [JsonPropertyName("toolCall")]
-        public object? ToolCall { get; set; }
-
-        /// <summary>
         /// 标题（用于某些类型的更新）。
         /// </summary>
         [JsonPropertyName("title")]
@@ -208,7 +203,7 @@ namespace SalmonEgg.Domain.Models.Session
         /// 配置选项（用于 config_option_update 类型的更新）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public object? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; set; }
 
         /// <summary>
         /// 创建新的会话更新条目实例。
@@ -229,31 +224,6 @@ namespace SalmonEgg.Domain.Models.Session
             {
                 SessionUpdateType = "agent_message_chunk",
                 Content = content,
-                Timestamp = DateTime.UtcNow
-            };
-        }
-
-        /// <summary>
-        /// 创建新的工具调用类型更新条目。
-        /// </summary>
-        /// <param name="toolCallId">工具调用 ID</param>
-        /// <param name="toolCall">工具调用数据</param>
-        /// <param name="kind">工具调用类型</param>
-        /// <param name="status">工具调用状态</param>
-        /// <returns>会话更新条目</returns>
-        public static SessionUpdateEntry CreateToolCall(
-            string toolCallId,
-            object toolCall,
-            ToolCallKind kind,
-            ToolCallStatus status)
-        {
-            return new SessionUpdateEntry
-            {
-                SessionUpdateType = "tool_call",
-                ToolCallId = toolCallId,
-                ToolCall = toolCall,
-                Kind = kind,
-                Status = status,
                 Timestamp = DateTime.UtcNow
             };
         }
