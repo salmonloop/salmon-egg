@@ -21,11 +21,15 @@ public sealed class AcpSdkBoundaryTests
     }
 
     [Fact]
-    public void DomainReferencesAcpSdkAndKeepsStopReasonAsExtensibleValueType()
+    public void DomainDoesNotReferenceAcpSdkAndKeepsStopReasonAsExtensibleValueType()
     {
         var domainProject = XDocument.Parse(LoadFile(@"src\SalmonEgg.Domain\SalmonEgg.Domain.csproj"));
 
-        Assert.Contains(@"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj", domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")));
+        // Domain owns app-local models only; ACP wire types are projected at Application/host boundaries.
+        Assert.DoesNotContain(
+            @"..\SalmonEgg.Acp\SalmonEgg.Acp.csproj",
+            domainProject.Descendants("ProjectReference").Select(reference => (string?)reference.Attribute("Include")));
+        Assert.Empty(domainProject.Descendants("ProjectReference"));
 
         // StopReason lives in the SDK as an extensible value type so unknown wire values can
         // round-trip losslessly (ACP #[non_exhaustive] + Other(String) contract). 禁止回退为

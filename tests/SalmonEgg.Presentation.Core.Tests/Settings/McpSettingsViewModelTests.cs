@@ -12,6 +12,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
@@ -26,10 +27,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]),
-                        enabled: false),
-                    new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")])
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "C:\\mcp\\filesystem.exe", ["--root", "C:\\repo"]), false),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp", [new McpHttpHeader("Authorization", "Bearer token")]))
                 }
             }
         };
@@ -87,8 +86,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp"),
-                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("docs", "https://docs.example.com/mcp"))
                 }
             }
         };
@@ -107,7 +106,7 @@ public sealed class McpSettingsViewModelTests
 
         Assert.NotNull(service.SavedSettings);
         Assert.Equal(2, service.SavedSettings!.Servers.Count);
-        var server = Assert.IsType<StdioMcpServer>(service.SavedSettings.Servers[0].Server);
+        var server = Assert.IsType<StdioMcpServer>(McpServerCatalogMapper.ToAcpServer(service.SavedSettings.Servers[0]));
         Assert.Equal("filesystem", server.Name);
         Assert.Equal("C:\\mcp\\filesystem.exe", server.Command);
         Assert.Equal(["--root", "C:\\repo path"], server.Args);
@@ -128,7 +127,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -151,8 +150,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("filesystem", "npx"),
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "npx")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -259,7 +258,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new StdioMcpServer("search", "old.exe")
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("search", "old.exe"))
                 }
             }
         };
@@ -491,7 +490,7 @@ public sealed class McpSettingsViewModelTests
         Assert.NotNull(service.SavedSettings);
         var entry = Assert.Single(service.SavedSettings!.Servers);
         Assert.False(entry.Enabled);
-        var server = Assert.IsType<StdioMcpServer>(entry.Server);
+        var server = Assert.IsType<StdioMcpServer>(McpServerCatalogMapper.ToAcpServer(entry));
         Assert.Equal("new-mcp-server", server.Name);
         Assert.Equal(string.Empty, server.Command);
         Assert.Single(viewModel.Servers);
@@ -527,9 +526,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new HttpMcpServer("search", "https://example.com/mcp"),
-                        enabled: false)
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"), false)
                 }
             }
         };
@@ -552,9 +549,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(
-                        new StdioMcpServer("draft", string.Empty),
-                        enabled: false)
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("draft", string.Empty), false)
                 }
             }
         };
@@ -577,8 +572,8 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp"),
-                    new HttpMcpServer("docs", "https://docs.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp")),
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("docs", "https://docs.example.com/mcp"))
                 }
             }
         };
@@ -602,7 +597,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };
@@ -630,7 +625,7 @@ public sealed class McpSettingsViewModelTests
             {
                 Servers =
                 {
-                    new HttpMcpServer("search", "https://example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("search", "https://example.com/mcp"))
                 }
             }
         };

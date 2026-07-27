@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
 
@@ -9,9 +8,9 @@ namespace SalmonEgg.Infrastructure.Storage;
 
 internal static class McpServerYamlMapper
 {
-    internal const string StdioTransport = "stdio";
-    internal const string HttpTransport = "http";
-    internal const string SseTransport = "sse";
+    internal const string StdioTransport = McpCatalogTransports.Stdio;
+    internal const string HttpTransport = McpCatalogTransports.Http;
+    internal const string SseTransport = McpCatalogTransports.Sse;
 
     internal static List<McpServerYamlV1> ToYamlServers(IEnumerable<McpServerCatalogEntry>? servers)
     {
@@ -23,43 +22,45 @@ internal static class McpServerYamlMapper
         var yamlServers = new List<McpServerYamlV1>();
         foreach (var entry in servers)
         {
-            var server = entry.Server;
-            switch (server)
+            var transport = (entry.Transport ?? string.Empty).Trim().ToLowerInvariant();
+            switch (transport)
             {
-                case StdioMcpServer stdio:
+                case StdioTransport:
                     yamlServers.Add(new McpServerYamlV1
                     {
                         Transport = StdioTransport,
-                        Name = stdio.Name ?? string.Empty,
+                        Name = entry.Name ?? string.Empty,
                         Enabled = entry.Enabled,
-                        Meta = McpServerSnapshots.CloneMeta(stdio.Meta),
-                        Command = stdio.Command ?? string.Empty,
-                        Args = stdio.Args ?? new List<string>(),
-                        Env = ToYamlNameValues(stdio.Env)
+                        Meta = McpCatalogSnapshots.CloneMeta(entry.Meta),
+                        Command = entry.Command ?? string.Empty,
+                        Args = McpCatalogSnapshots.CloneArgs(entry.Args),
+                        Env = ToYamlNameValues(entry.Env)
                     });
                     break;
-                case HttpMcpServer http:
+                case HttpTransport:
                     yamlServers.Add(new McpServerYamlV1
                     {
                         Transport = HttpTransport,
-                        Name = http.Name ?? string.Empty,
+                        Name = entry.Name ?? string.Empty,
                         Enabled = entry.Enabled,
-                        Meta = McpServerSnapshots.CloneMeta(http.Meta),
-                        Url = http.Url ?? string.Empty,
-                        Headers = ToYamlNameValues(http.Headers)
+                        Meta = McpCatalogSnapshots.CloneMeta(entry.Meta),
+                        Url = entry.Url ?? string.Empty,
+                        Headers = ToYamlNameValues(entry.Headers)
                     });
                     break;
-                case SseMcpServer sse:
+                case SseTransport:
                     yamlServers.Add(new McpServerYamlV1
                     {
                         Transport = SseTransport,
-                        Name = sse.Name ?? string.Empty,
+                        Name = entry.Name ?? string.Empty,
                         Enabled = entry.Enabled,
-                        Meta = McpServerSnapshots.CloneMeta(sse.Meta),
-                        Url = sse.Url ?? string.Empty,
-                        Headers = ToYamlNameValues(sse.Headers)
+                        Meta = McpCatalogSnapshots.CloneMeta(entry.Meta),
+                        Url = entry.Url ?? string.Empty,
+                        Headers = ToYamlNameValues(entry.Headers)
                     });
                     break;
+                default:
+                    throw new InvalidDataException("MCP server transport must be one of: stdio, http, sse.");
             }
         }
 
@@ -85,38 +86,38 @@ internal static class McpServerYamlMapper
             switch (transport)
             {
                 case HttpTransport:
-                    servers.Add(new McpServerCatalogEntry(
-                        new HttpMcpServer(
-                            yamlServer.Name ?? string.Empty,
-                            yamlServer.Url ?? string.Empty,
-                            FromYamlHeaders(yamlServer.Headers))
-                        {
-                            Meta = McpServerSnapshots.CloneMeta(yamlServer.Meta)
-                        },
-                        yamlServer.Enabled));
+                    servers.Add(new McpServerCatalogEntry
+                    {
+                        Transport = HttpTransport,
+                        Name = yamlServer.Name ?? string.Empty,
+                        Enabled = yamlServer.Enabled,
+                        Meta = McpCatalogSnapshots.CloneMeta(yamlServer.Meta),
+                        Url = yamlServer.Url ?? string.Empty,
+                        Headers = FromYamlNameValues(yamlServer.Headers)
+                    });
                     break;
                 case SseTransport:
-                    servers.Add(new McpServerCatalogEntry(
-                        new SseMcpServer(
-                            yamlServer.Name ?? string.Empty,
-                            yamlServer.Url ?? string.Empty,
-                            FromYamlHeaders(yamlServer.Headers))
-                        {
-                            Meta = McpServerSnapshots.CloneMeta(yamlServer.Meta)
-                        },
-                        yamlServer.Enabled));
+                    servers.Add(new McpServerCatalogEntry
+                    {
+                        Transport = SseTransport,
+                        Name = yamlServer.Name ?? string.Empty,
+                        Enabled = yamlServer.Enabled,
+                        Meta = McpCatalogSnapshots.CloneMeta(yamlServer.Meta),
+                        Url = yamlServer.Url ?? string.Empty,
+                        Headers = FromYamlNameValues(yamlServer.Headers)
+                    });
                     break;
                 case StdioTransport:
-                    servers.Add(new McpServerCatalogEntry(
-                        new StdioMcpServer(
-                            yamlServer.Name ?? string.Empty,
-                            yamlServer.Command ?? string.Empty,
-                            yamlServer.Args ?? new List<string>(),
-                            FromYamlEnv(yamlServer.Env))
-                        {
-                            Meta = McpServerSnapshots.CloneMeta(yamlServer.Meta)
-                        },
-                        yamlServer.Enabled));
+                    servers.Add(new McpServerCatalogEntry
+                    {
+                        Transport = StdioTransport,
+                        Name = yamlServer.Name ?? string.Empty,
+                        Enabled = yamlServer.Enabled,
+                        Meta = McpCatalogSnapshots.CloneMeta(yamlServer.Meta),
+                        Command = yamlServer.Command ?? string.Empty,
+                        Args = yamlServer.Args is null ? new List<string>() : new List<string>(yamlServer.Args),
+                        Env = FromYamlNameValues(yamlServer.Env)
+                    });
                     break;
                 default:
                     throw new InvalidDataException("MCP server transport must be one of: stdio, http, sse.");
@@ -126,7 +127,7 @@ internal static class McpServerYamlMapper
         return servers;
     }
 
-    private static List<McpNameValueYamlV1> ToYamlNameValues(IEnumerable<McpEnvVariable>? values)
+    private static List<McpNameValueYamlV1> ToYamlNameValues(IEnumerable<McpCatalogNameValue>? values)
     {
         if (values == null)
         {
@@ -138,55 +139,23 @@ internal static class McpServerYamlMapper
             {
                 Name = value.Name ?? string.Empty,
                 Value = value.Value ?? string.Empty,
-                Meta = McpServerSnapshots.CloneMeta(value.Meta)
+                Meta = McpCatalogSnapshots.CloneMeta(value.Meta)
             })
             .ToList();
     }
 
-    private static List<McpNameValueYamlV1> ToYamlNameValues(IEnumerable<McpHttpHeader>? values)
+    private static List<McpCatalogNameValue> FromYamlNameValues(IEnumerable<McpNameValueYamlV1>? values)
     {
         if (values == null)
         {
-            return new List<McpNameValueYamlV1>();
+            return new List<McpCatalogNameValue>();
         }
 
         return values
-            .Select(value => new McpNameValueYamlV1
-            {
-                Name = value.Name ?? string.Empty,
-                Value = value.Value ?? string.Empty,
-                Meta = McpServerSnapshots.CloneMeta(value.Meta)
-            })
-            .ToList();
-    }
-
-    private static List<McpEnvVariable> FromYamlEnv(IEnumerable<McpNameValueYamlV1>? values)
-    {
-        if (values == null)
-        {
-            return new List<McpEnvVariable>();
-        }
-
-        return values
-            .Select(value => new McpEnvVariable(value.Name ?? string.Empty, value.Value ?? string.Empty)
-            {
-                Meta = McpServerSnapshots.CloneMeta(value.Meta)
-            })
-            .ToList();
-    }
-
-    private static List<McpHttpHeader> FromYamlHeaders(IEnumerable<McpNameValueYamlV1>? values)
-    {
-        if (values == null)
-        {
-            return new List<McpHttpHeader>();
-        }
-
-        return values
-            .Select(value => new McpHttpHeader(value.Name ?? string.Empty, value.Value ?? string.Empty)
-            {
-                Meta = McpServerSnapshots.CloneMeta(value.Meta)
-            })
+            .Select(value => new McpCatalogNameValue(
+                value.Name ?? string.Empty,
+                value.Value ?? string.Empty,
+                value.Meta))
             .ToList();
     }
 }

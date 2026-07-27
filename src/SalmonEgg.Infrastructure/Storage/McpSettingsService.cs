@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Application.Services.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
@@ -71,7 +72,7 @@ public sealed class McpSettingsService : IMcpSettingsService
         if (settings is null) throw new ArgumentNullException(nameof(settings));
 
         var validation = McpServerSupportPolicy.Validate(
-            settings.Servers.Where(entry => entry.Enabled).Select(entry => entry.Server),
+            McpServerCatalogMapper.ToAcpServers(settings.Servers, enabledOnly: true),
             McpServerSupportPolicy.SupportAllTransports);
         if (!validation.IsSupported)
         {
@@ -99,7 +100,7 @@ public sealed class McpSettingsService : IMcpSettingsService
 
     private static bool HasValidServers(McpSettings settings)
         => McpServerSupportPolicy
-            .Validate(settings.Servers.Where(entry => entry.Enabled).Select(entry => entry.Server), McpServerSupportPolicy.SupportAllTransports)
+            .Validate(McpServerCatalogMapper.ToAcpServers(settings.Servers, enabledOnly: true), McpServerSupportPolicy.SupportAllTransports)
             .IsSupported;
 
     private async Task EnsureWritableSchemaAsync(CancellationToken cancellationToken)

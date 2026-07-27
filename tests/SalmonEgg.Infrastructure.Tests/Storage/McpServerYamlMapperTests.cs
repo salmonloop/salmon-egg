@@ -7,6 +7,7 @@ using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Infrastructure.Storage;
 using SalmonEgg.Infrastructure.Storage.YamlModels;
 using Xunit;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Infrastructure.Tests.Storage;
 
@@ -21,13 +22,11 @@ public sealed class McpServerYamlMapperTests
     [Fact]
     public void RoundTrip_Stdio_PreservesTransportCommandArgsAndEnv()
     {
-        var entry = new McpServerCatalogEntry(
-            new StdioMcpServer(
+        var entry = McpServerCatalogMapper.FromAcpServer(new StdioMcpServer(
                 "stdio-server",
                 "node",
                 new List<string> { "--flag", "value" },
-                new List<McpEnvVariable> { new("API_KEY", "secret") }),
-            enabled: false);
+                new List<McpEnvVariable> { new("API_KEY", "secret") }), false);
 
         var yaml = McpServerYamlMapper.ToYamlServers(new[] { entry });
         var yamlServer = Assert.Single(yaml);
@@ -43,7 +42,7 @@ public sealed class McpServerYamlMapperTests
         var restored = McpServerYamlMapper.FromYamlServers(yaml);
         var restoredEntry = Assert.Single(restored);
         Assert.False(restoredEntry.Enabled);
-        var stdio = Assert.IsType<StdioMcpServer>(restoredEntry.Server);
+        var stdio = Assert.IsType<StdioMcpServer>(McpServerCatalogMapper.ToAcpServer(restoredEntry));
         Assert.Equal("stdio-server", stdio.Name);
         Assert.Equal("node", stdio.Command);
         Assert.Equal(new[] { "--flag", "value" }, stdio.Args);
@@ -56,8 +55,7 @@ public sealed class McpServerYamlMapperTests
     [Fact]
     public void RoundTrip_Http_PreservesUrlAndHeaders()
     {
-        var entry = new McpServerCatalogEntry(
-            new HttpMcpServer(
+        var entry = McpServerCatalogMapper.FromAcpServer(new HttpMcpServer(
                 "http-server",
                 "https://example.com/mcp",
                 new List<McpHttpHeader> { new("Authorization", "Bearer token") }));
@@ -66,7 +64,7 @@ public sealed class McpServerYamlMapperTests
             McpServerYamlMapper.ToYamlServers(new[] { entry }));
 
         var restoredEntry = Assert.Single(restored);
-        var http = Assert.IsType<HttpMcpServer>(restoredEntry.Server);
+        var http = Assert.IsType<HttpMcpServer>(McpServerCatalogMapper.ToAcpServer(restoredEntry));
         Assert.Equal("http-server", http.Name);
         Assert.Equal("https://example.com/mcp", http.Url);
         Assert.NotNull(http.Headers);
@@ -78,8 +76,7 @@ public sealed class McpServerYamlMapperTests
     [Fact]
     public void RoundTrip_Sse_PreservesUrlAndHeaders()
     {
-        var entry = new McpServerCatalogEntry(
-            new SseMcpServer(
+        var entry = McpServerCatalogMapper.FromAcpServer(new SseMcpServer(
                 "sse-server",
                 "https://example.com/sse",
                 new List<McpHttpHeader> { new("X-Trace", "1") }));
@@ -88,7 +85,7 @@ public sealed class McpServerYamlMapperTests
             McpServerYamlMapper.ToYamlServers(new[] { entry }));
 
         var restoredEntry = Assert.Single(restored);
-        var sse = Assert.IsType<SseMcpServer>(restoredEntry.Server);
+        var sse = Assert.IsType<SseMcpServer>(McpServerCatalogMapper.ToAcpServer(restoredEntry));
         Assert.Equal("sse-server", sse.Name);
         Assert.Equal("https://example.com/sse", sse.Url);
         Assert.NotNull(sse.Headers);
@@ -108,7 +105,7 @@ public sealed class McpServerYamlMapperTests
 
         var restored = McpServerYamlMapper.FromYamlServers(new[] { yaml });
 
-        var server = Assert.Single(restored).Server;
+        var server = McpServerCatalogMapper.ToAcpServer(Assert.Single(restored));
         Assert.Equal(expected, server is StdioMcpServer ? "stdio" : server is HttpMcpServer ? "http" : "sse");
     }
 
@@ -139,7 +136,7 @@ public sealed class McpServerYamlMapperTests
 
         var restored = McpServerYamlMapper.FromYamlServers(new[] { yaml });
 
-        var http = Assert.IsType<HttpMcpServer>(Assert.Single(restored).Server);
+        var http = Assert.IsType<HttpMcpServer>(McpServerCatalogMapper.ToAcpServer(Assert.Single(restored)));
         Assert.Equal(string.Empty, http.Name);
         Assert.Equal(string.Empty, http.Url);
         Assert.NotNull(http.Headers);

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Application.Services.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 using SalmonEgg.Domain.Services;
 
@@ -28,7 +29,8 @@ public sealed class SettingsAcpMcpServerProvider : IAcpMcpServerProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         var settings = await _settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return McpServerSnapshots.CloneServers(settings.Servers.Where(entry => entry.Enabled).Select(entry => entry.Server));
+        return McpServerSnapshots.CloneServers(
+            McpServerCatalogMapper.ToAcpServers(settings.Servers, enabledOnly: true));
     }
 }
 

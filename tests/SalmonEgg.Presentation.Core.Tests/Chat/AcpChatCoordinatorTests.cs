@@ -26,6 +26,7 @@ using SalmonEgg.Presentation.Core.Tests.Threading;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Chat;
 
@@ -1645,7 +1646,7 @@ public sealed class AcpChatCoordinatorTests
             {
                 Servers =
                 [
-                    new HttpMcpServer("global", "https://global.example.com/mcp")
+                    McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("global", "https://global.example.com/mcp"))
                 ]
             }));
         services.AddSingleton<IAcpMcpServerProvider>(sp =>
@@ -1685,7 +1686,7 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"])
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]))
             ]
         };
         var profile = new ServerConfiguration
@@ -1723,11 +1724,11 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new StdioMcpServer(
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer(
                     "filesystem",
                     "/usr/bin/mcp",
                     ["--stdio"],
-                    [new McpEnvVariable("ROOT", "/repo")])
+                    [new McpEnvVariable("ROOT", "/repo")]))
             ]
         };
         var profile = new ServerConfiguration
@@ -1766,9 +1767,7 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new McpServerCatalogEntry(
-                    new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]),
-                    enabled: false)
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("filesystem", "/usr/bin/mcp", ["--stdio"]), false)
             ]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
@@ -1785,10 +1784,8 @@ public sealed class AcpChatCoordinatorTests
         {
             Servers =
             [
-                new McpServerCatalogEntry(
-                    new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"]),
-                    enabled: false),
-                new HttpMcpServer("enabled", "https://enabled.example.com/mcp")
+                McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("disabled", "/usr/bin/disabled", ["--stdio"]), false),
+                McpServerCatalogMapper.FromAcpServer(new HttpMcpServer("enabled", "https://enabled.example.com/mcp"))
             ]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
@@ -1814,7 +1811,7 @@ public sealed class AcpChatCoordinatorTests
         };
         var settings = new McpSettings
         {
-            Servers = [source]
+            Servers = [McpServerCatalogMapper.FromAcpServer(source)]
         };
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 

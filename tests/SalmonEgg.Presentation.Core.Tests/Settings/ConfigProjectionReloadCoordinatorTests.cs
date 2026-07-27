@@ -13,6 +13,7 @@ using SalmonEgg.Presentation.Core.Tests.Localization;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Settings;
+using SalmonEgg.Application.Services.Mcp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Settings;
 
@@ -96,7 +97,7 @@ public sealed class ConfigProjectionReloadCoordinatorTests
             {
                 Servers =
                 {
-                    new McpServerCatalogEntry(new StdioMcpServer("tools", "tool-server"))
+                    McpServerCatalogMapper.FromAcpServer(new StdioMcpServer("tools", "tool-server"))
                 }
             }
         };

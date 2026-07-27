@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Application.Services.Mcp;
 using SalmonEgg.Domain.Models.Mcp;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
@@ -145,7 +146,14 @@ public sealed partial class McpServerRowViewModel : ObservableObject
         Func<McpServerRowViewModel, Task>? enabledChanged = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        return FromServer(entry.Server, remove, save, edit, edited, enabledChanged, entry.Enabled);
+        return FromServer(
+            McpServerCatalogMapper.ToAcpServer(entry),
+            remove,
+            save,
+            edit,
+            edited,
+            enabledChanged,
+            entry.Enabled);
     }
 
     private void Remove()
@@ -308,7 +316,7 @@ public sealed partial class McpServerRowViewModel : ObservableObject
     }
 
     public McpServerCatalogEntry ToCatalogEntry()
-        => new(ToServer(), Enabled);
+        => McpServerCatalogMapper.FromAcpServer(ToServer(), Enabled);
 
     partial void OnTransportChanged(McpServerTransport value)
     {
