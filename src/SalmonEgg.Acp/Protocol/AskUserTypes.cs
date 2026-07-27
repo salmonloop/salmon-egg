@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol;
 /// Agent-to-client ask_user request payload.
 /// Mirrors the question-based interaction contract used by built-in interaction tools.
 /// </summary>
-public sealed class AskUserRequest
+public sealed record AskUserRequest
 {
     [JsonPropertyName("sessionId")]
     public string SessionId { get; init; } = string.Empty;
@@ -18,7 +18,7 @@ public sealed class AskUserRequest
     public List<AskUserQuestion> Questions { get; init; } = new();
 }
 
-public sealed class AskUserQuestion
+public sealed record AskUserQuestion
 {
     [JsonPropertyName("header")]
     public string Header { get; init; } = string.Empty;
@@ -33,7 +33,7 @@ public sealed class AskUserQuestion
     public bool MultiSelect { get; init; }
 }
 
-public sealed class AskUserOption
+public sealed record AskUserOption
 {
     [JsonPropertyName("label")]
     public string Label { get; init; } = string.Empty;
@@ -42,7 +42,7 @@ public sealed class AskUserOption
     public string Description { get; init; } = string.Empty;
 }
 
-public sealed class AskUserResponse
+public sealed record AskUserResponse
 {
     [JsonPropertyName("questions")]
     public List<AskUserQuestion> Questions { get; init; } = new();
