@@ -440,10 +440,13 @@ namespace SalmonEgg.Acp.Tests.Content
         }
 
         /// <summary>
-        /// 属性 8：未知内容类型仅保留 ACP 定义的公共字段。
+        /// 属性 8：未知内容类型走 passthrough，无损保留整个原始 payload。
+        /// spec 要求 receiver 对不认识的 content 类型保留 raw payload，由 Agent 而非 client
+        /// 决定接受或拒绝；丢弃未知字段属反向收紧，为 AGENTS.md §11 明令禁止
+        /// （对照 McpServerJsonConverter 的 RawPayload 范式）。
         /// </summary>
         [Fact]
-        public void ContentBlock_UnknownType_RoundTrip_PreservesProtocolFieldsWithoutReplayingUnknownRootFields()
+        public void ContentBlock_UnknownType_RoundTrip_PreservesEntireRawPayload()
         {
             // Arrange
             var json = """
@@ -472,7 +475,10 @@ namespace SalmonEgg.Acp.Tests.Content
             Assert.NotNull(block);
             Assert.IsAssignableFrom<ContentBlock>(block);
             Assert.Equal("experimental_content", doc.RootElement.GetProperty("type").GetString());
-            Assert.False(doc.RootElement.TryGetProperty("payload", out _));
+            // 未知的非协议字段必须原样透传，不得丢弃。
+            Assert.True(doc.RootElement.TryGetProperty("payload", out var payload));
+            Assert.Equal("custom", payload.GetProperty("kind").GetString());
+            Assert.Equal(42, payload.GetProperty("value").GetInt32());
             Assert.Equal(
                 "assistant",
                 doc.RootElement.GetProperty("annotations").GetProperty("audience")[0].GetString());

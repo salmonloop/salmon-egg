@@ -24,6 +24,15 @@ namespace SalmonEgg.Acp.Content
         internal string? UnknownTypeDiscriminator { get; set; }
 
         /// <summary>
+        /// 未知判别值内容块的原始 payload，原样保留以供无损透传。
+        /// spec 要求 client 对未知 content 类型保留原始形态，由 Agent 而非 client 决定接受或拒绝；
+        /// 已知类型（text/image/audio/resource/resource_link）不使用此字段。
+        /// 由 <see cref="ContentBlockJsonConverter"/> 手动读写，不经默认序列化。
+        /// </summary>
+        [JsonIgnore]
+        internal JsonElement? RawPayload { get; set; }
+
+        /// <summary>
         /// 内容块的类型标识符。
         /// 用于多态序列化和反序列化。
         /// </summary>
@@ -177,11 +186,15 @@ namespace SalmonEgg.Acp.Content
 
         private static ContentBlock ReadUnknown(JsonElement root, string discriminator)
         {
+            // 未知判别值走 passthrough:spec 要求 receiver 对不认识的 content 类型保留 raw payload,
+            // 由 Agent 而非 client 决定接受或拒绝。原样保留整个 block object 以供无损 round-trip,
+            // 不丢弃 type/annotations/_meta 之外的字段(对照 McpServerJsonConverter 的 RawPayload 范式)。
             return new ContentBlock
             {
                 UnknownTypeDiscriminator = discriminator,
                 Annotations = ReadAnnotations(root),
-                Meta = AcpMetaJson.Read(root)
+                Meta = AcpMetaJson.Read(root),
+                RawPayload = root.Clone()
             };
         }
 
@@ -421,6 +434,16 @@ namespace SalmonEgg.Acp.Content
             if (string.IsNullOrWhiteSpace(value.UnknownTypeDiscriminator))
             {
                 throw new JsonException("Unknown ContentBlock instances must preserve their original type discriminator.");
+            }
+
+            // 无损透传:原样写回读入时保留的 raw payload,不重排字段、不丢弃未知属性。
+            // RawPayload 是未知 block 的唯一权威事实源(含其 annotations/_meta),故不叠加另写,
+            // 避免第二套状态 owner。用 WriteRawValue(GetRawText()) 保证字节级保真(对照 CustomMcpServer)。
+            // 若 RawPayload 为空(如手工构造的未知 block),退化为按已知字段最小写出,仍携带原始 type。
+            if (value.RawPayload is { ValueKind: JsonValueKind.Object } rawPayload)
+            {
+                writer.WriteRawValue(rawPayload.GetRawText());
+                return;
             }
 
             writer.WriteStartObject();
