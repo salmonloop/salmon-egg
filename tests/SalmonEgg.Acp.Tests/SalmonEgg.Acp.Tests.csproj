@@ -24,4 +24,8 @@
     <ProjectReference Include="..\..\src\SalmonEgg.Acp\SalmonEgg.Acp.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\src\SalmonEgg.Acp\PublicSurface.Types.txt" Link="PublicSurface.Types.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -416,10 +416,13 @@ public class UiConventionsTests
 
         Assert.DoesNotContain(
             root.Descendants("PackageReference"),
-            packageReference => string.Equals(
-                packageReference.Attribute("Include")?.Value?.Trim(),
-                "System.Text.Json",
-                StringComparison.Ordinal));
+            packageReference =>
+            {
+                var include = packageReference.Attribute("Include")?.Value?.Trim();
+                return string.Equals(include, "System.Text.Json", StringComparison.Ordinal)
+                    || (!string.IsNullOrWhiteSpace(include)
+                        && !string.Equals(packageReference.Attribute("PrivateAssets")?.Value?.Trim(), "All", StringComparison.OrdinalIgnoreCase));
+            });
 
         Assert.Equal(
             "true",
@@ -429,6 +432,23 @@ public class UiConventionsTests
             "true",
             root.Descendants("TreatWarningsAsErrors").Select(node => node.Value.Trim()).SingleOrDefault(),
             StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            "MIT",
+            root.Descendants("PackageLicenseExpression").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.Ordinal);
+        Assert.Equal(
+            "1.0.0",
+            root.Descendants("Version").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.Ordinal);
+        Assert.Equal(
+            "true",
+            root.Descendants("GenerateDocumentationFile").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(repoRoot, "LICENSE")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "PublicSurface.Types.txt")));
+        Assert.True(File.Exists(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "Serialization", "AcpJsonContext.cs")));
+        var contextSource = File.ReadAllText(Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "Serialization", "AcpJsonContext.cs"));
+        Assert.Contains("public partial class AcpJsonContext", contextSource, StringComparison.Ordinal);
     }
 
     [Fact]
