@@ -138,6 +138,8 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(object))]
 [JsonSerializable(typeof(List<ContentBlock>))]
 [JsonSerializable(typeof(List<ToolCallContent>))]
+[JsonSerializable(typeof(IReadOnlyList<ToolCallContent>))]
+[JsonSerializable(typeof(IReadOnlyList<ToolCallLocation>))]
 [JsonSerializable(typeof(List<ToolCallLocation>))]
 [JsonSerializable(typeof(List<SalmonEgg.Acp.Protocol.SessionMode>))]
 [JsonSerializable(typeof(List<ConfigOption>))]

@@ -1,10 +1,14 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
-using SalmonEgg.Acp.Content;
 
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
+/// <summary>
+/// Clones and compares ACP tool-call content via the SDK source-generated context.
+/// Host code must not re-source-generate Acp polymorphic types; that would require
+/// public converter types and leaks SDK implementation details.
+/// </summary>
 internal static class ToolCallContentSnapshots
 {
     public static List<ToolCallContent>? CloneList(IReadOnlyList<ToolCallContent>? content)
@@ -26,8 +30,8 @@ internal static class ToolCallContentSnapshots
     public static ToolCallContent Clone(ToolCallContent content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var json = JsonSerializer.Serialize(content, ToolCallContentJsonContext.Default.ToolCallContent);
-        return JsonSerializer.Deserialize(json, ToolCallContentJsonContext.Default.ToolCallContent)
+        var json = JsonSerializer.Serialize(content, AcpJsonContext.Default.ToolCallContent);
+        return JsonSerializer.Deserialize(json, AcpJsonContext.Default.ToolCallContent)
             ?? throw new InvalidOperationException("Failed to clone tool call content.");
     }
 
@@ -59,7 +63,7 @@ internal static class ToolCallContentSnapshots
 
     public static string? SerializePayload(IReadOnlyList<ToolCallContent>? content)
         => content is { Count: > 0 }
-            ? JsonSerializer.Serialize(content, ToolCallContentJsonContext.Default.IReadOnlyListToolCallContent)
+            ? JsonSerializer.Serialize(content, AcpJsonContext.Default.IReadOnlyListToolCallContent)
             : null;
 
     private static bool JsonSequenceEquals<T>(
@@ -92,32 +96,10 @@ internal static class ToolCallContentSnapshots
         {
             ToolCallContent toolCallContent => JsonSerializer.Serialize(
                 toolCallContent,
-                ToolCallContentJsonContext.Default.ToolCallContent),
+                AcpJsonContext.Default.ToolCallContent),
             ToolCallLocation toolCallLocation => JsonSerializer.Serialize(
                 toolCallLocation,
-                ToolCallContentJsonContext.Default.ToolCallLocation),
+                AcpJsonContext.Default.ToolCallLocation),
             _ => throw new InvalidOperationException($"Unsupported tool call snapshot value type: {typeof(T).FullName}")
         };
-}
-
-[JsonSourceGenerationOptions(
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(ToolCallContent))]
-[JsonSerializable(typeof(ContentToolCallContent))]
-[JsonSerializable(typeof(DiffToolCallContent))]
-[JsonSerializable(typeof(TerminalToolCallContent))]
-[JsonSerializable(typeof(ToolCallLocation))]
-[JsonSerializable(typeof(IReadOnlyList<ToolCallContent>))]
-[JsonSerializable(typeof(List<ToolCallContent>))]
-[JsonSerializable(typeof(ContentBlock))]
-[JsonSerializable(typeof(TextContentBlock))]
-[JsonSerializable(typeof(ImageContentBlock))]
-[JsonSerializable(typeof(AudioContentBlock))]
-[JsonSerializable(typeof(ResourceContentBlock))]
-[JsonSerializable(typeof(ResourceLinkContentBlock))]
-[JsonSerializable(typeof(Annotations))]
-[JsonSerializable(typeof(EmbeddedResource))]
-internal partial class ToolCallContentJsonContext : JsonSerializerContext
-{
 }

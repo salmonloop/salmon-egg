@@ -166,7 +166,7 @@ namespace SalmonEgg.Acp.Tool
     /// 完整 raw payload 到 <see cref="CustomToolCallContent"/> 并原样写回,保证未知判别值
     /// 字节级 round-trip。缺失 <c>type</c> 按已知最宽松分支(content)处理,不抛错。
     /// </summary>
-    public sealed class ToolCallContentJsonConverter : JsonConverter<ToolCallContent>
+    internal sealed class ToolCallContentJsonConverter : JsonConverter<ToolCallContent>
     {
         public override ToolCallContent? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

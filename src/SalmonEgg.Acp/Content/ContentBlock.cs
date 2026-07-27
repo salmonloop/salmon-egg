@@ -64,7 +64,7 @@ namespace SalmonEgg.Acp.Content
         public string? LastModified { get; init; }
     }
 
-    public sealed class ContentBlockJsonConverter : JsonConverter<ContentBlock>
+    internal sealed class ContentBlockJsonConverter : JsonConverter<ContentBlock>
     {
         public override ContentBlock? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

@@ -10,7 +10,7 @@
 - Host helpers: `AcpMetaJson`, `McpServerSnapshots`, `ProtocolPathRules`, capability defaults
 - `AcpException` / `JsonRpcErrorCode`
 
-JSON-RPC envelopes, message parser/validator, and most converters are assembly-internal implementation details.
+JSON-RPC envelopes, message parser/validator, and all JsonConverters are assembly-internal implementation details. Hosts should serialize ACP wire types through `AcpJsonContext` rather than re-source-generating them.
 
 ## Requirements
 

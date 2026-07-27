@@ -297,7 +297,7 @@ namespace SalmonEgg.Acp.Plan
         public override string ToString() => Value;
     }
 
-    public sealed class PlanEntryStatusJsonConverter : JsonConverter<PlanEntryStatus>
+    internal sealed class PlanEntryStatusJsonConverter : JsonConverter<PlanEntryStatus>
     {
         public override PlanEntryStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -315,7 +315,7 @@ namespace SalmonEgg.Acp.Plan
         }
     }
 
-    public sealed class PlanEntryPriorityJsonConverter : JsonConverter<PlanEntryPriority>
+    internal sealed class PlanEntryPriorityJsonConverter : JsonConverter<PlanEntryPriority>
     {
         public override PlanEntryPriority Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

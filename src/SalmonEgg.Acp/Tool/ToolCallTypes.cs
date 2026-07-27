@@ -186,7 +186,7 @@ namespace SalmonEgg.Acp.Tool
         public override string ToString() => Value;
     }
 
-    public sealed class ToolCallStatusJsonConverter : JsonConverter<ToolCallStatus>
+    internal sealed class ToolCallStatusJsonConverter : JsonConverter<ToolCallStatus>
     {
         public override ToolCallStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -204,7 +204,7 @@ namespace SalmonEgg.Acp.Tool
         }
     }
 
-    public sealed class ToolCallKindJsonConverter : JsonConverter<ToolCallKind>
+    internal sealed class ToolCallKindJsonConverter : JsonConverter<ToolCallKind>
     {
         public override ToolCallKind Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
