@@ -5,6 +5,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.Plan;
+using SalmonEgg.Acp.Tool;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Services;
@@ -115,6 +118,74 @@ public sealed class ConversationStoreTests : IDisposable
 
         Assert.Equal("1.2300e+02", Assert.IsType<JsonElement>(reloadedMeta["number"]).GetRawText());
         Assert.Equal("\"\\u4f60\\u597d\"", Assert.IsType<JsonElement>(reloadedMeta["escaped"]).GetRawText());
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithToolCallAndPlanWireValues_RoundTripsThroughDomainConverters()
+    {
+        var sut = CreateStore();
+        var document = new ConversationDocument
+        {
+            Conversations =
+            {
+                new ConversationRecord
+                {
+                    ConversationId = "conversation-tool",
+                    Messages =
+                    {
+                        new ConversationMessageSnapshot
+                        {
+                            Id = "tool-1",
+                            ContentType = "tool_call",
+                            ToolCallId = "call-1",
+                            ToolCallKind = ToolCallKind.Execute,
+                            ToolCallStatus = ToolCallStatus.Completed,
+                            ToolCallContent =
+                            [
+                                new ContentToolCallContent(new TextContentBlock("ran ls"))
+                            ],
+                            ToolCallLocations =
+                            [
+                                new ToolCallLocation("/tmp/a.txt", 12u)
+                            ],
+                            PlanEntry = new ConversationPlanEntrySnapshot
+                            {
+                                Content = "inspect workspace",
+                                Status = PlanEntryStatus.Completed,
+                                Priority = PlanEntryPriority.High
+                            }
+                        }
+                    },
+                    Plan =
+                    {
+                        new ConversationPlanEntrySnapshot
+                        {
+                            Content = "inspect workspace",
+                            Status = PlanEntryStatus.InProgress,
+                            Priority = PlanEntryPriority.Medium
+                        }
+                    }
+                }
+            }
+        };
+
+        await sut.SaveAsync(document, TestContext.Current.CancellationToken);
+        var loaded = await sut.LoadAsync(TestContext.Current.CancellationToken);
+
+        var conversation = Assert.Single(loaded.Conversations);
+        var message = Assert.Single(conversation.Messages);
+        Assert.Equal(ToolCallKind.Execute, message.ToolCallKind);
+        Assert.Equal(ToolCallStatus.Completed, message.ToolCallStatus);
+        var content = Assert.IsType<ContentToolCallContent>(Assert.Single(message.ToolCallContent!));
+        Assert.Equal("ran ls", Assert.IsType<TextContentBlock>(content.Content).Text);
+        var location = Assert.Single(message.ToolCallLocations!);
+        Assert.Equal("/tmp/a.txt", location.Path);
+        Assert.Equal(12u, location.Line);
+        Assert.Equal(PlanEntryStatus.Completed, message.PlanEntry!.Status);
+        Assert.Equal(PlanEntryPriority.High, message.PlanEntry.Priority);
+        var plan = Assert.Single(conversation.Plan);
+        Assert.Equal(PlanEntryStatus.InProgress, plan.Status);
+        Assert.Equal(PlanEntryPriority.Medium, plan.Priority);
     }
 
     [Fact]

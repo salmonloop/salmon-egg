@@ -1,16 +1,14 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using SalmonEgg.Acp.Content;
 using SalmonEgg.Domain.Models.Conversation;
-using SalmonEgg.Acp.Plan;
-using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Infrastructure.Storage;
 
 /// <summary>
-/// Source-generated JsonSerializerContext for all conversation persistence types.
-/// Every type serialized transitively through ConversationDocument must be registered
-/// here so that trimming/AOT metadata is available at compile time.
+/// Source-generated JsonSerializerContext for conversation persistence types.
+/// ACP wire values nested under conversation snapshots are handled by Domain-owned
+/// property converters that route through <c>AcpJsonContext</c>, so this context must
+/// not re-register ACP types or depend on internal ACP converters.
 /// </summary>
 [JsonSourceGenerationOptions(
     WriteIndented = false,
@@ -26,34 +24,6 @@ namespace SalmonEgg.Infrastructure.Storage;
 [JsonSerializable(typeof(ConversationUsageSnapshot))]
 [JsonSerializable(typeof(ConversationUsageCostSnapshot))]
 [JsonSerializable(typeof(ConversationPlanEntrySnapshot))]
-
-// ToolCallContent polymorphic hierarchy (referenced by ConversationMessageSnapshot.ToolCallContent)
-[JsonSerializable(typeof(ToolCallContent))]
-[JsonSerializable(typeof(ContentToolCallContent))]
-[JsonSerializable(typeof(DiffToolCallContent))]
-[JsonSerializable(typeof(TerminalToolCallContent))]
-[JsonSerializable(typeof(ToolCallLocation))]
-
-// ContentBlock has a custom [JsonConverter], so source-gen can't provide metadata.
-// It is handled at runtime via ContentBlockJsonConverter on the type itself.
-// Its subclasses and Annotations/EmbeddedResource ARE source-gen compatible.
-[JsonSerializable(typeof(TextContentBlock))]
-[JsonSerializable(typeof(ImageContentBlock))]
-[JsonSerializable(typeof(AudioContentBlock))]
-[JsonSerializable(typeof(ResourceContentBlock))]
-[JsonSerializable(typeof(ResourceLinkContentBlock))]
-[JsonSerializable(typeof(Annotations))]
-[JsonSerializable(typeof(EmbeddedResource))]
-
-// Enums with custom [JsonConverter] (ToolCallKind, ToolCallStatus) are handled
-// at runtime via their converter attributes — not source-gen compatible.
-// PlanEntryStatus and PlanEntryPriority use [JsonPropertyName] and ARE compatible.
-[JsonSerializable(typeof(PlanEntryStatus))]
-[JsonSerializable(typeof(PlanEntryPriority))]
-
-// SessionInfo.Meta uses Domain ConversationMetaDictionaryJsonConverter (property-level),
-// which delegates lossless ACP '_meta' token rules to AcpMetaJson. Keep the dictionary
-// type registered for source-gen graph completeness; values are handled by that converter.
 [JsonSerializable(typeof(Dictionary<string, object?>))]
 internal partial class ConversationJsonContext : JsonSerializerContext
 {
