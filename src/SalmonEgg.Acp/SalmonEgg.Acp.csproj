@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <IsPackable>true</IsPackable>
+
+    <!-- SDK 硬约束：AOT/trim 安全 + 零警告门禁。协议序列化全走源生成 (AcpJsonContext)，
+         多态转换器已改用 GetTypeInfo，故 AOT/trim 干净；两开关让后续的 AOT/警告退化当场变红。 -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <PackageId>SalmonEgg.Acp</PackageId>
     <Title>SalmonEgg ACP SDK</Title>
     <Description>ACP protocol contracts and SDK primitives used by SalmonEgg.</Description>
