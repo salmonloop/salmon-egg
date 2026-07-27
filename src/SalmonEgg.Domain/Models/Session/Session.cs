@@ -64,18 +64,6 @@ namespace SalmonEgg.Domain.Models.Session
         public string? Cwd { get; set; }
 
         /// <summary>
-        /// MCP 服务器配置列表。
-        /// </summary>
-        [JsonPropertyName("mcpServers")]
-        public object? McpServers { get; set; }
-
-        /// <summary>
-        /// 会话的配置选项。
-        /// </summary>
-        [JsonPropertyName("configOptions")]
-        public object? ConfigOptions { get; set; }
-
-        /// <summary>
         /// 创建新的会话实例。
         /// </summary>
         public Session()
