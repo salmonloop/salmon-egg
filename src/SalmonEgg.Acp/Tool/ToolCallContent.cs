@@ -1,6 +1,7 @@
 using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Protocol;
 
@@ -201,7 +202,10 @@ namespace SalmonEgg.Acp.Tool
                     if (content.Content is not null)
                     {
                         writer.WritePropertyName("content");
-                        JsonSerializer.Serialize(writer, content.Content, options);
+                        JsonSerializer.Serialize(
+                            writer,
+                            content.Content,
+                            (JsonTypeInfo<ContentBlock>)options.GetTypeInfo(typeof(ContentBlock)));
                     }
 
                     AcpMetaJson.Write(writer, content.Meta);
@@ -247,7 +251,8 @@ namespace SalmonEgg.Acp.Tool
         {
             var content = root.TryGetProperty("content", out var contentElement)
                 && contentElement.ValueKind != JsonValueKind.Null
-                    ? contentElement.Deserialize<ContentBlock>(options)
+                    ? contentElement.Deserialize(
+                        (JsonTypeInfo<ContentBlock>)options.GetTypeInfo(typeof(ContentBlock)))
                     : null;
             return new ContentToolCallContent(content)
             {

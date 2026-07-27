@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Tool;
@@ -112,7 +113,8 @@ namespace SalmonEgg.Acp.Protocol
             SessionUpdate? update = null;
             if (root.TryGetProperty("update", out var updateElement) && updateElement.ValueKind == JsonValueKind.Object)
             {
-                update = updateElement.Deserialize<SessionUpdate>(options);
+                update = updateElement.Deserialize(
+                    (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
                 if (update is not null
                     && update.GetType() == typeof(SessionUpdate)
                     && updateElement.TryGetProperty("sessionUpdate", out var kindElement))
@@ -137,7 +139,10 @@ namespace SalmonEgg.Acp.Protocol
             if (value.Update is not null)
             {
                 writer.WritePropertyName("update");
-                JsonSerializer.Serialize(writer, value.Update, options);
+                JsonSerializer.Serialize(
+                    writer,
+                    value.Update,
+                    (JsonTypeInfo<SessionUpdate>)options.GetTypeInfo(typeof(SessionUpdate)));
             }
 
             AcpMetaJson.Write(writer, value.Meta);
