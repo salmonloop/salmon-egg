@@ -71,6 +71,54 @@ public sealed class StreamableHttpTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task Initialize_WhenServerNeverResponds_TimesOutWithinConnectTimeout()
+    {
+        // 握手 POST 是有界操作:HttpClient 配的是 InfiniteTimeSpan,若不给连接超时,
+        // 服务器不应答会让 initialize 永久悬挂。连接超时须把它转成 TimeoutException。
+        _server.HangInitializeRequests = true;
+        using var transport = new StreamableHttpTransport(
+            _logger.Object,
+            new HttpClient(_server),
+            connectTimeout: TimeSpan.FromMilliseconds(200));
+        await transport.ConnectAsync(Endpoint, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            transport.SendAsync("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Constructor_CustomProxyModeWithoutUrl_Throws()
+    {
+        // 自建 HttpClient 时按 ProxyConfig 装配 handler,与 WebSocketTransport 同一套代理事实源;
+        // Custom 模式缺 URL 是配置错误,须与 WebSocket 路径一致地快速失败。
+        Assert.Throws<InvalidOperationException>(() =>
+            new StreamableHttpTransport(
+                _logger.Object,
+                httpClient: null,
+                proxyConfiguration: new SalmonEgg.Domain.Models.ProxyConfig
+                {
+                    Mode = SalmonEgg.Domain.Models.ProxyMode.Custom,
+                    ProxyUrl = null
+                }));
+    }
+
+    [Fact]
+    public void Constructor_CustomProxyModeWithUrl_BuildsProxiedClient()
+    {
+        // Custom 模式带合法 URL 时应成功装配自有 HttpClient(不注入),不抛。
+        using var transport = new StreamableHttpTransport(
+            _logger.Object,
+            httpClient: null,
+            proxyConfiguration: new SalmonEgg.Domain.Models.ProxyConfig
+            {
+                Mode = SalmonEgg.Domain.Models.ProxyMode.Custom,
+                ProxyUrl = "http://127.0.0.1:8888"
+            });
+
+        Assert.NotNull(transport);
+    }
+
+    [Fact]
     public async Task SessionNewResponseOnConnectionStream_OpensSessionStream_AndPromptCarriesSessionHeader()
     {
         await InitializeAsync();
@@ -192,6 +240,8 @@ public sealed class StreamableHttpTransportTests : IDisposable
 
         public bool HangDeleteRequests { get; set; }
 
+        public bool HangInitializeRequests { get; set; }
+
         public ConcurrentQueue<PostRequest> Posts { get; } = new();
 
         public ConcurrentQueue<StreamRequest> ConnectionStreamRequests { get; } = new();
@@ -232,6 +282,12 @@ public sealed class StreamableHttpTransportTests : IDisposable
                 var body = await request.Content!.ReadAsStringAsync(cancellationToken);
                 if (body.Contains("\"initialize\"", StringComparison.Ordinal))
                 {
+                    if (HangInitializeRequests)
+                    {
+                        // 模拟服务器对 initialize 握手永不应答:若握手未加连接超时,SendAsync 会永久悬挂。
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    }
+
                     var response = new HttpResponseMessage(HttpStatusCode.OK)
                     {
                         Content = new StringContent(

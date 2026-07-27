@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Reactive.Subjects;
 using System.Text;
@@ -8,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using SalmonEgg.Domain.Models;
 
 namespace SalmonEgg.Infrastructure.Network
 {
@@ -51,18 +53,56 @@ namespace SalmonEgg.Infrastructure.Network
 
         private readonly ConcurrentDictionary<string, Lazy<Task>> _sessionStreams = new();
 
+        private readonly TimeSpan _connectTimeout;
+
         private Uri? _endpoint;
         private CancellationTokenSource? _connectionCts;
         private Task? _connectionStreamTask;
         private string? _connectionId;
         private bool _disposed;
 
-        public StreamableHttpTransport(ILogger logger, HttpClient? httpClient = null)
+        public StreamableHttpTransport(
+            ILogger logger,
+            HttpClient? httpClient = null,
+            ProxyConfig? proxyConfiguration = null,
+            TimeSpan? connectTimeout = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _ownsHttpClient = httpClient is null;
-            // SSE 流是长连接,超时交由调用方 CancellationToken 与上层协议看门狗控制。
-            _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            // SSE 流是长连接,HttpClient 级超时须为无限,单次请求超时交由 CancellationToken 控制。
+            // 注入的 HttpClient(测试用)原样沿用;自建时按代理配置装配 handler。
+            _httpClient = httpClient ?? CreateHttpClient(proxyConfiguration);
+            _connectTimeout = connectTimeout ?? TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
+        }
+
+        // 与 WebSocketTransport 对齐:自建 HttpClient 时按 ProxyConfig 装配 handler,
+        // 使 Streamable HTTP 与 WebSocket 走同一套代理事实源;注入 HttpClient 时不覆盖调用方选择。
+        private static HttpClient CreateHttpClient(ProxyConfig? proxyConfiguration)
+        {
+            var mode = proxyConfiguration?.Mode ?? ProxyConfig.DefaultMode;
+            var handler = new HttpClientHandler();
+
+            switch (mode)
+            {
+                case ProxyMode.None:
+                    handler.UseProxy = false;
+                    break;
+                case ProxyMode.System:
+                    break;
+                case ProxyMode.Custom:
+                    if (string.IsNullOrWhiteSpace(proxyConfiguration?.ProxyUrl))
+                    {
+                        throw new InvalidOperationException("Custom proxy mode requires a proxy URL.");
+                    }
+
+                    handler.Proxy = new WebProxy(new Uri(proxyConfiguration.ProxyUrl, UriKind.Absolute));
+                    handler.UseProxy = true;
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported proxy mode: {mode}");
+            }
+
+            return new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
         }
 
         public IObservable<string> Messages => _messagesSubject;
@@ -184,7 +224,30 @@ namespace SalmonEgg.Infrastructure.Network
         private async Task SendInitializeAsync(string message, CancellationToken ct)
         {
             using var request = CreateJsonPost(message, includeConnectionId: false, sessionId: null);
-            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            // 握手 POST 是有界操作(须拿到 Acp-Connection-Id 才能开流),给它一个连接超时,
+            // 避免 HttpClient 的 InfiniteTimeSpan 在服务器不应答时让 initialize 永久悬挂。
+            // 后续的 SSE 长流不受此约束,仍由连接级 CancellationToken 控制。
+            using var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            handshakeCts.CancelAfter(_connectTimeout);
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.SendAsync(request, handshakeCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (handshakeCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"Streamable HTTP initialize handshake did not complete within {_connectTimeout.TotalSeconds:0.###}s.");
+            }
+
+            using (response)
+            {
+                await ProcessInitializeResponseAsync(response, handshakeCts.Token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task ProcessInitializeResponseAsync(HttpResponseMessage response, CancellationToken ct)
+        {
             response.EnsureSuccessStatusCode();
 
             string? connectionId = null;

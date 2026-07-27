@@ -54,9 +54,9 @@ public class TransportFactory : ITransportFactory
         string? url = null)
     {
         _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
-        var webSocketConnectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
+        var connectTimeout = TimeSpan.FromSeconds(AcpConnectionTimeoutPolicy.DefaultSeconds);
 
-        return CreateTransportCore(transportType, command, arguments, url, webSocketConnectTimeout);
+        return CreateTransportCore(transportType, command, arguments, url, connectTimeout);
     }
 
     public SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransport(ServerConfiguration configuration)
@@ -67,14 +67,14 @@ public class TransportFactory : ITransportFactory
         }
 
         _logger.Information("Creating transport instance from configuration. TransportType={TransportType}, ProfileId={ProfileId}", configuration.Transport, configuration.Id);
-        var webSocketConnectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
+        var connectTimeout = AcpConnectionTimeoutPolicy.ResolveTimeout(configuration.ConnectionTimeout);
 
         return CreateTransportCore(
             configuration.Transport,
             configuration.Transport == TransportType.Stdio ? configuration.StdioCommand : null,
             configuration.Transport == TransportType.Stdio ? configuration.StdioArguments : null,
             configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
-            webSocketConnectTimeout,
+            connectTimeout,
             configuration.Proxy);
     }
 
@@ -83,7 +83,7 @@ public class TransportFactory : ITransportFactory
         string? command,
         IReadOnlyList<string>? arguments,
         string? url,
-        TimeSpan webSocketConnectTimeout,
+        TimeSpan connectTimeout,
         ProxyConfig? proxy = null)
     {
         _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
@@ -91,8 +91,8 @@ public class TransportFactory : ITransportFactory
         return transportType switch
         {
             TransportType.Stdio => CreateStdioTransport(command, arguments),
-            TransportType.WebSocket => CreateWebSocketTransport(url, webSocketConnectTimeout, proxy),
-            TransportType.StreamableHttp => CreateStreamableHttpTransport(url),
+            TransportType.WebSocket => CreateWebSocketTransport(url, connectTimeout, proxy),
+            TransportType.StreamableHttp => CreateStreamableHttpTransport(url, connectTimeout, proxy),
             _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
         };
     }
@@ -158,9 +158,14 @@ public class TransportFactory : ITransportFactory
     /// 创建 Streamable HTTP 传输实例(ACP 官方草案 RFD)。
     /// </summary>
     /// <param name="url">Streamable HTTP 端点 URL</param>
+    /// <param name="connectTimeout">握手连接超时</param>
+    /// <param name="proxy">代理配置</param>
     /// <returns>Streamable HTTP 传输实例</returns>
     /// <exception cref="ArgumentException">当 URL 为空或无效时抛出</exception>
-    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStreamableHttpTransport(string? url)
+    private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStreamableHttpTransport(
+        string? url,
+        TimeSpan connectTimeout,
+        ProxyConfig? proxy)
     {
         if (string.IsNullOrWhiteSpace(url))
         {
@@ -172,9 +177,16 @@ public class TransportFactory : ITransportFactory
             throw new ArgumentException($"Invalid Streamable HTTP URL: {url}", nameof(url));
         }
 
-        _logger.Information("Creating Streamable HTTP transport. Url={Url}", url);
+        _logger.Information(
+            "Creating Streamable HTTP transport. Url={Url} proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
+            url,
+            proxy?.Mode ?? ProxyConfig.DefaultMode,
+            connectTimeout.TotalSeconds);
 
-        var inner = new SalmonEgg.Infrastructure.Network.StreamableHttpTransport(_logger);
+        var inner = new SalmonEgg.Infrastructure.Network.StreamableHttpTransport(
+            _logger,
+            proxyConfiguration: proxy,
+            connectTimeout: connectTimeout);
         return new NetworkTransportAdapter(inner, url.Trim());
     }
 }
