@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// ACP 协议异常类。
     /// 用于表示 JSON-RPC 2.0 协议级别的错误。
     /// </summary>
-    public class AcpException : Exception
+    public sealed class AcpException : Exception
     {
         /// <summary>
         /// JSON-RPC 2.0 错误码。

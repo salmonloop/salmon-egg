@@ -19,7 +19,7 @@ namespace SalmonEgg.Acp.Client
     /// ACP 客户端核心实现。
     /// 整合了消息层、协议层、传输层和安全层，提供完整的 ACP 客户端功能。
     /// </summary>
-    public class AcpClient : IAcpClient, IDisposable
+    public sealed class AcpClient : IAcpClient, IDisposable
     {
         private sealed class PendingInboundRequest
         {
