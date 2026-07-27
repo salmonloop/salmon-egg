@@ -10,9 +10,9 @@ namespace SalmonEgg.Acp.Plan
     /// 计划类。
     /// 表示 Agent 的行动计划，包含一系列计划条目。
     /// </summary>
-    public record Plan : AcpProtocolObject
+    public sealed record Plan : AcpProtocolObject
     {
-        private List<PlanEntry> _entries = new List<PlanEntry>();
+        private readonly List<PlanEntry> _entries = new();
 
         /// <summary>
         /// 计划条目列表。
@@ -22,7 +22,7 @@ namespace SalmonEgg.Acp.Plan
         public List<PlanEntry> Entries
         {
             get => _entries;
-            set => _entries = ValidateEntries(value);
+            init => _entries = ValidateEntries(value);
         }
 
         /// <summary>
@@ -38,50 +38,43 @@ namespace SalmonEgg.Acp.Plan
         /// <param name="entries">计划条目列表</param>
         public Plan(List<PlanEntry> entries)
         {
-            Entries = entries;
+            Entries = ValidateEntries(entries);
         }
 
         /// <summary>
-        /// 添加一个新的计划条目。
+        /// 返回追加一条新计划条目后的计划快照（不修改当前实例）。
         /// </summary>
-        /// <param name="content">条目内容</param>
-        /// <param name="status">条目状态</param>
-        /// <param name="priority">条目优先级</param>
-        public void AddEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
+        public Plan WithEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
-            Entries.Add(new PlanEntry
+            var entries = new List<PlanEntry>(Entries)
             {
-                Content = content,
-                Status = status ?? PlanEntryStatus.Pending,
-                Priority = priority ?? PlanEntryPriority.Medium
-            });
+                new PlanEntry(
+                    content,
+                    status ?? PlanEntryStatus.Pending,
+                    priority ?? PlanEntryPriority.Medium)
+            };
+            return this with { Entries = entries };
         }
 
         /// <summary>
         /// 获取所有待处理的条目。
         /// </summary>
         public List<PlanEntry> GetPendingEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.Pending);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.Pending);
 
         /// <summary>
         /// 获取所有进行中的条目。
         /// </summary>
         public List<PlanEntry> GetInProgressEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.InProgress);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.InProgress);
 
         /// <summary>
         /// 获取所有已完成的条目。
         /// </summary>
         public List<PlanEntry> GetCompletedEntries()
-        {
-            return Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
-        }
+            => Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
 
-        private static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
+        internal static List<PlanEntry> ValidateEntries(List<PlanEntry>? entries)
         {
             if (entries is null)
             {
@@ -104,9 +97,9 @@ namespace SalmonEgg.Acp.Plan
     /// 计划条目类。
     /// 表示计划中的一个具体任务或步骤。
     /// </summary>
-    public record PlanEntry : AcpProtocolObject
+    public sealed record PlanEntry : AcpProtocolObject
     {
-        private string _content = string.Empty;
+        private readonly string _content = string.Empty;
 
         /// <summary>
         /// 条目的内容描述。
@@ -116,7 +109,7 @@ namespace SalmonEgg.Acp.Plan
         public string Content
         {
             get => _content;
-            set => _content = value ?? throw new JsonException("Plan entry content must not be null.");
+            init => _content = value ?? throw new JsonException("Plan entry content must not be null.");
         }
 
         /// <summary>
@@ -124,14 +117,14 @@ namespace SalmonEgg.Acp.Plan
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("status")]
-        public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
+        public PlanEntryStatus Status { get; init; } = PlanEntryStatus.Pending;
 
         /// <summary>
         /// 条目的优先级。
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("priority")]
-        public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Medium;
+        public PlanEntryPriority Priority { get; init; } = PlanEntryPriority.Medium;
 
         /// <summary>
         /// 创建新的计划条目实例。
@@ -148,27 +141,24 @@ namespace SalmonEgg.Acp.Plan
         /// <param name="priority">条目优先级</param>
         public PlanEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
-            Content = content;
+            Content = content ?? throw new JsonException("Plan entry content must not be null.");
             Status = status ?? PlanEntryStatus.Pending;
             Priority = priority ?? PlanEntryPriority.Medium;
         }
 
         /// <summary>
-        /// 标记条目为进行中。
+        /// 返回标记为进行中的条目快照（不修改当前实例）。
         /// </summary>
-        public void Start()
-        {
-            Status = PlanEntryStatus.InProgress;
-        }
+        public PlanEntry Started()
+            => this with { Status = PlanEntryStatus.InProgress };
 
         /// <summary>
-        /// 标记条目为已完成。
+        /// 返回标记为已完成的条目快照（不修改当前实例）。
         /// </summary>
-        public void Complete()
-        {
-            Status = PlanEntryStatus.Completed;
-        }
+        public PlanEntry Completed()
+            => this with { Status = PlanEntryStatus.Completed };
     }
+
 
     /// <summary>
     /// 计划条目状态。

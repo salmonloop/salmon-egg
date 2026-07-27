@@ -9,58 +9,58 @@ namespace SalmonEgg.Acp.Protocol;
 /// https://agentclientprotocol.com/protocol/session-config-options
 /// </summary>
 [JsonConverter(typeof(ConfigOptionJsonConverter))]
-public record ConfigOption : AcpProtocolObject
+public sealed record ConfigOption : AcpProtocolObject
 {
     [JsonPropertyName("id")]
-    public string Id { get; set; } = string.Empty;
+    public string Id { get; init; } = string.Empty;
 
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 
     [JsonPropertyName("category")]
-    public string? Category { get; set; }
+    public string? Category { get; init; }
 
     [JsonPropertyName("type")]
-    public string Type { get; set; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
 
     [JsonIgnore]
-    public string? CurrentValue { get; set; }
+    public string? CurrentValue { get; init; }
 
     [JsonIgnore]
-    public bool? CurrentBooleanValue { get; set; }
+    public bool? CurrentBooleanValue { get; init; }
 
     [JsonIgnore]
-    public List<ConfigOptionValue> Options { get; set; } = new();
+    public List<ConfigOptionValue> Options { get; init; } = new();
 
     [JsonIgnore]
-    public List<ConfigOptionGroup> OptionGroups { get; set; } = new();
+    public List<ConfigOptionGroup> OptionGroups { get; init; } = new();
 }
 
-public record ConfigOptionValue : AcpProtocolObject
+public sealed record ConfigOptionValue : AcpProtocolObject
 {
     [JsonPropertyName("value")]
-    public string Value { get; set; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
 
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
-    public string? Description { get; set; }
+    public string? Description { get; init; }
 }
 
-public record ConfigOptionGroup : AcpProtocolObject
+public sealed record ConfigOptionGroup : AcpProtocolObject
 {
     [JsonPropertyName("group")]
-    public string Group { get; set; } = string.Empty;
+    public string Group { get; init; } = string.Empty;
 
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     [JsonPropertyName("options")]
-    public List<ConfigOptionValue> Options { get; set; } = new();
+    public List<ConfigOptionValue> Options { get; init; } = new();
 }
 
 internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
@@ -79,22 +79,18 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             throw new JsonException("ACP session config option must be an object.");
         }
 
-        var result = new ConfigOption
-        {
-            Id = ReadRequiredString(root, "id"),
-            Name = ReadRequiredString(root, "name"),
-            Description = ReadOptionalString(root, "description"),
-            Category = ReadOptionalString(root, "category"),
-            Type = ReadRequiredString(root, "type"),
-            Meta = AcpMetaJson.Read(root)
-        };
+        var type = ReadRequiredString(root, "type");
+        string? currentValueText = null;
+        bool? currentBoolean = null;
+        var selectOptions = new List<ConfigOptionValue>();
+        var optionGroups = new List<ConfigOptionGroup>();
 
-        if (string.Equals(result.Type, "select", System.StringComparison.Ordinal))
+        if (string.Equals(type, "select", System.StringComparison.Ordinal))
         {
-            result.CurrentValue = ReadRequiredString(root, "currentValue");
-            ReadSelectOptions(root, result);
+            currentValueText = ReadRequiredString(root, "currentValue");
+            ReadSelectOptions(root, selectOptions, optionGroups);
         }
-        else if (string.Equals(result.Type, "boolean", System.StringComparison.Ordinal))
+        else if (string.Equals(type, "boolean", System.StringComparison.Ordinal))
         {
             if (!root.TryGetProperty("currentValue", out var currentValue)
                 || currentValue.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
@@ -102,10 +98,22 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
                 throw new JsonException("ACP boolean session config option requires a boolean currentValue.");
             }
 
-            result.CurrentBooleanValue = currentValue.GetBoolean();
+            currentBoolean = currentValue.GetBoolean();
         }
 
-        return result;
+        return new ConfigOption
+        {
+            Id = ReadRequiredString(root, "id"),
+            Name = ReadRequiredString(root, "name"),
+            Description = ReadOptionalString(root, "description"),
+            Category = ReadOptionalString(root, "category"),
+            Type = type,
+            CurrentValue = currentValueText,
+            CurrentBooleanValue = currentBoolean,
+            Options = selectOptions,
+            OptionGroups = optionGroups,
+            Meta = AcpMetaJson.Read(root)
+        };
     }
 
     public override void Write(Utf8JsonWriter writer, ConfigOption value, JsonSerializerOptions options)
@@ -153,7 +161,10 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
         writer.WriteEndObject();
     }
 
-    private static void ReadSelectOptions(JsonElement root, ConfigOption result)
+    private static void ReadSelectOptions(
+        JsonElement root,
+        List<ConfigOptionValue> options,
+        List<ConfigOptionGroup> optionGroups)
     {
         if (!root.TryGetProperty("options", out var optionsElement)
             || optionsElement.ValueKind != JsonValueKind.Array)
@@ -178,11 +189,11 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             grouped = isGroup;
             if (isGroup)
             {
-                result.OptionGroups.Add(ReadGroup(item));
+                optionGroups.Add(ReadGroup(item));
             }
             else
             {
-                result.Options.Add(ReadOption(item));
+                options.Add(ReadOption(item));
             }
         }
     }
@@ -195,18 +206,19 @@ internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
             throw new JsonException("ACP session config option group requires an options array.");
         }
 
-        var group = new ConfigOptionGroup
+        var groupOptions = new List<ConfigOptionValue>();
+        foreach (var item in optionsElement.EnumerateArray())
+        {
+            groupOptions.Add(ReadOption(item));
+        }
+
+        return new ConfigOptionGroup
         {
             Group = ReadRequiredString(element, "group"),
             Name = ReadRequiredString(element, "name"),
+            Options = groupOptions,
             Meta = AcpMetaJson.Read(element)
         };
-        foreach (var item in optionsElement.EnumerateArray())
-        {
-            group.Options.Add(ReadOption(item));
-        }
-
-        return group;
     }
 
     private static ConfigOptionValue ReadOption(JsonElement element)

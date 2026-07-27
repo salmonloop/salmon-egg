@@ -11,19 +11,19 @@ public sealed record PermissionOption : AcpProtocolObject
     /// Unique identifier for this option.
     /// </summary>
     [JsonPropertyName("optionId")]
-    public string OptionId { get; set; } = string.Empty;
+    public string OptionId { get; init; } = string.Empty;
 
     /// <summary>
     /// Human-readable label displayed to the user.
     /// </summary>
     [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
     /// ACP permission option kind such as `allow_once` or `reject_always`.
     /// </summary>
     [JsonPropertyName("kind")]
-    public string Kind { get; set; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
 
     public PermissionOption()
     {

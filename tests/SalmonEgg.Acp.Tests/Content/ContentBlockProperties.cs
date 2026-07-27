@@ -126,7 +126,7 @@ namespace SalmonEgg.Acp.Tests.Content
             string lastModified)
         {
             var block = ResourceContentBlock.CreateText(uri, text, mimeType);
-            block.Annotations = CreateAnnotations(audience1, audience2, prioritySeed, lastModified);
+            block = block with { Annotations = CreateAnnotations(audience1, audience2, prioritySeed, lastModified) };
 
             var roundTripped = RoundTrip(block) as ResourceContentBlock;
 
@@ -154,7 +154,7 @@ namespace SalmonEgg.Acp.Tests.Content
             string lastModified)
         {
             var block = ResourceContentBlock.CreateBinary(uri, blob, mimeType);
-            block.Annotations = CreateAnnotations(audience1, audience2, prioritySeed, lastModified);
+            block = block with { Annotations = CreateAnnotations(audience1, audience2, prioritySeed, lastModified) };
 
             var roundTripped = RoundTrip(block) as ResourceContentBlock;
 

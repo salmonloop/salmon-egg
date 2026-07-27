@@ -9,19 +9,19 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Set_Mode 方法的请求参数。
     /// 用于切换会话的工作模式。
     /// </summary>
-    public record SessionSetModeParams : AcpProtocolObject
+    public sealed record SessionSetModeParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 要切换到的目标模式 ID（必填）。
         /// </summary>
         [JsonPropertyName("modeId")]
-        public string ModeId { get; set; } = string.Empty;
+        public string ModeId { get; init; } = string.Empty;
 
         /// <summary>
         /// 创建新的 SessionSetModeParams 实例。
@@ -45,7 +45,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Set_Mode 方法的响应。
     /// </summary>
-    public record SessionSetModeResponse : AcpProtocolObject
+    public sealed record SessionSetModeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 协议扩展字段（_meta）。
@@ -61,10 +61,10 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// ACP <c>session/cancel</c> notification parameters.
     /// </summary>
-    public record SessionCancelParams : AcpProtocolObject
+    public sealed record SessionCancelParams : AcpProtocolObject
     {
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         public SessionCancelParams()
         {
@@ -80,32 +80,32 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Load 方法的请求参数。
     /// 用于加载已存在的会话历史。
     /// </summary>
-    public record SessionLoadParams : AcpProtocolObject
+    public sealed record SessionLoadParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 会话的工作目录（必填）。
         /// </summary>
         [JsonPropertyName("cwd")]
-        public string Cwd { get; set; } = string.Empty;
+        public string Cwd { get; init; } = string.Empty;
 
         /// <summary>
         /// MCP 服务器配置列表。
         /// ACP session/load 要求该字段始终为数组，即使当前没有任何 MCP server 也必须发送 []。
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; set; } = new List<McpServer>();
+        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
 
         /// <summary>
         /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
         /// </summary>
         [JsonPropertyName("additionalDirectories")]
-        public List<string>? AdditionalDirectories { get; set; }
+        public List<string>? AdditionalDirectories { get; init; }
 
         /// <summary>
         /// 创建新的 SessionLoadParams 实例。
@@ -138,20 +138,20 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Load 方法的响应。
     /// 可能返回 null / 空对象，或返回模式与配置选项快照。
     /// </summary>
-    public record SessionLoadResponse : AcpProtocolObject
+    public sealed record SessionLoadResponse : AcpProtocolObject
     {
         /// <summary>
         /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
         /// </summary>
         [JsonPropertyName("modes")]
         [JsonConverter(typeof(SessionModesStateJsonConverter))]
-        public SessionModesState? Modes { get; set; }
+        public SessionModesState? Modes { get; init; }
 
         /// <summary>
         /// 可用的配置选项列表（可选）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; init; }
 
         /// <summary>
         /// 创建新的 SessionLoadResponse 实例。
@@ -182,13 +182,13 @@ namespace SalmonEgg.Acp.Protocol
     /// Official V2 known form is <c>{ "type": "start" }</c> for full history replay.
     /// Other <c>type</c> values remain open for custom/future cursors.
     /// </summary>
-    public record SessionReplayFrom : AcpProtocolObject
+    public sealed record SessionReplayFrom : AcpProtocolObject
     {
         /// <summary>
         /// Replay cursor type. Official full-history replay uses <c>start</c>.
         /// </summary>
         [JsonPropertyName("type")]
-        public string Type { get; set; } = string.Empty;
+        public string Type { get; init; } = string.Empty;
 
         /// <summary>
         /// Creates an empty replay cursor.
@@ -217,39 +217,39 @@ namespace SalmonEgg.Acp.Protocol
     /// 用于恢复已存在的会话上下文；省略 <see cref="ReplayFrom"/> 时不要求 Agent 重放历史，
     /// 设置 <c>replayFrom: { type: "start" }</c> 时请求完整历史重放（V2 对 session/load 的替代路径）。
     /// </summary>
-    public record SessionResumeParams : AcpProtocolObject
+    public sealed record SessionResumeParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 会话的工作目录（必填）。
         /// </summary>
         [JsonPropertyName("cwd")]
-        public string Cwd { get; set; } = string.Empty;
+        public string Cwd { get; init; } = string.Empty;
 
         /// <summary>
         /// MCP 服务器配置列表。
         /// ACP session/resume 要求该字段始终为数组，即使当前没有任何 MCP server 也必须发送 []。
         /// </summary>
         [JsonPropertyName("mcpServers")]
-        public List<McpServer> McpServers { get; set; } = new List<McpServer>();
+        public List<McpServer> McpServers { get; init; } = new List<McpServer>();
 
         /// <summary>
         /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
         /// </summary>
         [JsonPropertyName("additionalDirectories")]
-        public List<string>? AdditionalDirectories { get; set; }
+        public List<string>? AdditionalDirectories { get; init; }
 
         /// <summary>
         /// Optional V2 history replay cursor.
         /// Omit/null resumes without replaying history; <see cref="SessionReplayFrom.Start"/> requests full history.
         /// </summary>
         [JsonPropertyName("replayFrom")]
-        public SessionReplayFrom? ReplayFrom { get; set; }
+        public SessionReplayFrom? ReplayFrom { get; init; }
 
         /// <summary>
         /// 创建新的 SessionResumeParams 实例。
@@ -285,20 +285,20 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Resume 方法的响应。
     /// 可能返回 null / 空对象，或返回模式与配置选项快照。
     /// </summary>
-    public record SessionResumeResponse : AcpProtocolObject
+    public sealed record SessionResumeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
         /// </summary>
         [JsonPropertyName("modes")]
         [JsonConverter(typeof(SessionModesStateJsonConverter))]
-        public SessionModesState? Modes { get; set; }
+        public SessionModesState? Modes { get; init; }
 
         /// <summary>
         /// 可用的配置选项列表（可选）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; init; }
 
         /// <summary>
         /// 创建新的 SessionResumeResponse 实例。
@@ -328,13 +328,13 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Close 方法的请求参数。
     /// 用于关闭已存在的会话并释放 Agent 侧资源。
     /// </summary>
-    public record SessionCloseParams : AcpProtocolObject
+    public sealed record SessionCloseParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 创建新的 SessionCloseParams 实例。
@@ -356,7 +356,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Close 方法的响应。
     /// </summary>
-    public record SessionCloseResponse : AcpProtocolObject
+    public sealed record SessionCloseResponse : AcpProtocolObject
     {
         /// <summary>
         /// 创建新的 SessionCloseResponse 实例。
@@ -375,13 +375,13 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Delete 方法的请求参数。
     /// 用于删除 session/list 中的已有会话。
     /// </summary>
-    public record SessionDeleteParams : AcpProtocolObject
+    public sealed record SessionDeleteParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         public SessionDeleteParams()
         {
@@ -396,7 +396,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Delete 方法的响应。
     /// </summary>
-    public record SessionDeleteResponse : AcpProtocolObject
+    public sealed record SessionDeleteResponse : AcpProtocolObject
     {
         public static readonly SessionDeleteResponse Completed = new SessionDeleteResponse();
     }
@@ -406,28 +406,28 @@ namespace SalmonEgg.Acp.Protocol
     /// 用于设置会话的配置选项。
     /// </summary>
     [JsonConverter(typeof(SessionSetConfigOptionParamsJsonConverter))]
-    public record SessionSetConfigOptionParams : AcpProtocolObject
+    public sealed record SessionSetConfigOptionParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
         /// </summary>
         [JsonPropertyName("sessionId")]
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 配置选项 ID（必填）。
         /// </summary>
         [JsonPropertyName("configId")]
-        public string ConfigId { get; set; } = string.Empty;
+        public string ConfigId { get; init; } = string.Empty;
 
         /// <summary>
         /// 配置选项的值（必填）。
         /// </summary>
         [JsonIgnore]
-        public string? Value { get; set; }
+        public string? Value { get; init; }
 
         [JsonIgnore]
-        public bool? BooleanValue { get; set; }
+        public bool? BooleanValue { get; init; }
 
         /// <summary>
         /// 创建新的 SessionSetConfigOptionParams 实例。
@@ -471,17 +471,13 @@ namespace SalmonEgg.Acp.Protocol
 
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
-            var result = new SessionSetConfigOptionParams
-            {
-                SessionId = ReadRequiredString(root, "sessionId"),
-                ConfigId = ReadRequiredString(root, "configId"),
-                Meta = AcpMetaJson.Read(root)
-            };
             if (!root.TryGetProperty("value", out var value))
             {
                 throw new JsonException("ACP session/set_config_option requires value.");
             }
 
+            string? stringValue = null;
+            bool? booleanValue = null;
             if (root.TryGetProperty("type", out var type)
                 && type.ValueKind == JsonValueKind.String
                 && string.Equals(type.GetString(), "boolean", System.StringComparison.Ordinal))
@@ -491,18 +487,25 @@ namespace SalmonEgg.Acp.Protocol
                     throw new JsonException("ACP boolean session config value must be a boolean.");
                 }
 
-                result.BooleanValue = value.GetBoolean();
+                booleanValue = value.GetBoolean();
             }
             else if (value.ValueKind == JsonValueKind.String)
             {
-                result.Value = value.GetString() ?? string.Empty;
+                stringValue = value.GetString() ?? string.Empty;
             }
             else
             {
                 throw new JsonException("ACP session config value must be a string value ID or declared boolean.");
             }
 
-            return result;
+            return new SessionSetConfigOptionParams
+            {
+                SessionId = ReadRequiredString(root, "sessionId"),
+                ConfigId = ReadRequiredString(root, "configId"),
+                Value = stringValue,
+                BooleanValue = booleanValue,
+                Meta = AcpMetaJson.Read(root)
+            };
         }
 
         public override void Write(
@@ -551,13 +554,13 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Set_Config_Option 方法的响应。
     /// </summary>
-    public record SessionSetConfigOptionResponse : AcpProtocolObject
+    public sealed record SessionSetConfigOptionResponse : AcpProtocolObject
     {
         /// <summary>
         /// 更新后的配置选项列表（完整状态）。
         /// </summary>
         [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
+        public List<ConfigOption>? ConfigOptions { get; init; }
 
         /// <summary>
         /// 创建新的 SessionSetConfigOptionResponse 实例。

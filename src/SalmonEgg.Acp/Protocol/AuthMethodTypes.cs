@@ -11,21 +11,21 @@ namespace SalmonEgg.Acp.Protocol
     [JsonConverter(typeof(AuthMethodDefinitionJsonConverter))]
     public sealed record AuthMethodDefinition : AcpProtocolObject
     {
-        public string Id { get; set; } = string.Empty;
+        public string Id { get; init; } = string.Empty;
 
         [JsonIgnore]
         public string MethodId
         {
             get => Id;
-            set => Id = value;
+            init => Id = value;
         }
 
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
-        public string? Type { get; set; }
+        public string? Type { get; init; }
 
         [JsonPropertyName("description")]
-        public string? Description { get; set; }
+        public string? Description { get; init; }
     }
 
     internal sealed class AuthMethodDefinitionJsonConverter : JsonConverter<AuthMethodDefinition>

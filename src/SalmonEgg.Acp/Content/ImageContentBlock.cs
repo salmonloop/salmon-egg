@@ -6,11 +6,11 @@ namespace SalmonEgg.Acp.Content
     /// 图片内容块。
     /// 用于表示 Base64 编码的图片数据。
     /// </summary>
-    public record ImageContentBlock : ContentBlock
+    public sealed record ImageContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "image"。
-        /// 此属性被 [JsonIgnore] 忽略，因为类型信息已由 JsonPolymorphic 自动处理。
+        /// 此属性被 [JsonIgnore] 忽略；wire 判别值由 ContentBlockJsonConverter 手写读写（保留未知类型 RawPayload 透传）。
         /// </summary>
         [JsonIgnore]
         public override string Type => "image";
@@ -19,19 +19,19 @@ namespace SalmonEgg.Acp.Content
         /// Base64 编码的图片数据。
         /// </summary>
         [JsonPropertyName("data")]
-        public string Data { get; set; } = string.Empty;
+        public string Data { get; init; } = string.Empty;
 
         /// <summary>
         /// Optional URI reference for the image source.
         /// </summary>
         [JsonPropertyName("uri")]
-        public string? Uri { get; set; }
+        public string? Uri { get; init; }
 
         /// <summary>
         /// 图片的 MIME 类型（例如 "image/png", "image/jpeg"）。
         /// </summary>
         [JsonPropertyName("mimeType")]
-        public string MimeType { get; set; } = "image/png";
+        public string MimeType { get; init; } = "image/png";
 
         /// <summary>
         /// 创建新的图片内容块实例。

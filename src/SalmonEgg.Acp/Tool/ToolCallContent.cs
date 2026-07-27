@@ -25,13 +25,13 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Regular content produced by a tool call.
     /// </summary>
-    public record ContentToolCallContent : ToolCallContent
+    public sealed record ContentToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The content block.
         /// </summary>
         [JsonPropertyName("content")]
-        public ContentBlock? Content { get; set; }
+        public ContentBlock? Content { get; init; }
 
         /// <summary>
         /// Creates a new ContentToolCallContent instance.
@@ -53,25 +53,25 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// File diff produced by a tool call.
     /// </summary>
-    public record DiffToolCallContent : ToolCallContent
+    public sealed record DiffToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The absolute file path being modified.
         /// </summary>
         [JsonPropertyName("path")]
-        public string? Path { get; set; }
+        public string? Path { get; init; }
 
         /// <summary>
         /// The original content (null for new files).
         /// </summary>
         [JsonPropertyName("oldText")]
-        public string? OldText { get; set; }
+        public string? OldText { get; init; }
 
         /// <summary>
         /// The new content after modification.
         /// </summary>
         [JsonPropertyName("newText")]
-        public string? NewText { get; set; }
+        public string? NewText { get; init; }
 
         /// <summary>
         /// Creates a new DiffToolCallContent instance.
@@ -97,13 +97,13 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Terminal output produced by a tool call.
     /// </summary>
-    public record TerminalToolCallContent : ToolCallContent
+    public sealed record TerminalToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The ID of a terminal created with terminal/create.
         /// </summary>
         [JsonPropertyName("terminalId")]
-        public string? TerminalId { get; set; }
+        public string? TerminalId { get; init; }
 
         /// <summary>
         /// Creates a new TerminalToolCallContent instance.
@@ -127,20 +127,20 @@ namespace SalmonEgg.Acp.Tool
     /// 原样保留整个对象(含判别值与所有未知字段),由 Agent 而非 client 决定语义;client 不解释、
     /// 不丢弃、不收紧。
     /// </summary>
-    public record CustomToolCallContent : ToolCallContent
+    public sealed record CustomToolCallContent : ToolCallContent
     {
         /// <summary>
         /// 原始 <c>type</c> 判别值。
         /// </summary>
         [JsonIgnore]
-        public string Type { get; set; } = string.Empty;
+        public string Type { get; init; } = string.Empty;
 
         /// <summary>
         /// 读入时保留的完整原始 payload,由 <see cref="ToolCallContentJsonConverter"/> 手动读写,
         /// 是本载体的唯一权威事实源。
         /// </summary>
         [JsonIgnore]
-        public JsonElement RawPayload { get; set; }
+        public JsonElement RawPayload { get; init; }
 
         /// <summary>
         /// Creates a new CustomToolCallContent instance.

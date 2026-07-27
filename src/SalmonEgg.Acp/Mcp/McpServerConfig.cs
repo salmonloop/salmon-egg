@@ -17,7 +17,7 @@ namespace SalmonEgg.Acp.Mcp
         /// 服务器的显示名称。
         /// </summary>
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
     }
 
@@ -33,25 +33,25 @@ namespace SalmonEgg.Acp.Mcp
     /// Stdio 类型的 MCP 服务器配置。
     /// 通过标准输入/输出与服务器通信。
     /// </summary>
-    public record StdioMcpServer : McpServer
+    public sealed record StdioMcpServer : McpServer
     {
         /// <summary>
         /// 服务器可执行文件的命令。
         /// </summary>
         [JsonPropertyName("command")]
-        public string Command { get; set; } = string.Empty;
+        public string Command { get; init; } = string.Empty;
 
         /// <summary>
         /// 命令行参数列表。
         /// </summary>
         [JsonPropertyName("args")]
-        public List<string>? Args { get; set; }
+        public List<string>? Args { get; init; }
 
         /// <summary>
         /// 环境变量配置。
         /// </summary>
         [JsonPropertyName("env")]
-        public List<McpEnvVariable>? Env { get; set; }
+        public List<McpEnvVariable>? Env { get; init; }
 
         /// <summary>
         /// 创建新的 StdioMcpServer 实例。
@@ -84,19 +84,19 @@ namespace SalmonEgg.Acp.Mcp
     /// HTTP 类型的 MCP 服务器配置。
     /// 通过 HTTP 请求与服务器通信。
     /// </summary>
-    public record HttpMcpServer : McpServer
+    public sealed record HttpMcpServer : McpServer
     {
         /// <summary>
         /// 服务器的 URL 地址。
         /// </summary>
         [JsonPropertyName("url")]
-        public string Url { get; set; } = string.Empty;
+        public string Url { get; init; } = string.Empty;
 
         /// <summary>
         /// HTTP 请求头配置。
         /// </summary>
         [JsonPropertyName("headers")]
-        public List<McpHttpHeader>? Headers { get; set; }
+        public List<McpHttpHeader>? Headers { get; init; }
 
         /// <summary>
         /// 创建新的 HttpMcpServer 实例。
@@ -123,19 +123,19 @@ namespace SalmonEgg.Acp.Mcp
     /// SSE (Server-Sent Events) 类型的 MCP 服务器配置。
     /// 通过 SSE 流与服务器通信。
     /// </summary>
-    public record SseMcpServer : McpServer
+    public sealed record SseMcpServer : McpServer
     {
         /// <summary>
         /// SSE 端点的 URL 地址。
         /// </summary>
         [JsonPropertyName("url")]
-        public string Url { get; set; } = string.Empty;
+        public string Url { get; init; } = string.Empty;
 
         /// <summary>
         /// HTTP 请求头配置。
         /// </summary>
         [JsonPropertyName("headers")]
-        public List<McpHttpHeader>? Headers { get; set; }
+        public List<McpHttpHeader>? Headers { get; init; }
 
         /// <summary>
         /// 创建新的 SseMcpServer 实例。
@@ -164,19 +164,19 @@ namespace SalmonEgg.Acp.Mcp
     /// spec 要求 receiver 对不认识的 transport「preserve the raw payload」，
     /// 由 Agent 而非 client 决定接受或拒绝。
     /// </summary>
-    public record CustomMcpServer : McpServer
+    public sealed record CustomMcpServer : McpServer
     {
         /// <summary>
         /// 原始 <c>type</c> transport 值（如 <c>_custom</c> 扩展或未来 ACP 变体值）。
         /// </summary>
         [JsonPropertyName("type")]
-        public string Transport { get; set; } = string.Empty;
+        public string Transport { get; init; } = string.Empty;
 
         /// <summary>
         /// 原始 server object payload，原样保留以供透传。
         /// 由 <see cref="McpServerJsonConverter"/> 手动读写，不经默认序列化。
         /// </summary>
-        public JsonElement RawPayload { get; set; }
+        public JsonElement RawPayload { get; init; }
 
         /// <summary>
         /// 创建新的 CustomMcpServer 实例。
@@ -202,19 +202,19 @@ namespace SalmonEgg.Acp.Mcp
     /// <summary>
     /// MCP 环境变量配置类。
     /// </summary>
-    public record McpEnvVariable : AcpProtocolObject
+    public sealed record McpEnvVariable : AcpProtocolObject
     {
         /// <summary>
         /// 环境变量名称。
         /// </summary>
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
         /// <summary>
         /// 环境变量值。
         /// </summary>
         [JsonPropertyName("value")]
-        public string Value { get; set; } = string.Empty;
+        public string Value { get; init; } = string.Empty;
 
         /// <summary>
         /// 创建新的 McpEnvVariable 实例。
@@ -238,19 +238,19 @@ namespace SalmonEgg.Acp.Mcp
     /// <summary>
     /// MCP HTTP 请求头配置类。
     /// </summary>
-    public record McpHttpHeader : AcpProtocolObject
+    public sealed record McpHttpHeader : AcpProtocolObject
     {
         /// <summary>
         /// 请求头名称。
         /// </summary>
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
         /// <summary>
         /// 请求头值。
         /// </summary>
         [JsonPropertyName("value")]
-        public string Value { get; set; } = string.Empty;
+        public string Value { get; init; } = string.Empty;
 
         /// <summary>
         /// 创建新的 McpHttpHeader 实例。

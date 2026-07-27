@@ -7,11 +7,11 @@ namespace SalmonEgg.Acp.Content
     /// 资源内容块。
     /// 用于表示嵌入的实际资源数据（文本或二进制）。
     /// </summary>
-    public record ResourceContentBlock : ContentBlock
+    public sealed record ResourceContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "resource"。
-        /// 此属性被 [JsonIgnore] 忽略，因为类型信息已由 JsonPolymorphic 自动处理。
+        /// 此属性被 [JsonIgnore] 忽略；wire 判别值由 ContentBlockJsonConverter 手写读写（保留未知类型 RawPayload 透传）。
         /// </summary>
         [JsonIgnore]
         public override string Type => "resource";
@@ -21,7 +21,7 @@ namespace SalmonEgg.Acp.Content
         /// 包含资源的实际数据（uri, mimeType, text 或 blob）。
         /// </summary>
         [JsonPropertyName("resource")]
-        public EmbeddedResource Resource { get; set; } = null!;
+        public EmbeddedResource Resource { get; init; } = null!;
 
         /// <summary>
         /// 创建新的资源内容块实例。

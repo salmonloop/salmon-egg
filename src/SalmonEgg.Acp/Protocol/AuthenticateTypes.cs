@@ -17,20 +17,14 @@ namespace SalmonEgg.Acp.Protocol
         public required string MethodId { get; init; }
 
         /// <summary>
-        /// 创建新的 AuthenticateParams 实例。
-        /// </summary>
-        public AuthenticateParams()
-        {
-        }
-
-        /// <summary>
         /// Create params for a specific method id.
         /// </summary>
         /// <param name="methodId">Authentication method id</param>
+        [JsonConstructor]
         [SetsRequiredMembers]
         public AuthenticateParams(string methodId)
         {
-            MethodId = methodId;
+            MethodId = methodId ?? throw new System.ArgumentNullException(nameof(methodId));
         }
     }
 

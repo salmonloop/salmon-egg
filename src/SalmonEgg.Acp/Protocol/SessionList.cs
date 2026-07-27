@@ -3,41 +3,41 @@ using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol;
 
-public record SessionListParams : AcpProtocolObject
+public sealed record SessionListParams : AcpProtocolObject
 {
     [JsonPropertyName("cwd")]
-    public string? Cwd { get; set; }
+    public string? Cwd { get; init; }
 
     [JsonPropertyName("cursor")]
-    public string? Cursor { get; set; }
+    public string? Cursor { get; init; }
 
 }
 
-public record SessionListResponse : AcpProtocolObject
+public sealed record SessionListResponse : AcpProtocolObject
 {
     [JsonPropertyName("sessions")]
-    public List<AgentSessionInfo> Sessions { get; set; } = new();
+    public List<AgentSessionInfo> Sessions { get; init; } = new();
 
     [JsonPropertyName("nextCursor")]
-    public string? NextCursor { get; set; }
+    public string? NextCursor { get; init; }
 
 }
 
-public record AgentSessionInfo : AcpProtocolObject
+public sealed record AgentSessionInfo : AcpProtocolObject
 {
     [JsonPropertyName("sessionId")]
-    public string SessionId { get; set; } = string.Empty;
+    public string SessionId { get; init; } = string.Empty;
 
     [JsonPropertyName("cwd")]
-    public string Cwd { get; set; } = string.Empty;
+    public string Cwd { get; init; } = string.Empty;
 
     [JsonPropertyName("title")]
-    public string? Title { get; set; }
+    public string? Title { get; init; }
 
     [JsonPropertyName("updatedAt")]
-    public string? UpdatedAt { get; set; }
+    public string? UpdatedAt { get; init; }
 
     [JsonPropertyName("additionalDirectories")]
-    public List<string>? AdditionalDirectories { get; set; }
+    public List<string>? AdditionalDirectories { get; init; }
 
 }

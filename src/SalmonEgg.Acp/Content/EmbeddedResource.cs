@@ -7,33 +7,33 @@ namespace SalmonEgg.Acp.Content
     /// 嵌入的资源对象。
     /// 用于 ResourceContentBlock 中包含的实际资源数据。
     /// </summary>
-    public record EmbeddedResource : AcpProtocolObject
+    public sealed record EmbeddedResource : AcpProtocolObject
     {
         /// <summary>
         /// 资源的 URI 标识符。
         /// </summary>
         [JsonPropertyName("uri")]
-        public string Uri { get; set; } = string.Empty;
+        public string Uri { get; init; } = string.Empty;
 
         /// <summary>
         /// 资源的 MIME 类型（例如 "text/plain", "application/json"）。
         /// </summary>
         [JsonPropertyName("mimeType")]
-        public string MimeType { get; set; } = "text/plain";
+        public string MimeType { get; init; } = "text/plain";
 
         /// <summary>
         /// 资源的文本内容（如果资源是文本类型）。
         /// 与 Blob 互斥。
         /// </summary>
         [JsonPropertyName("text")]
-        public string? Text { get; set; }
+        public string? Text { get; init; }
 
         /// <summary>
         /// 资源的二进制数据（Base64 编码，如果资源是二进制类型）。
         /// 与 Text 互斥。
         /// </summary>
         [JsonPropertyName("blob")]
-        public string? Blob { get; set; }
+        public string? Blob { get; init; }
 
         /// <summary>
         /// 创建新的 EmbeddedResource 实例。

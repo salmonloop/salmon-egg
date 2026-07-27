@@ -6,11 +6,11 @@ namespace SalmonEgg.Acp.Content
     /// 资源链接内容块。
     /// 用于表示对外部资源的引用（URI 链接）。
     /// </summary>
-    public record ResourceLinkContentBlock : ContentBlock
+    public sealed record ResourceLinkContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "resource_link"。
-        /// 此属性被 [JsonIgnore] 忽略，因为类型信息已由 JsonPolymorphic 自动处理。
+        /// 此属性被 [JsonIgnore] 忽略；wire 判别值由 ContentBlockJsonConverter 手写读写（保留未知类型 RawPayload 透传）。
         /// </summary>
         [JsonIgnore]
         public override string Type => "resource_link";
@@ -19,37 +19,37 @@ namespace SalmonEgg.Acp.Content
         /// 资源的 URI 标识符。
         /// </summary>
         [JsonPropertyName("uri")]
-        public string Uri { get; set; } = string.Empty;
+        public string Uri { get; init; } = string.Empty;
 
         /// <summary>
         /// 资源的名称（可选）。
         /// </summary>
         [JsonPropertyName("name")]
-        public string? Name { get; set; }
+        public string? Name { get; init; }
 
         /// <summary>
         /// 资源的 MIME 类型（可选）。
         /// </summary>
         [JsonPropertyName("mimeType")]
-        public string? MimeType { get; set; }
+        public string? MimeType { get; init; }
 
         /// <summary>
         /// 资源的标题（可选）。
         /// </summary>
         [JsonPropertyName("title")]
-        public string? Title { get; set; }
+        public string? Title { get; init; }
 
         /// <summary>
         /// 资源的描述（可选）。
         /// </summary>
         [JsonPropertyName("description")]
-        public string? Description { get; set; }
+        public string? Description { get; init; }
 
         /// <summary>
         /// 资源的大小（字节，可选）。
         /// </summary>
         [JsonPropertyName("size")]
-        public long? Size { get; set; }
+        public long? Size { get; init; }
 
         /// <summary>
         /// 创建新的资源链接内容块实例。

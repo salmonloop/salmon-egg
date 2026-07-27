@@ -7,19 +7,19 @@ namespace SalmonEgg.Acp.Tool
     /// Represents a file location affected by a tool call.
     /// Used for "follow-along" features that track which files the Agent is accessing or modifying.
     /// </summary>
-    public record ToolCallLocation : AcpProtocolObject
+    public sealed record ToolCallLocation : AcpProtocolObject
     {
         /// <summary>
         /// The absolute file path being accessed or modified.
         /// </summary>
         [JsonPropertyName("path")]
-        public string Path { get; set; } = string.Empty;
+        public string Path { get; init; } = string.Empty;
 
         /// <summary>
         /// Optional line number within the file.
         /// </summary>
         [JsonPropertyName("line")]
-        public uint? Line { get; set; }
+        public uint? Line { get; init; }
 
         /// <summary>
         /// Creates a new ToolCallLocation instance.

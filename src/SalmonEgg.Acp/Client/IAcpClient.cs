@@ -234,12 +234,12 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 会话 ID。
         /// </summary>
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 更新内容。
         /// </summary>
-        public SessionUpdate? Update { get; set; }
+        public SessionUpdate? Update { get; init; }
 
         /// <summary>
         /// 创建新的会话更新事件参数。
@@ -268,27 +268,27 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 原始请求的消息 ID。
         /// </summary>
-        public object MessageId { get; set; } = string.Empty;
+        public object MessageId { get; init; } = string.Empty;
 
         /// <summary>
         /// 会话 ID。
         /// </summary>
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// 工具调用数据。
         /// </summary>
-        public object? ToolCall { get; set; }
+        public object? ToolCall { get; init; }
 
         /// <summary>
         /// 可用的权限选项列表。
         /// </summary>
-        public List<PermissionOption> Options { get; set; } = new List<PermissionOption>();
+        public List<PermissionOption> Options { get; init; } = new List<PermissionOption>();
 
         /// <summary>
         /// 响应回调。
         /// </summary>
-        public Func<string, string?, Task> Respond { get; set; } = null!;
+        public Func<string, string?, Task> Respond { get; init; } = null!;
 
         /// <summary>
         /// 创建新的权限请求事件参数。
@@ -334,42 +334,42 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 原始请求的消息 ID。
         /// </summary>
-        public object MessageId { get; set; } = string.Empty;
+        public object MessageId { get; init; } = string.Empty;
 
         /// <summary>
         /// 会话 ID。
         /// </summary>
-        public string SessionId { get; set; } = string.Empty;
+        public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
         /// ACP 文件系统请求方法。
         /// </summary>
-        public string Method { get; set; } = string.Empty;
+        public string Method { get; init; } = string.Empty;
 
         /// <summary>
         /// 文件系统请求类型。
         /// </summary>
-        public FileSystemRequestKind Kind { get; set; }
+        public FileSystemRequestKind Kind { get; init; }
 
         /// <summary>
         /// 文件路径。
         /// </summary>
-        public string Path { get; set; } = string.Empty;
+        public string Path { get; init; } = string.Empty;
 
         /// <summary>
         /// 文件编码（读取操作）。
         /// </summary>
-        public string? Encoding { get; set; }
+        public string? Encoding { get; init; }
 
         /// <summary>
         /// 文件内容（写入操作）。
         /// </summary>
-        public string? Content { get; set; }
+        public string? Content { get; init; }
 
         /// <summary>
         /// 响应回调。
         /// </summary>
-        public Func<bool, string?, string?, Task> Respond { get; set; } = null!;
+        public Func<bool, string?, string?, Task> Respond { get; init; } = null!;
 
         /// <summary>
         /// 创建新的文件系统请求事件参数。

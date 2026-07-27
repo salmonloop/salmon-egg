@@ -12,43 +12,43 @@ namespace SalmonEgg.Acp.Protocol;
 public sealed class AskUserRequest
 {
     [JsonPropertyName("sessionId")]
-    public string SessionId { get; set; } = string.Empty;
+    public string SessionId { get; init; } = string.Empty;
 
     [JsonPropertyName("questions")]
-    public List<AskUserQuestion> Questions { get; set; } = new();
+    public List<AskUserQuestion> Questions { get; init; } = new();
 }
 
 public sealed class AskUserQuestion
 {
     [JsonPropertyName("header")]
-    public string Header { get; set; } = string.Empty;
+    public string Header { get; init; } = string.Empty;
 
     [JsonPropertyName("question")]
-    public string Question { get; set; } = string.Empty;
+    public string Question { get; init; } = string.Empty;
 
     [JsonPropertyName("options")]
-    public List<AskUserOption> Options { get; set; } = new();
+    public List<AskUserOption> Options { get; init; } = new();
 
     [JsonPropertyName("multiSelect")]
-    public bool MultiSelect { get; set; }
+    public bool MultiSelect { get; init; }
 }
 
 public sealed class AskUserOption
 {
     [JsonPropertyName("label")]
-    public string Label { get; set; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
 
     [JsonPropertyName("description")]
-    public string Description { get; set; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
 }
 
 public sealed class AskUserResponse
 {
     [JsonPropertyName("questions")]
-    public List<AskUserQuestion> Questions { get; set; } = new();
+    public List<AskUserQuestion> Questions { get; init; } = new();
 
     [JsonPropertyName("answers")]
-    public Dictionary<string, string> Answers { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, string> Answers { get; init; } = new(StringComparer.Ordinal);
 
     public AskUserResponse()
     {

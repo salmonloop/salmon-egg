@@ -18,10 +18,10 @@ namespace SalmonEgg.Acp.Content
         /// Optional ACP annotations that guide how the content should be used or displayed.
         /// </summary>
         [JsonPropertyName("annotations")]
-        public Annotations? Annotations { get; set; }
+        public Annotations? Annotations { get; init; }
 
         [JsonIgnore]
-        internal string? UnknownTypeDiscriminator { get; set; }
+        internal string? UnknownTypeDiscriminator { get; init; }
 
         /// <summary>
         /// 未知判别值内容块的原始 payload，原样保留以供无损透传。
@@ -30,7 +30,7 @@ namespace SalmonEgg.Acp.Content
         /// 由 <see cref="ContentBlockJsonConverter"/> 手动读写，不经默认序列化。
         /// </summary>
         [JsonIgnore]
-        internal JsonElement? RawPayload { get; set; }
+        internal JsonElement? RawPayload { get; init; }
 
         /// <summary>
         /// 内容块的类型标识符。
@@ -49,19 +49,19 @@ namespace SalmonEgg.Acp.Content
         /// Intended audience for the content.
         /// </summary>
         [JsonPropertyName("audience")]
-        public List<string>? Audience { get; set; }
+        public List<string>? Audience { get; init; }
 
         /// <summary>
         /// Relative priority from 0.0 to 1.0.
         /// </summary>
         [JsonPropertyName("priority")]
-        public double? Priority { get; set; }
+        public double? Priority { get; init; }
 
         /// <summary>
         /// ISO 8601 timestamp for the last modification time.
         /// </summary>
         [JsonPropertyName("lastModified")]
-        public string? LastModified { get; set; }
+        public string? LastModified { get; init; }
     }
 
     public sealed class ContentBlockJsonConverter : JsonConverter<ContentBlock>

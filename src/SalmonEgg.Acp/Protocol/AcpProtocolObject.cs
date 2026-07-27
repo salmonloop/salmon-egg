@@ -12,7 +12,7 @@ namespace SalmonEgg.Acp.Protocol;
 public abstract record AcpProtocolObject
 {
     [JsonPropertyName("_meta")]
-    public Dictionary<string, object?>? Meta { get; set; }
+    public Dictionary<string, object?>? Meta { get; init; }
 }
 
 public static class AcpMetaJson
