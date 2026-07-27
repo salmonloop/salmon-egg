@@ -36,7 +36,10 @@ namespace SalmonEgg.Acp.JsonRpc
                 // ACP session/update payloads may place protocol extension fields like `_meta`
                 // before the polymorphic discriminator (`sessionUpdate`).
                 AllowOutOfOrderMetadataProperties = true,
-                TypeInfoResolver = AcpJsonContext.Default
+                // Public protocol contracts + internal JSON-RPC envelopes.
+                TypeInfoResolver = JsonTypeInfoResolver.Combine(
+                    AcpJsonContext.Default,
+                    AcpJsonRpcContext.Default)
             };
         }
 

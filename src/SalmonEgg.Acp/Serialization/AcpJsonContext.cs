@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
@@ -15,10 +14,6 @@ namespace SalmonEgg.Acp.Serialization;
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     AllowOutOfOrderMetadataProperties = true)]
-[JsonSerializable(typeof(JsonRpcRequest))]
-[JsonSerializable(typeof(JsonRpcResponse))]
-[JsonSerializable(typeof(JsonRpcNotification))]
-[JsonSerializable(typeof(JsonRpcError))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(InitializeParams))]
 [JsonSerializable(typeof(InitializeResponse))]
@@ -149,6 +144,6 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(List<McpServer>))]
 [JsonSerializable(typeof(List<AskUserQuestion>))]
 [JsonSerializable(typeof(List<PlanEntry>))]
-internal partial class AcpJsonContext : JsonSerializerContext
+public partial class AcpJsonContext : JsonSerializerContext
 {
 }

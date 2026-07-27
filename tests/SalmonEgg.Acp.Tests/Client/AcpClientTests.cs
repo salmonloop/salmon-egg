@@ -41,7 +41,7 @@ namespace SalmonEgg.Acp.Tests.Client
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
-            var client = CreateClient(parser, terminalSessionManager, sessionStore);
+            var client = CreateClient( terminalSessionManager, sessionStore);
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
@@ -68,7 +68,6 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         private AcpClient CreateClient(
-            MessageParser parser,
             IAcpTerminalSessionManager? terminalSessionManager = null,
             IAcpClientSessionStore? sessionStore = null)
             => new(
@@ -427,7 +426,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_SendsAskUserCapabilityMetadataInClientCapabilities()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
             string? sentInitialize = null;
 
             var initResponse = new InitializeResponse(
@@ -467,7 +466,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_WhenServerProtocolIsOlder_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
 
             var initResponse = new InitializeResponse(
                 0,
@@ -491,7 +490,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_WhenDisconnectedBeforeResponse_CancelsPendingInitialize()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
             var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _transportMock
@@ -542,7 +541,7 @@ namespace SalmonEgg.Acp.Tests.Client
                     t => t.ErrorOccurred += null,
                     new AcpTransportErrorEventArgs("Unable to start process: stdio command not found")))
                 .ReturnsAsync(false);
-            var client = CreateClient(parser);
+            var client = CreateClient();
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
@@ -557,7 +556,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_WhenAlreadyInitialized_ThrowsEnglishInvalidOperationException()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
 
             var initResponse = new InitializeResponse(
                 1,
@@ -595,7 +594,7 @@ namespace SalmonEgg.Acp.Tests.Client
                         new InvalidOperationException(
                             "Failed to construct 'WebSocket': An insecure WebSocket connection may not be initiated from a page loaded over HTTPS."))))
                 .ReturnsAsync(false);
-            var client = CreateClient(parser);
+            var client = CreateClient();
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 client.InitializeAsync(new InitializeParams(
@@ -613,7 +612,7 @@ namespace SalmonEgg.Acp.Tests.Client
             var parser = new MessageParser();
             var isConnected = true;
             _transportMock.SetupGet(t => t.IsConnected).Returns(() => isConnected);
-            var client = CreateClient(parser);
+            var client = CreateClient();
             var initializeSent = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             _transportMock
@@ -738,7 +737,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_WhenServerProtocolIsNewer_ThrowsProtocolVersionMismatch()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -772,7 +771,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public async Task InitializeAsync_WhenClientRequestsV2AndAgentAnswersV1_AcceptsNegotiatedVersion()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
             string? sentInitialize = null;
 
             SetupJsonRpcResponse(
@@ -900,7 +899,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public void TransportErrors_ForStdioBridgeFailures_ShouldAppendSshGuidance()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
             string? receivedError = null;
             client.ErrorOccurred += (_, error) => receivedError = error;
 
@@ -920,7 +919,7 @@ namespace SalmonEgg.Acp.Tests.Client
         public void TransportErrors_WhenAgentStderrDiagnostic_ShouldNotPublishUserError()
         {
             var parser = new MessageParser();
-            var client = CreateClient(parser);
+            var client = CreateClient();
             var receivedErrors = new List<string>();
             client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
 
@@ -1506,7 +1505,7 @@ namespace SalmonEgg.Acp.Tests.Client
         {
             var parser = new MessageParser();
             var sessionStore = new RecordingAcpClientSessionStore();
-            var client = CreateClient(parser, sessionStore: sessionStore);
+            var client = CreateClient( sessionStore: sessionStore);
 
             SetupJsonRpcResponse(
                 "initialize",
@@ -1858,7 +1857,7 @@ namespace SalmonEgg.Acp.Tests.Client
             var sessionStore = new RecordingAcpClientSessionStore();
             await sessionStore.CreateSessionAsync("remote-1", AbsoluteCwd);
 
-            var client = CreateClient(parser, sessionStore: sessionStore);
+            var client = CreateClient( sessionStore: sessionStore);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))
