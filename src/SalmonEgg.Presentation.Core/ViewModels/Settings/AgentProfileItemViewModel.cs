@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
@@ -103,7 +104,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     /// <summary>
     /// The transport-specific FontIcon glyph code extracted from the server configuration.
     /// </summary>
-    public string TransportGlyph => _profile.TransportGlyph;
+    public string TransportGlyph => AcpTransportGlyph.Resolve(_profile.Transport);
 
     /// <summary>
     /// Short status string suitable for a badge or subtitle.

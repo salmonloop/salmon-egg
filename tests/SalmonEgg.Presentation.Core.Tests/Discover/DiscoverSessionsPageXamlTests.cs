@@ -104,6 +104,21 @@ public sealed class DiscoverSessionsPageXamlTests
     }
 
     [Fact]
+    public void DiscoverSessionsPage_ProfileGlyph_IsConverterDriven_NotDomainUiMember()
+    {
+        // 传输图标是 Presentation 关注点:模板须经 TransportTypeGlyphConverter 从 Transport 投影,
+        // 不得绑定已从 Domain 移除的 UI 成员 TransportGlyph(Core 层禁 UI 概念)。
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        Assert.Contains("TransportTypeGlyphConverter", xaml, StringComparison.Ordinal);
+        Assert.Contains(
+            "Glyph=\"{x:Bind Transport, Converter={StaticResource TransportTypeGlyphConverter}}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Glyph=\"{x:Bind TransportGlyph}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiscoverSessionsPage_ExposesStableAutomationIds_ForGuiSmoke()
     {
         var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");

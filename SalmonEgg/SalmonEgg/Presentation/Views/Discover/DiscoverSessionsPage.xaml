@@ -17,6 +17,7 @@
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <converters:TransportTypeLocalizationConverter x:Key="TransportTypeLocalizationConverter"/>
+        <converters:TransportTypeGlyphConverter x:Key="TransportTypeGlyphConverter"/>
 
         <!-- Compact short-height default keeps touch-friendly row height (>=44) while
              reclaiming vertical budget. Comfortable restores prior 104/10 marketing density. -->
@@ -219,7 +220,7 @@
                                     VerticalAlignment="Center">
                                 <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                              Glyph="{x:Bind TransportGlyph}"
+                                              Glyph="{x:Bind Transport, Converter={StaticResource TransportTypeGlyphConverter}}"
                                               Foreground="{ThemeResource AccentBrush}" />
                                 </Viewbox>
                             </Border>
