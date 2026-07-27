@@ -69,6 +69,7 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
 
     private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
+        ViewModel.Activate();
         ViewModel.Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
         ViewModel.Preferences.PropertyChanged += OnPreferencesPropertyChanged;
         QueueRefreshShortcutDirectionalTargets();
@@ -77,6 +78,7 @@ public sealed partial class ShortcutsSettingsPage : SettingsPageBase
     private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         ViewModel.Preferences.PropertyChanged -= OnPreferencesPropertyChanged;
+        ViewModel.Deactivate();
     }
 
     private void OnPreferencesPropertyChanged(object? sender, PropertyChangedEventArgs e)

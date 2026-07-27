@@ -19,12 +19,13 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class ShortcutsSettingsViewModelTests
 {
     [Fact]
-    public async Task Constructor_SeedsOnlySupportedEditableActions()
+    public async Task Activate_SeedsOnlySupportedEditableActions()
     {
         var preferences = await CreatePreferencesAsync(new AppSettings());
 
         var localizer = new TestCoreStringLocalizer();
         var viewModel = new ShortcutsSettingsViewModel(preferences, localizer);
+        viewModel.Activate();
 
         Assert.Collection(
             viewModel.Shortcuts,
@@ -45,7 +46,7 @@ public sealed class ShortcutsSettingsViewModelTests
     }
 
     [Fact]
-    public async Task Constructor_AppliesSavedOverridesForSupportedActionsOnly()
+    public async Task Activate_AppliesSavedOverridesForSupportedActionsOnly()
     {
         var preferences = await CreatePreferencesAsync(new AppSettings
         {
@@ -57,6 +58,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Alt+K", searchShortcut.Gesture);
@@ -70,6 +72,7 @@ public sealed class ShortcutsSettingsViewModelTests
         var preferences = await CreatePreferencesAsync(new AppSettings());
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
         Assert.Equal("Shortcuts.Record.search", searchShortcut.RecorderAutomationId);
@@ -87,6 +90,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         viewModel.RestoreDefaultsCommand.Execute(null);
 
@@ -108,6 +112,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
 
         viewModel.Preferences.KeyboardShortcutsEnabled = false;
 
@@ -131,6 +136,7 @@ public sealed class ShortcutsSettingsViewModelTests
         });
 
         var viewModel = new ShortcutsSettingsViewModel(preferences, localizer, languageService);
+        viewModel.Activate();
 
         Assert.Equal("New session", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
         Assert.Equal("Search", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);

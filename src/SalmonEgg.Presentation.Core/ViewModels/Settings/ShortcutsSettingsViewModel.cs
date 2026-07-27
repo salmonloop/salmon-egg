@@ -58,6 +58,11 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisp
         }
     }
 
+    private bool _isActive;
+
+    // 构造函数只做依赖赋值：不得触发持久化副作用（PruneUnsupportedBindings 会写 _preferences）
+    // 或事件订阅（coding-standards §3.1 / AGENTS.md §11 缓存与持久化边界）。真正的初始化与
+    // 订阅推迟到 Activate，由页面 Loaded 驱动、Deactivate 对称解绑，支持 singleton 反复重载。
     public ShortcutsSettingsViewModel(
         AppPreferencesViewModel preferences,
         IStringLocalizer<CoreStrings> localizer,
@@ -66,6 +71,20 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisp
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _languageService = languageService;
+    }
+
+    /// <summary>
+    /// 从 preferences 投影快捷键状态并订阅事件。幂等：重复调用不重复订阅、不重复 seed，
+    /// 支持页面反复 Loaded（VM 是 singleton）。
+    /// </summary>
+    public void Activate()
+    {
+        if (_isActive)
+        {
+            return;
+        }
+
+        _isActive = true;
 
         PruneUnsupportedBindings();
         SeedDefaults();
@@ -83,8 +102,18 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisp
         }
     }
 
-    public void Dispose()
+    /// <summary>
+    /// 解绑 Activate 建立的订阅。幂等：未激活时无操作，可与 Activate 反复配对。
+    /// </summary>
+    public void Deactivate()
     {
+        if (!_isActive)
+        {
+            return;
+        }
+
+        _isActive = false;
+
         if (_languageService is not null)
         {
             _languageService.LanguageChanged -= OnLanguageChanged;
@@ -96,6 +125,8 @@ public sealed partial class ShortcutsSettingsViewModel : ObservableObject, IDisp
             shortcut.PropertyChanged -= OnShortcutPropertyChanged;
         }
     }
+
+    public void Dispose() => Deactivate();
 
     private void SeedDefaults()
     {
