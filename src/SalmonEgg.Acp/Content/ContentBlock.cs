@@ -12,7 +12,7 @@ namespace SalmonEgg.Acp.Content
     /// ContentBlock uses a dedicated converter so protocol fields retain their wire shape.
     /// </summary>
     [JsonConverter(typeof(ContentBlockJsonConverter))]
-    public class ContentBlock : AcpProtocolObject
+    public record ContentBlock : AcpProtocolObject
     {
         /// <summary>
         /// Optional ACP annotations that guide how the content should be used or displayed.
@@ -43,7 +43,7 @@ namespace SalmonEgg.Acp.Content
     /// <summary>
     /// Optional ACP annotations attached to a content block.
     /// </summary>
-    public sealed class Annotations : AcpProtocolObject
+    public sealed record Annotations : AcpProtocolObject
     {
         /// <summary>
         /// Intended audience for the content.

@@ -5,7 +5,7 @@ namespace SalmonEgg.Acp.Protocol;
 /// <summary>
 /// A permission option supplied by the Agent in `session/request_permission`.
 /// </summary>
-public sealed class PermissionOption : AcpProtocolObject
+public sealed record PermissionOption : AcpProtocolObject
 {
     /// <summary>
     /// Unique identifier for this option.

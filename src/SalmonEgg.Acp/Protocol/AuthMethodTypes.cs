@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Custom authentication metadata is carried through the ACP <c>_meta</c> field.
     /// </summary>
     [JsonConverter(typeof(AuthMethodDefinitionJsonConverter))]
-    public sealed class AuthMethodDefinition : AcpProtocolObject
+    public sealed record AuthMethodDefinition : AcpProtocolObject
     {
         public string Id { get; set; } = string.Empty;
 

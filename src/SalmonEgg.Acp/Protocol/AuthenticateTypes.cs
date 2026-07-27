@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
@@ -6,14 +7,14 @@ namespace SalmonEgg.Acp.Protocol
     /// Authenticate 方法的请求参数。
     /// 用于向 Agent 发起认证请求。
     /// </summary>
-    public class AuthenticateParams : AcpProtocolObject
+    public sealed record AuthenticateParams : AcpProtocolObject
     {
         /// <summary>
         /// Agent-advertised authentication method id (from initializeResponse.authMethods[].id in v1 or
         /// initializeResponse.authMethods[].methodId in v2).
         /// </summary>
         [JsonPropertyName("methodId")]
-        public string MethodId { get; set; } = string.Empty;
+        public required string MethodId { get; init; }
 
         /// <summary>
         /// 创建新的 AuthenticateParams 实例。
@@ -26,6 +27,7 @@ namespace SalmonEgg.Acp.Protocol
         /// Create params for a specific method id.
         /// </summary>
         /// <param name="methodId">Authentication method id</param>
+        [SetsRequiredMembers]
         public AuthenticateParams(string methodId)
         {
             MethodId = methodId;
@@ -35,23 +37,23 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Authenticate 方法的响应。
     /// </summary>
-    public class AuthenticateResponse : AcpProtocolObject
+    public sealed record AuthenticateResponse : AcpProtocolObject
     {
     }
 
     /// <summary>
     /// Logout 方法的请求参数。
     /// </summary>
-    public class LogoutParams : AcpProtocolObject
+    public sealed record LogoutParams : AcpProtocolObject
     {
     }
 
     /// <summary>
     /// Logout 方法的响应。
     /// </summary>
-    public class LogoutResponse : AcpProtocolObject
+    public sealed record LogoutResponse : AcpProtocolObject
     {
-        public static readonly LogoutResponse Completed = new LogoutResponse();
+        public static readonly LogoutResponse Completed = new();
     }
 
     /// <summary>

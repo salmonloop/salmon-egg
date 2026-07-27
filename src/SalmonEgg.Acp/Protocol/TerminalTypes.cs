@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -9,7 +10,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Terminal/create method request parameters.
     /// Agent initiates this request to create a terminal and execute a command.
     /// </summary>
-    public class TerminalCreateRequest : AcpProtocolObject
+    public record TerminalCreateRequest : AcpProtocolObject
     {
         /// <summary>
         /// The session ID for this request.
@@ -51,25 +52,36 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Environment variable for terminal commands.
     /// </summary>
-    public class EnvVariable : AcpProtocolObject
+    public sealed record EnvVariable : AcpProtocolObject
     {
         /// <summary>
         /// The name of the environment variable.
         /// </summary>
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
         /// <summary>
         /// The value of the environment variable.
         /// </summary>
         [JsonPropertyName("value")]
-        public string Value { get; set; } = string.Empty;
+        public string Value { get; init; } = string.Empty;
+
+        public EnvVariable()
+        {
+        }
+
+        [SetsRequiredMembers]
+        public EnvVariable(string name, string value)
+        {
+            Name = name;
+            Value = value;
+        }
     }
 
     /// <summary>
     /// Response for terminal/create method.
     /// </summary>
-    public class TerminalCreateResponse : AcpProtocolObject
+    public record TerminalCreateResponse : AcpProtocolObject
     {
         /// <summary>
         /// The unique identifier for the created terminal.
@@ -82,7 +94,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Terminal/output method request parameters.
     /// Agent initiates this request to get terminal output.
     /// </summary>
-    public class TerminalOutputRequest : AcpProtocolObject
+    public record TerminalOutputRequest : AcpProtocolObject
     {
         /// <summary>
         /// The session ID for this request.
@@ -100,7 +112,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Response for terminal/output method.
     /// </summary>
-    public class TerminalOutputResponse : AcpProtocolObject
+    public record TerminalOutputResponse : AcpProtocolObject
     {
         /// <summary>
         /// The terminal output captured so far.
@@ -124,7 +136,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Terminal exit status information.
     /// </summary>
-    public class TerminalExitStatus : AcpProtocolObject
+    public record TerminalExitStatus : AcpProtocolObject
     {
         /// <summary>
         /// The process exit code (may be null if terminated by signal).
@@ -143,7 +155,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Terminal/wait_for_exit method request parameters.
     /// Agent initiates this request to wait for terminal command to exit.
     /// </summary>
-    public class TerminalWaitForExitRequest : AcpProtocolObject
+    public record TerminalWaitForExitRequest : AcpProtocolObject
     {
         /// <summary>
         /// The session ID for this request.
@@ -161,7 +173,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Response for terminal/wait_for_exit method.
     /// </summary>
-    public class TerminalWaitForExitResponse : AcpProtocolObject
+    public record TerminalWaitForExitResponse : AcpProtocolObject
     {
         /// <summary>
         /// The process exit code (may be null if terminated by signal).
@@ -180,7 +192,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Terminal/kill method request parameters.
     /// Agent initiates this request to kill a terminal command without releasing the terminal.
     /// </summary>
-    public class TerminalKillRequest : AcpProtocolObject
+    public record TerminalKillRequest : AcpProtocolObject
     {
         /// <summary>
         /// The session ID for this request.
@@ -198,7 +210,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Response for terminal/kill method.
     /// </summary>
-    public class TerminalKillResponse : AcpProtocolObject
+    public record TerminalKillResponse : AcpProtocolObject
     {
         // Empty response - success is indicated by no error
     }
@@ -207,7 +219,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Terminal/release method request parameters.
     /// Agent initiates this request to release a terminal and free its resources.
     /// </summary>
-    public class TerminalReleaseRequest : AcpProtocolObject
+    public record TerminalReleaseRequest : AcpProtocolObject
     {
         /// <summary>
         /// The session ID for this request.
@@ -225,7 +237,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Response for terminal/release method.
     /// </summary>
-    public class TerminalReleaseResponse : AcpProtocolObject
+    public record TerminalReleaseResponse : AcpProtocolObject
     {
         // Empty response - success is indicated by no error
     }

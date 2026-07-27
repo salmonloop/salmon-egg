@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Set_Mode 方法的请求参数。
     /// 用于切换会话的工作模式。
     /// </summary>
-    public class SessionSetModeParams : AcpProtocolObject
+    public record SessionSetModeParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -45,7 +45,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Set_Mode 方法的响应。
     /// </summary>
-    public class SessionSetModeResponse : AcpProtocolObject
+    public record SessionSetModeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 协议扩展字段（_meta）。
@@ -61,7 +61,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// ACP <c>session/cancel</c> notification parameters.
     /// </summary>
-    public class SessionCancelParams : AcpProtocolObject
+    public record SessionCancelParams : AcpProtocolObject
     {
         [JsonPropertyName("sessionId")]
         public string SessionId { get; set; } = string.Empty;
@@ -80,7 +80,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Load 方法的请求参数。
     /// 用于加载已存在的会话历史。
     /// </summary>
-    public class SessionLoadParams : AcpProtocolObject
+    public record SessionLoadParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -138,7 +138,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Load 方法的响应。
     /// 可能返回 null / 空对象，或返回模式与配置选项快照。
     /// </summary>
-    public class SessionLoadResponse : AcpProtocolObject
+    public record SessionLoadResponse : AcpProtocolObject
     {
         /// <summary>
         /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
@@ -182,7 +182,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Official V2 known form is <c>{ "type": "start" }</c> for full history replay.
     /// Other <c>type</c> values remain open for custom/future cursors.
     /// </summary>
-    public class SessionReplayFrom : AcpProtocolObject
+    public record SessionReplayFrom : AcpProtocolObject
     {
         /// <summary>
         /// Replay cursor type. Official full-history replay uses <c>start</c>.
@@ -217,7 +217,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 用于恢复已存在的会话上下文；省略 <see cref="ReplayFrom"/> 时不要求 Agent 重放历史，
     /// 设置 <c>replayFrom: { type: "start" }</c> 时请求完整历史重放（V2 对 session/load 的替代路径）。
     /// </summary>
-    public class SessionResumeParams : AcpProtocolObject
+    public record SessionResumeParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -285,7 +285,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Resume 方法的响应。
     /// 可能返回 null / 空对象，或返回模式与配置选项快照。
     /// </summary>
-    public class SessionResumeResponse : AcpProtocolObject
+    public record SessionResumeResponse : AcpProtocolObject
     {
         /// <summary>
         /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
@@ -328,7 +328,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Close 方法的请求参数。
     /// 用于关闭已存在的会话并释放 Agent 侧资源。
     /// </summary>
-    public class SessionCloseParams : AcpProtocolObject
+    public record SessionCloseParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -356,7 +356,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Close 方法的响应。
     /// </summary>
-    public class SessionCloseResponse : AcpProtocolObject
+    public record SessionCloseResponse : AcpProtocolObject
     {
         /// <summary>
         /// 创建新的 SessionCloseResponse 实例。
@@ -375,7 +375,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Delete 方法的请求参数。
     /// 用于删除 session/list 中的已有会话。
     /// </summary>
-    public class SessionDeleteParams : AcpProtocolObject
+    public record SessionDeleteParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -396,7 +396,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Delete 方法的响应。
     /// </summary>
-    public class SessionDeleteResponse : AcpProtocolObject
+    public record SessionDeleteResponse : AcpProtocolObject
     {
         public static readonly SessionDeleteResponse Completed = new SessionDeleteResponse();
     }
@@ -406,7 +406,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 用于设置会话的配置选项。
     /// </summary>
     [JsonConverter(typeof(SessionSetConfigOptionParamsJsonConverter))]
-    public class SessionSetConfigOptionParams : AcpProtocolObject
+    public record SessionSetConfigOptionParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -551,7 +551,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Session/Set_Config_Option 方法的响应。
     /// </summary>
-    public class SessionSetConfigOptionResponse : AcpProtocolObject
+    public record SessionSetConfigOptionResponse : AcpProtocolObject
     {
         /// <summary>
         /// 更新后的配置选项列表（完整状态）。

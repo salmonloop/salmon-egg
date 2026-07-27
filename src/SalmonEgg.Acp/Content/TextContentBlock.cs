@@ -6,7 +6,7 @@ namespace SalmonEgg.Acp.Content
     /// 文本内容块。
     /// 用于表示纯文本内容。
     /// </summary>
-    public class TextContentBlock : ContentBlock
+    public record TextContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "text"。

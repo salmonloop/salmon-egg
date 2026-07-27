@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol;
 
-public class SessionListParams : AcpProtocolObject
+public record SessionListParams : AcpProtocolObject
 {
     [JsonPropertyName("cwd")]
     public string? Cwd { get; set; }
@@ -13,7 +13,7 @@ public class SessionListParams : AcpProtocolObject
 
 }
 
-public class SessionListResponse : AcpProtocolObject
+public record SessionListResponse : AcpProtocolObject
 {
     [JsonPropertyName("sessions")]
     public List<AgentSessionInfo> Sessions { get; set; } = new();
@@ -23,7 +23,7 @@ public class SessionListResponse : AcpProtocolObject
 
 }
 
-public class AgentSessionInfo : AcpProtocolObject
+public record AgentSessionInfo : AcpProtocolObject
 {
     [JsonPropertyName("sessionId")]
     public string SessionId { get; set; } = string.Empty;

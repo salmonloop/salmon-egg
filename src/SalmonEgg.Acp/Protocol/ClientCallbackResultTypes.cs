@@ -2,13 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace SalmonEgg.Acp.Protocol
 {
-    public sealed class PermissionOutcomeResult : AcpProtocolObject
+    public sealed record PermissionOutcomeResult : AcpProtocolObject
     {
         [JsonPropertyName("outcome")]
         public PermissionOutcome Outcome { get; set; } = new();
     }
 
-    public sealed class PermissionOutcome : AcpProtocolObject
+    public sealed record PermissionOutcome : AcpProtocolObject
     {
         [JsonPropertyName("outcome")]
         public string Outcome { get; set; } = string.Empty;
@@ -17,7 +17,7 @@ namespace SalmonEgg.Acp.Protocol
         public string? OptionId { get; set; }
     }
 
-    public sealed class ReadTextFileResult : AcpProtocolObject
+    public sealed record ReadTextFileResult : AcpProtocolObject
     {
         [JsonPropertyName("content")]
         public string Content { get; set; } = string.Empty;

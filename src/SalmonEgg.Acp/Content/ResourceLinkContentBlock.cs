@@ -6,7 +6,7 @@ namespace SalmonEgg.Acp.Content
     /// 资源链接内容块。
     /// 用于表示对外部资源的引用（URI 链接）。
     /// </summary>
-    public class ResourceLinkContentBlock : ContentBlock
+    public record ResourceLinkContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "resource_link"。

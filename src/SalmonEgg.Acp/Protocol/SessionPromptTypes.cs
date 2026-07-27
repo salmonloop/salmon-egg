@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Prompt 方法的请求参数。
     /// 用于向会话发送提示并请求 Agent 响应。
     /// </summary>
-    public class SessionPromptParams : AcpProtocolObject
+    public record SessionPromptParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -50,7 +50,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/Prompt 方法的响应。
     /// Agent 对提示请求的响应，仅包含停止原因。
     /// </summary>
-    public class SessionPromptResponse : AcpProtocolObject
+    public record SessionPromptResponse : AcpProtocolObject
     {
         /// <summary>
         /// 停止原因。

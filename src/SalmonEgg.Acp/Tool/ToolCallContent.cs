@@ -18,14 +18,14 @@ namespace SalmonEgg.Acp.Tool
     /// <c>type</c> 当多态元数据消费掉,导致未知判别值无法 round-trip。
     /// </summary>
     [JsonConverter(typeof(ToolCallContentJsonConverter))]
-    public abstract class ToolCallContent : AcpProtocolObject
+    public abstract record ToolCallContent : AcpProtocolObject
     {
     }
 
     /// <summary>
     /// Regular content produced by a tool call.
     /// </summary>
-    public class ContentToolCallContent : ToolCallContent
+    public record ContentToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The content block.
@@ -53,7 +53,7 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// File diff produced by a tool call.
     /// </summary>
-    public class DiffToolCallContent : ToolCallContent
+    public record DiffToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The absolute file path being modified.
@@ -97,7 +97,7 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Terminal output produced by a tool call.
     /// </summary>
-    public class TerminalToolCallContent : ToolCallContent
+    public record TerminalToolCallContent : ToolCallContent
     {
         /// <summary>
         /// The ID of a terminal created with terminal/create.
@@ -127,7 +127,7 @@ namespace SalmonEgg.Acp.Tool
     /// 原样保留整个对象(含判别值与所有未知字段),由 Agent 而非 client 决定语义;client 不解释、
     /// 不丢弃、不收紧。
     /// </summary>
-    public class CustomToolCallContent : ToolCallContent
+    public record CustomToolCallContent : ToolCallContent
     {
         /// <summary>
         /// 原始 <c>type</c> 判别值。

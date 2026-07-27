@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol;
 /// <summary>
 /// Base contract for ACP specification types that support protocol extension metadata.
 /// </summary>
-public abstract class AcpProtocolObject
+public abstract record AcpProtocolObject
 {
     [JsonPropertyName("_meta")]
     public Dictionary<string, object?>? Meta { get; set; }

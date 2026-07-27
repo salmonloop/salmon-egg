@@ -10,7 +10,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/New 方法的请求参数。
     /// 用于创建新的会话。
     /// </summary>
-    public class SessionNewParams : AcpProtocolObject
+    public record SessionNewParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话的工作目录（必填）。
@@ -58,7 +58,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Session/New 方法的响应。
     /// Agent 对创建会话请求的响应。
     /// </summary>
-    public class SessionNewResponse : AcpProtocolObject
+    public record SessionNewResponse : AcpProtocolObject
     {
         /// <summary>
         /// 新创建的会话 ID。
@@ -106,7 +106,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 会话模式状态（用于 Session/New 响应）。
     /// https://agentclientprotocol.com/protocol/session-modes
     /// </summary>
-    public class SessionModesState : AcpProtocolObject
+    public record SessionModesState : AcpProtocolObject
     {
         /// <summary>
         /// 当前模式 ID。
@@ -121,7 +121,7 @@ namespace SalmonEgg.Acp.Protocol
         public List<SessionMode> AvailableModes { get; set; } = new();
     }
 
-    public class SessionMode : AcpProtocolObject
+    public record SessionMode : AcpProtocolObject
     {
         [JsonPropertyName("id")]
         public string Id { get; set; } = string.Empty;

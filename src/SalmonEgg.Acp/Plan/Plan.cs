@@ -10,7 +10,7 @@ namespace SalmonEgg.Acp.Plan
     /// 计划类。
     /// 表示 Agent 的行动计划，包含一系列计划条目。
     /// </summary>
-    public class Plan : AcpProtocolObject
+    public record Plan : AcpProtocolObject
     {
         private List<PlanEntry> _entries = new List<PlanEntry>();
 
@@ -104,7 +104,7 @@ namespace SalmonEgg.Acp.Plan
     /// 计划条目类。
     /// 表示计划中的一个具体任务或步骤。
     /// </summary>
-    public class PlanEntry : AcpProtocolObject
+    public record PlanEntry : AcpProtocolObject
     {
         private string _content = string.Empty;
 

@@ -14,7 +14,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 用于 Agent 向客户端发送会话更新。
     /// </summary>
     [JsonConverter(typeof(SessionUpdateParamsJsonConverter))]
-    public class SessionUpdateParams : AcpProtocolObject
+    public record SessionUpdateParams : AcpProtocolObject
     {
         /// <summary>
         /// 会话 ID（必填）。
@@ -67,7 +67,7 @@ namespace SalmonEgg.Acp.Protocol
     [JsonDerivedType(typeof(ConfigOptionUpdate), "config_option_update")]
     [JsonDerivedType(typeof(SessionInfoUpdate), "session_info_update")]
     [JsonDerivedType(typeof(UsageUpdate), "usage_update")]
-    public class SessionUpdate : AcpProtocolObject
+    public record SessionUpdate : AcpProtocolObject
     {
         /// <summary>
         /// 未绑定到已知契约的前向兼容字段(含未知 sessionUpdate 判别值的完整 payload)。
@@ -150,7 +150,7 @@ namespace SalmonEgg.Acp.Protocol
         }
     }
 
-    public abstract class ContentChunkUpdate : SessionUpdate
+    public abstract record ContentChunkUpdate : SessionUpdate
     {
         [JsonPropertyName("messageId")]
         public string? MessageId { get; set; }
@@ -160,7 +160,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Usage update extension.
     /// Represents resource usage or other telemetry sent by the agent.
     /// </summary>
-    public class UsageUpdate : SessionUpdate
+    public record UsageUpdate : SessionUpdate
     {
         [JsonPropertyName("used")]
         public ulong Used { get; set; }
@@ -172,7 +172,7 @@ namespace SalmonEgg.Acp.Protocol
         public UsageCost? Cost { get; set; }
     }
 
-    public class UsageCost : AcpProtocolObject
+    public record UsageCost : AcpProtocolObject
     {
         [JsonPropertyName("amount")]
         public double Amount { get; set; }
@@ -185,7 +185,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Agent 消息片段更新。
     /// 用于流式传输 Agent 的文本响应。
     /// </summary>
-    public class AgentMessageUpdate : ContentChunkUpdate
+    public record AgentMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
         public ContentBlock? Content { get; set; }
@@ -210,7 +210,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 用户消息片段更新（用于 session/load 回放或多端同步）。
     /// </summary>
-    public class UserMessageUpdate : ContentChunkUpdate
+    public record UserMessageUpdate : ContentChunkUpdate
     {
         [JsonPropertyName("content")]
         public ContentBlock? Content { get; set; }
@@ -228,7 +228,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// Agent 思考片段更新（通常不直接展示给用户，但必须可解析/可跳过）。
     /// </summary>
-    public class AgentThoughtUpdate : ContentChunkUpdate
+    public record AgentThoughtUpdate : ContentChunkUpdate
     {
         /// <summary>
         /// 消息内容块。
@@ -241,7 +241,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 工具调用更新。
     /// 用于通知客户端工具调用的状态变化。
     /// </summary>
-    public class ToolCallUpdate : SessionUpdate
+    public record ToolCallUpdate : SessionUpdate
     {
         /// <summary>
         /// 工具调用 ID。
@@ -334,7 +334,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 计划更新。
     /// 用于通知客户端 Agent 的行动计划变化。
     /// </summary>
-    public class PlanUpdate : SessionUpdate
+    public record PlanUpdate : SessionUpdate
     {
         private List<PlanEntry> _entries = new();
 
@@ -388,7 +388,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 当前模式更新（current_mode_update）。
     /// ACP 会通过 session/update 通知发送当前模式的变化。
     /// </summary>
-    public class CurrentModeUpdate : SessionUpdate
+    public record CurrentModeUpdate : SessionUpdate
     {
         [JsonPropertyName("currentModeId")]
         public string ModeId { get; set; } = string.Empty;
@@ -407,7 +407,7 @@ namespace SalmonEgg.Acp.Protocol
     /// 工具调用状态更新（tool_call_update）。
     /// 某些 Agent 不会在 tool_call update 中发送完整 toolCall 对象，只会推送状态与输出内容。
     /// </summary>
-    public class ToolCallStatusUpdate : SessionUpdate
+    public record ToolCallStatusUpdate : SessionUpdate
     {
         /// <summary>
         /// 工具调用 ID。
@@ -461,7 +461,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 配置选项更新（config_option_update）。
     /// </summary>
-    public class ConfigOptionUpdate : SessionUpdate
+    public record ConfigOptionUpdate : SessionUpdate
     {
         /// <summary>
         /// 配置选项列表。
@@ -473,7 +473,7 @@ namespace SalmonEgg.Acp.Protocol
     /// <summary>
     /// 会话信息更新（session_info_update）。
     /// </summary>
-    public class SessionInfoUpdate : SessionUpdate
+    public record SessionInfoUpdate : SessionUpdate
     {
         private string? _title;
         private string? _updatedAt;

@@ -11,7 +11,7 @@ namespace SalmonEgg.Acp.Mcp
     /// 支持多种传输类型（stdio、http、sse）的配置。
     /// </summary>
     [JsonConverter(typeof(McpServerJsonConverter))]
-    public abstract class McpServer : AcpProtocolObject
+    public abstract record McpServer : AcpProtocolObject
     {
         /// <summary>
         /// 服务器的显示名称。
@@ -33,7 +33,7 @@ namespace SalmonEgg.Acp.Mcp
     /// Stdio 类型的 MCP 服务器配置。
     /// 通过标准输入/输出与服务器通信。
     /// </summary>
-    public class StdioMcpServer : McpServer
+    public record StdioMcpServer : McpServer
     {
         /// <summary>
         /// 服务器可执行文件的命令。
@@ -84,7 +84,7 @@ namespace SalmonEgg.Acp.Mcp
     /// HTTP 类型的 MCP 服务器配置。
     /// 通过 HTTP 请求与服务器通信。
     /// </summary>
-    public class HttpMcpServer : McpServer
+    public record HttpMcpServer : McpServer
     {
         /// <summary>
         /// 服务器的 URL 地址。
@@ -123,7 +123,7 @@ namespace SalmonEgg.Acp.Mcp
     /// SSE (Server-Sent Events) 类型的 MCP 服务器配置。
     /// 通过 SSE 流与服务器通信。
     /// </summary>
-    public class SseMcpServer : McpServer
+    public record SseMcpServer : McpServer
     {
         /// <summary>
         /// SSE 端点的 URL 地址。
@@ -164,7 +164,7 @@ namespace SalmonEgg.Acp.Mcp
     /// spec 要求 receiver 对不认识的 transport「preserve the raw payload」，
     /// 由 Agent 而非 client 决定接受或拒绝。
     /// </summary>
-    public class CustomMcpServer : McpServer
+    public record CustomMcpServer : McpServer
     {
         /// <summary>
         /// 原始 <c>type</c> transport 值（如 <c>_custom</c> 扩展或未来 ACP 变体值）。
@@ -202,7 +202,7 @@ namespace SalmonEgg.Acp.Mcp
     /// <summary>
     /// MCP 环境变量配置类。
     /// </summary>
-    public class McpEnvVariable : AcpProtocolObject
+    public record McpEnvVariable : AcpProtocolObject
     {
         /// <summary>
         /// 环境变量名称。
@@ -238,7 +238,7 @@ namespace SalmonEgg.Acp.Mcp
     /// <summary>
     /// MCP HTTP 请求头配置类。
     /// </summary>
-    public class McpHttpHeader : AcpProtocolObject
+    public record McpHttpHeader : AcpProtocolObject
     {
         /// <summary>
         /// 请求头名称。

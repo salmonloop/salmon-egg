@@ -7,13 +7,13 @@ namespace SalmonEgg.Acp.Protocol;
 /// ACP Slash Commands types.
 /// https://agentclientprotocol.com/protocol/slash-commands
 /// </summary>
-public class AvailableCommandsUpdate : SessionUpdate
+public record AvailableCommandsUpdate : SessionUpdate
 {
     [JsonPropertyName("availableCommands")]
     public List<AvailableCommand> AvailableCommands { get; set; } = new();
 }
 
-public class AvailableCommand : AcpProtocolObject
+public record AvailableCommand : AcpProtocolObject
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
@@ -25,7 +25,7 @@ public class AvailableCommand : AcpProtocolObject
     public AvailableCommandInput? Input { get; set; }
 }
 
-public class AvailableCommandInput : AcpProtocolObject
+public record AvailableCommandInput : AcpProtocolObject
 {
     [JsonPropertyName("hint")]
     public string Hint { get; set; } = string.Empty;

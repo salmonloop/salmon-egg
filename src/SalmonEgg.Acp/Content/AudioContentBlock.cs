@@ -6,7 +6,7 @@ namespace SalmonEgg.Acp.Content
     /// 音频内容块。
     /// 用于表示 Base64 编码的音频数据。
     /// </summary>
-    public class AudioContentBlock : ContentBlock
+    public record AudioContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "audio"。

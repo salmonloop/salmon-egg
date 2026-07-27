@@ -9,7 +9,7 @@ namespace SalmonEgg.Acp.Protocol;
 /// https://agentclientprotocol.com/protocol/session-config-options
 /// </summary>
 [JsonConverter(typeof(ConfigOptionJsonConverter))]
-public class ConfigOption : AcpProtocolObject
+public record ConfigOption : AcpProtocolObject
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
@@ -39,7 +39,7 @@ public class ConfigOption : AcpProtocolObject
     public List<ConfigOptionGroup> OptionGroups { get; set; } = new();
 }
 
-public class ConfigOptionValue : AcpProtocolObject
+public record ConfigOptionValue : AcpProtocolObject
 {
     [JsonPropertyName("value")]
     public string Value { get; set; } = string.Empty;
@@ -51,7 +51,7 @@ public class ConfigOptionValue : AcpProtocolObject
     public string? Description { get; set; }
 }
 
-public class ConfigOptionGroup : AcpProtocolObject
+public record ConfigOptionGroup : AcpProtocolObject
 {
     [JsonPropertyName("group")]
     public string Group { get; set; } = string.Empty;

@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.Content
     /// 嵌入的资源对象。
     /// 用于 ResourceContentBlock 中包含的实际资源数据。
     /// </summary>
-    public class EmbeddedResource : AcpProtocolObject
+    public record EmbeddedResource : AcpProtocolObject
     {
         /// <summary>
         /// 资源的 URI 标识符。

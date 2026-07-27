@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.Content
     /// 资源内容块。
     /// 用于表示嵌入的实际资源数据（文本或二进制）。
     /// </summary>
-    public class ResourceContentBlock : ContentBlock
+    public record ResourceContentBlock : ContentBlock
     {
         /// <summary>
         /// 内容块类型标识符，固定为 "resource"。
