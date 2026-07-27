@@ -285,13 +285,6 @@ namespace SalmonEgg.Acp.Protocol
         /// <summary>
         /// Creates a new TerminalRequestEventArgs instance.
         /// </summary>
-        public TerminalRequestEventArgs()
-        {
-        }
-
-        /// <summary>
-        /// Creates a new TerminalRequestEventArgs instance.
-        /// </summary>
         public TerminalRequestEventArgs(
             object messageId,
             string sessionId,
@@ -327,10 +320,6 @@ namespace SalmonEgg.Acp.Protocol
         public TerminalExitStatus? ExitStatus { get; init; }
 
         public bool IsReleased { get; init; }
-
-        public TerminalStateChangedEventArgs()
-        {
-        }
 
         public TerminalStateChangedEventArgs(
             string sessionId,

@@ -17,6 +17,14 @@ JSON-RPC envelopes, message parser/validator, and all JsonConverters are assembl
 - .NET 10 (`net10.0`)
 - Zero package dependencies; AOT/trim compatible (`IsAotCompatible`)
 
+## Collection equality
+
+Wire DTOs are `record` types, but collection properties remain mutable `List<T>` /
+`Dictionary<TKey,TValue>` for STJ source-gen friendliness. Record equality is therefore
+**reference equality on collections**, not deep structural equality. Hosts that need
+value snapshots should clone via helpers such as `McpServerSnapshots` / `AcpMetaJson.Clone`
+or re-serialize through `AcpJsonContext`.
+
 ## License
 
 MIT

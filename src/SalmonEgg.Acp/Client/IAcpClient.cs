@@ -244,13 +244,6 @@ namespace SalmonEgg.Acp.Client
         /// <summary>
         /// 创建新的会话更新事件参数。
         /// </summary>
-        public SessionUpdateEventArgs()
-        {
-        }
-
-        /// <summary>
-        /// 创建新的会话更新事件参数。
-        /// </summary>
         /// <param name="sessionId">会话 ID</param>
         /// <param name="update">更新内容</param>
         public SessionUpdateEventArgs(string sessionId, SessionUpdate? update)
@@ -289,13 +282,6 @@ namespace SalmonEgg.Acp.Client
         /// 响应回调。
         /// </summary>
         public Func<string, string?, Task> Respond { get; init; } = null!;
-
-        /// <summary>
-        /// 创建新的权限请求事件参数。
-        /// </summary>
-        public PermissionRequestEventArgs()
-        {
-        }
 
         /// <summary>
         /// 创建新的权限请求事件参数。
@@ -370,13 +356,6 @@ namespace SalmonEgg.Acp.Client
         /// 响应回调。
         /// </summary>
         public Func<bool, string?, string?, Task> Respond { get; init; } = null!;
-
-        /// <summary>
-        /// 创建新的文件系统请求事件参数。
-        /// </summary>
-        public FileSystemRequestEventArgs()
-        {
-        }
 
         /// <summary>
         /// 创建新的文件系统请求事件参数。
