@@ -935,7 +935,6 @@
   <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>尚未同步</value></data>
   <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>已上传本地配置</value></data>
   <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>已应用云端配置</value></data>
-  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>已应用云端配置，并保留本地备份</value></data>
   <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>成功</value></data>
   <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>上次同步：{0} · {1:g}</value></data>
   <data name="DataStorage_CloudSyncSavedConnectionContext" xml:space="preserve"><value>已保留 {0} 连接设置</value></data>

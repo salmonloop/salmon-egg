@@ -48,12 +48,7 @@ public enum CloudTransferOutcome
 {
     None,
     Uploaded,
-    Restored,
-    /// <summary>
-    /// 历史兼容：旧实现在 LWW 下静默应用远端冲突。
-    /// 新实现真冲突 fail-closed，不再产生该 outcome；保留枚举值以免破坏已序列化/绑定分支。
-    /// </summary>
-    ConflictRemoteApplied
+    Restored
 }
 
 /// <summary>

@@ -929,7 +929,6 @@ Create the corresponding Markdown file in:
   <data name="DataStorage_CloudSyncNeverSynced" xml:space="preserve"><value>Not synced yet</value></data>
   <data name="DataStorage_CloudSyncUploadedLocal" xml:space="preserve"><value>Local configuration uploaded</value></data>
   <data name="DataStorage_CloudSyncAppliedRemote" xml:space="preserve"><value>Cloud configuration applied</value></data>
-  <data name="DataStorage_CloudSyncAppliedRemoteConflict" xml:space="preserve"><value>Cloud configuration applied; local backup retained</value></data>
   <data name="DataStorage_CloudSyncLastSucceeded" xml:space="preserve"><value>Succeeded</value></data>
   <data name="DataStorage_CloudSyncTransferWithTime" xml:space="preserve"><value>Last sync: {0} · {1:g}</value></data>
   <data name="DataStorage_CloudSyncSavedConnectionContext" xml:space="preserve"><value>Saved {0} connection settings</value></data>

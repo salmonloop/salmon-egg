@@ -124,7 +124,7 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task TransportPersistence_WritesCanonicalStreamableHttp_AndReadsLegacyHttpSse()
+    public async Task TransportPersistence_WritesAndReadsCanonicalStreamableHttp()
     {
         var config = CreateTestConfiguration("streamable-http-001");
         config.Transport = TransportType.StreamableHttp;
@@ -136,26 +136,7 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.Contains("transport: streamable_http", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("http_sse", yaml, StringComparison.Ordinal);
 
-        // 旧安装持久化的 legacy token 必须继续可读,升级不得让 profile 丢失传输类型。
-        var legacyId = "legacy-http-sse-001";
-        var legacyPath = GetServerYamlPath(legacyId);
-        Directory.CreateDirectory(Path.GetDirectoryName(legacyPath)!);
-        await File.WriteAllTextAsync(
-            legacyPath,
-            """
-            schema_version: 2
-            id: legacy-http-sse-001
-            name: Legacy Sse Profile
-            transport: http_sse
-            server_url: https://agents.example.com/acp
-            connection_timeout_seconds: 10
-            authentication:
-              mode: none
-            proxy:
-              mode: system
-            """, TestContext.Current.CancellationToken);
-
-        var loaded = await _configManager.LoadConfigurationAsync(legacyId);
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
         Assert.NotNull(loaded);
         Assert.Equal(TransportType.StreamableHttp, loaded!.Transport);
     }

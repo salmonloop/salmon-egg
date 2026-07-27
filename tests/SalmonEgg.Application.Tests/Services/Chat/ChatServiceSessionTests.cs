@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Moq;
 using Serilog;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
@@ -951,16 +950,11 @@ public sealed class ChatServiceSessionTests
 
     private sealed class ScriptedTransport : ITransport
     {
-        private readonly MessageParser _parser = new();
-        private int _nextResponseId = 1;
-
         public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
 
         public event EventHandler<TransportErrorEventArgs>? ErrorOccurred;
 
         public bool IsConnected => true;
-
-        public List<string> SentMessages { get; } = [];
 
         public Task<bool> ConnectAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
@@ -968,36 +962,11 @@ public sealed class ChatServiceSessionTests
 
         public Task<bool> SendMessageAsync(string message, CancellationToken cancellationToken = default)
         {
+            // Factory wiring test only needs a live Domain transport identity.
+            // Protocol responses are supplied by StubAcpClientFactory/ScriptedAcpClient, not this transport.
+            _ = MessageReceived;
             _ = ErrorOccurred;
-            SentMessages.Add(message);
-
-            var parsed = _parser.ParseMessage(message);
-            if (parsed is JsonRpcRequest request)
-            {
-                var response = request.Method switch
-                {
-                    "initialize" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(
-                            new InitializeResponse(
-                                1,
-                                new AgentInfo("TestAgent", "1.0.0"),
-                                new AgentCapabilities(loadSession: true)),
-                            _parser.Options)),
-                    "session/load" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(new SessionLoadResponse(), _parser.Options)),
-                    "session/prompt" => new JsonRpcResponse(
-                        request.Id,
-                        JsonSerializer.SerializeToElement(new SessionPromptResponse(StopReason.EndTurn), _parser.Options)),
-                    _ => new JsonRpcResponse(
-                        request.Id ?? _nextResponseId++,
-                        JsonSerializer.SerializeToElement(new { }, _parser.Options))
-                };
-
-                MessageReceived?.Invoke(this, new MessageReceivedEventArgs(_parser.SerializeMessage(response)));
-            }
-
+            _ = message;
             return Task.FromResult(true);
         }
 

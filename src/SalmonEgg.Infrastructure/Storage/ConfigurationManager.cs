@@ -338,8 +338,6 @@ public sealed class ConfigurationManager : IConfigurationService
         {
             "stdio" => TransportType.Stdio,
             "streamable_http" => TransportType.StreamableHttp,
-            // 旧安装持久化的 legacy token,读取兼容;写出一律 canonical streamable_http。
-            "http_sse" => TransportType.StreamableHttp,
             "websocket" => TransportType.WebSocket,
             _ => TransportType.WebSocket
         };

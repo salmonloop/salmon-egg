@@ -177,7 +177,6 @@ public partial class CloudConfigSettingsViewModel : ObservableObject, IDisposabl
             {
                 CloudTransferOutcome.Uploaded => _localizer["DataStorage_CloudSyncUploadedLocal"],
                 CloudTransferOutcome.Restored => _localizer["DataStorage_CloudSyncAppliedRemote"],
-                CloudTransferOutcome.ConflictRemoteApplied => _localizer["DataStorage_CloudSyncAppliedRemoteConflict"],
                 _ => _localizer["DataStorage_CloudSyncLastSucceeded"]
             };
             return string.Format(

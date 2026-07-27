@@ -314,7 +314,6 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["DataStorage_CloudSyncNeverSynced"] = "Not synced yet",
         ["DataStorage_CloudSyncUploadedLocal"] = "Local configuration uploaded",
         ["DataStorage_CloudSyncAppliedRemote"] = "Cloud configuration applied",
-        ["DataStorage_CloudSyncAppliedRemoteConflict"] = "Cloud configuration applied; local backup retained",
         ["DataStorage_CloudSyncLastSucceeded"] = "Succeeded",
         ["DataStorage_CloudSyncTransferWithTime"] = "Last sync: {0} · {1:g}",
         ["DataStorage_CloudSyncSavedConnectionContext"] = "Saved {0} connection settings",
