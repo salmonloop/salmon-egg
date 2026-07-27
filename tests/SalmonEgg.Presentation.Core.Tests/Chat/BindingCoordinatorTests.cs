@@ -90,8 +90,8 @@ public sealed class BindingCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "Plan",
-                    Status = PlanEntryStatus.Pending,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.Pending.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -141,8 +141,8 @@ public sealed class BindingCoordinatorTests
                     ImmutableList.Create(new ConversationPlanEntrySnapshot
                     {
                         Content = "Plan",
-                        Status = PlanEntryStatus.Pending,
-                        Priority = PlanEntryPriority.Medium
+                        Status = PlanEntryStatus.Pending.ToString(),
+                        Priority = PlanEntryPriority.Medium.ToString()
                     }),
                     true)),
             ConversationSessionStates = ImmutableDictionary<string, ConversationSessionStateSlice>.Empty.Add(
@@ -174,8 +174,8 @@ public sealed class BindingCoordinatorTests
             PlanEntries = ImmutableList.Create(new ConversationPlanEntrySnapshot
             {
                 Content = "Plan",
-                Status = PlanEntryStatus.Pending,
-                Priority = PlanEntryPriority.Medium
+                Status = PlanEntryStatus.Pending.ToString(),
+                Priority = PlanEntryPriority.Medium.ToString()
             }),
             AvailableModes = ImmutableList.Create(new ConversationModeOptionSnapshot { ModeId = "mode-1", ModeName = "Mode 1" }),
             SelectedModeId = "mode-1",
@@ -480,8 +480,8 @@ public sealed class BindingCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "Plan",
-                    Status = PlanEntryStatus.Pending,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.Pending.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -515,8 +515,8 @@ public sealed class BindingCoordinatorTests
                     ImmutableList.Create(new ConversationPlanEntrySnapshot
                     {
                         Content = "Plan",
-                        Status = PlanEntryStatus.Pending,
-                        Priority = PlanEntryPriority.Medium
+                        Status = PlanEntryStatus.Pending.ToString(),
+                        Priority = PlanEntryPriority.Medium.ToString()
                     }),
                     true))
         };

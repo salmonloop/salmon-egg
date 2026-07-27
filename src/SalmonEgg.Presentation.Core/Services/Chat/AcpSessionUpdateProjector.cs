@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
@@ -135,12 +136,7 @@ public sealed class AcpSessionUpdateProjector : IAcpSessionUpdateProjector
             throw new JsonException("Plan update entries must not contain null items.");
         }
 
-        return new ConversationPlanEntrySnapshot
-        {
-            Content = entry.Content,
-            Status = entry.Status,
-            Priority = entry.Priority
-        };
+        return ConversationPlanWire.ToDomain(entry);
     }
 
     private static IReadOnlyList<AcpAvailableCommandSnapshot> MapAvailableCommands(

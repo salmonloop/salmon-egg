@@ -2186,13 +2186,13 @@ public partial class ChatViewModel
             Title = toolCall.Title ?? string.Empty,
             TextContent = ResolveToolCallOutput(toolCall.RawOutput, toolCall.Content, string.Empty),
             ToolCallId = toolCall.ToolCallId,
-            ToolCallKind = toolCall.Kind,
-            ToolCallStatus = toolCall.Status,
+            ToolCallKind = ToolCallContentSnapshots.FormatKind(toolCall.Kind),
+            ToolCallStatus = ToolCallContentSnapshots.FormatStatus(toolCall.Status),
             ToolCallJson = ResolveToolCallPayload(toolCall.RawInput, toolCall.Content),
             ToolCallRawInputJson = TryGetRawJson(toolCall.RawInput),
             ToolCallRawOutputJson = TryGetRawJson(toolCall.RawOutput),
-            ToolCallContent = ToolCallContentSnapshots.CloneList(toolCall.Content),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(toolCall.Locations)
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(toolCall.Content),
+            ToolCallLocations = ToolCallContentSnapshots.ToDomainLocations(toolCall.Locations)
         };
     }
 
@@ -2240,16 +2240,20 @@ public partial class ChatViewModel
                 AudioMimeType = existing.AudioMimeType,
                 ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
-                ToolCallKind = toolCallStatusUpdate.Kind ?? existing.ToolCallKind,
-                ToolCallStatus = toolCallStatusUpdate.Status ?? existing.ToolCallStatus,
+                ToolCallKind = toolCallStatusUpdate.Kind is null
+                    ? existing.ToolCallKind
+                    : ToolCallContentSnapshots.FormatKind(toolCallStatusUpdate.Kind),
+                ToolCallStatus = toolCallStatusUpdate.Status is null
+                    ? existing.ToolCallStatus
+                    : ToolCallContentSnapshots.FormatStatus(toolCallStatusUpdate.Status),
                 ToolCallJson = ResolveToolCallPayload(toolCallStatusUpdate.RawInput, toolCallStatusUpdate.Content) ?? existing.ToolCallJson,
                 ToolCallRawInputJson = TryGetRawJson(toolCallStatusUpdate.RawInput) ?? existing.ToolCallRawInputJson,
                 ToolCallRawOutputJson = TryGetRawJson(toolCallStatusUpdate.RawOutput) ?? existing.ToolCallRawOutputJson,
                 ToolCallContent = toolCallStatusUpdate.Content is not null
-                    ? ToolCallContentSnapshots.CloneList(toolCallStatusUpdate.Content)
+                    ? ToolCallContentSnapshots.ToDomainContent(toolCallStatusUpdate.Content)
                     : existing.ToolCallContent,
                 ToolCallLocations = toolCallStatusUpdate.Locations is not null
-                    ? ToolCallContentSnapshots.CloneLocations(toolCallStatusUpdate.Locations)
+                    ? ToolCallContentSnapshots.ToDomainLocations(toolCallStatusUpdate.Locations)
                     : existing.ToolCallLocations,
                 PlanEntry = ClonePlanEntrySnapshot(existing.PlanEntry),
                 ModeId = existing.ModeId
@@ -2270,13 +2274,13 @@ public partial class ChatViewModel
             Title = toolCallStatusUpdate.Title ?? string.Empty,
             TextContent = ResolveToolCallOutput(toolCallStatusUpdate.RawOutput, toolCallStatusUpdate.Content, string.Empty),
             ToolCallId = toolCallStatusUpdate.ToolCallId,
-            ToolCallKind = toolCallStatusUpdate.Kind,
-            ToolCallStatus = toolCallStatusUpdate.Status,
+            ToolCallKind = ToolCallContentSnapshots.FormatKind(toolCallStatusUpdate.Kind),
+            ToolCallStatus = ToolCallContentSnapshots.FormatStatus(toolCallStatusUpdate.Status),
             ToolCallJson = ResolveToolCallPayload(toolCallStatusUpdate.RawInput, toolCallStatusUpdate.Content),
             ToolCallRawInputJson = TryGetRawJson(toolCallStatusUpdate.RawInput),
             ToolCallRawOutputJson = TryGetRawJson(toolCallStatusUpdate.RawOutput),
-            ToolCallContent = ToolCallContentSnapshots.CloneList(toolCallStatusUpdate.Content),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(toolCallStatusUpdate.Locations)
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(toolCallStatusUpdate.Content),
+            ToolCallLocations = ToolCallContentSnapshots.ToDomainLocations(toolCallStatusUpdate.Locations)
         };
     }
 
@@ -2406,9 +2410,9 @@ public partial class ChatViewModel
             .Where(message =>
                 string.Equals(message.ContentType, "tool_call", StringComparison.Ordinal)
                 && !string.IsNullOrWhiteSpace(message.ToolCallId)
-                && (message.ToolCallStatus is null
-                    || message.ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.Pending
-                    || message.ToolCallStatus == SalmonEgg.Acp.Tool.ToolCallStatus.InProgress))
+                && (string.IsNullOrWhiteSpace(message.ToolCallStatus)
+                    || string.Equals(message.ToolCallStatus, SalmonEgg.Acp.Tool.ToolCallStatus.Pending.ToString(), StringComparison.Ordinal)
+                    || string.Equals(message.ToolCallStatus, SalmonEgg.Acp.Tool.ToolCallStatus.InProgress.ToString(), StringComparison.Ordinal)))
             .ToArray();
 
         foreach (var existing in pendingToolCalls)
@@ -2428,12 +2432,12 @@ public partial class ChatViewModel
                 ProtocolMessageId = existing.ProtocolMessageId,
                 ToolCallId = existing.ToolCallId,
                 ToolCallKind = existing.ToolCallKind,
-                ToolCallStatus = SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled,
+                ToolCallStatus = SalmonEgg.Acp.Tool.ToolCallStatus.Cancelled.ToString(),
                 ToolCallJson = existing.ToolCallJson,
                 ToolCallRawInputJson = existing.ToolCallRawInputJson,
                 ToolCallRawOutputJson = existing.ToolCallRawOutputJson,
-                ToolCallContent = CloneToolCallContentList(existing.ToolCallContent),
-                ToolCallLocations = CloneToolCallLocationList(existing.ToolCallLocations),
+                ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(existing.ToolCallContent),
+                ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(existing.ToolCallLocations),
                 PlanEntry = ClonePlanEntrySnapshot(existing.PlanEntry),
                 ModeId = existing.ModeId
             })).ConfigureAwait(true);

@@ -1819,9 +1819,14 @@ public sealed class AcpChatCoordinatorTests
         var provider = new SettingsAcpMcpServerProvider(new FakeMcpSettingsService(settings));
 
         var servers = await provider.GetMcpServersAsync(TestContext.Current.CancellationToken);
-        source.Url = "https://mutated.example.com/mcp";
-        source.Headers![0].Value = "mutated";
-        source.Meta["source"] = "mutated";
+        // ACP wire DTOs are init-only; isolation is verified by NotSame + unchanged captured values
+        // even if the caller retains the original catalog entry reference.
+        _ = source with
+        {
+            Url = "https://mutated.example.com/mcp",
+            Headers = [new McpHttpHeader(source.Headers![0].Name, "mutated")],
+            Meta = new Dictionary<string, object?> { ["source"] = "mutated" }
+        };
 
         var captured = Assert.IsType<HttpMcpServer>(Assert.Single(servers));
         Assert.NotSame(source, captured);

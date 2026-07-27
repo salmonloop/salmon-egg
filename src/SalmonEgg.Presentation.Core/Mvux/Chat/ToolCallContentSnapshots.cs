@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using SalmonEgg.Acp.Serialization;
 using SalmonEgg.Acp.Tool;
@@ -5,12 +7,76 @@ using SalmonEgg.Acp.Tool;
 namespace SalmonEgg.Presentation.Core.Mvux.Chat;
 
 /// <summary>
-/// Clones and compares ACP tool-call content via the SDK source-generated context.
-/// Host code must not re-source-generate Acp polymorphic types; that would require
-/// public converter types and leaks SDK implementation details.
+/// Presentation-owned projections between Domain conversation snapshots (opaque JSON /
+/// open wire strings) and ACP tool-call DTOs used by chat ViewModels.
 /// </summary>
 internal static class ToolCallContentSnapshots
 {
+    public static JsonElement? ToDomainContent(IReadOnlyList<ToolCallContent>? content)
+    {
+        if (content is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return JsonSerializer.SerializeToElement(content, AcpJsonContext.Default.ListToolCallContent);
+    }
+
+    public static List<ToolCallContent>? FromDomainContent(JsonElement? content)
+    {
+        if (content is null || content.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Deserialize(content.Value, AcpJsonContext.Default.ListToolCallContent);
+    }
+
+    public static JsonElement? ToDomainLocations(IReadOnlyList<ToolCallLocation>? locations)
+    {
+        if (locations is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return JsonSerializer.SerializeToElement(locations, AcpJsonContext.Default.ListToolCallLocation);
+    }
+
+    public static List<ToolCallLocation>? FromDomainLocations(JsonElement? locations)
+    {
+        if (locations is null || locations.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Deserialize(locations.Value, AcpJsonContext.Default.ListToolCallLocation);
+    }
+
+    public static JsonElement? CloneDomainPayload(JsonElement? payload)
+    {
+        if (payload is null || payload.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return payload.Value.Clone();
+    }
+
+    public static bool DomainPayloadEquals(JsonElement? left, JsonElement? right)
+    {
+        if (left is null || left.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return right is null || right.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
+        }
+
+        if (right is null || right.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return false;
+        }
+
+        return string.Equals(left.Value.GetRawText(), right.Value.GetRawText(), StringComparison.Ordinal);
+    }
+
     public static List<ToolCallContent>? CloneList(IReadOnlyList<ToolCallContent>? content)
     {
         if (content is null)
@@ -38,7 +104,7 @@ internal static class ToolCallContentSnapshots
     public static bool SequenceEquals(
         IReadOnlyList<ToolCallContent>? left,
         IReadOnlyList<ToolCallContent>? right)
-        => JsonSequenceEquals(left, right);
+        => DomainPayloadEquals(ToDomainContent(left), ToDomainContent(right));
 
     public static List<ToolCallLocation>? CloneLocations(IReadOnlyList<ToolCallLocation>? locations)
     {
@@ -59,47 +125,20 @@ internal static class ToolCallContentSnapshots
     public static bool LocationsSequenceEquals(
         IReadOnlyList<ToolCallLocation>? left,
         IReadOnlyList<ToolCallLocation>? right)
-        => JsonSequenceEquals(left, right);
+        => DomainPayloadEquals(ToDomainLocations(left), ToDomainLocations(right));
 
     public static string? SerializePayload(IReadOnlyList<ToolCallContent>? content)
         => content is { Count: > 0 }
             ? JsonSerializer.Serialize(content, AcpJsonContext.Default.IReadOnlyListToolCallContent)
             : null;
 
-    private static bool JsonSequenceEquals<T>(
-        IReadOnlyList<T>? left,
-        IReadOnlyList<T>? right)
-    {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
+    public static ToolCallKind? ParseKind(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : new ToolCallKind(value);
 
-        if (left is null || right is null || left.Count != right.Count)
-        {
-            return false;
-        }
+    public static ToolCallStatus? ParseStatus(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : new ToolCallStatus(value);
 
-        for (var i = 0; i < left.Count; i++)
-        {
-            if (!string.Equals(SerializeValue(left[i]), SerializeValue(right[i]), StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
+    public static string? FormatKind(ToolCallKind? kind) => kind?.ToString();
 
-        return true;
-    }
-
-    private static string SerializeValue<T>(T value)
-        => value switch
-        {
-            ToolCallContent toolCallContent => JsonSerializer.Serialize(
-                toolCallContent,
-                AcpJsonContext.Default.ToolCallContent),
-            ToolCallLocation toolCallLocation => JsonSerializer.Serialize(
-                toolCallLocation,
-                AcpJsonContext.Default.ToolCallLocation),
-            _ => throw new InvalidOperationException($"Unsupported tool call snapshot value type: {typeof(T).FullName}")
-        };
+    public static string? FormatStatus(ToolCallStatus? status) => status?.ToString();
 }

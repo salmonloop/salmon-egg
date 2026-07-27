@@ -1,3 +1,4 @@
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
@@ -24,10 +25,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var path = AbsolutePath("src/App.cs");
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent(path, "one\nold\n", "one\nnew\nextra\n")
-            }
+            })
         };
 
         var change = Assert.Single(coordinator.Project(new[] { message }));
@@ -48,10 +49,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         {
             new ConversationMessageSnapshot
             {
-                ToolCallContent = new List<ToolCallContent>
+                ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                 {
                     new DiffToolCallContent(path, "old\n", "new\nnext\n")
-                }
+                })
             }
         };
 
@@ -68,10 +69,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var coordinator = new TaskOverviewChangeProjectionCoordinator();
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent(AbsolutePath("src/New.cs"), null, "one\ntwo\n")
-            }
+            })
         };
 
         var change = Assert.Single(coordinator.Project(new[] { message }));
@@ -86,10 +87,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var coordinator = new TaskOverviewChangeProjectionCoordinator();
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent(AbsolutePath("src/Empty.cs"), "old\n", string.Empty)
-            }
+            })
         };
 
         var change = Assert.Single(coordinator.Project(new[] { message }));
@@ -104,10 +105,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var coordinator = new TaskOverviewChangeProjectionCoordinator();
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent(AbsolutePath("src/Old.cs"), "one\n", null)
-            }
+            })
         };
 
         Assert.Empty(coordinator.Project(new[] { message }));
@@ -119,10 +120,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var coordinator = new TaskOverviewChangeProjectionCoordinator();
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent(null, "old", "new")
-            }
+            })
         };
 
         Assert.Empty(coordinator.Project(new[] { message }));
@@ -134,10 +135,10 @@ public sealed class TaskOverviewChangeProjectionCoordinatorTests
         var coordinator = new TaskOverviewChangeProjectionCoordinator();
         var message = new ConversationMessageSnapshot
         {
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new DiffToolCallContent("src/Relative.cs", "old", "new")
-            }
+            })
         };
 
         Assert.Empty(coordinator.Project(new[] { message }));

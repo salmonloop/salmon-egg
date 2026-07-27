@@ -679,16 +679,11 @@ public static class ChatReducer
             ToolCallJson = source.ToolCallJson,
             ToolCallRawInputJson = source.ToolCallRawInputJson,
             ToolCallRawOutputJson = source.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(source.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(source.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallLocations),
             PlanEntry = source.PlanEntry is null
                 ? null
-                : new ConversationPlanEntrySnapshot
-                {
-                    Content = source.PlanEntry.Content,
-                    Status = source.PlanEntry.Status,
-                    Priority = source.PlanEntry.Priority
-                },
+                : ConversationPlanWire.CloneDomain(source.PlanEntry),
             ModeId = source.ModeId
         };
     }

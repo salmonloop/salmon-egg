@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SalmonEgg.Acp.Protocol;
-using SalmonEgg.Acp.Tool;
-using SalmonEgg.Acp.Plan;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {
@@ -223,30 +221,14 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string? ToolCallId { get; set; }
 
         /// <summary>
-        /// In-memory ACP tool-call kind. Persistence uses <see cref="ToolCallKindWire"/>.
+        /// Open ACP tool-call kind wire value (for example read, execute).
         /// </summary>
-        [JsonIgnore]
-        public ToolCallKind? ToolCallKind { get; set; }
-
-        [JsonPropertyName("toolCallKind")]
-        public string? ToolCallKindWire
-        {
-            get => ToolCallKind?.ToString();
-            set => ToolCallKind = ConversationAcpWireProjection.ParseToolCallKind(value);
-        }
+        public string? ToolCallKind { get; set; }
 
         /// <summary>
-        /// In-memory ACP tool-call status. Persistence uses <see cref="ToolCallStatusWire"/>.
+        /// Open ACP tool-call status wire value (for example pending, completed).
         /// </summary>
-        [JsonIgnore]
-        public ToolCallStatus? ToolCallStatus { get; set; }
-
-        [JsonPropertyName("toolCallStatus")]
-        public string? ToolCallStatusWire
-        {
-            get => ToolCallStatus?.ToString();
-            set => ToolCallStatus = ConversationAcpWireProjection.ParseToolCallStatus(value);
-        }
+        public string? ToolCallStatus { get; set; }
 
         public string? ToolCallJson { get; set; }
 
@@ -255,30 +237,15 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string? ToolCallRawOutputJson { get; set; }
 
         /// <summary>
-        /// In-memory ACP tool-call content blocks. Persistence uses <see cref="ToolCallContentWire"/>.
+        /// Opaque ACP tool-call content array payload. Presentation deserializes through
+        /// <c>AcpJsonContext</c>; Domain never retains protocol DTO instances.
         /// </summary>
-        [JsonIgnore]
-        public List<ToolCallContent>? ToolCallContent { get; set; }
-
-        [JsonPropertyName("toolCallContent")]
-        public JsonElement? ToolCallContentWire
-        {
-            get => ConversationAcpWireProjection.SerializeToolCallContent(ToolCallContent);
-            set => ToolCallContent = ConversationAcpWireProjection.DeserializeToolCallContent(value);
-        }
+        public JsonElement? ToolCallContent { get; set; }
 
         /// <summary>
-        /// In-memory ACP tool-call locations. Persistence uses <see cref="ToolCallLocationsWire"/>.
+        /// Opaque ACP tool-call locations array payload.
         /// </summary>
-        [JsonIgnore]
-        public List<ToolCallLocation>? ToolCallLocations { get; set; }
-
-        [JsonPropertyName("toolCallLocations")]
-        public JsonElement? ToolCallLocationsWire
-        {
-            get => ConversationAcpWireProjection.SerializeToolCallLocations(ToolCallLocations);
-            set => ToolCallLocations = ConversationAcpWireProjection.DeserializeToolCallLocations(value);
-        }
+        public JsonElement? ToolCallLocations { get; set; }
 
         public ConversationPlanEntrySnapshot? PlanEntry { get; set; }
 
@@ -290,30 +257,14 @@ namespace SalmonEgg.Domain.Models.Conversation
         public string Content { get; set; } = string.Empty;
 
         /// <summary>
-        /// In-memory ACP plan status. Persistence uses <see cref="StatusWire"/>.
+        /// Open ACP plan entry status wire value.
         /// </summary>
-        [JsonIgnore]
-        public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
-
-        [JsonPropertyName("status")]
-        public string StatusWire
-        {
-            get => Status.ToString();
-            set => Status = ConversationAcpWireProjection.ParsePlanEntryStatus(value);
-        }
+        public string Status { get; set; } = "pending";
 
         /// <summary>
-        /// In-memory ACP plan priority. Persistence uses <see cref="PriorityWire"/>.
+        /// Open ACP plan entry priority wire value.
         /// </summary>
-        [JsonIgnore]
-        public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Low;
-
-        [JsonPropertyName("priority")]
-        public string PriorityWire
-        {
-            get => Priority.ToString();
-            set => Priority = ConversationAcpWireProjection.ParsePlanEntryPriority(value);
-        }
+        public string Priority { get; set; } = "low";
     }
 
     /// <summary>

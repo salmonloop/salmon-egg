@@ -1,4 +1,5 @@
 ﻿using System;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -383,11 +384,11 @@ public sealed class ChatConversationWorkspaceTests
                     Id = "tool-1",
                     ContentType = "tool_call",
                     ToolCallId = "call-1",
-                    ToolCallStatus = ToolCallStatus.InProgress,
-                    ToolCallContent = new List<ToolCallContent>
+                    ToolCallStatus = ToolCallStatus.InProgress.ToString(),
+                    ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                     {
                         new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/doc"))
-                    },
+                    }),
                     Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             ],
@@ -398,7 +399,7 @@ public sealed class ChatConversationWorkspaceTests
 
         var snapshot = workspace.GetConversationSnapshot("session-1");
         var toolCall = Assert.Single(snapshot!.Transcript);
-        var structuredContent = Assert.Single(toolCall.ToolCallContent!);
+        var structuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(toolCall.ToolCallContent)!);
         var content = Assert.IsType<ContentToolCallContent>(structuredContent);
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
         Assert.Equal("https://example.com/doc", resourceLink.Uri);
@@ -408,7 +409,7 @@ public sealed class ChatConversationWorkspaceTests
         var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
         var conversation = Assert.Single(saved.Conversations);
         var savedToolCall = Assert.Single(conversation.Messages);
-        var savedStructuredContent = Assert.Single(savedToolCall.ToolCallContent!);
+        var savedStructuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(savedToolCall.ToolCallContent)!);
         var savedContent = Assert.IsType<ContentToolCallContent>(savedStructuredContent);
         var savedResourceLink = Assert.IsType<ResourceLinkContentBlock>(savedContent.Content);
         Assert.Equal("https://example.com/doc", savedResourceLink.Uri);
@@ -592,8 +593,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -786,8 +787,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -871,8 +872,8 @@ public sealed class ChatConversationWorkspaceTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -958,8 +959,8 @@ public sealed class ChatConversationWorkspaceTests
                             new ConversationPlanEntrySnapshot
                             {
                                 Content = "step-1",
-                                Status = PlanEntryStatus.InProgress,
-                                Priority = PlanEntryPriority.High
+                                Status = PlanEntryStatus.InProgress.ToString(),
+                                Priority = PlanEntryPriority.High.ToString()
                             }
                         },
                         AvailableModes =

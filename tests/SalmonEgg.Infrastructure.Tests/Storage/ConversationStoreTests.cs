@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SalmonEgg.Acp.Serialization;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -138,21 +139,19 @@ public sealed class ConversationStoreTests : IDisposable
                             Id = "tool-1",
                             ContentType = "tool_call",
                             ToolCallId = "call-1",
-                            ToolCallKind = ToolCallKind.Execute,
-                            ToolCallStatus = ToolCallStatus.Completed,
-                            ToolCallContent =
-                            [
-                                new ContentToolCallContent(new TextContentBlock("ran ls"))
-                            ],
-                            ToolCallLocations =
-                            [
-                                new ToolCallLocation("/tmp/a.txt", 12u)
-                            ],
+                            ToolCallKind = ToolCallKind.Execute.ToString(),
+                            ToolCallStatus = ToolCallStatus.Completed.ToString(),
+                            ToolCallContent = JsonSerializer.SerializeToElement(
+                                new List<ToolCallContent> { new ContentToolCallContent(new TextContentBlock("ran ls")) },
+                                AcpJsonContext.Default.ListToolCallContent),
+                            ToolCallLocations = JsonSerializer.SerializeToElement(
+                                new List<ToolCallLocation> { new ToolCallLocation("/tmp/a.txt", 12u) },
+                                AcpJsonContext.Default.ListToolCallLocation),
                             PlanEntry = new ConversationPlanEntrySnapshot
                             {
                                 Content = "inspect workspace",
-                                Status = PlanEntryStatus.Completed,
-                                Priority = PlanEntryPriority.High
+                                Status = PlanEntryStatus.Completed.ToString(),
+                                Priority = PlanEntryPriority.High.ToString()
                             }
                         }
                     },
@@ -161,8 +160,8 @@ public sealed class ConversationStoreTests : IDisposable
                         new ConversationPlanEntrySnapshot
                         {
                             Content = "inspect workspace",
-                            Status = PlanEntryStatus.InProgress,
-                            Priority = PlanEntryPriority.Medium
+                            Status = PlanEntryStatus.InProgress.ToString(),
+                            Priority = PlanEntryPriority.Medium.ToString()
                         }
                     }
                 }
@@ -174,18 +173,20 @@ public sealed class ConversationStoreTests : IDisposable
 
         var conversation = Assert.Single(loaded.Conversations);
         var message = Assert.Single(conversation.Messages);
-        Assert.Equal(ToolCallKind.Execute, message.ToolCallKind);
-        Assert.Equal(ToolCallStatus.Completed, message.ToolCallStatus);
-        var content = Assert.IsType<ContentToolCallContent>(Assert.Single(message.ToolCallContent!));
+        Assert.Equal(ToolCallKind.Execute.ToString(), message.ToolCallKind);
+        Assert.Equal(ToolCallStatus.Completed.ToString(), message.ToolCallStatus);
+        var contentList = JsonSerializer.Deserialize(message.ToolCallContent!.Value, AcpJsonContext.Default.ListToolCallContent);
+        var content = Assert.IsType<ContentToolCallContent>(Assert.Single(contentList!));
         Assert.Equal("ran ls", Assert.IsType<TextContentBlock>(content.Content).Text);
-        var location = Assert.Single(message.ToolCallLocations!);
+        var locations = JsonSerializer.Deserialize(message.ToolCallLocations!.Value, AcpJsonContext.Default.ListToolCallLocation);
+        var location = Assert.Single(locations!);
         Assert.Equal("/tmp/a.txt", location.Path);
         Assert.Equal(12u, location.Line);
-        Assert.Equal(PlanEntryStatus.Completed, message.PlanEntry!.Status);
-        Assert.Equal(PlanEntryPriority.High, message.PlanEntry.Priority);
+        Assert.Equal(PlanEntryStatus.Completed.ToString(), message.PlanEntry!.Status);
+        Assert.Equal(PlanEntryPriority.High.ToString(), message.PlanEntry.Priority);
         var plan = Assert.Single(conversation.Plan);
-        Assert.Equal(PlanEntryStatus.InProgress, plan.Status);
-        Assert.Equal(PlanEntryPriority.Medium, plan.Priority);
+        Assert.Equal(PlanEntryStatus.InProgress.ToString(), plan.Status);
+        Assert.Equal(PlanEntryPriority.Medium.ToString(), plan.Priority);
     }
 
     [Fact]

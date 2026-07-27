@@ -401,8 +401,8 @@ public class AcpSessionUpdateProjectorTests
         Assert.True(delta.ShowPlanPanel);
         var entry = Assert.Single(delta.PlanEntries!);
         Assert.Equal("Step 1", entry.Content);
-        Assert.Equal(PlanEntryStatus.Pending, entry.Status);
-        Assert.Equal(PlanEntryPriority.High, entry.Priority);
+        Assert.Equal(PlanEntryStatus.Pending.ToString(), entry.Status);
+        Assert.Equal(PlanEntryPriority.High.ToString(), entry.Priority);
     }
 
     [Fact]
@@ -598,9 +598,12 @@ public class AcpSessionUpdateProjectorTests
 
         // Act
         var delta = projector.Project(new SessionUpdateEventArgs("remote-1", update));
-        availableCommand.Name = "apply";
-        availableCommand.Description = "Apply the plan";
-        availableCommand.Input!.Hint = "target";
+        _ = availableCommand with
+        {
+            Name = "apply",
+            Description = "Apply the plan",
+            Input = availableCommand.Input is null ? null : availableCommand.Input with { Hint = "target" }
+        };
         update.AvailableCommands.Clear();
 
         // Assert

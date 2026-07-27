@@ -432,13 +432,13 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 AudioData = snapshot.AudioData ?? string.Empty;
                 AudioMimeType = snapshot.AudioMimeType ?? string.Empty;
                 ToolCallId = snapshot.ToolCallId;
-                ToolCallKind = snapshot.ToolCallKind;
-                ToolCallStatus = snapshot.ToolCallStatus;
+                ToolCallKind = ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind);
+                ToolCallStatus = ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus);
                 ToolCallJson = snapshot.ToolCallJson;
                 ToolCallRawInputJson = snapshot.ToolCallRawInputJson;
                 ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson;
-                ToolCallContent = ToolCallContentSnapshots.CloneList(snapshot.ToolCallContent);
-                ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations);
+                ToolCallContent = ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent);
+                ToolCallLocations = ToolCallContentSnapshots.FromDomainLocations(snapshot.ToolCallLocations);
                 ModeId = snapshot.ModeId;
 
                 if (snapshot.PlanEntry is not null)
@@ -448,15 +448,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                         PlanEntry = new PlanEntryViewModel
                         {
                             Content = snapshot.PlanEntry.Content ?? string.Empty,
-                            Status = snapshot.PlanEntry.Status,
-                            Priority = snapshot.PlanEntry.Priority
+                            Status = ConversationPlanWire.ParseStatus(snapshot.PlanEntry.Status),
+                            Priority = ConversationPlanWire.ParsePriority(snapshot.PlanEntry.Priority)
                         };
                     }
                     else
                     {
                         PlanEntry.Content = snapshot.PlanEntry.Content ?? string.Empty;
-                        PlanEntry.Status = snapshot.PlanEntry.Status;
-                        PlanEntry.Priority = snapshot.PlanEntry.Priority;
+                        PlanEntry.Status = ConversationPlanWire.ParseStatus(snapshot.PlanEntry.Status);
+                        PlanEntry.Priority = ConversationPlanWire.ParsePriority(snapshot.PlanEntry.Priority);
                     }
                 }
                 else

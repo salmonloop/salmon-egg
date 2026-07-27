@@ -650,8 +650,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             && string.Equals(left.ToolCallJson, right.ToolCallJson, StringComparison.Ordinal)
             && string.Equals(left.ToolCallRawInputJson, right.ToolCallRawInputJson, StringComparison.Ordinal)
             && string.Equals(left.ToolCallRawOutputJson, right.ToolCallRawOutputJson, StringComparison.Ordinal)
-            && ToolCallContentSnapshots.SequenceEquals(left.ToolCallContent, right.ToolCallContent)
-            && ToolCallContentSnapshots.LocationsSequenceEquals(left.ToolCallLocations, right.ToolCallLocations)
+            && ToolCallContentSnapshots.DomainPayloadEquals(left.ToolCallContent, right.ToolCallContent)
+            && ToolCallContentSnapshots.DomainPayloadEquals(left.ToolCallLocations, right.ToolCallLocations)
             && string.Equals(left.ModeId, right.ModeId, StringComparison.Ordinal)
             && PlanEntryEquals(left.PlanEntry, right.PlanEntry);
     }
@@ -664,8 +664,8 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
         }
 
         return string.Equals(left.Content, right.Content, StringComparison.Ordinal)
-            && left.Status == right.Status
-            && left.Priority == right.Priority;
+            && string.Equals(left.Status, right.Status, StringComparison.Ordinal)
+            && string.Equals(left.Priority, right.Priority, StringComparison.Ordinal);
     }
 
     private static bool ModeOptionEquals(ConversationModeOptionSnapshot left, ConversationModeOptionSnapshot right)
@@ -821,9 +821,9 @@ public sealed class WorkspaceWriter : IWorkspaceWriter, IDisposable
             ToolCallJson = snapshot.ToolCallJson,
             ToolCallRawInputJson = snapshot.ToolCallRawInputJson,
             ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(snapshot.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(snapshot.ToolCallLocations),
-            PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallLocations),
+            PlanEntry = snapshot.PlanEntry is null ? null : ConversationPlanWire.CloneDomain(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
 

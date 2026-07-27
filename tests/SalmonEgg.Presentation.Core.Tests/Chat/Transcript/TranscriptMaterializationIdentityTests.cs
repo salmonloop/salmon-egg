@@ -5,6 +5,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Chat.Transcript;
@@ -266,7 +267,7 @@ public sealed class TranscriptMaterializationIdentityTests
             ContentType = "tool_call",
             ToolCallId = toolCallId,
             Title = title,
-            ToolCallStatus = status
+            ToolCallStatus = ToolCallContentSnapshots.FormatStatus(status)
         };
 
     private static ChatMessageViewModel Project(ConversationMessageSnapshot snapshot, int index)
@@ -298,7 +299,7 @@ public sealed class TranscriptMaterializationIdentityTests
         && string.Equals(viewModel.Title ?? string.Empty, snapshot.Title ?? string.Empty, StringComparison.Ordinal)
         && string.Equals(viewModel.TextContent ?? string.Empty, snapshot.TextContent ?? string.Empty, StringComparison.Ordinal)
         && string.Equals(viewModel.ToolCallId, snapshot.ToolCallId, StringComparison.Ordinal)
-        && viewModel.ToolCallStatus == snapshot.ToolCallStatus;
+        && viewModel.ToolCallStatus == ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus);
 
     private enum MaterializationMode
     {

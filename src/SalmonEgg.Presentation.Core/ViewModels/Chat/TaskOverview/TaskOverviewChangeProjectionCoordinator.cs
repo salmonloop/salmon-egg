@@ -1,4 +1,5 @@
 using SalmonEgg.Domain.Models.Conversation;
+using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Acp.Tool;
 
 namespace SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
@@ -10,7 +11,7 @@ public sealed class TaskOverviewChangeProjectionCoordinator
         ArgumentNullException.ThrowIfNull(messages);
 
         return messages
-            .SelectMany(static message => message.ToolCallContent ?? Enumerable.Empty<ToolCallContent>())
+            .SelectMany(static message => ToolCallContentSnapshots.FromDomainContent(message.ToolCallContent) ?? Enumerable.Empty<ToolCallContent>())
             .OfType<DiffToolCallContent>()
             .Where(IsStableAcpDiff)
             .Select(CreateChange)

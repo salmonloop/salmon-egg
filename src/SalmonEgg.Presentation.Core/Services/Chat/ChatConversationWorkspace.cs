@@ -1272,8 +1272,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             ToolCallJson = source.ToolCallJson,
             ToolCallRawInputJson = source.ToolCallRawInputJson,
             ToolCallRawOutputJson = source.ToolCallRawOutputJson,
-            ToolCallContent = ToolCallContentSnapshots.CloneList(source.ToolCallContent),
-            ToolCallLocations = ToolCallContentSnapshots.CloneLocations(source.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(source.ToolCallLocations),
             PlanEntry = source.PlanEntry is null ? null : ClonePlanEntry(source.PlanEntry),
             ModeId = source.ModeId
         };
@@ -1292,12 +1292,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     }
 
     private static ConversationPlanEntrySnapshot ClonePlanEntry(ConversationPlanEntrySnapshot source)
-        => new()
-        {
-            Content = source.Content,
-            Status = source.Status,
-            Priority = source.Priority
-        };
+        => ConversationPlanWire.CloneDomain(source);
 
     private static ConversationModeOptionSnapshot CloneModeOption(ConversationModeOptionSnapshot source)
         => new()

@@ -220,8 +220,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "workspace plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -305,8 +305,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -509,8 +509,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -562,8 +562,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -736,8 +736,8 @@ public sealed class ConversationActivationCoordinatorTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "step-1",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.Medium
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.Medium.ToString()
                 }
             ],
             ShowPlanPanel: true,

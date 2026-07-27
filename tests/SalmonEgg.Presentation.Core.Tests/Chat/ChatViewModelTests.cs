@@ -3997,11 +3997,11 @@ public partial class ChatViewModelTests
             Id = "tool-1",
             ContentType = "tool_call",
             ToolCallId = "call-1",
-            ToolCallStatus = ToolCallStatus.InProgress,
-            ToolCallContent = new List<ToolCallContent>
+            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
+            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
             {
                 new ContentToolCallContent(new ImageContentBlock("image-data", "image/png"))
-            },
+            }),
             Timestamp = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)
         };
 
@@ -4626,13 +4626,13 @@ public partial class ChatViewModelTests
                             Id = "message-1",
                             Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
                             ContentType = "tool_call",
-                            ToolCallContent = new List<ToolCallContent>
+                            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                             {
                                 new DiffToolCallContent(
                                     diffPath,
                                     oldText: null,
                                     newText: "updated")
-                            }
+                            }),
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     ShowPlanPanel: false)),
@@ -4642,13 +4642,13 @@ public partial class ChatViewModelTests
                     Id = "message-1",
                     Timestamp = new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
                     ContentType = "tool_call",
-                    ToolCallContent = new List<ToolCallContent>
+                    ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                     {
                         new DiffToolCallContent(
                             diffPath,
                             oldText: null,
                             newText: "updated")
-                    }
+                    }),
                 })
         });
         await fixture.ApplyCurrentStoreProjectionAsync();
@@ -5997,8 +5997,9 @@ public partial class ChatViewModelTests
 
     private static IReadOnlyList<ToolCallContent> GetStructuredToolCallContent(ConversationMessageSnapshot snapshot)
     {
-        Assert.NotNull(snapshot.ToolCallContent);
-        return snapshot.ToolCallContent!;
+        var content = ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent);
+        Assert.NotNull(content);
+        return content!;
     }
 
     private static bool HasUnreadAttention(ConversationAttentionState attentionState, string conversationId)
@@ -7876,7 +7877,7 @@ public partial class ChatViewModelTests
                             Timestamp = null,
                             ContentType = "tool_call",
                             ToolCallId = "tool-replayed",
-                            ToolCallStatus = ToolCallStatus.Completed,
+                            ToolCallStatus = ToolCallStatus.Completed.ToString(),
                             Title = "replayed"
                         },
                         new ConversationMessageSnapshot
@@ -7886,7 +7887,7 @@ public partial class ChatViewModelTests
                             Timestamp = null,
                             ContentType = "tool_call",
                             ToolCallId = "tool-pending-null-time",
-                            ToolCallStatus = ToolCallStatus.InProgress,
+                            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                             Title = "pending-null-time"
                         },
                         new ConversationMessageSnapshot
@@ -7896,12 +7897,12 @@ public partial class ChatViewModelTests
                             Timestamp = observedToolTime,
                             ContentType = "tool_call",
                             ToolCallId = "tool-current",
-                            ToolCallStatus = ToolCallStatus.InProgress,
+                            ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                             Title = "current",
-                            ToolCallContent = new List<ToolCallContent>
+                            ToolCallContent = ToolCallContentSnapshots.ToDomainContent(new List<ToolCallContent>
                             {
                                 new ContentToolCallContent(new ResourceLinkContentBlock("https://example.com/tool-current"))
-                            }
+                            }),
                         }),
                     ImmutableList<ConversationPlanEntrySnapshot>.Empty,
                     false)),
@@ -7921,10 +7922,10 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             var cancelledCurrent = transcript.Any(message =>
                 string.Equals(message.Id, "tool-current", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
             var cancelledNullTime = transcript.Any(message =>
                 string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
             return state.ActiveTurn?.Phase == ChatTurnPhase.ToolRunning && cancelledCurrent && cancelledNullTime;
         }, timeoutMilliseconds: 12000);
 
@@ -7936,18 +7937,18 @@ public partial class ChatViewModelTests
 
         // Already-terminal historical tool calls are not rewritten.
         var replayed = finalTranscript.Single(message => string.Equals(message.Id, "tool-replayed", StringComparison.Ordinal));
-        Assert.Equal(ToolCallStatus.Completed, replayed.ToolCallStatus);
+        Assert.Equal(ToolCallStatus.Completed.ToString(), replayed.ToolCallStatus);
         Assert.Null(replayed.Timestamp);
 
         // Pending tool calls are cancelled by status, not wall-clock cutoffs; times are preserved.
         var cancelledNullTime = finalTranscript.Single(message => string.Equals(message.Id, "tool-pending-null-time", StringComparison.Ordinal));
-        Assert.Equal(ToolCallStatus.Cancelled, cancelledNullTime.ToolCallStatus);
+        Assert.Equal(ToolCallStatus.Cancelled.ToString(), cancelledNullTime.ToolCallStatus);
         Assert.Null(cancelledNullTime.Timestamp);
 
         var cancelledCurrent = finalTranscript.Single(message => string.Equals(message.Id, "tool-current", StringComparison.Ordinal));
-        Assert.Equal(ToolCallStatus.Cancelled, cancelledCurrent.ToolCallStatus);
+        Assert.Equal(ToolCallStatus.Cancelled.ToString(), cancelledCurrent.ToolCallStatus);
         Assert.Equal(observedToolTime, cancelledCurrent.Timestamp);
-        var structuredContent = Assert.Single(cancelledCurrent.ToolCallContent!);
+        var structuredContent = Assert.Single(ToolCallContentSnapshots.FromDomainContent(cancelledCurrent.ToolCallContent)!);
         var content = Assert.IsType<ContentToolCallContent>(structuredContent);
         var resourceLink = Assert.IsType<ResourceLinkContentBlock>(content.Content);
         Assert.Equal("https://example.com/tool-current", resourceLink.Uri);
@@ -7979,12 +7980,7 @@ public partial class ChatViewModelTests
         });
         syncContext.RunAll();
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-1",
-            SessionId = "remote-1",
-            Options = []
-        });
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-1", "remote-1", null, new List<PermissionOption>(), null!));
         await WaitForConditionAsync(() =>
         {
             syncContext.RunAll();
@@ -8025,12 +8021,7 @@ public partial class ChatViewModelTests
                 && string.Equals(state.ResolveBinding("session-1")?.RemoteSessionId, "remote-fresh", StringComparison.Ordinal);
         }, timeoutMilliseconds: 5000);
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-2",
-            SessionId = "remote-fresh",
-            Options = []
-        });
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs("permission-2", "remote-fresh", null, new List<PermissionOption>(), null!));
 
         await WaitForConditionAsync(() =>
         {
@@ -8081,18 +8072,16 @@ public partial class ChatViewModelTests
             }
             """).RootElement.Clone();
 
-        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs
-        {
-            MessageId = "permission-1",
-            SessionId = "remote-1",
-            ToolCall = toolCall,
-            Options =
+        chatService.Raise(service => service.PermissionRequestReceived += null, new PermissionRequestEventArgs(
+            "permission-1",
+            "remote-1",
+            toolCall,
             [
                 new PermissionOption("allow-once", "Allow once", "allow_once"),
                 new PermissionOption("allow-always", "Always allow", "allow_always"),
                 new PermissionOption("reject-once", "Reject", "reject_once")
-            ]
-        });
+            ],
+            null!));
 
         await WaitForConditionAsync(() =>
         {
@@ -8632,7 +8621,7 @@ public partial class ChatViewModelTests
                 Timestamp = DateTime.UtcNow,
                 ContentType = "tool_call",
                 ToolCallId = "call-1",
-                ToolCallStatus = ToolCallStatus.InProgress,
+                ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "title"
             }),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
@@ -8657,7 +8646,7 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
         });
 
         var state = await fixture.GetStateAsync();
@@ -8668,7 +8657,7 @@ public partial class ChatViewModelTests
         Assert.Contains(
             transcript,
             message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Cancelled);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Cancelled.ToString(), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -8692,7 +8681,7 @@ public partial class ChatViewModelTests
                 Timestamp = DateTime.UtcNow,
                 ContentType = "tool_call",
                 ToolCallId = "call-1",
-                ToolCallStatus = ToolCallStatus.InProgress,
+                ToolCallStatus = ToolCallStatus.InProgress.ToString(),
                 Title = "Read File"
             }),
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, DateTime.UtcNow, DateTime.UtcNow)
@@ -8718,7 +8707,7 @@ public partial class ChatViewModelTests
                 ?? ImmutableList<ConversationMessageSnapshot>.Empty;
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
-                && message.ToolCallStatus == ToolCallStatus.Failed);
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Failed.ToString(), StringComparison.Ordinal));
         });
 
         var failedState = await fixture.GetStateAsync();
@@ -8781,8 +8770,8 @@ public partial class ChatViewModelTests
             return transcript.Any(message =>
                 string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal)
                 && string.Equals(message.Title, "Switch mode", StringComparison.Ordinal)
-                && message.ToolCallKind == ToolCallKind.SwitchMode
-                && message.ToolCallStatus == ToolCallStatus.Completed);
+                && string.Equals(message.ToolCallKind, ToolCallKind.SwitchMode.ToString(), StringComparison.Ordinal)
+                && string.Equals(message.ToolCallStatus, ToolCallStatus.Completed.ToString(), StringComparison.Ordinal));
         });
 
         var finalState = await fixture.GetStateAsync();
@@ -8790,8 +8779,8 @@ public partial class ChatViewModelTests
             finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             message => string.Equals(message.ToolCallId, "call-1", StringComparison.Ordinal));
         Assert.Equal("Switch mode", toolCallMessage.Title);
-        Assert.Equal(ToolCallKind.SwitchMode, toolCallMessage.ToolCallKind);
-        Assert.Equal(ToolCallStatus.Completed, toolCallMessage.ToolCallStatus);
+        Assert.Equal(ToolCallKind.SwitchMode.ToString(), toolCallMessage.ToolCallKind);
+        Assert.Equal(ToolCallStatus.Completed.ToString(), toolCallMessage.ToolCallStatus);
         Assert.Equal("plan", JsonDocument.Parse(toolCallMessage.ToolCallJson!).RootElement.GetProperty("targetMode").GetString());
         Assert.True(JsonDocument.Parse(toolCallMessage.TextContent).RootElement.GetProperty("applied").GetBoolean());
     }
@@ -11708,8 +11697,8 @@ public partial class ChatViewModelTests
         Assert.True(finalContent.HasValue);
         var planEntry = Assert.Single(finalContent.Value.PlanEntries);
         Assert.Equal("restored plan", planEntry.Content);
-        Assert.Equal(PlanEntryStatus.Pending, planEntry.Status);
-        Assert.Equal(PlanEntryPriority.Medium, planEntry.Priority);
+        Assert.Equal(PlanEntryStatus.Pending.ToString(), planEntry.Status);
+        Assert.Equal(PlanEntryPriority.Medium.ToString(), planEntry.Priority);
         Assert.Contains(
             finalState.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty,
             message => string.Equals(message.TextContent, "late replay after plan", StringComparison.Ordinal));

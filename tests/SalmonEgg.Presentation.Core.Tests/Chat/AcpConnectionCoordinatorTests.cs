@@ -294,9 +294,12 @@ public sealed class AcpConnectionCoordinatorTests
                     NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance));
 
         await coordinator.ResyncAsync(sink, TestContext.Current.CancellationToken);
-        current.Url = "mutated.example.com/mcp";
-        current.Meta["source"] = "mutated";
-        current.Headers![0].Value = "mutated";
+        _ = current with
+        {
+            Url = "mutated.example.com/mcp",
+            Headers = [new McpHttpHeader(current.Headers![0].Name, "mutated")],
+            Meta = new Dictionary<string, object?> { ["source"] = "mutated" }
+        };
 
         var captured = Assert.IsType<HttpMcpServer>(Assert.Single(inner.LastLoadParams!.McpServers));
         Assert.NotSame(current, captured);

@@ -427,8 +427,8 @@ public sealed class ChatTranscriptVirtualizedMessageCollection :
                && string.Equals(oldSnapshot.ToolCallJson, newSnapshot.ToolCallJson, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallRawInputJson, newSnapshot.ToolCallRawInputJson, StringComparison.Ordinal)
                && string.Equals(oldSnapshot.ToolCallRawOutputJson, newSnapshot.ToolCallRawOutputJson, StringComparison.Ordinal)
-               && ToolCallContentSnapshots.SequenceEquals(oldSnapshot.ToolCallContent, newSnapshot.ToolCallContent)
-               && ToolCallContentSnapshots.LocationsSequenceEquals(oldSnapshot.ToolCallLocations, newSnapshot.ToolCallLocations)
+               && ToolCallContentSnapshots.DomainPayloadEquals(oldSnapshot.ToolCallContent, newSnapshot.ToolCallContent)
+               && ToolCallContentSnapshots.DomainPayloadEquals(oldSnapshot.ToolCallLocations, newSnapshot.ToolCallLocations)
                && string.Equals(oldSnapshot.ModeId, newSnapshot.ModeId, StringComparison.Ordinal)
                && PlanEntrySnapshotEquals(oldSnapshot.PlanEntry, newSnapshot.PlanEntry));
 

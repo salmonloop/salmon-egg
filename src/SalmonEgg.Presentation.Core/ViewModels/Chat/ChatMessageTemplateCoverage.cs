@@ -66,8 +66,8 @@ public static class ChatMessageTemplateCoverage
                 ContentType = "tool_call",
                 Title = "Read file",
                 ToolCallId = "tool-1",
-                ToolCallKind = SalmonEgg.Acp.Tool.ToolCallKind.Read,
-                ToolCallStatus = SalmonEgg.Acp.Tool.ToolCallStatus.Completed
+                ToolCallKind = "read",
+                ToolCallStatus = "completed"
             },
             "image" => new ConversationMessageSnapshot
             {
@@ -116,8 +116,8 @@ public static class ChatMessageTemplateCoverage
                 PlanEntry = new ConversationPlanEntrySnapshot
                 {
                     Content = "Plan step",
-                    Status = SalmonEgg.Acp.Plan.PlanEntryStatus.Pending,
-                    Priority = SalmonEgg.Acp.Plan.PlanEntryPriority.Medium
+                    Status = "pending",
+                    Priority = "medium"
                 }
             },
             "thinking" => new ConversationMessageSnapshot

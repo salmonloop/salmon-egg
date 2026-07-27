@@ -2468,13 +2468,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             && string.Equals(viewModel.AudioData ?? string.Empty, snapshot.AudioData ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.AudioMimeType ?? string.Empty, snapshot.AudioMimeType ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallId, snapshot.ToolCallId, StringComparison.Ordinal)
-            && viewModel.ToolCallKind == snapshot.ToolCallKind
-            && viewModel.ToolCallStatus == snapshot.ToolCallStatus
+            && viewModel.ToolCallKind == ToolCallContentSnapshots.ParseKind(snapshot.ToolCallKind)
+            && viewModel.ToolCallStatus == ToolCallContentSnapshots.ParseStatus(snapshot.ToolCallStatus)
             && string.Equals(viewModel.ToolCallJson, snapshot.ToolCallJson, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallRawInputJson, snapshot.ToolCallRawInputJson, StringComparison.Ordinal)
             && string.Equals(viewModel.ToolCallRawOutputJson, snapshot.ToolCallRawOutputJson, StringComparison.Ordinal)
-            && ToolCallContentSnapshots.SequenceEquals(viewModel.ToolCallContent, snapshot.ToolCallContent)
-            && ToolCallContentSnapshots.LocationsSequenceEquals(viewModel.ToolCallLocations, snapshot.ToolCallLocations)
+            && ToolCallContentSnapshots.SequenceEquals(viewModel.ToolCallContent, ToolCallContentSnapshots.FromDomainContent(snapshot.ToolCallContent))
+            && ToolCallContentSnapshots.LocationsSequenceEquals(viewModel.ToolCallLocations, ToolCallContentSnapshots.FromDomainLocations(snapshot.ToolCallLocations))
             && string.Equals(viewModel.ModeId, snapshot.ModeId, StringComparison.Ordinal)
             && PlanEntryMatches(viewModel.PlanEntry, snapshot.PlanEntry);
     }
@@ -2492,8 +2492,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
 
         return string.Equals(viewModel.Content ?? string.Empty, snapshot.Content ?? string.Empty, StringComparison.Ordinal)
-            && viewModel.Status == snapshot.Status
-            && viewModel.Priority == snapshot.Priority;
+            && viewModel.Status == ConversationPlanWire.ParseStatus(snapshot.Status)
+            && viewModel.Priority == ConversationPlanWire.ParsePriority(snapshot.Priority);
     }
 
     private static ConversationMessageSnapshot CloneSnapshot(ConversationMessageSnapshot snapshot)
@@ -2517,8 +2517,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             ToolCallJson = snapshot.ToolCallJson,
             ToolCallRawInputJson = snapshot.ToolCallRawInputJson,
             ToolCallRawOutputJson = snapshot.ToolCallRawOutputJson,
-            ToolCallContent = CloneToolCallContentList(snapshot.ToolCallContent),
-            ToolCallLocations = CloneToolCallLocationList(snapshot.ToolCallLocations),
+            ToolCallContent = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallContent),
+            ToolCallLocations = ToolCallContentSnapshots.CloneDomainPayload(snapshot.ToolCallLocations),
             PlanEntry = ClonePlanEntrySnapshot(snapshot.PlanEntry),
             ModeId = snapshot.ModeId
         };
@@ -2531,12 +2531,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return null;
         }
 
-        return new ConversationPlanEntrySnapshot
-        {
-            Content = snapshot.Content,
-            Status = snapshot.Status,
-            Priority = snapshot.Priority
-        };
+        return ConversationPlanWire.CloneDomain(snapshot);
     }
 
     private static bool IsThinkingPlaceholder(ConversationMessageSnapshot message)

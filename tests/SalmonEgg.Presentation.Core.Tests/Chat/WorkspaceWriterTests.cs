@@ -482,8 +482,8 @@ public sealed class WorkspaceWriterTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "persisted plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
@@ -870,8 +870,8 @@ public sealed class WorkspaceWriterTests
                 new ConversationPlanEntrySnapshot
                 {
                     Content = "persisted plan",
-                    Status = PlanEntryStatus.InProgress,
-                    Priority = PlanEntryPriority.High
+                    Status = PlanEntryStatus.InProgress.ToString(),
+                    Priority = PlanEntryPriority.High.ToString()
                 }
             ],
             ShowPlanPanel: true,
