@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {
@@ -268,8 +267,8 @@ namespace SalmonEgg.Domain.Models.Conversation
     }
 
     /// <summary>
-    /// Domain-owned meta dictionary converter. Delegates lossless ACP _meta token rules to <see cref="AcpMetaJson"/>.
-    /// Keeps the SDK JsonConverter implementation internal while preserving conversation document round-trip.
+    /// Domain-owned meta dictionary converter. Preserves raw JSON token text for conversation
+    /// session-info metadata without depending on ACP protocol converters.
     /// </summary>
     public sealed class ConversationMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
     {
@@ -277,7 +276,7 @@ namespace SalmonEgg.Domain.Models.Conversation
             ref Utf8JsonReader reader,
             Type typeToConvert,
             JsonSerializerOptions options)
-            => AcpMetaJson.ReadValue(ref reader);
+            => ConversationMetaJson.ReadValue(ref reader);
 
         public override void Write(
             Utf8JsonWriter writer,
@@ -290,7 +289,7 @@ namespace SalmonEgg.Domain.Models.Conversation
                 return;
             }
 
-            AcpMetaJson.WriteObject(writer, value);
+            ConversationMetaJson.WriteObject(writer, value);
         }
     }
 }
