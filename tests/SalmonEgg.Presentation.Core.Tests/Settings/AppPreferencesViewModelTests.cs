@@ -274,10 +274,19 @@ public class AppPreferencesViewModelTests
     {
         var appSettingsService = new Mock<IAppSettingsService>();
         appSettingsService.Setup(s => s.LoadAsync()).ReturnsAsync(new AppSettings());
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+        // 捕获最后一次持久化的语言：debounce 的保存在后台线程触发，直接枚举 Moq.Invocations 会
+        // 与并发写竞态，故用回调投影到线程安全 holder（数组元素可作 Volatile 的 ref 目标）供轮询。
+        var lastSavedLanguage = new string?[1];
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .Callback<AppSettings>(settings => Volatile.Write(ref lastSavedLanguage[0], settings.Language))
+            .Returns(Task.CompletedTask);
 
         var startupService = new Mock<IAppStartupService>();
         var languageService = new Mock<IAppLanguageService>();
+        languageService
+            .Setup(s => s.ApplyLanguageOverrideAsync(It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
         var capabilities = new Mock<IPlatformCapabilityService>();
         var uiRuntime = new Mock<IUiRuntimeService>();
 
@@ -295,10 +304,14 @@ public class AppPreferencesViewModelTests
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         languageService.Invocations.Clear();
         uiRuntime.Invocations.Clear();
+        Volatile.Write(ref lastSavedLanguage[0], null);
 
         vm.Language = "zh-CN";
 
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        // 语言变更经 debounce 后才落副作用；持久化是最后一步，轮询到它落盘即保证整条链完成，
+        // 避免固定 sleep 的时序脆弱，也避免抢在 debounce 保存之前断言。
+        await WaitForConditionAsync(() =>
+            string.Equals(Volatile.Read(ref lastSavedLanguage[0]), "zh-Hans", StringComparison.Ordinal));
 
         Assert.Equal("zh-Hans", vm.Language);
         languageService.Verify(service => service.ApplyLanguageOverrideAsync("zh-Hans"), Times.Once);
@@ -573,7 +586,19 @@ public class AppPreferencesViewModelTests
         {
             KeyboardShortcutsEnabled = true
         });
-        appSettingsService.Setup(s => s.SaveAsync(It.IsAny<AppSettings>())).Returns(Task.CompletedTask);
+        // debounce 的持久化在后台线程触发；用 TaskCompletionSource 等待首个「关闭」落盘，
+        // 避免固定 sleep 的时序脆弱，也避免并发枚举 Moq.Invocations。
+        var shortcutsDisabledSaved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        appSettingsService
+            .Setup(s => s.SaveAsync(It.IsAny<AppSettings>()))
+            .Returns(Task.CompletedTask)
+            .Callback<AppSettings>(settings =>
+            {
+                if (!settings.KeyboardShortcutsEnabled)
+                {
+                    shortcutsDisabledSaved.TrySetResult();
+                }
+            });
 
         var vm = new AppPreferencesViewModel(
             appSettingsService.Object,
@@ -590,7 +615,7 @@ public class AppPreferencesViewModelTests
 
         vm.KeyboardShortcutsEnabled = false;
 
-        await Task.Delay(1200, TestContext.Current.CancellationToken);
+        await shortcutsDisabledSaved.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         appSettingsService.Verify(
             service => service.SaveAsync(It.Is<AppSettings>(settings => settings.KeyboardShortcutsEnabled == false)),

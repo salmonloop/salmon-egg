@@ -1555,7 +1555,7 @@ public partial class ChatViewModelTests
         voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.StartCount == 1));
 
         Assert.Equal(1, voiceInput.StartCount);
         Assert.False(fixture.ViewModel.IsVoiceInputListening);
@@ -1647,7 +1647,7 @@ public partial class ChatViewModelTests
         voiceInput.PermissionResult = VoiceInputPermissionResult.Granted();
         activationSource.RaiseActivated();
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(voiceInput.StartCount == 1));
 
         Assert.Equal(1, voiceInput.StartCount);
         Assert.False(viewModel.IsVoiceInputListening);
@@ -2667,8 +2667,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.UpdateStateAsync(state => state with { HydratedConversationId = null });
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var state = await fixture.GetStateAsync();
         Assert.Null(state.HydratedConversationId);
@@ -3112,8 +3111,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(fixture.ViewModel.IsConnected);
         Assert.False(fixture.ViewModel.IsInitializing);
@@ -3373,7 +3371,8 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(profile);
 
         fixture.ViewModel.SelectedAcpProfile = profile;
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(async () =>
+            (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId == "profile-a");
 
         var connectionState = await fixture.GetConnectionStateAsync();
         Assert.Equal("profile-a", connectionState.SelectedProfileIntentId);
@@ -3654,7 +3653,8 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(profile);
 
         fixture.ViewModel.SelectedAcpProfile = profile;
-        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(() => Task.FromResult(
+            (fixture.ViewModel.ConnectionErrorMessage ?? string.Empty).Contains("profile switch failed", StringComparison.Ordinal)));
 
         Assert.Contains("profile switch failed", fixture.ViewModel.ConnectionErrorMessage ?? string.Empty, StringComparison.Ordinal);
     }
@@ -3981,8 +3981,7 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("hello", fixture.ViewModel.MessageHistory[0].TextContent);
@@ -4014,8 +4013,7 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var projected = Assert.Single(fixture.ViewModel.MessageHistory);
         var structuredContent = Assert.Single(projected.ToolCallContent!);
@@ -4561,8 +4559,7 @@ public partial class ChatViewModelTests
         syncContext.RunAll();
 
         await fixture.DispatchAsync(new SetDraftTextAction("from store"));
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.Equal("from store", viewModel.CurrentPrompt);
     }
@@ -4584,8 +4581,7 @@ public partial class ChatViewModelTests
 
         var staleState = await fixture.GetStateAsync();
         viewModel.CurrentPrompt = "new instruction";
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await fixture.UpdateStateAsync(_ => staleState with
         {
@@ -7920,8 +7916,7 @@ public partial class ChatViewModelTests
             ActiveTurn = new ActiveTurnState("conv-1", "turn-1", ChatTurnPhase.ToolRunning, turnStartedAt, turnStartedAt),
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await viewModel.CancelPromptCommand.ExecuteAsync(null);
 
@@ -9614,8 +9609,7 @@ public partial class ChatViewModelTests
                     }
                 }));
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var state = await fixture.GetStateAsync();
         Assert.Equal(ChatTurnPhase.WaitingForAgent, state.ActiveTurn!.Phase);
@@ -11366,8 +11360,7 @@ public partial class ChatViewModelTests
                 new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         await WaitForConditionAsync(() => Task.FromResult(
             fixture.ViewModel.IsOverlayVisible
@@ -11401,8 +11394,7 @@ public partial class ChatViewModelTests
                 })
         });
         syncContext.RunAll();
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(fixture.ViewModel.IsOverlayVisible);
         Assert.Contains("2 messages loaded", fixture.ViewModel.OverlayStatusText, StringComparison.Ordinal);
@@ -11908,8 +11900,7 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 2000);
 
         syncContext.RunAll();
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         innerChatService.RaiseSessionUpdate(new SessionUpdateEventArgs(
             "remote-1",
@@ -11921,8 +11912,7 @@ public partial class ChatViewModelTests
 
         allowLoadCompletion.TrySetResult(null);
         await syncContext.RunUntilCompletedAsync(hydrationTask);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         Assert.True(await hydrationTask);
         await WaitForConditionAsync(async () =>
@@ -15925,8 +15915,7 @@ public partial class ChatViewModelTests
         }, timeoutMilliseconds: 2000);
 
         var thirdHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
-        await Task.Delay(100, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
         Assert.False(replacementLoadStarted.Task.IsCompleted);
         Assert.Equal(1, Volatile.Read(ref loadInvocationCount));
 
@@ -17751,8 +17740,7 @@ public partial class ChatViewModelTests
             service => service.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var finalState = await fixture.GetStateAsync();
         var finalSessionSlice = finalState.ResolveSessionStateSlice("conv-1");

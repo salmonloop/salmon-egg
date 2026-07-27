@@ -35,8 +35,7 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var message = Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("[图片: image/png]", message.TextContent);
@@ -67,8 +66,7 @@ public partial class ChatViewModelTests
             Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(snapshot)
         });
 
-        await Task.Delay(50, TestContext.Current.CancellationToken);
-        syncContext.RunAll();
+        await syncContext.RunUntilIdleAsync();
 
         var message = Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("[音频]", message.TextContent);
