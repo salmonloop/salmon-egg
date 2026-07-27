@@ -149,6 +149,58 @@ public sealed class ShortcutsSettingsViewModelTests
         Assert.Equal("搜索", viewModel.Shortcuts.Single(s => s.ActionId == "search").Name);
     }
 
+    [Fact]
+    public async Task Activate_CalledTwice_DoesNotDuplicateSeededActions()
+    {
+        // VM 是 singleton，页面反复 Loaded 会反复 Activate；幂等门控须保证不重复 seed。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+
+        viewModel.Activate();
+        var seededCount = viewModel.Shortcuts.Count;
+        viewModel.Activate();
+
+        Assert.Equal(seededCount, viewModel.Shortcuts.Count);
+    }
+
+    [Fact]
+    public async Task Deactivate_ThenLanguageChanged_DoesNotReprojectNames()
+    {
+        // Deactivate 必须对称解绑 LanguageChanged；解绑后语言事件不得再改投影，避免 singleton 泄漏订阅。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var languageService = new RecordingAppLanguageService();
+        var localizer = new MutableCoreStringLocalizer(new Dictionary<string, string>
+        {
+            ["ShortcutAction_NewSession"] = "New session",
+            ["ShortcutAction_Search"] = "Search"
+        });
+        var viewModel = new ShortcutsSettingsViewModel(preferences, localizer, languageService);
+        viewModel.Activate();
+
+        viewModel.Deactivate();
+        localizer.Set("ShortcutAction_NewSession", "新建会话");
+        languageService.RaiseLanguageChanged();
+
+        Assert.Equal("New session", viewModel.Shortcuts.Single(s => s.ActionId == "new_session").Name);
+    }
+
+    [Fact]
+    public async Task Reactivate_ReprojectsLatestSavedOverrides()
+    {
+        // Deactivate 后再 Activate（页面重进）必须从 preferences 重新投影最新覆盖值，
+        // 不得停留在上次激活时的旧快照。
+        var preferences = await CreatePreferencesAsync(new AppSettings());
+        var viewModel = new ShortcutsSettingsViewModel(preferences, new TestCoreStringLocalizer());
+        viewModel.Activate();
+        viewModel.Deactivate();
+
+        preferences.SetKeyBinding("search", "Alt+K");
+        viewModel.Activate();
+
+        var searchShortcut = Assert.Single(viewModel.Shortcuts, shortcut => shortcut.ActionId == "search");
+        Assert.Equal("Alt+K", searchShortcut.Gesture);
+    }
+
     private static async Task<AppPreferencesViewModel> CreatePreferencesAsync(AppSettings settings)
     {
         var appSettingsService = new Mock<IAppSettingsService>();
