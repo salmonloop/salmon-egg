@@ -64,8 +64,8 @@ public sealed class ChatServiceSessionTests
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
         Assert.Single(session!.History);
-        Assert.IsType<TextContentBlock>(session.History[0].Content);
-        Assert.Equal("hello", ((TextContentBlock)session.History[0].Content!).Text);
+        Assert.Equal("text", session.History[0].ContentType);
+        Assert.Equal("hello", session.History[0].TextContent);
 
         sut.Dispose();
     }
@@ -96,7 +96,7 @@ public sealed class ChatServiceSessionTests
 
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
         var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.History);
-        Assert.Equal("background plan", Assert.Single(backgroundEntry.Entries!).Content);
+        Assert.Equal("background plan", Assert.Single(backgroundEntry.PlanEntries!).Content);
 
         sut.Dispose();
     }
@@ -134,7 +134,7 @@ public sealed class ChatServiceSessionTests
 
         // Seed cached history for the target session.
         await sessionManager.CreateSessionAsync("s2", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession("s2", s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateMessage(new TextContentBlock("cached"))));
+        sessionManager.UpdateSession("s2", s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached")));
 
         var before = sessionManager.GetSession("s2")!.History.Count;
 
@@ -313,7 +313,7 @@ public sealed class ChatServiceSessionTests
         await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
         sessionManager.UpdateSession(
             "remote-1",
-            s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateMessage(new TextContentBlock("cached"))));
+            s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached")));
 
         acpClient.SetupGet(c => c.IsInitialized).Returns(true);
         acpClient.SetupGet(c => c.IsConnected).Returns(true);
@@ -330,7 +330,8 @@ public sealed class ChatServiceSessionTests
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
         Assert.Single(session!.History);
-        Assert.Equal("cached", ((TextContentBlock)session.History[0].Content!).Text);
+        Assert.Equal("text", session.History[0].ContentType);
+        Assert.Equal("cached", session.History[0].TextContent);
 
         sut.Dispose();
     }

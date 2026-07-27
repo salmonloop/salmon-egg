@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
-using SalmonEgg.Acp.Content;
-using SalmonEgg.Acp.Tool;
-using SalmonEgg.Acp.Plan;
-using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Models.Session
 {
@@ -128,114 +125,73 @@ namespace SalmonEgg.Domain.Models.Session
     }
 
     /// <summary>
-    /// 会话更新条目类。
-    /// 表示会话历史中的一个条目，可以是消息、工具调用、计划更新等。
+    /// Domain-owned session history entry.
+    /// Captures a projection of an ACP session/update for in-process recovery without
+    /// retaining protocol wire types in the Domain model.
     /// </summary>
-    public class SessionUpdateEntry
+    public sealed class SessionUpdateEntry
     {
-        /// <summary>
-        /// 条目的时间戳。
-        /// </summary>
-        [JsonPropertyName("timestamp")]
-        public DateTime Timestamp { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
         /// <summary>
-        /// 更新类型。
+        /// ACP sessionUpdate discriminator (for example agent_message_chunk, plan).
         /// </summary>
-        [JsonPropertyName("sessionUpdate")]
         public string SessionUpdateType { get; set; } = string.Empty;
 
         /// <summary>
-        /// 文本内容（用于 agent_message 类型的更新）。
+        /// Flattened text for content-bearing updates (agent/user/thought message chunks).
+        /// Non-text content is intentionally not retained in Domain history.
         /// </summary>
-        [JsonPropertyName("content")]
-        public ContentBlock? Content { get; set; }
+        public string? TextContent { get; set; }
 
         /// <summary>
-        /// 计划条目列表（用于 plan 类型的更新）。
+        /// Content block type when TextContent is present (for example text).
         /// </summary>
-        [JsonPropertyName("entries")]
-        public List<PlanEntry>? Entries { get; set; }
+        public string? ContentType { get; set; }
 
-        /// <summary>
-        /// 工具调用 ID（用于 tool_call 类型的更新）。
-        /// </summary>
-        [JsonPropertyName("toolCallId")]
+        public IReadOnlyList<SessionPlanHistoryEntry>? PlanEntries { get; set; }
+
         public string? ToolCallId { get; set; }
 
-        /// <summary>
-        /// 标题（用于某些类型的更新）。
-        /// </summary>
-        [JsonPropertyName("title")]
         public string? Title { get; set; }
 
         /// <summary>
-        /// 工具调用类型（用于 tool_call 类型的更新）。
+        /// Open ACP tool-call kind wire value.
         /// </summary>
-        [JsonPropertyName("kind")]
-        public ToolCallKind? Kind { get; set; }
+        public string? ToolCallKind { get; set; }
 
         /// <summary>
-        /// 工具调用状态（用于 tool_call 类型的更新）。
+        /// Open ACP tool-call status wire value.
         /// </summary>
-        [JsonPropertyName("status")]
-        public ToolCallStatus? Status { get; set; }
+        public string? ToolCallStatus { get; set; }
 
-        /// <summary>
-        /// 模式 ID（用于 current_mode_update 类型的更新）。
-        /// </summary>
-        [JsonPropertyName("modeId")]
         public string? ModeId { get; set; }
 
-        /// <summary>
-        /// 配置选项（用于 config_option_update 类型的更新）。
-        /// </summary>
-        [JsonPropertyName("configOptions")]
-        public List<ConfigOption>? ConfigOptions { get; set; }
-
-        /// <summary>
-        /// 创建新的会话更新条目实例。
-        /// </summary>
         public SessionUpdateEntry()
         {
-            Timestamp = DateTime.UtcNow;
         }
 
-        /// <summary>
-        /// 创建新的消息类型更新条目。
-        /// </summary>
-        /// <param name="content">内容块</param>
-        /// <returns>会话更新条目</returns>
-        public static SessionUpdateEntry CreateMessage(ContentBlock content)
+        public static SessionUpdateEntry CreateTextMessage(string text)
         {
             return new SessionUpdateEntry
             {
                 SessionUpdateType = "agent_message_chunk",
-                Content = content,
+                ContentType = "text",
+                TextContent = text ?? string.Empty,
                 Timestamp = DateTime.UtcNow
             };
         }
 
-        /// <summary>
-        /// 创建新的计划类型更新条目。
-        /// </summary>
-        /// <param name="entries">计划条目列表</param>
-        /// <returns>会话更新条目</returns>
-        public static SessionUpdateEntry CreatePlan(List<PlanEntry> entries)
+        public static SessionUpdateEntry CreatePlan(IEnumerable<SessionPlanHistoryEntry> entries)
         {
             return new SessionUpdateEntry
             {
                 SessionUpdateType = "plan",
-                Entries = entries,
+                PlanEntries = entries?.ToList() ?? new List<SessionPlanHistoryEntry>(),
                 Timestamp = DateTime.UtcNow
             };
         }
 
-        /// <summary>
-        /// 创建新的模式切换类型更新条目。
-        /// </summary>
-        /// <param name="modeId">新的模式 ID</param>
-        /// <returns>会话更新条目</returns>
         public static SessionUpdateEntry CreateModeChange(string modeId)
         {
             return new SessionUpdateEntry
@@ -245,6 +201,29 @@ namespace SalmonEgg.Domain.Models.Session
                 Timestamp = DateTime.UtcNow
             };
         }
+    }
 
+    /// <summary>
+    /// Domain projection of a plan entry retained in session history.
+    /// Status/priority are open ACP wire strings.
+    /// </summary>
+    public sealed class SessionPlanHistoryEntry
+    {
+        public string Content { get; set; } = string.Empty;
+
+        public string Status { get; set; } = "pending";
+
+        public string Priority { get; set; } = "medium";
+
+        public SessionPlanHistoryEntry()
+        {
+        }
+
+        public SessionPlanHistoryEntry(string content, string? status = null, string? priority = null)
+        {
+            Content = content ?? string.Empty;
+            Status = string.IsNullOrWhiteSpace(status) ? "pending" : status;
+            Priority = string.IsNullOrWhiteSpace(priority) ? "medium" : priority;
+        }
     }
 }

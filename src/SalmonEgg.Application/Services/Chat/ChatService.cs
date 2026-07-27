@@ -238,25 +238,33 @@ namespace SalmonEgg.Application.Services.Chat
             switch (update)
             {
                 case AgentMessageUpdate messageUpdate:
-                    entry.Content = messageUpdate.Content;
+                    ApplyContentProjection(entry, messageUpdate.Content);
+                    break;
+                case UserMessageUpdate userMessageUpdate:
+                    ApplyContentProjection(entry, userMessageUpdate.Content);
                     break;
                 case AgentThoughtUpdate thoughtUpdate:
-                    entry.Content = thoughtUpdate.Content;
+                    ApplyContentProjection(entry, thoughtUpdate.Content);
                     break;
                 case ToolCallUpdate toolCallUpdate:
                     entry.ToolCallId = toolCallUpdate.ToolCallId;
-                    entry.Kind = toolCallUpdate.Kind;
-                    entry.Status = toolCallUpdate.Status;
+                    entry.ToolCallKind = toolCallUpdate.Kind?.ToString();
+                    entry.ToolCallStatus = toolCallUpdate.Status?.ToString();
                     entry.Title = toolCallUpdate.Title;
                     break;
                 case ToolCallStatusUpdate toolCallStatusUpdate:
                     entry.ToolCallId = toolCallStatusUpdate.ToolCallId;
-                    entry.Kind = toolCallStatusUpdate.Kind;
-                    entry.Status = toolCallStatusUpdate.Status;
+                    entry.ToolCallKind = toolCallStatusUpdate.Kind?.ToString();
+                    entry.ToolCallStatus = toolCallStatusUpdate.Status?.ToString();
                     entry.Title = toolCallStatusUpdate.Title;
                     break;
                 case PlanUpdate planUpdate:
-                    entry.Entries = planUpdate.Entries;
+                    entry.PlanEntries = planUpdate.Entries?
+                        .Select(static planEntry => new SessionPlanHistoryEntry(
+                            planEntry.Content,
+                            planEntry.Status.ToString(),
+                            planEntry.Priority.ToString()))
+                        .ToList();
                     break;
                 case CurrentModeUpdate modeChange:
                     entry.ModeId = modeChange.ModeId;
@@ -264,18 +272,32 @@ namespace SalmonEgg.Application.Services.Chat
                 case SessionInfoUpdate sessionInfoUpdate:
                     entry.Title = sessionInfoUpdate.Title;
                     break;
-                case ConfigOptionUpdate configOptionUpdate:
-                    entry.ConfigOptions = configOptionUpdate.ConfigOptions;
-                    break;
+                // Config options, available commands, and usage remain ACP wire concerns.
+                // Domain history only keeps recovery-relevant projections.
             }
 
             return entry;
+        }
+
+        private static void ApplyContentProjection(SessionUpdateEntry entry, ContentBlock? content)
+        {
+            if (content is null)
+            {
+                return;
+            }
+
+            entry.ContentType = content.Type;
+            if (content is TextContentBlock textBlock)
+            {
+                entry.TextContent = textBlock.Text;
+            }
         }
 
         private static string GetSessionUpdateType(SessionUpdate update) =>
             update switch
             {
                 AgentMessageUpdate => "agent_message_chunk",
+                UserMessageUpdate => "user_message_chunk",
                 AgentThoughtUpdate => "agent_thought_chunk",
                 ToolCallUpdate => "tool_call",
                 ToolCallStatusUpdate => "tool_call_update",
