@@ -18,7 +18,6 @@ SalmonEgg.Acp.Client.UnsupportedAcpTerminalSessionManager
 SalmonEgg.Acp.Content.Annotations
 SalmonEgg.Acp.Content.AudioContentBlock
 SalmonEgg.Acp.Content.ContentBlock
-SalmonEgg.Acp.Content.ContentBlockJsonConverter
 SalmonEgg.Acp.Content.EmbeddedResource
 SalmonEgg.Acp.Content.ImageContentBlock
 SalmonEgg.Acp.Content.ResourceContentBlock
@@ -40,9 +39,7 @@ SalmonEgg.Acp.Mcp.StdioMcpServer
 SalmonEgg.Acp.Plan.Plan
 SalmonEgg.Acp.Plan.PlanEntry
 SalmonEgg.Acp.Plan.PlanEntryPriority
-SalmonEgg.Acp.Plan.PlanEntryPriorityJsonConverter
 SalmonEgg.Acp.Plan.PlanEntryStatus
-SalmonEgg.Acp.Plan.PlanEntryStatusJsonConverter
 SalmonEgg.Acp.Protocol.AcpMetaJson
 SalmonEgg.Acp.Protocol.AcpProtocolObject
 SalmonEgg.Acp.Protocol.AcpProtocolVersion
@@ -149,9 +146,6 @@ SalmonEgg.Acp.Tool.CustomToolCallContent
 SalmonEgg.Acp.Tool.DiffToolCallContent
 SalmonEgg.Acp.Tool.TerminalToolCallContent
 SalmonEgg.Acp.Tool.ToolCallContent
-SalmonEgg.Acp.Tool.ToolCallContentJsonConverter
 SalmonEgg.Acp.Tool.ToolCallKind
-SalmonEgg.Acp.Tool.ToolCallKindJsonConverter
 SalmonEgg.Acp.Tool.ToolCallLocation
 SalmonEgg.Acp.Tool.ToolCallStatus
-SalmonEgg.Acp.Tool.ToolCallStatusJsonConverter
