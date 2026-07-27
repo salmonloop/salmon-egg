@@ -35,6 +35,7 @@ using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
 using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Navigation;
 

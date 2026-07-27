@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\SalmonEgg.Domain\SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="..\SalmonEgg.Acp\SalmonEgg.Acp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FluentValidation" Version="12.1.1" />

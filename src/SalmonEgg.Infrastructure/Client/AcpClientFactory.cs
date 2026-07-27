@@ -2,6 +2,7 @@ using System;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Infrastructure.Client;
 

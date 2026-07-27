@@ -19,6 +19,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.Security;
 using SalmonEgg.Infrastructure.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Application.Tests.Services.Chat;
 

@@ -45,6 +45,7 @@ using Uno.Extensions.Reactive;
 using SalmonEgg.Platforms.Windows;
 #elif __WASM__
 using SalmonEgg.Platforms.WebAssembly;
+using SalmonEgg.Application.Services.Acp;
 #endif
 
 namespace SalmonEgg;

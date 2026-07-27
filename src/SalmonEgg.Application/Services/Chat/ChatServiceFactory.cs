@@ -5,6 +5,8 @@ using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
+
 namespace SalmonEgg.Application.Services.Chat;
 
 /// <summary>

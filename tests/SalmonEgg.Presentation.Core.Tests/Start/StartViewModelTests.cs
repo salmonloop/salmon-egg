@@ -35,6 +35,7 @@ using SerilogLogger = Serilog.ILogger;
 using Uno.Extensions.Reactive;
 using Xunit;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 
 namespace SalmonEgg.Presentation.Core.Tests.Start;
 
