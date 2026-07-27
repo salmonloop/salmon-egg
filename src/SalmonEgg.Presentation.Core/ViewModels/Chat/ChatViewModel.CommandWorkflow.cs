@@ -226,7 +226,7 @@ public partial class ChatViewModel
 
         return new(
             cwdResolution.Cwd,
-            McpServerJsonConverter.CloneServers(
+            McpServerSnapshots.CloneServers(
                 await ResolveCurrentMcpServersAsync(cancellationToken).ConfigureAwait(false)));
     }
 

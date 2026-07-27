@@ -51,9 +51,9 @@ namespace SalmonEgg.Infrastructure.Storage;
 [JsonSerializable(typeof(PlanEntryStatus))]
 [JsonSerializable(typeof(PlanEntryPriority))]
 
-// SessionInfo.Meta uses AcpMetaDictionaryJsonConverter (property-level) to own
-// raw-token serialization of ACP '_meta' values. Keep the dictionary type registered
-// for source-gen graph completeness; values are handled by the converter.
+// SessionInfo.Meta uses Domain ConversationMetaDictionaryJsonConverter (property-level),
+// which delegates lossless ACP '_meta' token rules to AcpMetaJson. Keep the dictionary
+// type registered for source-gen graph completeness; values are handled by that converter.
 [JsonSerializable(typeof(Dictionary<string, object?>))]
 internal partial class ConversationJsonContext : JsonSerializerContext
 {

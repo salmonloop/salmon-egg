@@ -113,7 +113,7 @@ public partial class ChatViewModel
 
     public void SetCurrentMcpServers(IReadOnlyList<McpServer> mcpServers)
     {
-        _currentMcpServers = McpServerJsonConverter.CloneServers(mcpServers);
+        _currentMcpServers = McpServerSnapshots.CloneServers(mcpServers);
     }
 
     public async Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(

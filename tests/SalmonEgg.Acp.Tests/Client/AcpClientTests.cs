@@ -24,13 +24,11 @@ namespace SalmonEgg.Acp.Tests.Client
             "workspace",
             "project"));
         private readonly Mock<IAcpTransport> _transportMock = new();
-        private readonly Mock<IMessageParser> _parserMock = new();
         private readonly Mock<IAcpClientLogger> _loggerMock = new();
 
         public AcpClientTests()
         {
             _transportMock.SetupGet(t => t.IsConnected).Returns(true);
-            _parserMock.Setup(p => p.Options).Returns(new JsonSerializerOptions());
         }
 
         private async Task<AcpClient> CreateInitializedClientAsync(
@@ -75,8 +73,6 @@ namespace SalmonEgg.Acp.Tests.Client
             IAcpClientSessionStore? sessionStore = null)
             => new(
                 _transportMock.Object,
-                parser,
-                null,
                 _loggerMock.Object,
                 sessionStore,
                 terminalSessionManager);

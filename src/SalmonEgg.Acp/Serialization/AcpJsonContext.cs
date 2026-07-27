@@ -149,6 +149,6 @@ namespace SalmonEgg.Acp.Serialization;
 [JsonSerializable(typeof(List<McpServer>))]
 [JsonSerializable(typeof(List<AskUserQuestion>))]
 [JsonSerializable(typeof(List<PlanEntry>))]
-public partial class AcpJsonContext : JsonSerializerContext
+internal partial class AcpJsonContext : JsonSerializerContext
 {
 }

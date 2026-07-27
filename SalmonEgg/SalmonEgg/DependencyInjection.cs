@@ -7,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Client;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Interfaces;
@@ -115,10 +114,6 @@ public static class DependencyInjection
 
     private static void RegisterDomainServices(IServiceCollection services)
     {
-        // Message Parser and Validator
-        services.AddSingleton<IMessageParser, MessageParser>();
-        services.AddSingleton<IMessageValidator, MessageValidator>();
-
         // Session Manager
         services.AddSingleton<ISessionManager, Infrastructure.Services.SessionManager>();
 

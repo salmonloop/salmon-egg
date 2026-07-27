@@ -4,7 +4,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// JSON-RPC 2.0 消息验证器实现。
     /// 验证消息格式和必需字段的完整性。
     /// </summary>
-    public class MessageValidator : IMessageValidator
+    internal sealed class MessageValidator
     {
         /// <summary>
         /// 验证请求消息的格式和必需字段。
@@ -176,5 +176,44 @@ namespace SalmonEgg.Acp.JsonRpc
 
             return ValidationResult.Success();
         }
+    }
+
+    /// <summary>
+    /// JSON-RPC 消息验证结果。仅供 SDK 内部消息校验使用。
+    /// </summary>
+    internal sealed class ValidationResult
+    {
+        /// <summary>
+        /// 验证是否通过。
+        /// </summary>
+        public bool IsValid { get; init; }
+
+        /// <summary>
+        /// 错误消息列表（当 <see cref="IsValid"/> 为 false 时包含错误）。
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyList<string> Errors { get; init; }
+            = System.Array.Empty<string>();
+
+        /// <summary>
+        /// 错误码（如果验证失败）。
+        /// </summary>
+        public int? ErrorCode { get; init; }
+
+        /// <summary>
+        /// 创建成功的验证结果。
+        /// </summary>
+        public static ValidationResult Success() => new() { IsValid = true };
+
+        /// <summary>
+        /// 创建失败的验证结果。
+        /// </summary>
+        public static ValidationResult Failure(int errorCode, System.Collections.Generic.IReadOnlyList<string> errors)
+            => new() { IsValid = false, ErrorCode = errorCode, Errors = errors };
+
+        /// <summary>
+        /// 创建失败的验证结果（单个错误）。
+        /// </summary>
+        public static ValidationResult Failure(int errorCode, string error)
+            => new() { IsValid = false, ErrorCode = errorCode, Errors = new[] { error } };
     }
 }

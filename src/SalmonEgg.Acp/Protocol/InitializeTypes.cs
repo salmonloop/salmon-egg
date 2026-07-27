@@ -711,7 +711,7 @@ namespace SalmonEgg.Acp.Protocol
     {
     }
 
-    public sealed class InitializeParamsJsonConverter : JsonConverter<InitializeParams>
+    internal sealed class InitializeParamsJsonConverter : JsonConverter<InitializeParams>
     {
         public override InitializeParams? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
@@ -799,7 +799,7 @@ namespace SalmonEgg.Acp.Protocol
         }
     }
 
-    public sealed class InitializeResponseJsonConverter : JsonConverter<InitializeResponse>
+    internal sealed class InitializeResponseJsonConverter : JsonConverter<InitializeResponse>
     {
         public override InitializeResponse? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

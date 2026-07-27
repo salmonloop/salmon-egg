@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// JSON-RPC 2.0 响应消息。
     /// 用于服务器对请求的响应。响应消息恰好包含 result 或 error 之一。
     /// </summary>
-    public class JsonRpcResponse : JsonRpcMessage
+    internal sealed class JsonRpcResponse : JsonRpcMessage
     {
         /// <summary>
         /// 对应请求的唯一标识符。

@@ -28,7 +28,7 @@ namespace SalmonEgg.Acp.Protocol
         public string? Description { get; set; }
     }
 
-    public sealed class AuthMethodDefinitionJsonConverter : JsonConverter<AuthMethodDefinition>
+    internal sealed class AuthMethodDefinitionJsonConverter : JsonConverter<AuthMethodDefinition>
     {
         public override AuthMethodDefinition? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

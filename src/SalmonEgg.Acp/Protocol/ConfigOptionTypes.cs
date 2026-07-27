@@ -63,7 +63,7 @@ public class ConfigOptionGroup : AcpProtocolObject
     public List<ConfigOptionValue> Options { get; set; } = new();
 }
 
-public sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
+internal sealed class ConfigOptionJsonConverter : JsonConverter<ConfigOption>
 {
     public override ConfigOption? Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
     {

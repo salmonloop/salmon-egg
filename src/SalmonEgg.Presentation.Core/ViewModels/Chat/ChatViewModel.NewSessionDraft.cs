@@ -1044,7 +1044,7 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
         }
         catch (Exception ex) when (ChatAuthenticationCoordinator.IsAuthenticationRequiredError(ex))
         {
@@ -1058,7 +1058,7 @@ public partial class ChatViewModel
             return await request.ChatService.CreateSessionAsync(
                 new SessionNewParams(
                     request.Cwd,
-                    McpServerJsonConverter.CloneServers(mcpServers))).ConfigureAwait(false);
+                    McpServerSnapshots.CloneServers(mcpServers))).ConfigureAwait(false);
         }
     }
 

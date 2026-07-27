@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Acp.Plan;
-using SalmonEgg.Acp.Protocol;
 
 namespace SalmonEgg.Domain.Models.Conversation
 {
@@ -130,7 +131,7 @@ namespace SalmonEgg.Domain.Models.Conversation
 
         public bool HasUpdatedAt { get; set; }
 
-        [JsonConverter(typeof(AcpMetaDictionaryJsonConverter))]
+        [JsonConverter(typeof(ConversationMetaDictionaryJsonConverter))]
         public Dictionary<string, object?>? Meta { get; set; }
     }
 
@@ -247,5 +248,32 @@ namespace SalmonEgg.Domain.Models.Conversation
         public PlanEntryStatus Status { get; set; } = PlanEntryStatus.Pending;
 
         public PlanEntryPriority Priority { get; set; } = PlanEntryPriority.Low;
+    }
+
+    /// <summary>
+    /// Domain-owned meta dictionary converter. Delegates lossless ACP _meta token rules to <see cref="AcpMetaJson"/>.
+    /// Keeps the SDK JsonConverter implementation internal while preserving conversation document round-trip.
+    /// </summary>
+    public sealed class ConversationMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
+    {
+        public override Dictionary<string, object?>? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+            => AcpMetaJson.ReadValue(ref reader);
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            Dictionary<string, object?>? value,
+            JsonSerializerOptions options)
+        {
+            if (value is null)
+            {
+                writer.WriteNullValue();
+                return;
+            }
+
+            AcpMetaJson.WriteObject(writer, value);
+        }
     }
 }

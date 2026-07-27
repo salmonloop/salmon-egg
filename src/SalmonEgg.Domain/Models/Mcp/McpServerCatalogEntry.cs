@@ -14,7 +14,7 @@ public sealed class McpServerCatalogEntry
 
     public McpServerCatalogEntry(McpServer server, bool enabled = true)
     {
-        Server = McpServerJsonConverter.CloneServer(server ?? throw new ArgumentNullException(nameof(server)));
+        Server = McpServerSnapshots.CloneServer(server ?? throw new ArgumentNullException(nameof(server)));
         Enabled = enabled;
     }
 

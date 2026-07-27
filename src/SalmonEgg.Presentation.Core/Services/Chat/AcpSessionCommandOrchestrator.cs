@@ -108,7 +108,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
         var activeSessionCwd = ResolveActiveSessionCwdOrProtocolError(sink);
         var sessionParams = new SessionNewParams(
             activeSessionCwd,
-            McpServerJsonConverter.CloneServers(
+            McpServerSnapshots.CloneServers(
                 await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                     .ConfigureAwait(false)));
 
@@ -129,7 +129,7 @@ public sealed class AcpSessionCommandOrchestrator : IAcpSessionCommandOrchestrat
 
             sessionParams = new SessionNewParams(
                 activeSessionCwd,
-                McpServerJsonConverter.CloneServers(
+                McpServerSnapshots.CloneServers(
                     await _mcpServerResolver.ResolveCurrentMcpServersAsync(sink, cancellationToken)
                         .ConfigureAwait(false)));
             response = await chatService.CreateSessionAsync(sessionParams).ConfigureAwait(false);

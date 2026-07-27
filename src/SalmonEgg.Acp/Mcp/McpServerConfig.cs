@@ -271,7 +271,11 @@ namespace SalmonEgg.Acp.Mcp
         }
     }
 
-    public sealed class McpServerJsonConverter : JsonConverter<McpServer>
+    /// <summary>
+    /// Deep-copy helpers for MCP server wire DTOs.
+    /// Host code uses these when snapshotting catalog/runtime server lists; JSON conversion stays internal.
+    /// </summary>
+    public static class McpServerSnapshots
     {
         public static List<McpServer> CloneServers(IEnumerable<McpServer>? servers)
         {
@@ -334,6 +338,48 @@ namespace SalmonEgg.Acp.Mcp
         public static Dictionary<string, object?>? CloneMeta(Dictionary<string, object?>? meta)
             => AcpMetaJson.Clone(meta);
 
+        private static List<McpEnvVariable>? CloneEnv(List<McpEnvVariable>? env)
+        {
+            if (env == null)
+            {
+                return null;
+            }
+
+            var result = new List<McpEnvVariable>();
+            foreach (var variable in env)
+            {
+                result.Add(new McpEnvVariable(variable.Name, variable.Value)
+                {
+                    Meta = CloneMeta(variable.Meta)
+                });
+            }
+
+            return result;
+        }
+
+        private static List<McpHttpHeader>? CloneHeaders(List<McpHttpHeader>? headers)
+        {
+            if (headers == null)
+            {
+                return null;
+            }
+
+            var result = new List<McpHttpHeader>();
+            foreach (var header in headers)
+            {
+                result.Add(new McpHttpHeader(header.Name, header.Value)
+                {
+                    Meta = CloneMeta(header.Meta)
+                });
+            }
+
+            return result;
+        }
+
+    }
+
+    internal sealed class McpServerJsonConverter : JsonConverter<McpServer>
+    {
         public override McpServer? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
@@ -654,44 +700,6 @@ namespace SalmonEgg.Acp.Mcp
             }
 
             writer.WriteEndArray();
-        }
-
-        private static List<McpEnvVariable>? CloneEnv(List<McpEnvVariable>? env)
-        {
-            if (env == null)
-            {
-                return null;
-            }
-
-            var result = new List<McpEnvVariable>();
-            foreach (var variable in env)
-            {
-                result.Add(new McpEnvVariable(variable.Name, variable.Value)
-                {
-                    Meta = CloneMeta(variable.Meta)
-                });
-            }
-
-            return result;
-        }
-
-        private static List<McpHttpHeader>? CloneHeaders(List<McpHttpHeader>? headers)
-        {
-            if (headers == null)
-            {
-                return null;
-            }
-
-            var result = new List<McpHttpHeader>();
-            foreach (var header in headers)
-            {
-                result.Add(new McpHttpHeader(header.Name, header.Value)
-                {
-                    Meta = CloneMeta(header.Meta)
-                });
-            }
-
-            return result;
         }
 
     }

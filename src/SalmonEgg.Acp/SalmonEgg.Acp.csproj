@@ -23,4 +23,11 @@
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- 内部实现细节（JsonRpc 信封、消息解析/校验、源生成上下文）对 SDK 自有测试工程开放，
+       其余消费者只经由 public 契约（IAcpClient / DTO / 宿主接缝）访问。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SalmonEgg.Acp.Tests" />
+    <InternalsVisibleTo Include="SalmonEgg.Application.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -28,7 +28,7 @@ public sealed class SettingsAcpMcpServerProvider : IAcpMcpServerProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         var settings = await _settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return McpServerJsonConverter.CloneServers(settings.Servers.Where(entry => entry.Enabled).Select(entry => entry.Server));
+        return McpServerSnapshots.CloneServers(settings.Servers.Where(entry => entry.Enabled).Select(entry => entry.Server));
     }
 }
 
@@ -55,7 +55,7 @@ public sealed class AcpMcpServerResolver : IAcpMcpServerResolver
         ArgumentNullException.ThrowIfNull(sink);
         var servers = await _provider.GetMcpServersAsync(cancellationToken)
             .ConfigureAwait(false);
-        var snapshot = McpServerJsonConverter.CloneServers(servers);
+        var snapshot = McpServerSnapshots.CloneServers(servers);
         sink.SetCurrentMcpServers(snapshot);
         return snapshot;
     }

@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// JSON-RPC 2.0 请求消息。
     /// 用于从客户端向服务器发送请求。
     /// </summary>
-    public class JsonRpcRequest : JsonRpcMessage
+    internal sealed class JsonRpcRequest : JsonRpcMessage
     {
         /// <summary>
         /// 请求的唯一标识符。

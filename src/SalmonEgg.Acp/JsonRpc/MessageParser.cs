@@ -10,7 +10,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// JSON-RPC 2.0 消息解析器实现。
     /// 使用 System.Text.Json 进行消息的解析和序列化。
     /// </summary>
-    public class MessageParser : IMessageParser
+    internal sealed class MessageParser
     {
         private readonly JsonSerializerOptions _options;
 
@@ -33,26 +33,11 @@ namespace SalmonEgg.Acp.JsonRpc
                 AllowTrailingCommas = false,
                 // ACP agents can be strict about optional fields; omit nulls rather than writing `"foo": null`.
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                // ACP session/update payloads may place protocol extension fields like `_meta`
+                // before the polymorphic discriminator (`sessionUpdate`).
+                AllowOutOfOrderMetadataProperties = true,
                 TypeInfoResolver = AcpJsonContext.Default
             };
-
-            EnableOutOfOrderMetadataProperties(_options);
-        }
-
-        /// <summary>
-        /// 创建新的 MessageParser 实例，使用自定义的 JsonSerializerOptions。
-        /// </summary>
-        /// <param name="options">JSON 序列化选项</param>
-        public MessageParser(JsonSerializerOptions options)
-        {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
-
-            EnableOutOfOrderMetadataProperties(_options);
-
-            if (_options.TypeInfoResolver == null)
-            {
-                _options.TypeInfoResolver = AcpJsonContext.Default;
-            }
         }
 
         /// <summary>
@@ -202,20 +187,6 @@ namespace SalmonEgg.Acp.JsonRpc
         private JsonTypeInfo<T> GetTypeInfo<T>()
         {
             return (JsonTypeInfo<T>)_options.GetTypeInfo(typeof(T));
-        }
-
-        private static void EnableOutOfOrderMetadataProperties(JsonSerializerOptions options)
-        {
-            // ACP session/update payloads may place protocol extension fields like `_meta`
-            // before the polymorphic discriminator (`sessionUpdate`).
-            // Newer System.Text.Json versions expose an opt-in switch for this, but the
-            // ACP SDK still multi-targets netstandard2.1, so enable it reflectively when
-            // the runtime supports it.
-            var property = typeof(JsonSerializerOptions).GetProperty("AllowOutOfOrderMetadataProperties");
-            if (property?.CanWrite == true && property.PropertyType == typeof(bool))
-            {
-                property.SetValue(options, true);
-            }
         }
     }
 }

@@ -15,7 +15,7 @@ public abstract class AcpProtocolObject
     public Dictionary<string, object?>? Meta { get; set; }
 }
 
-internal static class AcpMetaJson
+public static class AcpMetaJson
 {
     public static Dictionary<string, object?>? Read(JsonElement root)
     {
@@ -189,7 +189,7 @@ internal static class AcpMetaJson
         writer.WriteEndObject();
     }
 
-    internal static void WriteObject(
+    public static void WriteObject(
         Utf8JsonWriter writer,
         IEnumerable<KeyValuePair<string, object?>> values)
     {
@@ -276,7 +276,7 @@ internal static class AcpMetaJson
 /// Serializes ACP <c>_meta</c> dictionaries while preserving raw JSON token text for
 /// values stored as <see cref="JsonElement"/> / <see cref="JsonDocument"/>.
 /// </summary>
-public sealed class AcpMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
+internal sealed class AcpMetaDictionaryJsonConverter : JsonConverter<Dictionary<string, object?>?>
 {
     public static Dictionary<string, object?>? Clone(Dictionary<string, object?>? meta)
         => AcpMetaJson.Clone(meta);

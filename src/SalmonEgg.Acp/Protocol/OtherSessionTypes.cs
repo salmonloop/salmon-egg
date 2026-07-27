@@ -457,7 +457,7 @@ namespace SalmonEgg.Acp.Protocol
         }
     }
 
-    public sealed class SessionSetConfigOptionParamsJsonConverter : JsonConverter<SessionSetConfigOptionParams>
+    internal sealed class SessionSetConfigOptionParamsJsonConverter : JsonConverter<SessionSetConfigOptionParams>
     {
         public override SessionSetConfigOptionParams? Read(
             ref Utf8JsonReader reader,

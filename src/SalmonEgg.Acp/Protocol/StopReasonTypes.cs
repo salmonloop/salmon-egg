@@ -82,7 +82,7 @@ public readonly struct StopReason : IEquatable<StopReason>
     public override string ToString() => Value;
 }
 
-public sealed class StopReasonJsonConverter : JsonConverter<StopReason>
+internal sealed class StopReasonJsonConverter : JsonConverter<StopReason>
 {
     public override StopReason Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

@@ -1435,7 +1435,7 @@ public sealed class AcpConnectionCoordinatorTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -1443,7 +1443,7 @@ public sealed class AcpConnectionCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }

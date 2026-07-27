@@ -94,7 +94,7 @@ namespace SalmonEgg.Acp.Protocol
     /// STJ 会把判别值当多态元数据丢弃,这里把它补回 <see cref="SessionUpdate.ExtensionData"/>,
     /// 保证未知更新原样 round-trip 而不是被 client 静默降级。
     /// </summary>
-    public sealed class SessionUpdateParamsJsonConverter : JsonConverter<SessionUpdateParams>
+    internal sealed class SessionUpdateParamsJsonConverter : JsonConverter<SessionUpdateParams>
     {
         public override SessionUpdateParams? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

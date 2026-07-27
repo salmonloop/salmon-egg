@@ -133,7 +133,7 @@ namespace SalmonEgg.Acp.Protocol
         public string? Description { get; set; }
     }
 
-    public sealed class SessionModesStateJsonConverter : JsonConverter<SessionModesState?>
+    internal sealed class SessionModesStateJsonConverter : JsonConverter<SessionModesState?>
     {
         public override SessionModesState? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

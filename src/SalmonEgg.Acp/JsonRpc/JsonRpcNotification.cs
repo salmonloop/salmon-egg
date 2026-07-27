@@ -8,7 +8,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// 通知是一种特殊类型的请求，它没有响应，并且接收方不返回任何东西。
     /// 通知消息不包含 id 字段。
     /// </summary>
-    public class JsonRpcNotification : JsonRpcMessage
+    internal sealed class JsonRpcNotification : JsonRpcMessage
     {
         /// <summary>
         /// 要调用的方法名。

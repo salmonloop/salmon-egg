@@ -15,12 +15,12 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Interfaces.Transport;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Content;
+using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Models.Conversation;
 using SalmonEgg.Domain.Models.ConversationPreview;
 using SalmonEgg.Acp.Mcp;
@@ -103,8 +103,6 @@ public partial class ChatViewModelTests
                 It.IsAny<IReadOnlyList<string>?>(),
                 It.IsAny<string?>()))
             .Returns(transport.Object);
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var ownsSessionManager = sessionManager is null;
         sessionManager ??= new Mock<ISessionManager>();
@@ -4197,8 +4195,6 @@ public partial class ChatViewModelTests
 
         var syncContext = new QueueingSynchronizationContext();
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
@@ -4303,8 +4299,6 @@ public partial class ChatViewModelTests
 
         var syncContext = new QueueingSynchronizationContext();
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var sessionManager = new Mock<ISessionManager>();
         var serilog = new Mock<Serilog.ILogger>();
@@ -4404,8 +4398,6 @@ public partial class ChatViewModelTests
             .Returns<ChatAction>(action => state.Update(s => ChatReducer.Reduce(s!, action), default));
 
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var serilog = new Mock<SerilogLogger>();
         var sessions = new Dictionary<string, Session>(StringComparer.Ordinal);
@@ -6422,7 +6414,7 @@ public partial class ChatViewModelTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -6430,7 +6422,7 @@ public partial class ChatViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }

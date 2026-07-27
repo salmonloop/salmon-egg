@@ -368,6 +368,7 @@ public class UiConventionsTests
     }
 
     [Theory]
+    [InlineData("src", "SalmonEgg.Acp", "SalmonEgg.Acp.csproj")]
     [InlineData("src", "SalmonEgg.Domain", "SalmonEgg.Domain.csproj")]
     [InlineData("src", "SalmonEgg.Application", "SalmonEgg.Application.csproj")]
     [InlineData("src", "SalmonEgg.Infrastructure", "SalmonEgg.Infrastructure.csproj")]
@@ -398,7 +399,7 @@ public class UiConventionsTests
     }
 
     [Fact]
-    public void AcpSdk_ShouldScopeSystemTextJsonPackageToNetstandard()
+    public void AcpSdk_ShouldShipAsZeroDependencyAotHardenedNet10Package()
     {
         var repoRoot = FindRepoRoot();
         var projectFile = Path.Combine(repoRoot, "src", "SalmonEgg.Acp", "SalmonEgg.Acp.csproj");
@@ -406,29 +407,28 @@ public class UiConventionsTests
         var root = xml.Root;
         Assert.NotNull(root);
 
-        var targetFrameworks = root!
-            .Descendants("TargetFrameworks")
+        var targetFramework = root!
+            .Descendants("TargetFramework")
             .Select(node => node.Value.Trim())
             .SingleOrDefault();
-        Assert.Equal("netstandard2.1;net10.0", targetFrameworks);
+        Assert.Equal("net10.0", targetFramework);
+        Assert.Empty(root.Descendants("TargetFrameworks"));
 
-        var itemGroups = root
-            .Descendants("ItemGroup")
-            .Where(group => string.Equals(
-                group.Attribute("Condition")?.Value?.Trim(),
-                "'$(TargetFramework)' == 'netstandard2.1'",
-                StringComparison.Ordinal))
-            .ToList();
-        Assert.NotEmpty(itemGroups);
+        Assert.DoesNotContain(
+            root.Descendants("PackageReference"),
+            packageReference => string.Equals(
+                packageReference.Attribute("Include")?.Value?.Trim(),
+                "System.Text.Json",
+                StringComparison.Ordinal));
 
-        var hasScopedSystemTextJsonReference = itemGroups.Any(group =>
-            group.Elements("PackageReference").Any(packageReference =>
-                string.Equals(
-                    packageReference.Attribute("Include")?.Value?.Trim(),
-                    "System.Text.Json",
-                    StringComparison.Ordinal)));
-
-        Assert.True(hasScopedSystemTextJsonReference);
+        Assert.Equal(
+            "true",
+            root.Descendants("IsAotCompatible").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(
+            "true",
+            root.Descendants("TreatWarningsAsErrors").Select(node => node.Value.Trim()).SingleOrDefault(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]

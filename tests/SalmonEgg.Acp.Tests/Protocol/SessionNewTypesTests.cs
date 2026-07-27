@@ -153,7 +153,7 @@ public sealed class SessionNewTypesTests
         var env = Assert.Single(stdio.Env!);
         Assert.Equal("workspace", ((JsonElement)env.Meta!["scope"]!).GetString());
 
-        var clonedServer = McpServerJsonConverter.CloneServer(stdio);
+        var clonedServer = McpServerSnapshots.CloneServer(stdio);
         Assert.IsType<StdioMcpServer>(clonedServer);
         var clone = (StdioMcpServer)clonedServer;
         Assert.Equal("profile", ((JsonElement)clone.Meta!["source"]!).GetString());
@@ -492,7 +492,7 @@ public sealed class SessionNewTypesTests
         """;
 
         var custom = (CustomMcpServer)JsonSerializer.Deserialize<McpServer>(json)!;
-        var clone = (CustomMcpServer)McpServerJsonConverter.CloneServer(custom);
+        var clone = (CustomMcpServer)McpServerSnapshots.CloneServer(custom);
 
         Assert.Equal(custom.Transport, clone.Transport);
         Assert.Equal(custom.Name, clone.Name);

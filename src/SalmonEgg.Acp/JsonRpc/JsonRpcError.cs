@@ -7,7 +7,7 @@ namespace SalmonEgg.Acp.JsonRpc
     /// JSON-RPC 2.0 错误对象。
     /// 当发生错误或异常时，error 对象被包含在响应中。
     /// </summary>
-    public class JsonRpcError
+    internal sealed class JsonRpcError
     {
         /// <summary>
         /// 错误类型标识。根据 JSON-RPC 2.0 规范，这是一个数字。

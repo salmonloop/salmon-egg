@@ -54,8 +54,8 @@ namespace SalmonEgg.Acp.Client
                     request);
         }
         private readonly IAcpTransport _transport;
-        private readonly IMessageParser _parser;
-        private readonly IMessageValidator _validator;
+        private readonly MessageParser _parser;
+        private readonly MessageValidator _validator;
         private readonly IAcpClientSessionStore _sessionStore;
         private readonly IAcpTerminalSessionManager _terminalSessionManager;
         private readonly IAcpClientLogger _logger;
@@ -153,19 +153,15 @@ namespace SalmonEgg.Acp.Client
         /// 创建新的 AcpClient 实例。
         /// </summary>
         /// <param name="transport">传输层对象</param>
-        /// <param name="parser">消息解析器（可选）</param>
-        /// <param name="validator">消息验证器（可选）</param>
         public AcpClient(
             IAcpTransport transport,
-            IMessageParser? parser = null,
-            IMessageValidator? validator = null,
             IAcpClientLogger? logger = null,
             IAcpClientSessionStore? sessionStore = null,
             IAcpTerminalSessionManager? terminalSessionManager = null)
         {
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _parser = parser ?? new MessageParser();
-            _validator = validator ?? new MessageValidator();
+            _parser = new MessageParser();
+            _validator = new MessageValidator();
             _sessionStore = sessionStore ?? new InMemoryAcpClientSessionStore();
             _terminalSessionManager = terminalSessionManager ?? new UnsupportedAcpTerminalSessionManager();
             _logger = logger ?? new NullAcpClientLogger();

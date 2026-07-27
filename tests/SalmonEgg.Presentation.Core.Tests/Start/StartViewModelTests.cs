@@ -9,7 +9,6 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SalmonEgg.Application.Services.Chat;
-using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Domain.Interfaces;
 using SalmonEgg.Domain.Interfaces.Storage;
 using SalmonEgg.Domain.Models;
@@ -3138,8 +3137,6 @@ public sealed class StartViewModelTests
         var connectionStore = new ChatConnectionStore(connectionState);
         var chatStore = new ChatStore(state);
         var transportFactory = new Mock<ITransportFactory>();
-        var messageParser = new Mock<IMessageParser>();
-        var messageValidator = new Mock<IMessageValidator>();
         var errorLogger = new Mock<IErrorLogger>();
         var serilog = new Mock<SerilogLogger>();
 
@@ -3548,7 +3545,7 @@ public sealed class StartViewModelTests
 
         public StaticMcpResolver(IReadOnlyList<McpServer> servers)
         {
-            _servers = McpServerJsonConverter.CloneServers(servers);
+            _servers = McpServerSnapshots.CloneServers(servers);
         }
 
         public Task<IReadOnlyList<McpServer>> ResolveCurrentMcpServersAsync(
@@ -3556,7 +3553,7 @@ public sealed class StartViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = McpServerJsonConverter.CloneServers(_servers);
+            var snapshot = McpServerSnapshots.CloneServers(_servers);
             sink.SetCurrentMcpServers(snapshot);
             return Task.FromResult<IReadOnlyList<McpServer>>(snapshot);
         }

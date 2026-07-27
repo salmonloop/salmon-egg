@@ -23,7 +23,7 @@ internal static class ConversationSessionInfoSnapshots
             AdditionalDirectories = CloneAdditionalDirectories(sessionInfo.AdditionalDirectories),
             UpdatedAtUtc = sessionInfo.UpdatedAtUtc,
             HasUpdatedAt = sessionInfo.HasUpdatedAt,
-            Meta = AcpMetaDictionaryJsonConverter.Clone(sessionInfo.Meta)
+            Meta = AcpMetaJson.Clone(sessionInfo.Meta)
         };
     }
 
@@ -33,11 +33,11 @@ internal static class ConversationSessionInfoSnapshots
     {
         ArgumentNullException.ThrowIfNull(incoming);
 
-        var mergedMeta = AcpMetaDictionaryJsonConverter.Clone(existing?.Meta)
+        var mergedMeta = AcpMetaJson.Clone(existing?.Meta)
             ?? new Dictionary<string, object?>(StringComparer.Ordinal);
         if (incoming.Meta is not null)
         {
-            foreach (var pair in AcpMetaDictionaryJsonConverter.Clone(incoming.Meta)!)
+            foreach (var pair in AcpMetaJson.Clone(incoming.Meta)!)
             {
                 mergedMeta[pair.Key] = pair.Value;
             }

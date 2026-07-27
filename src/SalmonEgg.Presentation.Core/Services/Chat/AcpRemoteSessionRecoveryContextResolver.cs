@@ -181,7 +181,7 @@ public static class AcpRemoteSessionRecoveryRequestFactory
         => new(
             remoteSessionId,
             context.Cwd,
-            McpServerJsonConverter.CloneServers(mcpServers),
+            McpServerSnapshots.CloneServers(mcpServers),
             CreateAdditionalDirectories(context));
 
     public static SessionResumeParams CreateResumeParams(
@@ -192,7 +192,7 @@ public static class AcpRemoteSessionRecoveryRequestFactory
         => new(
             remoteSessionId,
             context.Cwd,
-            McpServerJsonConverter.CloneServers(mcpServers),
+            McpServerSnapshots.CloneServers(mcpServers),
             CreateAdditionalDirectories(context),
             replayFrom);
 
