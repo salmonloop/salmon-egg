@@ -99,7 +99,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             RestoreViewportForWarmResume();
         }
         EnsureMessageTracking();
-        RefreshLayoutLoadingState();
         ApplyCurrentViewportStateIfAttached();
         UpdateTranscriptViewportAutomationState();
         // ViewModel logs ACP profile load failures; shell must not silence them.
@@ -169,7 +168,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnTranscriptContentChanged(CreateViewportViewState()));
-        RefreshLayoutLoadingState();
 
         UpdateTranscriptViewportAutomationState();
     }
@@ -203,7 +201,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         ResumeViewportCoordinatorAfterOverlayIfNeeded();
-        RefreshLayoutLoadingState();
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportState();
@@ -239,14 +236,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
     private void OnMessagesListViewportChanged(object? sender, EventArgs e)
     {
-        RefreshLayoutLoadingState();
-
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnViewportChanged(
             CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
-        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 
@@ -790,7 +784,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         ApplyViewportActions(_viewportController.OnUserViewportDetachIntent(
             CreateViewportViewState(),
             TryCaptureProjectionRestoreToken()));
-        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 
@@ -978,7 +971,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             ApplyCurrentViewportStateIfAttached();
-            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -988,7 +980,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             ResetAutoScrollStateForConversationChange();
             _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
             ApplyCurrentViewportStateIfAttached();
-            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -998,7 +989,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             EnsureMessageTracking();
             ResetAutoScrollStateForConversationChange();
             ApplyCurrentViewportStateIfAttached();
-            RefreshLayoutLoadingState();
             UpdateTranscriptViewportAutomationState();
             return;
         }
@@ -1015,15 +1005,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             Bindings.Update();
             return;
         }
-    }
-
-    private void RefreshLayoutLoadingState()
-    {
-        ViewModel.IsLayoutLoading = InitialLayoutLoadingPolicy.ShouldKeepLoading(
-            isSessionActive: ViewModel.IsSessionActive,
-            isHydrating: ViewModel.IsHydrating,
-            isRemoteHydrationPending: ViewModel.IsRemoteHydrationPending);
-        UpdateTranscriptViewportAutomationState();
     }
 
     private void ApplyCurrentViewportState()
@@ -1181,7 +1162,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportStateIfAttached();
         TryRefreshViewportCoordinatorFromView();
-        RefreshLayoutLoadingState();
         UpdateTranscriptViewportAutomationState();
     }
 

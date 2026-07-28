@@ -639,7 +639,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             IsConnecting,
             IsInitializing,
             IsHydrating,
-            IsLayoutLoading,
             IsSessionSwitching,
             _sessionSwitchOverlayConversationId,
             _sessionSwitchPreviewConversationId,
@@ -659,7 +658,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             IsConnecting,
             IsInitializing,
             IsHydrating,
-            IsLayoutLoading,
             IsSessionSwitching,
             _sessionSwitchOverlayConversationId,
             _sessionSwitchPreviewConversationId,
@@ -803,10 +801,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ConversationHydrationPhase.FinalizingProjection => HydrationOverlayPhase.FinalizingProjection,
                 _ => HydrationOverlayPhase.None
             });
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverlayVisible))]
-    private bool _isLayoutLoading;
 
     [ObservableProperty]
     private bool _isTurnStatusVisible;
@@ -1917,8 +1911,6 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     partial void OnIsSessionSwitchingChanged(bool value) => RaiseOverlayStateChanged();
 
-    partial void OnIsLayoutLoadingChanged(bool value) => RaiseOverlayStateChanged();
-
     partial void OnPlanEntriesChanged(ObservableCollection<PlanEntryViewModel> value)
     {
         _planEntriesProjectionCoordinator.Observe(value, RaisePlanEntryDerivedPropertyNotifications);
@@ -1978,49 +1970,20 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             return;
         }
 
-        var keepLayoutLoading = false;
-        await SetLayoutLoadingAsync(true).ConfigureAwait(false);
-        try
+        var activationResult = await _conversationActivationCoordinator
+            .ActivateSessionAsync(conversationId)
+            .ConfigureAwait(false);
+        if (!activationResult.Succeeded)
         {
-            var activationResult = await _conversationActivationCoordinator
-                .ActivateSessionAsync(conversationId)
-                .ConfigureAwait(false);
-            if (!activationResult.Succeeded)
-            {
-                return;
-            }
-
-            if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-
-            // Re-evaluate if we should keep loading after projection applied.
-            // Layout loading is only a bridge until the active conversation is fully
-            // projected. Once hydration/pending replay has ended, visible transcript
-            // content should not keep the layout overlay alive on its own.
-            keepLayoutLoading = IsSessionActive && (IsHydrating || IsRemoteHydrationPending);
-        }
-        finally
-        {
-            if (!keepLayoutLoading)
-            {
-                await SetLayoutLoadingAsync(false).ConfigureAwait(false);
-            }
-        }
-    }
-
-    private Task SetLayoutLoadingAsync(bool value)
-    {
-        if (_uiDispatcher.HasThreadAccess)
-        {
-            IsLayoutLoading = value;
-            return Task.CompletedTask;
+            return;
         }
 
-        return PostToUiAsync(() => IsLayoutLoading = value);
+        if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
     }
 
     private Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)

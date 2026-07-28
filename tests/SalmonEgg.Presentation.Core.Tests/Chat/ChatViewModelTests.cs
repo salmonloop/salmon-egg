@@ -11972,7 +11972,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivationFails_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivationFails_DoesNotLeaveOverlayVisible()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -11984,33 +11984,12 @@ public partial class ChatViewModelTests
 
         await fixture.ViewModel.SwitchConversationAsync("conv-1", TestContext.Current.CancellationToken);
 
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
         Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenInvokedOffUiThread_QueuesLayoutLoadingStateChangesOnUiDispatcher()
-    {
-        var syncContext = new QueueingSynchronizationContext();
-        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
-        activationCoordinator
-            .Setup(coordinator => coordinator.ActivateSessionAsync("conv-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ConversationActivationResult(false, "conv-1", "ActivationFailed"));
-
-        await using var fixture = CreateViewModel(syncContext, conversationActivationCoordinator: activationCoordinator.Object);
-        syncContext.RunAll();
-
-        var switchTask = Task.Run(async () => await fixture.ViewModel.SwitchConversationAsync("conv-1"));
-
-        await WaitForConditionAsync(() => Task.FromResult(syncContext.PendingCount > 0));
-        await syncContext.RunUntilCompletedAsync(switchTask);
-
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
-    }
-
-    [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivatedConversationHasNoMessages_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivatedConversationHasNoMessages_ShowsActiveEmptyConversation()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -12026,13 +12005,12 @@ public partial class ChatViewModelTests
 
         Assert.Equal("conv-1", fixture.ViewModel.CurrentSessionId);
         Assert.Empty(fixture.ViewModel.MessageHistory);
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
         Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]
-    public async Task SelectAndHydrateConversationAsync_WhenActivatedConversationHasProjectedMessagesAndNoPendingHydration_ClearsLayoutLoadingState()
+    public async Task SwitchConversationAsync_WhenActivatedConversationHasProjectedMessages_ShowsTranscriptWithoutOverlay()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var activationCoordinator = new Mock<IConversationActivationCoordinator>();
@@ -12064,7 +12042,6 @@ public partial class ChatViewModelTests
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.False(fixture.ViewModel.IsHydrating);
         Assert.False(fixture.ViewModel.IsRemoteHydrationPending);
-        Assert.False(fixture.ViewModel.IsLayoutLoading);
         Assert.False(fixture.ViewModel.IsOverlayVisible);
     }
 
@@ -12459,23 +12436,6 @@ public partial class ChatViewModelTests
         Assert.Contains(nameof(ChatViewModel.ShouldShowLoadingOverlayStatusPill), raised);
         Assert.Contains(nameof(ChatViewModel.ShouldShowLoadingOverlayPresenter), raised);
         Assert.Contains(nameof(ChatViewModel.OverlayStatusText), raised);
-    }
-
-    [Fact]
-    public async Task Overlay_WhenOnlyLayoutSettlingIsActive_DoesNotSurfaceActivationPresenter()
-    {
-        var syncContext = new ImmediateSynchronizationContext();
-        await using var fixture = CreateViewModel(syncContext);
-        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
-
-        fixture.ViewModel.IsLayoutLoading = true;
-
-        Assert.True(fixture.ViewModel.IsOverlayVisible);
-        Assert.False(fixture.ViewModel.IsActivationOverlayVisible);
-        Assert.False(fixture.ViewModel.ShouldShowBlockingLoadingMask);
-        Assert.False(fixture.ViewModel.ShouldShowLoadingOverlayStatusPill);
-        Assert.False(fixture.ViewModel.ShouldShowLoadingOverlayPresenter);
-        Assert.Equal(string.Empty, fixture.ViewModel.OverlayStatusText);
     }
 
     [Fact]

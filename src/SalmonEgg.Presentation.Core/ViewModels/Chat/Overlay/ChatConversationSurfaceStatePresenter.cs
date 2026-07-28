@@ -28,7 +28,6 @@ internal static class ChatConversationSurfaceStatePresenter
             && !shouldShowHistoryOverlay
             && input.IsHydrating
             && !string.IsNullOrWhiteSpace(input.CurrentSessionId);
-        var shouldShowLayoutLoading = input.IsLayoutLoading && input.IsChatShellVisibleForRemoteUi;
         var isSessionSwitchOverlayBlockingVisibleTranscript =
             (isSessionSwitchPreviewVisible
                 && !MatchesCurrentSession(input.CurrentSessionId, input.SessionSwitchPreviewConversationId))
@@ -47,9 +46,6 @@ internal static class ChatConversationSurfaceStatePresenter
             && (!input.IsSessionActive
                 || !MatchesCurrentSession(input.CurrentSessionId, input.PendingShellActivationConversationId)
                 || !input.IsChatShellVisibleForRemoteUi);
-        var shouldPromoteLayoutLoadingToBlockingPresenter =
-            input.IsLayoutLoading
-            && (isVisibleTranscriptStaleForCurrentSession || isCurrentVisibleConversationSupersededByShellIntent);
         var shouldBlockCurrentConversationContentForActivation =
             shouldShowHistoryOverlay
             || shouldShowProjectedHydrationOverlay
@@ -79,14 +75,12 @@ internal static class ChatConversationSurfaceStatePresenter
                     || shouldBlockCurrentConversationContentForActivation
                     || isSessionSwitchOverlayBlockingVisibleTranscript
                     || isVisibleTranscriptStaleForCurrentSession
-                    || isCurrentVisibleConversationSupersededByShellIntent))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
+                    || isCurrentVisibleConversationSupersededByShellIntent));
         var shouldShowLoadingOverlayStatusPill =
             activationOverlayVisible && !string.IsNullOrWhiteSpace(overlayStatusText);
         var shouldShowLoadingOverlayPresenter =
-            (activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill))
-            || shouldPromoteLayoutLoadingToBlockingPresenter;
-        var isOverlayVisible = activationOverlayVisible || shouldShowLayoutLoading;
+            activationOverlayVisible && (shouldShowBlockingLoadingMask || shouldShowLoadingOverlayStatusPill);
+        var isOverlayVisible = activationOverlayVisible;
         var shouldShowActiveConversationRoot =
             input.IsSessionActive
             && !shouldShowBlockingLoadingMask

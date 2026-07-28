@@ -6,35 +6,6 @@ namespace SalmonEgg.Presentation.Core.Tests.Chat.Overlay;
 public sealed class ChatConversationSurfaceStatePresenterTests
 {
     [Fact]
-    public void Resolve_WhenOnlyLayoutSettlingIsActive_DoesNotSurfaceActivationPresenter()
-    {
-        var state = ChatConversationSurfaceStatePresenter.Resolve(new ChatConversationSurfaceStateInput(
-            IsSessionActive: false,
-            CurrentSessionId: null,
-            MessageHistoryCount: 0,
-            VisibleTranscriptConversationId: null,
-            IsChatShellVisibleForRemoteUi: true,
-            IsConnecting: false,
-            IsInitializing: false,
-            IsHydrating: false,
-            IsLayoutLoading: true,
-            IsSessionSwitching: false,
-            SessionSwitchOverlayConversationId: null,
-            SessionSwitchPreviewConversationId: null,
-            ConnectionLifecycleOverlayConversationId: null,
-            HistoryOverlayConversationId: null,
-            PendingShellActivationConversationId: null,
-            HydrationLoadedMessageCount: 0));
-
-        Assert.False(state.IsActivationOverlayVisible);
-        Assert.True(state.IsOverlayVisible);
-        Assert.False(state.ShouldShowBlockingLoadingMask);
-        Assert.False(state.ShouldShowLoadingOverlayStatusPill);
-        Assert.False(state.ShouldShowLoadingOverlayPresenter);
-        Assert.Equal(string.Empty, state.OverlayStatusText);
-    }
-
-    [Fact]
     public void Resolve_WhenHydratingHistory_UsesUserFriendlyLoadedCountStatus()
     {
         var state = ChatConversationSurfaceStatePresenter.Resolve(new ChatConversationSurfaceStateInput(
@@ -46,7 +17,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: true,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
@@ -72,7 +42,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: true,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
@@ -103,7 +72,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: false,
-            IsLayoutLoading: false,
             IsSessionSwitching: true,
             SessionSwitchOverlayConversationId: "conv-1",
             SessionSwitchPreviewConversationId: null,
@@ -134,7 +102,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: true,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
@@ -164,7 +131,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: false,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: "conv-2",
@@ -191,7 +157,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: false,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
@@ -218,7 +183,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: false,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
@@ -246,7 +210,6 @@ public sealed class ChatConversationSurfaceStatePresenterTests
             IsConnecting: false,
             IsInitializing: false,
             IsHydrating: false,
-            IsLayoutLoading: false,
             IsSessionSwitching: false,
             SessionSwitchOverlayConversationId: null,
             SessionSwitchPreviewConversationId: null,
