@@ -183,16 +183,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 #endif
     }
 
-    private bool ShouldSuppressPolledGamepadShortcut(GamepadShortcutIntent intent)
-    {
-        return false;
-    }
-
-    private bool ShouldSuppressPolledGamepadContextIntent(GamepadContextIntent intent)
-    {
-        return false;
-    }
-
     private void OnMainPageUnloaded(object sender, RoutedEventArgs e)
     {
         // Tree-scoped cleanup: pairs with the attachments done in OnMainPageLoaded.
@@ -781,14 +771,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        if (ShouldSuppressPolledGamepadShortcut(intent))
-        {
-            _logger.LogDebug(
-                "Gamepad shortcut intent suppressed due duplicate native keydown. Intent={Intent}.",
-                intent);
-            return;
-        }
-
         var consumed = _gamepadShortcutDispatcher.TryDispatch(intent);
         _logger.LogDebug(
             "Gamepad shortcut intent dispatched from poller. Intent={Intent} Consumed={Consumed}.",
@@ -804,14 +786,6 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
                 "Gamepad context intent received on non-UI thread, dispatching to UI. Intent={Intent}.",
                 intent);
             _ = DispatcherQueue.TryEnqueue(() => OnGamepadContextIntentRaised(sender, intent));
-            return;
-        }
-
-        if (ShouldSuppressPolledGamepadContextIntent(intent))
-        {
-            _logger.LogDebug(
-                "Gamepad context intent suppressed due duplicate native keydown. Intent={Intent}.",
-                intent);
             return;
         }
 

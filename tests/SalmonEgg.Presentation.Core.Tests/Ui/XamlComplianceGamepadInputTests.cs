@@ -534,6 +534,18 @@ public sealed class XamlComplianceGamepadInputTests
     }
 
     [Fact]
+    public void MainPage_GamepadShortcutAndContextDispatch_UsesDirectDispatcherChain()
+    {
+        var mainPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+
+        Assert.Contains("_gamepadShortcutDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
+        Assert.Contains("_gamepadContextIntentDispatcher.TryDispatch(intent)", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShouldSuppressPolledGamepadShortcut", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShouldSuppressPolledGamepadContextIntent", mainPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("suppressed due duplicate native keydown", mainPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GamepadNativeInputBridge_IsNotRegisteredOrPackaged()
     {
         var dependencyInjection = LoadText(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
