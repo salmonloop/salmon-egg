@@ -88,16 +88,13 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     {
         _isLoaded = true;
         ClearPendingProjectionRestore();
-        _ = _viewportController.Load(
+        _viewportController.Load(
             CurrentViewportConversationId,
             ViewModel.IsSessionActive,
-            ViewModel.IsActivationOverlayVisible,
-            ViewModel.MessageHistory.Count > 0);
-        if (!ViewModel.IsActivationOverlayVisible)
-        {
-            RestoreViewportForWarmResume();
-        }
+            ViewModel.IsActivationOverlayVisible);
         EnsureViewModelTracking();
+        TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
         ApplyCurrentViewportStateIfAttached();
         ApplyCurrentViewportState();
     }
@@ -137,6 +134,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         messagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);
         messagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportState();
         TryRefreshViewportCoordinatorFromView();
@@ -673,6 +671,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             ViewModel.IsActivationOverlayVisible,
             ViewModel.MessageHistory.Count > 0));
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
     }
 
     private void HandleOverlayVisibilityChanged()
@@ -680,6 +679,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         ApplyViewportActions(_viewportController.OnOverlayVisibilityChanged(
             ViewModel.IsActivationOverlayVisible));
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
     }
 
     private void TryResumeViewportAfterOverlay()
@@ -707,35 +707,29 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         TryRefreshViewportCoordinatorFromView();
     }
 
-    private void RestoreViewportForWarmResume()
+    private void TryActivateViewportAfterLoad()
     {
         if (!_isLoaded
-            || !ViewModel.IsSessionActive
-            || ViewModel.IsActivationOverlayVisible
-            || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
+            || !_isMessagesListLoaded
+            || _transcriptViewportHost is null)
         {
             return;
         }
 
-        _ = DispatcherQueue.TryEnqueue(() =>
+        if (!_viewportController.TryActivateAfterLoad(
+            CurrentViewportConversationId,
+            ViewModel.IsSessionActive,
+            ViewModel.IsActivationOverlayVisible,
+            ViewModel.MessageHistory.Count > 0,
+            out var actions))
         {
-            if (!_isLoaded
-                || !ViewModel.IsSessionActive
-                || ViewModel.IsActivationOverlayVisible
-                || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
-            {
-                return;
-            }
+            return;
+        }
 
-            ApplyViewportActions(_viewportController.OnConversationChanged(
-                CurrentViewportConversationId,
-                ViewModel.IsSessionActive,
-                ViewModel.IsActivationOverlayVisible,
-                ViewModel.MessageHistory.Count > 0));
-            TryApplyPendingProjectionRestore();
-            ApplyCurrentViewportStateIfAttached();
-            TryRefreshViewportCoordinatorFromView();
-        });
+        ApplyViewportActions(actions);
+        TryApplyPendingProjectionRestore();
+        ApplyCurrentViewportStateIfAttached();
+        TryRefreshViewportCoordinatorFromView();
     }
 
     private void OnMessagesListPointerPressed(object sender, PointerRoutedEventArgs e)

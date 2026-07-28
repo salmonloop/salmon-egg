@@ -17,6 +17,8 @@ public sealed class TranscriptViewportController
     private bool _isSessionActive;
     private bool _isOverlayVisible;
     private bool _overlayResumePending;
+    private bool _hasLoadedOnce;
+    private TranscriptViewportActivationKind? _pendingLoadActivationKind;
     private bool _programmaticScrollInFlight;
     private bool _userScrollIntentPending;
     private int _activationGeneration;
@@ -62,28 +64,49 @@ public sealed class TranscriptViewportController
 
     public void MarkUserScrollIntentCompleted() => _userScrollIntentPending = false;
 
-    public IReadOnlyList<TranscriptViewportControllerAction> Load(
+    public void Load(
         string? conversationId,
         bool isSessionActive,
-        bool isOverlayVisible,
-        bool hasMessages)
+        bool isOverlayVisible)
     {
+        PersistCurrentConversationState();
         _isLoaded = true;
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
         _overlayResumePending = isOverlayVisible;
+        _pendingLoadActivationKind = _hasLoadedOnce
+            ? TranscriptViewportActivationKind.WarmReturn
+            : TranscriptViewportActivationKind.ColdEnter;
+        _hasLoadedOnce = true;
         ClearTransientScrollState();
         _userScrollIntentPending = false;
         _conversationId = ResolveConversationId(conversationId, isSessionActive);
-
-        if (CanActivateCurrentConversation())
-        {
-            return ActivateResolvedConversation(TranscriptViewportActivationKind.ColdEnter, hasMessages);
-        }
-
         _follow.Deactivate();
         _pinnedToken = null;
-        return [];
+    }
+
+    public bool TryActivateAfterLoad(
+        string? conversationId,
+        bool isSessionActive,
+        bool isOverlayVisible,
+        bool hasMessages,
+        out IReadOnlyList<TranscriptViewportControllerAction> actions)
+    {
+        actions = [];
+        if (!_isLoaded || _pendingLoadActivationKind is not { } activationKind)
+        {
+            return false;
+        }
+
+        SynchronizePendingLoadContext(conversationId, isSessionActive, isOverlayVisible);
+        if (!CanActivateCurrentConversation() || _overlayResumePending)
+        {
+            return false;
+        }
+
+        _pendingLoadActivationKind = null;
+        actions = ActivateResolvedConversation(activationKind, hasMessages);
+        return true;
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> Unload()
@@ -95,6 +118,7 @@ public sealed class TranscriptViewportController
         _isSessionActive = false;
         _isOverlayVisible = false;
         _overlayResumePending = false;
+        _pendingLoadActivationKind = null;
         ClearTransientScrollState();
         _userScrollIntentPending = false;
         _pinnedToken = null;
@@ -107,6 +131,12 @@ public sealed class TranscriptViewportController
         bool isOverlayVisible,
         bool hasMessages)
     {
+        if (_pendingLoadActivationKind is not null)
+        {
+            SynchronizePendingLoadContext(conversationId, isSessionActive, isOverlayVisible);
+            return [];
+        }
+
         return ActivateConversation(
             conversationId,
             isSessionActive,
@@ -161,6 +191,7 @@ public sealed class TranscriptViewportController
             hasMessages,
             TranscriptViewportActivationKind.OverlayResume,
             consumeOverlayResume: true);
+        _pendingLoadActivationKind = null;
         return true;
     }
 
@@ -318,6 +349,27 @@ public sealed class TranscriptViewportController
         }
 
         return ActivateResolvedConversation(activationKind, hasMessages);
+    }
+
+    private void SynchronizePendingLoadContext(
+        string? conversationId,
+        bool isSessionActive,
+        bool isOverlayVisible)
+    {
+        var overlayVisibilityChanged = _isOverlayVisible != isOverlayVisible;
+        _isSessionActive = isSessionActive;
+        _isOverlayVisible = isOverlayVisible;
+        _conversationId = ResolveConversationId(conversationId, isSessionActive);
+        ClearTransientScrollState();
+        _userScrollIntentPending = false;
+
+        if (isOverlayVisible || overlayVisibilityChanged)
+        {
+            _overlayResumePending = true;
+        }
+
+        _follow.Deactivate();
+        _pinnedToken = null;
     }
 
     private IReadOnlyList<TranscriptViewportControllerAction> ActivateResolvedConversation(

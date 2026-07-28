@@ -1176,13 +1176,15 @@ public sealed class NavigationCoreTests
         var overlayResumeSection = ExtractSection(
             code,
             "private void TryResumeViewportAfterOverlay()",
-            "private void RestoreViewportForWarmResume()");
+            "private void TryActivateViewportAfterLoad()");
 
         Assert.Contains("_viewportController.OnConversationChanged(", code, StringComparison.Ordinal);
         Assert.Contains("_viewportController.TryResumeAfterOverlay(", overlayResumeSection, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryActivateAfterLoad(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", overlayResumeSection, StringComparison.Ordinal);
         Assert.DoesNotContain("_wasOverlayVisible", code, StringComparison.Ordinal);
         Assert.DoesNotContain("_resumeViewportCoordinatorAfterOverlayPending", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreViewportForWarmResume", code, StringComparison.Ordinal);
     }
 
     [Fact]

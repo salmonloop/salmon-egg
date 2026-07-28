@@ -80,16 +80,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         _isViewLoaded = true;
         ClearPendingProjectionRestore();
         ClearTranscriptMessageLayerState();
-        _ = _viewportController.Load(
+        _viewportController.Load(
             CurrentViewportConversationId,
             ViewModel.IsSessionActive,
-            ViewModel.IsActivationOverlayVisible,
-            ViewModel.MessageHistory.Count > 0);
-        if (!ViewModel.IsActivationOverlayVisible)
-        {
-            RestoreViewportForWarmResume();
-        }
+            ViewModel.IsActivationOverlayVisible);
         EnsureMessageTracking();
+        TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
         ApplyCurrentViewportStateIfAttached();
         UpdateTranscriptViewportAutomationState();
     }
@@ -189,6 +186,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
         TryApplyPendingTranscriptMessageFocus();
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportState();
@@ -1082,6 +1080,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             ViewModel.IsActivationOverlayVisible,
             ViewModel.MessageHistory.Count > 0));
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
     }
 
     private void HandleOverlayVisibilityChanged()
@@ -1089,6 +1088,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         ApplyViewportActions(_viewportController.OnOverlayVisibilityChanged(
             ViewModel.IsActivationOverlayVisible));
         TryResumeViewportAfterOverlay();
+        TryActivateViewportAfterLoad();
     }
 
     private void TryResumeViewportAfterOverlay()
@@ -1115,36 +1115,28 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         UpdateTranscriptViewportAutomationState();
     }
 
-    private void RestoreViewportForWarmResume()
+    private void TryActivateViewportAfterLoad()
     {
-        if (!_isViewLoaded
-            || !ViewModel.IsSessionActive
-            || ViewModel.IsActivationOverlayVisible
-            || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
+        if (!_isViewLoaded || _transcriptViewportHost is null)
         {
             return;
         }
 
-        _ = DispatcherQueue.TryEnqueue(() =>
+        if (!_viewportController.TryActivateAfterLoad(
+            CurrentViewportConversationId,
+            ViewModel.IsSessionActive,
+            ViewModel.IsActivationOverlayVisible,
+            ViewModel.MessageHistory.Count > 0,
+            out var actions))
         {
-            if (!_isViewLoaded
-                || !ViewModel.IsSessionActive
-                || ViewModel.IsActivationOverlayVisible
-                || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
-            {
-                return;
-            }
+            return;
+        }
 
-            ApplyViewportActions(_viewportController.OnConversationChanged(
-                CurrentViewportConversationId,
-                ViewModel.IsSessionActive,
-                ViewModel.IsActivationOverlayVisible,
-                ViewModel.MessageHistory.Count > 0));
-            TryApplyPendingProjectionRestore();
-            ApplyCurrentViewportStateIfAttached();
-            TryRefreshViewportCoordinatorFromView();
-            UpdateTranscriptViewportAutomationState();
-        });
+        ApplyViewportActions(actions);
+        TryApplyPendingProjectionRestore();
+        ApplyCurrentViewportStateIfAttached();
+        TryRefreshViewportCoordinatorFromView();
+        UpdateTranscriptViewportAutomationState();
     }
 
     private void UpdateTranscriptViewportAutomationState()

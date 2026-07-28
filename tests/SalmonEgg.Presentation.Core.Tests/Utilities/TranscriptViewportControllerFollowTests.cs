@@ -10,16 +10,35 @@ namespace SalmonEgg.Presentation.Core.Tests.Utilities;
 public sealed class TranscriptViewportControllerFollowTests
 {
     [Fact]
-    public void Load_WhenSessionActive_RequestsScrollToEnd_AndDoesNotPinFromGeometry()
+    public void TryActivateAfterLoad_WhenSessionActive_ActivatesOnceAndDoesNotPinFromGeometry()
     {
         // Arrange
         var sut = new TranscriptViewportController();
+        sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false);
+        var generationBeforeActivation = sut.Generation;
+        var stateBeforeActivation = sut.State;
 
         // Act
-        var actions = sut.Load("conv-1", isSessionActive: true, isOverlayVisible: false, hasMessages: true);
+        var activated = sut.TryActivateAfterLoad(
+            "conv-1",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+        var duplicateActivation = sut.TryActivateAfterLoad(
+            "conv-1",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var duplicateActions);
 
         // Assert
+        Assert.Equal(TranscriptViewportState.Suspended, stateBeforeActivation);
+        Assert.True(activated);
+        Assert.False(duplicateActivation);
+        Assert.Equal(generationBeforeActivation + 1, sut.Generation);
         Assert.Contains(actions, a => a.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Empty(duplicateActions);
         Assert.True(sut.IsAutoFollowAttached);
         Assert.False(sut.IsViewportDetached);
 
@@ -37,7 +56,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
 
         // Act
         sut.MarkUserScrollIntentStarted();
@@ -55,7 +74,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
 
         // Act
         var actions = sut.OnTranscriptContentChanged(ViewState(isAtBottom: true));
@@ -69,7 +88,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
         sut.MarkUserScrollIntentStarted();
         _ = sut.OnUserViewportDetachIntent(
             ViewState(isAtBottom: false),
@@ -89,7 +108,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
         sut.MarkUserScrollIntentStarted();
         _ = sut.OnUserViewportDetachIntent(
             ViewState(isAtBottom: false),
@@ -109,7 +128,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
 
         // Act
         var actions = sut.OnProjectionReady("conv-other");
@@ -123,7 +142,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-1", true, false, true);
+        _ = LoadAndActivate(sut, "conv-1");
         sut.MarkUserScrollIntentStarted();
         _ = sut.OnUserViewportDetachIntent(
             ViewState(isAtBottom: false),
@@ -142,7 +161,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.OnConversationChanged("conv-b", true, false, true);
 
@@ -163,7 +182,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         _ = sut.OnConversationChanged("conv-b", true, false, true);
 
         // Act
@@ -182,11 +201,16 @@ public sealed class TranscriptViewportControllerFollowTests
         var sut = new TranscriptViewportController();
 
         // Act
-        var loadActions = sut.Load(
+        sut.Load(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: true);
+        var activatedWhileOverlayVisible = sut.TryActivateAfterLoad(
             "conv-a",
             isSessionActive: true,
             isOverlayVisible: true,
-            hasMessages: true);
+            hasMessages: true,
+            actions: out var activationActions);
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
         var resumed = sut.TryResumeAfterOverlay(
             "conv-a",
@@ -194,10 +218,19 @@ public sealed class TranscriptViewportControllerFollowTests
             isOverlayVisible: false,
             hasMessages: true,
             actions: out var resumeActions);
+        var activatedAfterResume = sut.TryActivateAfterLoad(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var duplicateActions);
 
         // Assert
-        Assert.Empty(loadActions);
+        Assert.False(activatedWhileOverlayVisible);
+        Assert.Empty(activationActions);
         Assert.True(resumed);
+        Assert.False(activatedAfterResume);
+        Assert.Empty(duplicateActions);
         Assert.True(sut.IsAutoFollowAttached);
         Assert.False(sut.IsViewportDetached);
         Assert.Contains(resumeActions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
@@ -209,7 +242,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
@@ -236,7 +269,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
         _ = sut.OnConversationChanged("conv-b", true, true, true);
@@ -259,16 +292,49 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
-    public void Unload_AndReloadDoesNotCarryConversationStateAcrossColdStart()
+    public void Unload_AndReloadSameController_RestoresPinnedConversationState()
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.Unload();
 
         // Act
-        var actions = sut.Load("conv-a", true, false, true);
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false);
+        var activated = sut.TryActivateAfterLoad(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+
+        // Assert
+        Assert.True(activated);
+        Assert.True(sut.IsViewportDetached);
+        Assert.Contains(actions, action =>
+            action.Kind == TranscriptViewportControllerActionKind.RequestRestore
+            && action.RestoreToken?.ConversationId == "conv-a"
+            && action.RestoreToken?.ProjectionItemKey == "msg:a");
+        Assert.DoesNotContain(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        var state = sut.GetConversationState("conv-a");
+        Assert.True(state.HasValue);
+        Assert.Equal(TranscriptViewportState.DetachedByUser, state.Value.Mode);
+        Assert.Equal("msg:a", state.Value.RestoreToken?.ProjectionItemKey);
+    }
+
+    [Fact]
+    public void NewController_LoadStartsColdWithoutSharingPinnedConversationState()
+    {
+        // Arrange
+        var previousController = new TranscriptViewportController();
+        _ = LoadAndActivate(previousController, "conv-a");
+        PinConversation(previousController, "conv-a", "msg:a");
+        _ = previousController.Unload();
+        var sut = new TranscriptViewportController();
+
+        // Act
+        var actions = LoadAndActivate(sut, "conv-a");
 
         // Assert
         Assert.True(sut.IsAutoFollowAttached);
@@ -285,7 +351,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.OnConversationChanged("conv-b", true, false, true);
 
@@ -303,7 +369,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
 
         // Act
@@ -324,7 +390,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
         var generationBeforeResume = sut.Generation;
@@ -358,7 +424,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         PinConversation(sut, "conv-a", "msg:a");
         _ = sut.OnConversationChanged("conv-b", true, false, true);
         PinConversation(sut, "conv-b", "msg:b");
@@ -390,7 +456,7 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         var generationBeforeOverlay = sut.Generation;
 
         // Act
@@ -424,11 +490,11 @@ public sealed class TranscriptViewportControllerFollowTests
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
+        _ = LoadAndActivate(sut, "conv-a");
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
         _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
         _ = sut.Unload();
-        _ = sut.Load("conv-a", true, false, true);
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false);
         var generationAfterReload = sut.Generation;
 
         // Act
@@ -445,6 +511,96 @@ public sealed class TranscriptViewportControllerFollowTests
         Assert.Equal(generationAfterReload, sut.Generation);
     }
 
+    [Fact]
+    public void OnConversationChanged_BeforeLoadActivation_ActivatesLatestConversationOnly()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false);
+
+        // Act
+        var contextActions = sut.OnConversationChanged(
+            "conv-b",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true);
+        var activated = sut.TryActivateAfterLoad(
+            "conv-b",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var activationActions);
+
+        // Assert
+        Assert.Empty(contextActions);
+        Assert.True(activated);
+        Assert.Equal(1, sut.Generation);
+        Assert.Contains(activationActions, action =>
+            action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd
+            && action.ScrollRequestToken.ConversationId == "conv-b");
+        Assert.Null(sut.GetConversationState("conv-a"));
+    }
+
+    [Fact]
+    public void TryActivateAfterLoad_WhenSessionInitiallyInactive_WaitsForActiveConversation()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        sut.Load(conversationId: null, isSessionActive: false, isOverlayVisible: false);
+
+        // Act
+        var activatedWhileInactive = sut.TryActivateAfterLoad(
+            conversationId: null,
+            isSessionActive: false,
+            isOverlayVisible: false,
+            hasMessages: false,
+            actions: out var inactiveActions);
+        var contextActions = sut.OnConversationChanged(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true);
+        var activatedAfterSessionStarted = sut.TryActivateAfterLoad(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var activationActions);
+
+        // Assert
+        Assert.False(activatedWhileInactive);
+        Assert.Empty(inactiveActions);
+        Assert.Empty(contextActions);
+        Assert.True(activatedAfterSessionStarted);
+        Assert.Equal(1, sut.Generation);
+        Assert.Contains(activationActions, action =>
+            action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd
+            && action.ScrollRequestToken.ConversationId == "conv-a");
+    }
+
+    [Fact]
+    public void Unload_BeforeLoadActivation_ClearsPendingActivation()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        sut.Load("conv-a", isSessionActive: true, isOverlayVisible: false);
+
+        // Act
+        _ = sut.Unload();
+        var activated = sut.TryActivateAfterLoad(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+
+        // Assert
+        Assert.False(activated);
+        Assert.Empty(actions);
+        Assert.Equal(0, sut.Generation);
+        Assert.Equal(TranscriptViewportState.Suspended, sut.State);
+    }
+
     private static void PinConversation(
         TranscriptViewportController sut,
         string conversationId,
@@ -454,6 +610,23 @@ public sealed class TranscriptViewportControllerFollowTests
         _ = sut.OnUserViewportDetachIntent(
             ViewState(isAtBottom: false),
             new TranscriptProjectionRestoreToken(conversationId, itemKey));
+    }
+
+    private static IReadOnlyList<TranscriptViewportControllerAction> LoadAndActivate(
+        TranscriptViewportController sut,
+        string conversationId,
+        bool hasMessages = true)
+    {
+        sut.Load(conversationId, isSessionActive: true, isOverlayVisible: false);
+        var activated = sut.TryActivateAfterLoad(
+            conversationId,
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages,
+            actions: out var actions);
+
+        Assert.True(activated);
+        return actions;
     }
 
     private static TranscriptViewportViewState ViewState(

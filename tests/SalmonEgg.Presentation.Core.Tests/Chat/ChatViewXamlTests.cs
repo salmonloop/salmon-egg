@@ -60,7 +60,7 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewsCodeBehind_DelegateOverlayResumeToCoreController()
+    public void ChatViewsCodeBehind_DelegateHostReadyActivationToCoreController()
     {
         var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
@@ -71,8 +71,35 @@ public sealed class ChatViewXamlTests
         Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                ApplyCurrentViewportState();\n            }\n            ApplyCurrentViewportState();", miniChatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("_viewportController.TryResumeAfterOverlay(", chatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("_viewportController.TryResumeAfterOverlay(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryActivateAfterLoad(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryActivateAfterLoad(", miniChatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("_viewportController.OnConversationChanged(", chatViewCodeBehind, StringComparison.Ordinal);
         Assert.Contains("_viewportController.OnConversationChanged(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreViewportForWarmResume", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreViewportForWarmResume", miniChatViewCodeBehind, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChatViewsCodeBehind_LoadActivationRequiresNativeHostWithoutDispatcherGuess()
+    {
+        var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
+        var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
+        var chatActivation = ExtractSection(
+            chatViewCodeBehind,
+            "private void TryActivateViewportAfterLoad()",
+            "private void UpdateTranscriptViewportAutomationState()");
+        var miniActivation = ExtractSection(
+            miniChatViewCodeBehind,
+            "private void TryActivateViewportAfterLoad()",
+            "private void OnMessagesListPointerPressed");
+
+        foreach (var activation in new[] { chatActivation, miniActivation })
+        {
+            Assert.Contains("_transcriptViewportHost is null", activation, StringComparison.Ordinal);
+            Assert.Contains("_viewportController.TryActivateAfterLoad(", activation, StringComparison.Ordinal);
+            Assert.DoesNotContain("DispatcherQueue", activation, StringComparison.Ordinal);
+            Assert.DoesNotContain("_viewportController.OnConversationChanged(", activation, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
