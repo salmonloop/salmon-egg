@@ -78,7 +78,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly IGamepadInputService _gamepadInputService;
     private readonly IGamepadShortcutDispatcher _gamepadShortcutDispatcher;
     private readonly IGamepadContextIntentDispatcher _gamepadContextIntentDispatcher;
-    private readonly IShellStartupNavigationService _startupNavigation;
+    private readonly IApplicationStartupWorkflow _startupWorkflow;
     private readonly ContentFrameNavigationAdapter _contentNavigation;
     private bool _isGamepadInputAttached;
     private long _contentFrameNavigationVersion;
@@ -102,7 +102,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _gamepadInputService = App.ServiceProvider.GetRequiredService<IGamepadInputService>();
         _gamepadShortcutDispatcher = App.ServiceProvider.GetRequiredService<IGamepadShortcutDispatcher>();
         _gamepadContextIntentDispatcher = App.ServiceProvider.GetRequiredService<IGamepadContextIntentDispatcher>();
-        _startupNavigation = App.ServiceProvider.GetRequiredService<IShellStartupNavigationService>();
+        _startupWorkflow = App.ServiceProvider.GetRequiredService<IApplicationStartupWorkflow>();
         IsGuiAutomationMode = string.Equals(
             Environment.GetEnvironmentVariable("SALMONEGG_GUI"),
             "1",
@@ -742,9 +742,8 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         _appActivationSignalSource.Attach(App.MainWindowInstance!);
         _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter);
         UpdateNavPaneToggleUi();
-        NavVM.RebuildTree();
         UpdateMainNavAutomationSelectionState();
-        await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);
+        await _startupWorkflow.ActivateShellAsync().ConfigureAwait(true);
         BootLogDebug("MainPage: initial shell content activated");
         _ = DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
@@ -753,7 +752,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
                 _ = TryMoveFocusFromCurrentContentIntoMainNavigation();
             });
         InitializeTray();
-        await _chatViewModel.RestoreAsync();
+        await _startupWorkflow.InitializeRuntimeAsync().ConfigureAwait(true);
     }
 
     private void AttachGamepadInput()

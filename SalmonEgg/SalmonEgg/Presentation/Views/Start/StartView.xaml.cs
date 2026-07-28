@@ -32,19 +32,13 @@ public sealed partial class StartView : Page, IPrimaryContentFocusTarget
         Unloaded += OnUnloaded;
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         HookSuggestionCollection();
         HeroSuggestionLayoutStates.CurrentStateChanged += OnHeroSuggestionLayoutStateChanged;
         ViewModel.OnComposerLoaded();
         RefreshHeroSuggestionFocusTargets();
         _ = DispatcherQueue.TryEnqueue(RefreshHeroSuggestionFocusTargets);
-
-        // ViewModel owns ACP profile / conversation-restore error logging; shell must
-        // not silence activation failures here.
-        var ensureAcpProfilesLoadedTask = ViewModel.Chat.EnsureAcpProfilesLoadedAsync();
-        await ViewModel.Chat.RestoreConversationsAsync();
-        await ensureAcpProfilesLoadedTask;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

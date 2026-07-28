@@ -8,6 +8,8 @@ public sealed record SetConnectionPhaseAction(
 
 public sealed record SetSelectedProfileIntentAction(string? ProfileId) : ChatConnectionAction;
 
+public sealed record InitializeSelectedProfileIntentAction(string ProfileId) : ChatConnectionAction;
+
 public sealed record SetForegroundTransportProfileAction(string? ProfileId) : ChatConnectionAction;
 
 public sealed record SetConnectionInstanceIdAction(string? ConnectionInstanceId) : ChatConnectionAction;

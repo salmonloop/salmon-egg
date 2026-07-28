@@ -62,7 +62,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// Orchestrates the lifecycle of conversations, ACP agent connectivity, and UI state projection.
 /// Follows the MVVM pattern where the View is driven strictly by this ViewModel and its projected state.
 /// </summary>
-public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection
+public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection, IChatRuntimeInitialization
 {
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
     private const int TaskOverviewPlanPreviewLimit = 4;
@@ -202,7 +202,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private string? _foregroundTransportProfileIdFromStore;
     private int _storeProjectionSequence;
     private readonly object _restoreSync = new();
-    private Task? _restoreTask;
+    private Task<bool>? _restoreTask;
+    private bool _restoreCompleted;
     private readonly SemaphoreSlim _remoteConversationActivationGate = new(1, 1);
     private long _localTerminalActivationVersion;
 
@@ -1737,6 +1738,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     {
         if (e.PropertyName == nameof(AcpProfilesViewModel.SelectedProfile))
         {
+            if (_acpProfiles.IsCatalogProjectionInProgress)
+            {
+                return;
+            }
+
             if (_suppressProfileSyncFromStore)
             {
                 return;
@@ -1961,13 +1967,13 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         ClearProjectAffinityOverrideCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task SelectAndHydrateConversationAsync(string? conversationId)
+    private async Task<bool> SelectAndHydrateConversationAsync(string? conversationId)
     {
         if (string.IsNullOrWhiteSpace(conversationId))
         {
             await _chatStore.Dispatch(new SelectConversationAction(null));
             await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
-            return;
+            return true;
         }
 
         var activationResult = await _conversationActivationCoordinator
@@ -1975,15 +1981,16 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             .ConfigureAwait(false);
         if (!activationResult.Succeeded)
         {
-            return;
+            return false;
         }
 
         if (!await CommitActivatedConversationStateAsync(conversationId).ConfigureAwait(false))
         {
-            return;
+            return false;
         }
 
         await ApplyCurrentStoreProjectionAsync().ConfigureAwait(false);
+        return true;
     }
 
     private Task ApplyCurrentStoreProjectionAsync(long? activationVersion = null)
@@ -2187,31 +2194,64 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     public Task RestoreConversationsAsync()
         => RestoreAsync();
 
-    private Task EnsureConversationWorkspaceRestoredAsync(CancellationToken cancellationToken = default)
+    Task<bool> IChatRuntimeInitialization.RestoreConversationsAsync()
+        => EnsureConversationWorkspaceRestoredAsync();
+
+    private Task<bool> EnsureConversationWorkspaceRestoredAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         lock (_restoreSync)
         {
-            _restoreTask ??= RestoreConversationsCoreAsync();
+            if (_restoreCompleted)
+            {
+                return Task.FromResult(true);
+            }
+
+            if (_restoreTask is null || _restoreTask.IsCompleted)
+            {
+                _restoreTask = RestoreConversationsCoreAsync();
+            }
+
             return _restoreTask;
         }
     }
 
-    private async Task RestoreConversationsCoreAsync()
+    private async Task<bool> RestoreConversationsCoreAsync()
     {
         try
         {
-            await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
+            if (!_conversationWorkspace.IsRecoveryDocumentRestored)
+            {
+                await _conversationWorkspace.RestoreAsync().ConfigureAwait(false);
+            }
+
+            if (!_conversationWorkspace.IsRecoveryDocumentRestored)
+            {
+                return false;
+            }
+
             await RestoreConversationBindingsFromWorkspaceAsync().ConfigureAwait(false);
             var restoredConversationId = _conversationWorkspace.LastActiveConversationId;
             await BootstrapSelectedProfileFromWorkspaceAsync(restoredConversationId).ConfigureAwait(false);
-            await SelectAndHydrateConversationAsync(restoredConversationId).ConfigureAwait(false);
+            var activeConversationRestored = await SelectAndHydrateConversationAsync(restoredConversationId).ConfigureAwait(false);
             await TryAutoConnectAsync().ConfigureAwait(false);
+            if (!activeConversationRestored)
+            {
+                return false;
+            }
+
+            lock (_restoreSync)
+            {
+                _restoreCompleted = true;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
             Logger.LogDebug(ex, "Conversation workspace restore failed");
+            return false;
         }
     }
 
@@ -2690,29 +2730,64 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     public async Task EnsureAcpProfilesLoadedAsync()
     {
-        if (_acpProfiles.Profiles.Count > 0)
-        {
-            return;
-        }
+        await EnsureAcpProfilesLoadedCoreAsync().ConfigureAwait(false);
+    }
 
+    async Task<bool> IChatRuntimeInitialization.InitializeAcpProfilesAsync()
+        => await EnsureAcpProfilesLoadedCoreAsync().ConfigureAwait(false);
+
+    private async Task<bool> EnsureAcpProfilesLoadedCoreAsync()
+    {
         try
         {
-            await _acpProfiles.RefreshAsync().ConfigureAwait(false);
-            _suppressAcpProfileConnect = true;
-            _suppressStoreProfileProjection = true;
-            try
+            if (!await _acpProfiles.EnsureProfilesLoadedAsync().ConfigureAwait(false))
             {
-                SelectedAcpProfile = _acpProfiles.SelectedProfile;
+                return false;
             }
-            finally
+
+            var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            await PostToUiAsync(() =>
             {
-                _suppressStoreProfileProjection = false;
-                _suppressAcpProfileConnect = false;
-            }
+                _suppressAcpProfileConnect = true;
+                _suppressStoreProfileProjection = true;
+                try
+                {
+                    if (_hasPendingSelectedProfileIntent)
+                    {
+                        return;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(connectionState.SelectedProfileIntentId))
+                    {
+                        ApplySelectedProfileFromStore(connectionState.SelectedProfileIntentId);
+                        return;
+                    }
+
+                    if (_acpProfiles.SelectedProfile is { } defaultProfile)
+                    {
+                        ApplyDefaultSelectedProfileProjection(defaultProfile);
+                        return;
+                    }
+
+                    _isSelectedAcpProfileDefaultProjection = true;
+                    ApplyResolvedProfileSelection(
+                        selectedProfile: null,
+                        suppressStoreProjection: true,
+                        suppressProfileSyncFromStore: false);
+                }
+                finally
+                {
+                    _suppressStoreProfileProjection = false;
+                    _suppressAcpProfileConnect = false;
+                }
+            }).ConfigureAwait(false);
+
+            return true;
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to ensure ACP profiles are loaded.");
+            return false;
         }
     }
 
@@ -2785,10 +2860,14 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         var profileId = connectionState.SelectedProfileIntentId;
         if (string.IsNullOrWhiteSpace(profileId))
         {
-            profileId = _preferences.LastSelectedServerId;
-            if (!string.IsNullOrWhiteSpace(profileId))
+            var preferredProfileId = _preferences.LastSelectedServerId;
+            if (!string.IsNullOrWhiteSpace(preferredProfileId))
             {
-                await _chatConnectionStore.Dispatch(new SetSelectedProfileIntentAction(profileId)).ConfigureAwait(false);
+                await _chatConnectionStore
+                    .Dispatch(new InitializeSelectedProfileIntentAction(preferredProfileId))
+                    .ConfigureAwait(false);
+                connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+                profileId = connectionState.SelectedProfileIntentId;
             }
         }
 
@@ -2829,26 +2908,21 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 return;
             }
 
-            _suppressAcpProfileConnect = true;
-            _suppressStoreProfileProjection = true;
-            try
+            var latestConnectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+            if (!string.Equals(
+                latestConnectionState.SelectedProfileIntentId,
+                profileId,
+                StringComparison.Ordinal))
             {
-                await PostToUiAsync(() =>
-                {
-                    var selectedProfile = ResolveLoadedProfileSelection(config);
-                    SelectedAcpProfile = selectedProfile;
-                    _acpProfiles.SelectedProfile = selectedProfile;
-                }).ConfigureAwait(false);
-            }
-            finally
-            {
-                _suppressStoreProfileProjection = false;
-                _suppressAcpProfileConnect = false;
+                return;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            await ConnectToAcpProfileCoreAsync(config, cancellationToken);
-            attemptCommitted = true;
+            attemptCommitted = await ConnectToAcpProfileCoreAsync(
+                    config,
+                    cancellationToken,
+                    updateSelectedProfileIntent: false)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -2894,20 +2968,24 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private Task ConnectToAcpProfileAsync(ServerConfiguration? profile)
         => ConnectToAcpProfileCoreAsync(profile, CancellationToken.None);
 
-    private async Task ConnectToAcpProfileCoreAsync(ServerConfiguration? profile, CancellationToken cancellationToken)
+    private async Task<bool> ConnectToAcpProfileCoreAsync(
+        ServerConfiguration? profile,
+        CancellationToken cancellationToken,
+        bool updateSelectedProfileIntent = true)
     {
         if (profile == null)
         {
-            return;
+            return false;
         }
 
         var ambientConnectionRequest = BeginAmbientConnectionRequest(cancellationToken);
         try
         {
-            await ConnectToAcpProfileCoreAsync(
+            return await ConnectToAcpProfileCoreAsync(
                     profile,
                     AcpConnectionContext.None,
-                    ambientConnectionRequest.Token)
+                    ambientConnectionRequest.Token,
+                    updateSelectedProfileIntent)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ambientConnectionRequest.IsCancellationRequested)
@@ -2927,20 +3005,36 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         }
     }
 
-    private async Task ConnectToAcpProfileCoreAsync(
+    private async Task<bool> ConnectToAcpProfileCoreAsync(
         ServerConfiguration? profile,
         AcpConnectionContext connectionContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool updateSelectedProfileIntent = true)
     {
         if (profile == null)
         {
-            return;
+            return false;
         }
 
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
+            if (updateSelectedProfileIntent)
+            {
+                await PrepareSelectedProfileConnectionAsync(profile, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+                if (!string.Equals(
+                    connectionState.SelectedProfileIntentId,
+                    profile.Id,
+                    StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             var scopedSink = CreateScopedAcpCoordinatorSink(connectionContext);
             await PostToUiAsync(() =>
@@ -2976,7 +3070,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsCurrentConnectionContext(connectionContext))
             {
-                return;
+                return false;
             }
 
             await PostToUiAsync(() =>
@@ -2992,6 +3086,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
                 ShowTransportConfigPanel = false;
             }).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
+            return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

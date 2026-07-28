@@ -24,6 +24,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
     private readonly SemaphoreSlim _refreshSemaphore = new(1, 1);
+    private bool _hasAttemptedProfileLoad;
+    private bool _hasCompletedProfileLoad;
     private bool _disposed;
 
     // ── Dependencies for per-profile item ViewModels ─────────────────────────
@@ -59,6 +61,8 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
         get => ResolveSelectedProfileItem();
         set => SetSelectedProfileId(value?.ProfileId);
     }
+
+    internal bool IsCatalogProjectionInProgress { get; private set; }
 
     [ObservableProperty]
     private bool _isLoading;
@@ -134,11 +138,11 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
 
     public async Task RefreshIfEmptyAsync()
     {
-        if (Profiles.Count == 0)
-        {
-            await RefreshAsync().ConfigureAwait(false);
-        }
+        await EnsureProfilesLoadedAsync().ConfigureAwait(false);
     }
+
+    internal Task<bool> EnsureProfilesLoadedAsync()
+        => RefreshWithGateAsync(skipIfLoaded: true);
 
     private Task MarshalToUiAsync(Action action)
     {
@@ -216,47 +220,86 @@ public partial class AcpProfilesViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task RefreshAsync()
     {
+        await RefreshWithGateAsync(skipIfLoaded: false).ConfigureAwait(false);
+    }
+
+    private async Task<bool> RefreshWithGateAsync(bool skipIfLoaded)
+    {
         await _refreshSemaphore.WaitAsync().ConfigureAwait(false);
 
         try
         {
-            await SetIsLoadingAsync(true).ConfigureAwait(false);
-
-            var configs = await _configurationService.ListConfigurationsAsync().ConfigureAwait(false);
-            var ordered = configs.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-
-            await MarshalToUiAsync(() =>
+            if (skipIfLoaded
+                && (_hasCompletedProfileLoad
+                    || (!_hasAttemptedProfileLoad && await HasProjectedProfilesAsync().ConfigureAwait(false))))
             {
-                DismissOperationError();
-                var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
+                _hasCompletedProfileLoad = true;
+                return true;
+            }
 
-                RebuildProfileItems(ordered);
+            _hasAttemptedProfileLoad = true;
+            _hasCompletedProfileLoad = false;
+            try
+            {
+                await SetIsLoadingAsync(true).ConfigureAwait(false);
 
-                Profiles.Clear();
-                foreach (var cfg in ordered)
+                var configs = await _configurationService.ListConfigurationsAsync().ConfigureAwait(false);
+                var ordered = configs.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+                await MarshalToUiAsync(() =>
                 {
-                    Profiles.Add(cfg);
-                }
+                    IsCatalogProjectionInProgress = true;
+                    try
+                    {
+                        DismissOperationError();
+                        var preferredSelectedProfileId = SelectedProfileId ?? _preferences.LastSelectedServerId;
 
-                var nextSelectedProfileId = ResolveAvailableProfileId(preferredSelectedProfileId);
-                if (!SetSelectedProfileId(nextSelectedProfileId))
-                {
-                    NotifySelectedProfileProjectionChanged();
-                }
-            }).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to refresh server profiles");
-            await ShowOperationErrorAsync(
-                "AcpProfiles_RefreshFailed",
-                "Failed to refresh agent profiles. Please try again later.").ConfigureAwait(false);
+                        RebuildProfileItems(ordered);
+
+                        Profiles.Clear();
+                        foreach (var cfg in ordered)
+                        {
+                            Profiles.Add(cfg);
+                        }
+
+                        var nextSelectedProfileId = ResolveAvailableProfileId(preferredSelectedProfileId);
+                        if (!SetSelectedProfileId(nextSelectedProfileId))
+                        {
+                            NotifySelectedProfileProjectionChanged();
+                        }
+                    }
+                    finally
+                    {
+                        IsCatalogProjectionInProgress = false;
+                    }
+                }).ConfigureAwait(false);
+                _hasCompletedProfileLoad = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to refresh server profiles");
+                await ShowOperationErrorAsync(
+                    "AcpProfiles_RefreshFailed",
+                    "Failed to refresh agent profiles. Please try again later.").ConfigureAwait(false);
+                return false;
+            }
+            finally
+            {
+                await SetIsLoadingAsync(false).ConfigureAwait(false);
+            }
         }
         finally
         {
-            await SetIsLoadingAsync(false).ConfigureAwait(false);
             _refreshSemaphore.Release();
         }
+    }
+
+    private async Task<bool> HasProjectedProfilesAsync()
+    {
+        var hasProfiles = false;
+        await MarshalToUiAsync(() => hasProfiles = Profiles.Count > 0).ConfigureAwait(false);
+        return hasProfiles;
     }
 
     [RelayCommand]

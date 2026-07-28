@@ -86,7 +86,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 #endif
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = true;
         _resumeViewportCoordinatorAfterOverlayPending = false;
@@ -108,10 +108,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         }
         EnsureViewModelTracking();
         ApplyCurrentViewportStateIfAttached();
-
-        // ViewModel logs conversation restore failures; shell must not silence them.
-        await ViewModel.RestoreConversationsAsync();
-
         ApplyCurrentViewportState();
     }
 

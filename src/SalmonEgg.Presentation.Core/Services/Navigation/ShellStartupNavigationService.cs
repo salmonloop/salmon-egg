@@ -35,6 +35,7 @@ public sealed class ShellStartupNavigationService : IShellStartupNavigationServi
 
     public async Task ActivateInitialContentAsync()
     {
+        _navigationViewModel.RebuildTree();
         var content = ShellNavigationContent.Start;
         await _activationGate.WaitAsync().ConfigureAwait(true);
         try

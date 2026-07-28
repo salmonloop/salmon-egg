@@ -226,7 +226,7 @@ public sealed class NavigationCoreTests
         var loadedSection = ExtractSection(code, "private async void OnMainPageLoaded", "private void AttachGamepadInput");
 
         Assert.DoesNotContain("EnsureStartContent", constructorSection, StringComparison.Ordinal);
-        Assert.Contains("await _startupNavigation.ActivateInitialContentAsync().ConfigureAwait(true);", loadedSection, StringComparison.Ordinal);
+        Assert.Contains("await _startupWorkflow.ActivateShellAsync().ConfigureAwait(true);", loadedSection, StringComparison.Ordinal);
         Assert.DoesNotContain("_navigationCoordinator.ActivateStartAsync", code, StringComparison.Ordinal);
     }
 
@@ -241,16 +241,16 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void MainPage_StartupFocusSeed_IsScheduledBeforeChatRestore()
+    public void MainPage_StartupFocusSeed_IsScheduledBeforeRuntimeInitialization()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
         var loadedSection = ExtractSection(code, "private async void OnMainPageLoaded", "private void AttachGamepadInput");
         var focusSeedIndex = loadedSection.IndexOf("TryMoveFocusFromCurrentContentIntoMainNavigation();", StringComparison.Ordinal);
-        var restoreIndex = loadedSection.IndexOf("await _chatViewModel.RestoreAsync();", StringComparison.Ordinal);
+        var initializationIndex = loadedSection.IndexOf("await _startupWorkflow.InitializeRuntimeAsync().ConfigureAwait(true);", StringComparison.Ordinal);
 
         Assert.True(focusSeedIndex >= 0, "MainPage should schedule a concrete startup navigation focus seed.");
-        Assert.True(restoreIndex >= 0, "MainPage should still restore chat state during load.");
-        Assert.True(focusSeedIndex < restoreIndex, "MainPage should seed startup navigation focus before long-running chat restore.");
+        Assert.True(initializationIndex >= 0, "MainPage should initialize application runtime state during load.");
+        Assert.True(focusSeedIndex < initializationIndex, "MainPage should seed startup navigation focus before runtime initialization.");
     }
 
     [Fact]
@@ -265,6 +265,9 @@ public sealed class NavigationCoreTests
         Assert.Contains("new ShellStartupNavigationService(", section, StringComparison.Ordinal);
         Assert.Contains("sp.GetRequiredService<IActivationTokenShellNavigationService>()", section, StringComparison.Ordinal);
         Assert.DoesNotContain("AddTransient<IShellStartupNavigationService>", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IApplicationStartupWorkflow>", code, StringComparison.Ordinal);
+        Assert.Contains("new ApplicationStartupWorkflow(", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<IChatRuntimeInitialization>", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ShellNavigationService>();", code, StringComparison.Ordinal);
         Assert.Contains(
             "services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());",
@@ -725,14 +728,14 @@ public sealed class NavigationCoreTests
 
 
     [Fact]
-    public void StartViewLoaded_DoesNotSwallowProfileOrRestoreFailures()
+    public void StartViewLoaded_DoesNotOwnApplicationRuntimeInitialization()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Start\StartView.xaml.cs");
-        var method = ExtractSection(code, "private async void OnLoaded", "private void OnUnloaded");
+        var method = ExtractSection(code, "private void OnLoaded", "private void OnUnloaded");
 
-        Assert.Contains("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
-        Assert.Contains("RestoreConversationsAsync()", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("catch", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreConversationsAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationStartupWorkflow", code, StringComparison.Ordinal);
     }
 
     [Fact]

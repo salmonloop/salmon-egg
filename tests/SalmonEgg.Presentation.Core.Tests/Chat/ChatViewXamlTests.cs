@@ -697,31 +697,31 @@ public sealed class ChatViewXamlTests
 
 
     [Fact]
-    public void ChatViewLoaded_DoesNotSwallowAcpProfileLoadFailures()
+    public void ChatViewLoaded_DoesNotOwnProfileInitialization()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
-        var methodStart = code.IndexOf("private async void OnLoaded", StringComparison.Ordinal);
+        var methodStart = code.IndexOf("private void OnLoaded", StringComparison.Ordinal);
         Assert.True(methodStart >= 0);
         var methodEnd = code.IndexOf("private void OnUnloaded", methodStart, StringComparison.Ordinal);
         Assert.True(methodEnd > methodStart);
         var method = code.Substring(methodStart, methodEnd - methodStart);
 
-        Assert.Contains("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("catch", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureAcpProfilesLoadedAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationStartupWorkflow", code, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MiniChatViewLoaded_DoesNotSwallowConversationRestoreFailures()
+    public void MiniChatViewLoaded_DoesNotOwnConversationRestore()
     {
         var code = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
-        var methodStart = code.IndexOf("private async void OnLoaded", StringComparison.Ordinal);
+        var methodStart = code.IndexOf("private void OnLoaded", StringComparison.Ordinal);
         Assert.True(methodStart >= 0);
         var methodEnd = code.IndexOf("private void OnUnloaded", methodStart, StringComparison.Ordinal);
         Assert.True(methodEnd > methodStart);
         var method = code.Substring(methodStart, methodEnd - methodStart);
 
-        Assert.Contains("RestoreConversationsAsync()", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("catch", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("RestoreConversationsAsync()", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationStartupWorkflow", code, StringComparison.Ordinal);
     }
 
     private static string LoadChatViewXaml()

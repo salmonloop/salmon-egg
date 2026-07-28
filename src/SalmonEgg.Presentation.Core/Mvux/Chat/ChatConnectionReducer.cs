@@ -32,6 +32,13 @@ public static class ChatConnectionReducer
                 SelectedProfileIntentId = setSettings.ProfileId,
                 Generation = nextGeneration
             },
+            InitializeSelectedProfileIntentAction initializeSettings
+                when string.IsNullOrWhiteSpace(current.SelectedProfileIntentId) => current with
+                {
+                    SelectedProfileIntentId = initializeSettings.ProfileId,
+                    Generation = nextGeneration
+                },
+            InitializeSelectedProfileIntentAction => current,
             SetForegroundTransportProfileAction setForeground => current with
             {
                 ForegroundTransportProfileId = setForeground.ProfileId,

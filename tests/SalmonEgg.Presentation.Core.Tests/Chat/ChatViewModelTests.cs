@@ -809,6 +809,60 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task RestoreAsync_WhenWorkspaceLoadFails_RetriesOnNextCall()
+    {
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore
+            .SetupSequence(store => store.LoadAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("restore failed"))
+            .ReturnsAsync(new ConversationDocument());
+        await using var fixture = CreateViewModel(conversationStore: conversationStore);
+
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        conversationStore.Verify(store => store.LoadAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task RestoreAsync_WhenPostLoadActivationFails_RetriesWithoutReloadingWorkspace()
+    {
+        var conversationStore = new Mock<IConversationStore>();
+        conversationStore
+            .Setup(store => store.LoadAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationDocument
+            {
+                LastActiveConversationId = "conversation-1",
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "conversation-1",
+                        DisplayName = "Conversation 1"
+                    }
+                }
+            });
+        var activationCoordinator = new Mock<IConversationActivationCoordinator>();
+        activationCoordinator
+            .SetupSequence(coordinator => coordinator.ActivateSessionAsync(
+                "conversation-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConversationActivationResult(false, "conversation-1", "ActivationRejected"))
+            .ReturnsAsync(new ConversationActivationResult(true, "conversation-1", null));
+        await using var fixture = CreateViewModel(
+            conversationStore: conversationStore,
+            conversationActivationCoordinator: activationCoordinator.Object);
+
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+
+        conversationStore.Verify(store => store.LoadAsync(It.IsAny<CancellationToken>()), Times.Once);
+        activationCoordinator.Verify(coordinator => coordinator.ActivateSessionAsync(
+            "conversation-1",
+            It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task ChatShellViewModel_SelectedMiniWindowSession_WhenRemoteConversationSelected_ActivatesCoordinatorWithResolvedProjectId()
     {
         await using var fixture = CreateViewModel();
@@ -3488,6 +3542,127 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenCalledConcurrently_LoadsProfileCatalogOnce()
+    {
+        var refreshStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRefreshCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .Returns(async () =>
+            {
+                refreshStarted.TrySetResult(null);
+                await allowRefreshCompletion.Task;
+                return new[] { profile };
+            });
+
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+
+        var firstEnsure = fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        var secondEnsure = fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+
+        allowRefreshCompletion.SetResult(null);
+        await Task.WhenAll(firstEnsure, secondEnsure);
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+        Assert.Single(fixture.ViewModel.AcpProfileList);
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenCatalogIsEmpty_DoesNotReloadCompletedCatalog()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(Array.Empty<ServerConfiguration>());
+
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Once);
+        Assert.Empty(fixture.ViewModel.AcpProfileList);
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenProjectionFails_RetriesIncompleteCatalog()
+    {
+        var profile = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { profile });
+        await using var fixture = CreateViewModel(configurationService: configurationService);
+        var failNextProjection = true;
+        fixture.Profiles.Profiles.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == NotifyCollectionChangedAction.Add && failNextProjection)
+            {
+                failNextProjection = false;
+                throw new InvalidOperationException("Profile projection failed.");
+            }
+        };
+
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+        await fixture.ViewModel.EnsureAcpProfilesLoadedAsync();
+
+        configurationService.Verify(service => service.ListConfigurationsAsync(), Times.Exactly(2));
+        Assert.Same(profile, Assert.Single(fixture.ViewModel.AcpProfileList));
+    }
+
+    [Fact]
+    public async Task EnsureAcpProfilesLoadedAsync_WhenStoreIntentExists_PreservesAuthoritativeProfileSelection()
+    {
+        var preferredProfile = new ServerConfiguration
+        {
+            Id = "profile-preferred",
+            Name = "Preferred Profile",
+            Transport = TransportType.Stdio
+        };
+        var authoritativeProfile = new ServerConfiguration
+        {
+            Id = "profile-authoritative",
+            Name = "Authoritative Profile",
+            Transport = TransportType.Stdio
+        };
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { preferredProfile, authoritativeProfile });
+        var syncContext = new QueueingSynchronizationContext();
+        await using var fixture = CreateViewModel(syncContext, configurationService: configurationService);
+        fixture.Preferences.LastSelectedServerId = preferredProfile.Id;
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(authoritativeProfile.Id));
+
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.EnsureAcpProfilesLoadedAsync());
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Disconnected));
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ApplyCurrentStoreProjectionAsync());
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(authoritativeProfile.Id, connectionState.SelectedProfileIntentId);
+        Assert.Same(authoritativeProfile, fixture.ViewModel.SelectedAcpProfile);
+    }
+
+    [Fact]
     public async Task CurrentAgentDisplayText_PrefersProfileName_ThenProtocolAgentName_ThenDash()
     {
         await using var fixture = CreateViewModel();
@@ -3871,6 +4046,65 @@ public partial class ChatViewModelTests
 
         Assert.NotNull(connectedProfile);
         Assert.Equal("ws://codexacp.shangxin.me/acp/ws", connectedProfile!.ServerUrl);
+    }
+
+    [Fact]
+    public async Task TryAutoConnectAsync_WhenProfileIntentChangesDuringResolution_RetriesLatestProfile()
+    {
+        var profileA = new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "Profile A",
+            Transport = TransportType.Stdio
+        };
+        var profileB = new ServerConfiguration
+        {
+            Id = "profile-b",
+            Name = "Profile B",
+            Transport = TransportType.Stdio
+        };
+        var profileAResolutionStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowProfileAResolution = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connectedProfileIds = new List<string>();
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(service => service.ListConfigurationsAsync())
+            .ReturnsAsync(new[] { profileA, profileB });
+        configurationService
+            .Setup(service => service.LoadConfigurationAsync(profileA.Id))
+            .Returns(async () =>
+            {
+                profileAResolutionStarted.TrySetResult(null);
+                await allowProfileAResolution.Task;
+                return profileA;
+            });
+        configurationService
+            .Setup(service => service.LoadConfigurationAsync(profileB.Id))
+            .ReturnsAsync(profileB);
+        var commands = new Mock<IAcpConnectionCommands>();
+        commands
+            .Setup(command => command.ConnectToProfileAsync(
+                It.IsAny<ServerConfiguration>(),
+                It.IsAny<IAcpTransportConfiguration>(),
+                It.IsAny<IAcpChatCoordinatorSink>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ServerConfiguration, IAcpTransportConfiguration, IAcpChatCoordinatorSink, CancellationToken>(
+                (profile, _, _, _) => connectedProfileIds.Add(profile.Id))
+            .ReturnsAsync(new AcpTransportApplyResult(Mock.Of<IChatService>(), new InitializeResponse()));
+        await using var fixture = CreateViewModel(
+            acpConnectionCommands: commands.Object,
+            configurationService: configurationService);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(profileA.Id));
+
+        var staleAutoConnect = fixture.ViewModel.TryAutoConnectAsync(TestContext.Current.CancellationToken);
+        await profileAResolutionStarted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        await fixture.DispatchConnectionAsync(new SetSelectedProfileIntentAction(profileB.Id));
+        allowProfileAResolution.SetResult(null);
+        await staleAutoConnect;
+        await fixture.ViewModel.TryAutoConnectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { profileB.Id }, connectedProfileIds);
+        Assert.Equal(profileB.Id, (await fixture.GetConnectionStateAsync()).SelectedProfileIntentId);
     }
 
     [Fact]

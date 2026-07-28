@@ -67,6 +67,8 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         private set => SetProperty(ref _lastActiveConversationId, value);
     }
 
+    internal bool IsRecoveryDocumentRestored => _recoveryDocumentRestored;
+
     public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

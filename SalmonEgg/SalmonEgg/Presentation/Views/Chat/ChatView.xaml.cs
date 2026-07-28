@@ -77,7 +77,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isViewLoaded = true;
         _resumeViewportCoordinatorAfterOverlayPending = false;
@@ -101,8 +101,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         EnsureMessageTracking();
         ApplyCurrentViewportStateIfAttached();
         UpdateTranscriptViewportAutomationState();
-        // ViewModel logs ACP profile load failures; shell must not silence them.
-        await ViewModel.EnsureAcpProfilesLoadedAsync();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

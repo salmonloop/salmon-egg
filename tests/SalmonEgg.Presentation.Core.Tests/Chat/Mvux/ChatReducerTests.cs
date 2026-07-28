@@ -269,6 +269,35 @@ public class ChatReducerTests
     }
 
     [Fact]
+    public void GivenEmptyProfileIntent_WhenProfileIntentIsInitialized_ThenPreferenceBecomesAuthoritative()
+    {
+        var initialState = ChatConnectionState.Empty with { Generation = 4 };
+
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new InitializeSelectedProfileIntentAction("profile-preferred"));
+
+        Assert.Equal("profile-preferred", next.SelectedProfileIntentId);
+        Assert.Equal(5, next.Generation);
+    }
+
+    [Fact]
+    public void GivenAuthoritativeProfileIntent_WhenProfileIntentInitializationRaces_ThenAuthoritativeIntentIsPreserved()
+    {
+        var initialState = ChatConnectionState.Empty with
+        {
+            SelectedProfileIntentId = "profile-authoritative",
+            Generation = 4
+        };
+
+        var next = ChatConnectionReducer.Reduce(
+            initialState,
+            new InitializeSelectedProfileIntentAction("profile-preferred"));
+
+        Assert.Same(initialState, next);
+    }
+
+    [Fact]
     public void GivenConnectionState_WhenConnectionInstanceIdChanges_ThenOnlyIdentityAndGenerationUpdate()
     {
         var initialState = ChatConnectionState.Empty with
