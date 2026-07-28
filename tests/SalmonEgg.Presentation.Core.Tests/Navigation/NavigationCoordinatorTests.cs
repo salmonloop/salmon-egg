@@ -25,6 +25,7 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Models.Navigation;
+using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.ViewModels.Chat;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -53,6 +54,56 @@ public sealed class NavigationCoordinatorTests
         var result = await shellNavigation.Object.NavigateToChat();
 
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_RecordsNormalizedIntentBeforeNavigationCompletes()
+    {
+        var navigationCompletion = new TaskCompletionSource<ShellNavigationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var selectionStore = new ShellSelectionStateStore();
+        var settingsSelectionStore = new SettingsSectionSelectionStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Setup(service => service.NavigateToSettings(SettingsSectionCatalog.DiagnosticsKey, It.IsAny<long>()))
+            .Returns(new ValueTask<ShellNavigationResult>(navigationCompletion.Task));
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object,
+            settingsSelectionStore: settingsSelectionStore);
+
+        var activation = coordinator.ActivateSettingsAsync(SettingsSectionCatalog.DiagnosticsKey);
+
+        Assert.False(activation.IsCompleted);
+        Assert.Equal(SettingsSectionCatalog.DiagnosticsKey, settingsSelectionStore.CurrentSectionKey);
+
+        navigationCompletion.SetResult(ShellNavigationResult.Success());
+        Assert.True(await activation);
+    }
+
+    [Fact]
+    public async Task ActivateSettingsAsync_WhenKeyIsUnknown_UsesCanonicalGeneralSection()
+    {
+        var selectionStore = new ShellSelectionStateStore();
+        var settingsSelectionStore = new SettingsSectionSelectionStore();
+        var preferences = CreatePreferencesWithProject();
+        var shellNavigation = CreateShellNavigationService();
+        var coordinator = CreateCoordinator(
+            selectionStore,
+            new RecordingConversationSessionSwitcher((_, _) => Task.FromResult(true)),
+            preferences,
+            shellNavigation.Object,
+            settingsSelectionStore: settingsSelectionStore);
+
+        var activated = await coordinator.ActivateSettingsAsync("Unknown");
+
+        Assert.True(activated);
+        Assert.Equal(SettingsSectionCatalog.GeneralKey, settingsSelectionStore.CurrentSectionKey);
+        shellNavigation.As<IActivationTokenShellNavigationService>()
+            .Verify(service => service.NavigateToSettings(SettingsSectionCatalog.GeneralKey, It.IsAny<long>()), Times.Once);
     }
 
     [Fact]
@@ -1831,7 +1882,8 @@ public sealed class NavigationCoordinatorTests
         IShellNavigationService shellNavigationService,
         IShellNavigationRuntimeState? runtimeState = null,
         ILogger<NavigationCoordinator>? logger = null,
-        IDiscoverSessionsConnectionFacade? discoverConnectionFacade = null)
+        IDiscoverSessionsConnectionFacade? discoverConnectionFacade = null,
+        ISettingsSectionSelectionStore? settingsSelectionStore = null)
     {
         return new NavigationCoordinator(
             selectionSink,
@@ -1840,6 +1892,7 @@ public sealed class NavigationCoordinatorTests
             discoverConnectionFacade ?? new FakeDiscoverSessionsConnectionFacade(),
             new NavigationProjectSelectionStoreAdapter(preferences),
             shellNavigationService,
+            settingsSelectionStore ?? new SettingsSectionSelectionStore(),
             logger);
     }
 

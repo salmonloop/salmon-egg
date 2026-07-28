@@ -27,6 +27,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
     private readonly IDiscoverSessionsConnectionFacade _discoverConnectionFacade;
     private readonly INavigationProjectSelectionStore _projectSelectionStore;
     private readonly IShellNavigationService _shellNavigationService;
+    private readonly ISettingsSectionSelectionStore _settingsSelectionStore;
     private readonly ILogger<NavigationCoordinator> _logger;
     private readonly SemaphoreSlim _sessionActivationGate = new(1, 1);
     private readonly object _sessionActivationSync = new();
@@ -40,6 +41,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         IDiscoverSessionsConnectionFacade discoverConnectionFacade,
         INavigationProjectSelectionStore projectSelectionStore,
         IShellNavigationService shellNavigationService,
+        ISettingsSectionSelectionStore settingsSelectionStore,
         ILogger<NavigationCoordinator>? logger = null)
     {
         _selectionSink = selectionSink ?? throw new ArgumentNullException(nameof(selectionSink));
@@ -48,6 +50,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         _discoverConnectionFacade = discoverConnectionFacade ?? throw new ArgumentNullException(nameof(discoverConnectionFacade));
         _projectSelectionStore = projectSelectionStore ?? throw new ArgumentNullException(nameof(projectSelectionStore));
         _shellNavigationService = shellNavigationService ?? throw new ArgumentNullException(nameof(shellNavigationService));
+        _settingsSelectionStore = settingsSelectionStore ?? throw new ArgumentNullException(nameof(settingsSelectionStore));
         _logger = logger ?? NullLogger<NavigationCoordinator>.Instance;
     }
 
@@ -150,10 +153,7 @@ public sealed class NavigationCoordinator : INavigationCoordinator
 
     public async Task<bool> ActivateSettingsAsync(string settingsKey)
     {
-        var activationToken = BeginActivation(ShellNavigationContent.Settings);
-        var normalizedSettingsKey = string.IsNullOrWhiteSpace(settingsKey)
-            ? SettingsSectionCatalog.GeneralKey
-            : settingsKey;
+        var (activationToken, normalizedSettingsKey) = BeginSettingsActivation(settingsKey);
         try
         {
             CancelInFlightSessionActivation();
@@ -519,6 +519,18 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             _runtimeState.LatestActivationToken = activationToken;
             _runtimeState.PendingShellContent = pendingShellContent;
             return activationToken;
+        }
+    }
+
+    private (long ActivationToken, string SettingsKey) BeginSettingsActivation(string? settingsKey)
+    {
+        lock (_sessionActivationSync)
+        {
+            var normalizedSettingsKey = _settingsSelectionStore.Select(settingsKey);
+            var activationToken = _runtimeState.LatestActivationToken + 1;
+            _runtimeState.LatestActivationToken = activationToken;
+            _runtimeState.PendingShellContent = ShellNavigationContent.Settings;
+            return (activationToken, normalizedSettingsKey);
         }
     }
 

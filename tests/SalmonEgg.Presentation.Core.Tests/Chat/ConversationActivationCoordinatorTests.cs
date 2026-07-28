@@ -648,7 +648,8 @@ public sealed class ConversationActivationCoordinatorTests
             new ControlledConversationSessionSwitcher(activationGate.Task),
             Mock.Of<IDiscoverSessionsConnectionFacade>(),
             projectSelectionStore,
-            new StubShellNavigationService(ShellNavigationResult.Success()));
+            new StubShellNavigationService(ShellNavigationResult.Success()),
+            new SettingsSectionSelectionStore());
 
         var activationTask = coordinator.ActivateSessionAsync("session-1", "project-1");
 

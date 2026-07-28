@@ -567,10 +567,15 @@ public static class DependencyInjection
                 sp.GetRequiredService<IDiscoverSessionsConnectionFacade>(),
                 sp.GetRequiredService<INavigationProjectSelectionStore>(),
                 sp.GetRequiredService<IShellNavigationService>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<NavigationCoordinator>>()));
-        services.AddTransient<IShellStartupNavigationService>(sp =>
+        services.AddSingleton<ISettingsSectionSelectionStore, SettingsSectionSelectionStore>();
+        services.AddSingleton<IShellStartupNavigationService>(sp =>
             new ShellStartupNavigationService(
                 sp.GetRequiredService<MainNavigationViewModel>(),
+                sp.GetRequiredService<IShellNavigationRuntimeState>(),
+                sp.GetRequiredService<IActivationTokenShellNavigationService>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<ShellStartupNavigationService>>()));
 
         // Global search
@@ -633,7 +638,9 @@ public static class DependencyInjection
         // General settings
         services.AddSingleton<GeneralSettingsViewModel>();
         services.AddTransient<SettingsShellViewModel>(sp =>
-            new SettingsShellViewModel(sp.GetRequiredService<IStringLocalizer<CoreStrings>>()));
+            new SettingsShellViewModel(
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
+                sp.GetRequiredService<ISettingsSectionSelectionStore>()));
 
         // ACP session registry: single source of truth for per-profile connection sessions.
         // Registered as a singleton concrete type first, then aliased to both interfaces
@@ -742,7 +749,9 @@ public static class DependencyInjection
         services.AddSingleton<AboutViewModel>();
 
         // Shell navigation facade (prevents Settings pages from walking the visual tree)
-        services.AddSingleton<IShellNavigationService, ShellNavigationService>();
+        services.AddSingleton<ShellNavigationService>();
+        services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());
+        services.AddSingleton<IActivationTokenShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());
 
         // Navigation state service (Single Source of Truth for IsPaneOpen) - Read-only adapter for SSOT
         services.AddSingleton<INavigationPaneState, ShellLayoutNavigationStateAdapter>();

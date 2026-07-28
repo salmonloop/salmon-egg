@@ -1,4 +1,5 @@
 using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Models.Settings;
 using SalmonEgg.Presentation.ViewModels.Settings;
 using Xunit;
@@ -36,7 +37,7 @@ public sealed class SettingsShellViewModelTests
     [Fact]
     public void Constructor_ProvidesStableSectionOrderAndDefaultSelection()
     {
-        var viewModel = new SettingsShellViewModel(new TestCoreStringLocalizer());
+        var viewModel = CreateViewModel();
 
         Assert.Collection(
             viewModel.Sections,
@@ -54,7 +55,7 @@ public sealed class SettingsShellViewModelTests
     [Fact]
     public void SelectSection_WhenKeyExists_SelectsSharedSectionInstance()
     {
-        var viewModel = new SettingsShellViewModel(new TestCoreStringLocalizer());
+        var viewModel = CreateViewModel();
 
         var selected = viewModel.SelectSection(SettingsSectionCatalog.DiagnosticsKey);
 
@@ -68,13 +69,31 @@ public sealed class SettingsShellViewModelTests
     [InlineData("Missing")]
     public void SelectSection_WhenKeyIsUnknown_FallsBackToGeneral(string? key)
     {
-        var viewModel = new SettingsShellViewModel(new TestCoreStringLocalizer());
+        var viewModel = CreateViewModel();
 
         var selected = viewModel.SelectSection(key);
 
         Assert.Same(viewModel.Sections[0], selected);
         Assert.Same(selected, viewModel.SelectedSection);
     }
+
+    [Fact]
+    public void Constructor_AfterShellReload_RestoresAuthoritativeSectionSelection()
+    {
+        var selectionStore = new SettingsSectionSelectionStore();
+        var firstViewModel = CreateViewModel(selectionStore);
+        _ = firstViewModel.SelectSection(SettingsSectionCatalog.DiagnosticsKey);
+
+        var reloadedViewModel = CreateViewModel(selectionStore);
+
+        Assert.Equal(SettingsSectionCatalog.DiagnosticsKey, reloadedViewModel.SelectedSection.Key);
+    }
+
+    private static SettingsShellViewModel CreateViewModel(
+        ISettingsSectionSelectionStore? selectionStore = null)
+        => new(
+            new TestCoreStringLocalizer(),
+            selectionStore ?? new SettingsSectionSelectionStore());
 
     private static void AssertSection(
         SettingsSectionDefinition section,

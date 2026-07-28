@@ -254,16 +254,26 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void DependencyInjection_ShellStartupNavigationService_IsScopedToShellInstance()
+    public void DependencyInjection_ShellStartupNavigationService_IsApplicationScopedForReloadProjection()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
         var section = ExtractSection(
             code,
-            "services.AddTransient<IShellStartupNavigationService>",
+            "services.AddSingleton<IShellStartupNavigationService>",
             "// Global search");
 
         Assert.Contains("new ShellStartupNavigationService(", section, StringComparison.Ordinal);
-        Assert.DoesNotContain("AddSingleton<IShellStartupNavigationService>", code, StringComparison.Ordinal);
+        Assert.Contains("sp.GetRequiredService<IActivationTokenShellNavigationService>()", section, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddTransient<IShellStartupNavigationService>", code, StringComparison.Ordinal);
+        Assert.Contains("services.AddSingleton<ShellNavigationService>();", code, StringComparison.Ordinal);
+        Assert.Contains(
+            "services.AddSingleton<IShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());",
+            code,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "services.AddSingleton<IActivationTokenShellNavigationService>(sp => sp.GetRequiredService<ShellNavigationService>());",
+            code,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -274,7 +284,7 @@ public sealed class NavigationCoreTests
         var section = ExtractSection(
             dependencyInjection,
             "services.AddSingleton<INavigationCoordinator>",
-            "services.AddTransient<IShellStartupNavigationService>");
+            "services.AddSingleton<ISettingsSectionSelectionStore");
 
         Assert.Contains("sp.GetRequiredService<IDiscoverSessionsConnectionFacade>()", section, StringComparison.Ordinal);
         Assert.DoesNotContain("NoOpDiscoverSessionsConnectionFacade", navigationCoordinator, StringComparison.Ordinal);
