@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using SalmonEgg.Acp.Client;
+using SalmonEgg.Application.Services.Acp;
 using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Domain.Interfaces;
@@ -45,7 +46,6 @@ using Uno.Extensions.Reactive;
 using SalmonEgg.Platforms.Windows;
 #elif __WASM__
 using SalmonEgg.Platforms.WebAssembly;
-using SalmonEgg.Application.Services.Acp;
 #endif
 
 namespace SalmonEgg;
