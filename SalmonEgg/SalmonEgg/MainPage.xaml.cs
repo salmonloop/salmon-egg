@@ -44,10 +44,6 @@ namespace SalmonEgg;
 public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepadContextIntentConsumer
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
-    private const double NavPaneMinWidth = 240;
-    private const double NavPaneMaxWidth = 480;
-    private const double RightPanelMinWidth = 240;
-    private const double RightPanelMaxWidth = 520;
     private bool _isResizingRightPanel;
     private double _rightPanelResizeStartX;
     private double _rightPanelResizeStartWidth;
@@ -696,18 +692,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         var currentX = e.GetCurrentPoint(this).Position.X;
         var delta = currentX - _rightPanelResizeStartX;
-        var newWidth = _rightPanelResizeStartWidth - delta;
+        var requestedWidth = _rightPanelResizeStartWidth - delta;
 
-        if (newWidth < RightPanelMinWidth)
-        {
-            newWidth = RightPanelMinWidth;
-        }
-        else if (newWidth > RightPanelMaxWidth)
-        {
-            newWidth = RightPanelMaxWidth;
-        }
-
-        _metricsSink.ReportRightPanelWidth(newWidth);
+        _metricsSink.ReportRightPanelWidth(requestedWidth);
         e.Handled = true;
     }
 
@@ -1331,22 +1318,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
         var currentX = e.GetCurrentPoint(this).Position.X;
         var delta = currentX - _leftNavResizeStartX;
-        var newWidth = _leftNavResizeStartWidth + delta;
+        var requestedWidth = _leftNavResizeStartWidth + delta;
 
-        if (newWidth < NavPaneMinWidth)
-        {
-            newWidth = NavPaneMinWidth;
-        }
-        else if (newWidth > NavPaneMaxWidth)
-        {
-            newWidth = NavPaneMaxWidth;
-        }
-
-        _metricsSink.ReportLeftNavWidth(newWidth);
+        _metricsSink.ReportLeftNavWidth(requestedWidth);
         e.Handled = true;
     }
-
-    // Debug line removed
 
     private void OnLeftNavResizerPointerReleased(object sender, PointerRoutedEventArgs e)
     {

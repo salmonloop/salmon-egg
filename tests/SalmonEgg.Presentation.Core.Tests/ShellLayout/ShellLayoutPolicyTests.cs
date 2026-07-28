@@ -122,6 +122,22 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Compute_OutOfRangeStoredResizeWidths_ProjectsCanonicalWidths()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            NavOpenPaneLength = ShellLayoutPolicy.MinimumNavPaneWidth - 1,
+            RightPanelPreferredWidth = ShellLayoutPolicy.MaximumRightPanelWidth + 1
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.Equal(ShellLayoutPolicy.MinimumNavPaneWidth, snapshot.NavOpenPaneLength);
+        Assert.Equal(ShellLayoutPolicy.MaximumRightPanelWidth, snapshot.RightPanelOpenPaneLength);
+    }
+
+    [Fact]
     public void Policy_Disables_RightPanelToggles_WhenRightPanelCannotRender()
     {
         var state = ShellLayoutState.Default with

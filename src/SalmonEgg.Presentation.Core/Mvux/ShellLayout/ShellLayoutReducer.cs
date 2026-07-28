@@ -63,10 +63,15 @@ public static class ShellLayoutReducer
             },
             RightPanelResizeRequested r => state with
             {
-                RightPanelPreferredWidth = r.AbsoluteWidth,
+                RightPanelPreferredWidth = ShellLayoutPolicy.ClampRightPanelWidth(
+                    r.AbsoluteWidth,
+                    state.RightPanelPreferredWidth),
                 LastAuxiliaryPanelArea = state.DesiredRightPanelMode == RightPanelMode.None ? state.LastAuxiliaryPanelArea : AuxiliaryPanelArea.Right
             },
-            LeftNavResizeRequested l => state with { NavOpenPaneLength = l.OpenPaneLength },
+            LeftNavResizeRequested l => state with
+            {
+                NavOpenPaneLength = ShellLayoutPolicy.ClampNavPaneWidth(l.OpenPaneLength, state.NavOpenPaneLength)
+            },
             _ => state
         };
         var snapshot = ShellLayoutPolicy.Compute(next);
