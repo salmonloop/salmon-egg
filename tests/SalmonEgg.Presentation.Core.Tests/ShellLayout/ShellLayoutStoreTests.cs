@@ -13,8 +13,10 @@ public sealed class ShellLayoutStoreTests
     {
         var initialState = ShellLayoutState.Default;
         var initialSnapshot = ShellLayoutPolicy.Compute(initialState);
-        await using var state = State.Value(new object(), () => initialState);
-        await using var snapshot = State.Value(new object(), () => initialSnapshot);
+        var stateOwner = new object();
+        var snapshotOwner = new object();
+        await using var state = State.Value(stateOwner, () => initialState);
+        await using var snapshot = State.Value(snapshotOwner, () => initialSnapshot);
         var store = new ShellLayoutStore(state, snapshot, initialState, initialSnapshot);
 
         var expected = ShellLayoutReducer.Reduce(ShellLayoutState.Default, new NavToggleRequested("Test")).Snapshot.IsNavPaneOpen;
@@ -26,6 +28,8 @@ public sealed class ShellLayoutStoreTests
         var current = await WaitForSnapshotAsync(snapshot, value => value?.IsNavPaneOpen == expected);
         Assert.NotNull(current);
         Assert.Equal(expected, current!.IsNavPaneOpen);
+        GC.KeepAlive(stateOwner);
+        GC.KeepAlive(snapshotOwner);
     }
 
     [Fact]
@@ -35,8 +39,10 @@ public sealed class ShellLayoutStoreTests
         // N 次成对 toggle 后每次都应精确触发一次 Changed,且末态的 Current* 与快照 feed 一致收敛。
         var initialState = ShellLayoutState.Default;
         var initialSnapshot = ShellLayoutPolicy.Compute(initialState);
-        await using var state = State.Value(new object(), () => initialState);
-        await using var snapshot = State.Value(new object(), () => initialSnapshot);
+        var stateOwner = new object();
+        var snapshotOwner = new object();
+        await using var state = State.Value(stateOwner, () => initialState);
+        await using var snapshot = State.Value(snapshotOwner, () => initialSnapshot);
         var store = new ShellLayoutStore(state, snapshot, initialState, initialSnapshot);
 
         var changedCount = 0;
@@ -63,6 +69,8 @@ public sealed class ShellLayoutStoreTests
             value => value?.IsNavPaneOpen == store.CurrentSnapshot.IsNavPaneOpen);
         Assert.NotNull(converged);
         Assert.Equal(store.CurrentSnapshot.IsNavPaneOpen, converged!.IsNavPaneOpen);
+        GC.KeepAlive(stateOwner);
+        GC.KeepAlive(snapshotOwner);
     }
 
     private static async Task<ShellLayoutSnapshot?> WaitForSnapshotAsync(
