@@ -176,46 +176,54 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
-    public void ActivateCurrentConversation_ColdEnter_ClearsStoredPinAndFollowsBottom()
+    public void Load_WithOverlayVisible_DefersActivationUntilOverlayDismissal()
     {
         // Arrange
         var sut = new TranscriptViewportController();
-        _ = sut.Load("conv-a", true, false, true);
-        PinConversation(sut, "conv-a", "msg:a");
 
         // Act
-        var actions = sut.ActivateCurrentConversation(
+        var loadActions = sut.Load(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: true,
+            hasMessages: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+        var resumed = sut.TryResumeAfterOverlay(
             "conv-a",
             isSessionActive: true,
             isOverlayVisible: false,
             hasMessages: true,
-            TranscriptViewportActivationKind.ColdEnter);
+            actions: out var resumeActions);
 
         // Assert
+        Assert.Empty(loadActions);
+        Assert.True(resumed);
         Assert.True(sut.IsAutoFollowAttached);
         Assert.False(sut.IsViewportDetached);
-        Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
-        Assert.DoesNotContain(actions, action => action.Kind == TranscriptViewportControllerActionKind.RequestRestore);
+        Assert.Contains(resumeActions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.DoesNotContain(resumeActions, action => action.Kind == TranscriptViewportControllerActionKind.RequestRestore);
     }
 
     [Fact]
-    public void ActivateCurrentConversation_OverlayResumeSameConversation_RestoresPinnedItem()
+    public void TryResumeAfterOverlay_SameConversation_RestoresPinnedItem()
     {
         // Arrange
         var sut = new TranscriptViewportController();
         _ = sut.Load("conv-a", true, false, true);
         PinConversation(sut, "conv-a", "msg:a");
-        _ = sut.SuspendForOverlay();
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
 
         // Act
-        var actions = sut.ActivateCurrentConversation(
+        var resumed = sut.TryResumeAfterOverlay(
             "conv-a",
             isSessionActive: true,
             isOverlayVisible: false,
             hasMessages: true,
-            TranscriptViewportActivationKind.OverlayResume);
+            actions: out var actions);
 
         // Assert
+        Assert.True(resumed);
         Assert.True(sut.IsViewportDetached);
         Assert.Contains(actions, action =>
             action.Kind == TranscriptViewportControllerActionKind.RequestRestore
@@ -224,23 +232,26 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
-    public void ActivateCurrentConversation_OverlayResumeDifferentConversation_DoesNotLeakPreviousPin()
+    public void TryResumeAfterOverlay_DifferentConversation_DoesNotLeakPreviousPin()
     {
         // Arrange
         var sut = new TranscriptViewportController();
         _ = sut.Load("conv-a", true, false, true);
         PinConversation(sut, "conv-a", "msg:a");
-        _ = sut.SuspendForOverlay();
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnConversationChanged("conv-b", true, true, true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
 
         // Act
-        var actions = sut.ActivateCurrentConversation(
+        var resumed = sut.TryResumeAfterOverlay(
             "conv-b",
             isSessionActive: true,
             isOverlayVisible: false,
             hasMessages: true,
-            TranscriptViewportActivationKind.OverlayResume);
+            actions: out var actions);
 
         // Assert
+        Assert.True(resumed);
         Assert.True(sut.IsAutoFollowAttached);
         Assert.False(sut.IsViewportDetached);
         Assert.Contains(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
@@ -288,7 +299,7 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
-    public void SuspendForOverlay_SuspendsActiveFollowAndPreservesStoredPin()
+    public void OnOverlayVisibilityChanged_EnteringOverlay_SuspendsActiveFollowAndPreservesStoredPin()
     {
         // Arrange
         var sut = new TranscriptViewportController();
@@ -296,7 +307,7 @@ public sealed class TranscriptViewportControllerFollowTests
         PinConversation(sut, "conv-a", "msg:a");
 
         // Act
-        var actions = sut.SuspendForOverlay();
+        var actions = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
 
         // Assert
         Assert.Empty(actions);
@@ -306,6 +317,132 @@ public sealed class TranscriptViewportControllerFollowTests
         Assert.True(state.HasValue);
         Assert.Equal(TranscriptViewportState.DetachedByUser, state.Value.Mode);
         Assert.Equal("msg:a", state.Value.RestoreToken?.ProjectionItemKey);
+    }
+
+    [Fact]
+    public void TryResumeAfterOverlay_WhenAttemptIsDeferred_ResumesOnlyOnce()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = sut.Load("conv-a", true, false, true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+        var generationBeforeResume = sut.Generation;
+        var stateBeforeResume = sut.State;
+
+        // Act
+        var firstResume = sut.TryResumeAfterOverlay(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var firstActions);
+        var secondResume = sut.TryResumeAfterOverlay(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var secondActions);
+
+        // Assert
+        Assert.Equal(TranscriptViewportState.Suspended, stateBeforeResume);
+        Assert.True(firstResume);
+        Assert.False(secondResume);
+        Assert.Equal(generationBeforeResume + 1, sut.Generation);
+        Assert.Contains(firstActions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Empty(secondActions);
+    }
+
+    [Fact]
+    public void OnConversationChanged_WhileOverlayVisible_ResumesLatestConversationState()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = sut.Load("conv-a", true, false, true);
+        PinConversation(sut, "conv-a", "msg:a");
+        _ = sut.OnConversationChanged("conv-b", true, false, true);
+        PinConversation(sut, "conv-b", "msg:b");
+        _ = sut.OnConversationChanged("conv-a", true, false, true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnConversationChanged("conv-b", true, true, true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+
+        // Act
+        var resumed = sut.TryResumeAfterOverlay(
+            "conv-b",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+
+        // Assert
+        Assert.True(resumed);
+        Assert.True(sut.IsViewportDetached);
+        Assert.Contains(actions, action =>
+            action.Kind == TranscriptViewportControllerActionKind.RequestRestore
+            && action.RestoreToken?.ConversationId == "conv-b"
+            && action.RestoreToken?.ProjectionItemKey == "msg:b");
+        Assert.DoesNotContain(actions, action => action.RestoreToken?.ConversationId == "conv-a");
+    }
+
+    [Fact]
+    public void OnOverlayVisibilityChanged_RepeatedNotifications_DoNotAdvanceGenerationOrDuplicateResume()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = sut.Load("conv-a", true, false, true);
+        var generationBeforeOverlay = sut.Generation;
+
+        // Act
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+        var resumed = sut.TryResumeAfterOverlay(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+        var duplicateResume = sut.TryResumeAfterOverlay(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var duplicateActions);
+
+        // Assert
+        Assert.True(resumed);
+        Assert.False(duplicateResume);
+        Assert.Equal(generationBeforeOverlay + 1, sut.Generation);
+        Assert.Single(actions, action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Empty(duplicateActions);
+    }
+
+    [Fact]
+    public void Unload_ClearsPendingOverlayResume()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = sut.Load("conv-a", true, false, true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: true);
+        _ = sut.OnOverlayVisibilityChanged(isOverlayVisible: false);
+        _ = sut.Unload();
+        _ = sut.Load("conv-a", true, false, true);
+        var generationAfterReload = sut.Generation;
+
+        // Act
+        var resumed = sut.TryResumeAfterOverlay(
+            "conv-a",
+            isSessionActive: true,
+            isOverlayVisible: false,
+            hasMessages: true,
+            actions: out var actions);
+
+        // Assert
+        Assert.False(resumed);
+        Assert.Empty(actions);
+        Assert.Equal(generationAfterReload, sut.Generation);
     }
 
     private static void PinConversation(

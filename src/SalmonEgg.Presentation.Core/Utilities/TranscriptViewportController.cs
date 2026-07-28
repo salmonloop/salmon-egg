@@ -16,6 +16,7 @@ public sealed class TranscriptViewportController
     private bool _isLoaded;
     private bool _isSessionActive;
     private bool _isOverlayVisible;
+    private bool _overlayResumePending;
     private bool _programmaticScrollInFlight;
     private bool _userScrollIntentPending;
     private int _activationGeneration;
@@ -70,6 +71,7 @@ public sealed class TranscriptViewportController
         _isLoaded = true;
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
+        _overlayResumePending = isOverlayVisible;
         ClearTransientScrollState();
         _userScrollIntentPending = false;
         _conversationId = ResolveConversationId(conversationId, isSessionActive);
@@ -92,6 +94,7 @@ public sealed class TranscriptViewportController
         _conversationId = string.Empty;
         _isSessionActive = false;
         _isOverlayVisible = false;
+        _overlayResumePending = false;
         ClearTransientScrollState();
         _userScrollIntentPending = false;
         _pinnedToken = null;
@@ -112,19 +115,53 @@ public sealed class TranscriptViewportController
             TranscriptViewportActivationKind.WarmReturn);
     }
 
-    public IReadOnlyList<TranscriptViewportControllerAction> ActivateCurrentConversation(
+    public IReadOnlyList<TranscriptViewportControllerAction> OnOverlayVisibilityChanged(
+        bool isOverlayVisible)
+    {
+        if (_isOverlayVisible == isOverlayVisible)
+        {
+            return [];
+        }
+
+        if (isOverlayVisible)
+        {
+            PersistCurrentConversationState();
+        }
+
+        _isOverlayVisible = isOverlayVisible;
+        _overlayResumePending = true;
+        _follow.Deactivate();
+        ClearTransientScrollState();
+        _userScrollIntentPending = false;
+        _pinnedToken = null;
+        return [];
+    }
+
+    public bool TryResumeAfterOverlay(
         string? conversationId,
         bool isSessionActive,
         bool isOverlayVisible,
         bool hasMessages,
-        TranscriptViewportActivationKind activationKind)
+        out IReadOnlyList<TranscriptViewportControllerAction> actions)
     {
-        return ActivateConversation(
+        actions = [];
+        if (!_overlayResumePending
+            || !_isLoaded
+            || isOverlayVisible
+            || !isSessionActive
+            || string.IsNullOrWhiteSpace(conversationId))
+        {
+            return false;
+        }
+
+        actions = ActivateConversation(
             conversationId,
             isSessionActive,
             isOverlayVisible,
             hasMessages,
-            activationKind);
+            TranscriptViewportActivationKind.OverlayResume,
+            consumeOverlayResume: true);
+        return true;
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnTranscriptContentChanged(
@@ -186,16 +223,6 @@ public sealed class TranscriptViewportController
             pinStillResolvable: pinResolvable || !_follow.IsPinned,
             pinIsVisible: true,
             hasMessages: true);
-    }
-
-    public IReadOnlyList<TranscriptViewportControllerAction> SuspendForOverlay()
-    {
-        PersistCurrentConversationState();
-        _isOverlayVisible = true;
-        _follow.Deactivate();
-        ClearTransientScrollState();
-        _userScrollIntentPending = false;
-        return [];
     }
 
     public IReadOnlyList<TranscriptViewportControllerAction> OnRestoreConfirmed(
@@ -261,8 +288,10 @@ public sealed class TranscriptViewportController
         bool isSessionActive,
         bool isOverlayVisible,
         bool hasMessages,
-        TranscriptViewportActivationKind activationKind)
+        TranscriptViewportActivationKind activationKind,
+        bool consumeOverlayResume = false)
     {
+        var overlayVisibilityChanged = _isOverlayVisible != isOverlayVisible;
         PersistCurrentConversationState();
         _isSessionActive = isSessionActive;
         _isOverlayVisible = isOverlayVisible;
@@ -270,11 +299,22 @@ public sealed class TranscriptViewportController
         ClearTransientScrollState();
         _userScrollIntentPending = false;
 
-        if (!CanActivateCurrentConversation())
+        if (isOverlayVisible || overlayVisibilityChanged)
+        {
+            _overlayResumePending = true;
+        }
+
+        if (!CanActivateCurrentConversation()
+            || (_overlayResumePending && !consumeOverlayResume))
         {
             _follow.Deactivate();
             _pinnedToken = null;
             return [];
+        }
+
+        if (consumeOverlayResume)
+        {
+            _overlayResumePending = false;
         }
 
         return ActivateResolvedConversation(activationKind, hasMessages);

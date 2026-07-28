@@ -1170,17 +1170,19 @@ public sealed class NavigationCoreTests
     }
 
     [Fact]
-    public void ChatViewCodeBehind_WarmAndOverlayResumeActivateCoordinatorInsteadOfRedetach()
+    public void ChatViewCodeBehind_OverlayResumeIsConsumedByCoreController()
     {
         var code = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var overlayResumeSection = ExtractSection(
             code,
-            "private void ResumeViewportCoordinatorAfterOverlayIfNeeded()",
+            "private void TryResumeViewportAfterOverlay()",
             "private void RestoreViewportForWarmResume()");
 
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", code, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", code, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.OnConversationChanged(", code, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryResumeAfterOverlay(", overlayResumeSection, StringComparison.Ordinal);
         Assert.DoesNotContain("new TranscriptViewportEvent.UserIntentScroll(", overlayResumeSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("_wasOverlayVisible", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_resumeViewportCoordinatorAfterOverlayPending", code, StringComparison.Ordinal);
     }
 
     [Fact]

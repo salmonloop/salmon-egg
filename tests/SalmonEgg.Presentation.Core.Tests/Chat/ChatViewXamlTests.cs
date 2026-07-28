@@ -60,7 +60,7 @@ public sealed class ChatViewXamlTests
     }
 
     [Fact]
-    public void ChatViewsCodeBehind_SessionDrivenAutoScrollUsesAttachedOnlyHelper()
+    public void ChatViewsCodeBehind_DelegateOverlayResumeToCoreController()
     {
         var chatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\Chat\ChatView.xaml.cs");
         var miniChatViewCodeBehind = LoadText(@"SalmonEgg\SalmonEgg\Presentation\Views\MiniWindow\MiniChatView.xaml.cs");
@@ -69,10 +69,10 @@ public sealed class ChatViewXamlTests
         Assert.Contains("ApplyCurrentViewportStateIfAttached();", miniChatViewCodeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n                {\n                    ApplyCurrentViewportState();\n                }\n                ApplyCurrentViewportState();", chatViewCodeBehind, StringComparison.Ordinal);
         Assert.DoesNotContain("if (!IsViewportDetachedByUser())\n            {\n                ApplyCurrentViewportState();\n            }\n            ApplyCurrentViewportState();", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", chatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);", miniChatViewCodeBehind, StringComparison.Ordinal);
-        Assert.Contains("ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryResumeAfterOverlay(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.TryResumeAfterOverlay(", miniChatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.OnConversationChanged(", chatViewCodeBehind, StringComparison.Ordinal);
+        Assert.Contains("_viewportController.OnConversationChanged(", miniChatViewCodeBehind, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,6 +97,9 @@ public sealed class ChatViewXamlTests
             Assert.DoesNotContain("HasLastItemContainerGenerated(", code, StringComparison.Ordinal);
             Assert.DoesNotContain("_restoreDetachedViewportAfterOverlay", code, StringComparison.Ordinal);
             Assert.DoesNotContain("_restoreDetachedViewportConversationId", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_wasOverlayVisible", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_resumeViewportCoordinatorAfterOverlayPending", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("SuspendForOverlay(", code, StringComparison.Ordinal);
         }
     }
 

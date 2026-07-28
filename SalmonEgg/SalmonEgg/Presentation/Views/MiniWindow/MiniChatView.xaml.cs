@@ -28,8 +28,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private const double BottomThreshold = 10;
     private const double BottomGeometryTolerance = 2;
     private const int MaxRestoreAttempts = 32;
-    private bool _wasOverlayVisible;
-    private bool _resumeViewportCoordinatorAfterOverlayPending;
     private readonly TranscriptProjectionRestoreController _projectionRestoreController = new(MaxRestoreAttempts);
     private readonly Microsoft.UI.Xaml.Input.KeyEventHandler _messagesListHandledKeyDownHandler;
     private readonly PointerEventHandler _messagesListHandledPointerPressedHandler;
@@ -89,20 +87,13 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _isLoaded = true;
-        _resumeViewportCoordinatorAfterOverlayPending = false;
         ClearPendingProjectionRestore();
-        _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
-        _viewportController.Load(
+        _ = _viewportController.Load(
             CurrentViewportConversationId,
             ViewModel.IsSessionActive,
-            _wasOverlayVisible,
+            ViewModel.IsActivationOverlayVisible,
             ViewModel.MessageHistory.Count > 0);
-        if (_wasOverlayVisible)
-        {
-            _resumeViewportCoordinatorAfterOverlayPending = true;
-            ApplyViewportActions(_viewportController.SuspendForOverlay());
-        }
-        else
+        if (!ViewModel.IsActivationOverlayVisible)
         {
             RestoreViewportForWarmResume();
         }
@@ -117,7 +108,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         ApplyViewportActions(_viewportController.Unload());
         _isLoaded = false;
         _isMessagesListLoaded = false;
-        _resumeViewportCoordinatorAfterOverlayPending = false;
         DisposeTranscriptViewportHost();
         ClearPendingProjectionRestore();
         DetachViewModelTracking();
@@ -146,7 +136,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         messagesList?.AddHandler(UIElement.KeyDownEvent, _messagesListHandledKeyDownHandler, true);
         messagesList?.AddHandler(UIElement.PointerPressedEvent, _messagesListHandledPointerPressedHandler, true);
         messagesList?.AddHandler(UIElement.PointerWheelChangedEvent, _messagesListHandledPointerWheelChangedHandler, true);
-        ResumeViewportCoordinatorAfterOverlayIfNeeded();
+        TryResumeViewportAfterOverlay();
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportState();
         TryRefreshViewportCoordinatorFromView();
@@ -214,7 +204,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
             return;
         }
 
-        ResumeViewportCoordinatorAfterOverlayIfNeeded();
+        TryResumeViewportAfterOverlay();
         TryApplyPendingProjectionRestore();
         ApplyViewportActions(_viewportController.OnTranscriptContentChanged(CreateViewportViewState()));
     }
@@ -223,16 +213,14 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     {
         if (e.PropertyName == nameof(ChatViewModel.CurrentSessionId))
         {
-            ResetAutoScrollStateForConversationChange();
-            _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
+            HandleViewportConversationContextChanged();
             ApplyCurrentViewportStateIfAttached();
             return;
         }
 
         if (e.PropertyName == nameof(ChatViewModel.IsSessionActive))
         {
-            ResetAutoScrollStateForConversationChange();
-            _wasOverlayVisible = ViewModel.IsActivationOverlayVisible;
+            HandleViewportConversationContextChanged();
             ApplyCurrentViewportStateIfAttached();
             return;
         }
@@ -240,7 +228,7 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         if (e.PropertyName == nameof(ChatViewModel.MessageHistory))
         {
             EnsureViewModelTracking();
-            ResetAutoScrollStateForConversationChange();
+            HandleViewportConversationContextChanged();
             ApplyCurrentViewportStateIfAttached();
             return;
         }
@@ -511,16 +499,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
         }
     }
 
-    private void ActivateViewportForCurrentSession(TranscriptViewportActivationKind activationKind)
-    {
-        ApplyViewportActions(_viewportController.ActivateCurrentConversation(
-            CurrentViewportConversationId,
-            ViewModel.IsSessionActive,
-            ViewModel.IsActivationOverlayVisible,
-            ViewModel.MessageHistory.Count > 0,
-            activationKind));
-    }
-
     private bool IsViewportDetachedByUser()
         => _viewportController.State is TranscriptViewportState.DetachedByUser;
 
@@ -685,66 +663,45 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
     }
 
 
-    private void ResetAutoScrollStateForConversationChange()
+    private void HandleViewportConversationContextChanged()
     {
         AbandonPendingProjectionRestore("ConversationChanged");
         ClearPendingProjectionRestore();
-        if (ViewModel.IsActivationOverlayVisible)
-        {
-            _resumeViewportCoordinatorAfterOverlayPending = true;
-            return;
-        }
-
-        if (_resumeViewportCoordinatorAfterOverlayPending)
-        {
-            ResumeViewportCoordinatorAfterOverlayIfNeeded();
-            return;
-        }
-
-        _resumeViewportCoordinatorAfterOverlayPending = false;
         ApplyViewportActions(_viewportController.OnConversationChanged(
             CurrentViewportConversationId,
             ViewModel.IsSessionActive,
             ViewModel.IsActivationOverlayVisible,
             ViewModel.MessageHistory.Count > 0));
+        TryResumeViewportAfterOverlay();
     }
 
     private void HandleOverlayVisibilityChanged()
     {
-        var isOverlayVisible = ViewModel.IsActivationOverlayVisible;
-        var overlayJustDismissed = _wasOverlayVisible && !isOverlayVisible;
-        _wasOverlayVisible = isOverlayVisible;
-
-        if (isOverlayVisible)
-        {
-            _resumeViewportCoordinatorAfterOverlayPending = true;
-            ApplyViewportActions(_viewportController.SuspendForOverlay());
-            return;
-        }
-
-        if (!overlayJustDismissed)
-        {
-            return;
-        }
-
-        ResumeViewportCoordinatorAfterOverlayIfNeeded();
+        ApplyViewportActions(_viewportController.OnOverlayVisibilityChanged(
+            ViewModel.IsActivationOverlayVisible));
+        TryResumeViewportAfterOverlay();
     }
 
-    private void ResumeViewportCoordinatorAfterOverlayIfNeeded()
+    private void TryResumeViewportAfterOverlay()
     {
-        if (!_resumeViewportCoordinatorAfterOverlayPending
-            || ViewModel.IsActivationOverlayVisible
-            || !_isLoaded
-            || !ViewModel.IsSessionActive
+        if (!_isLoaded
             || !_isMessagesListLoaded
-            || _transcriptViewportHost is null
-            || string.IsNullOrWhiteSpace(ViewModel.CurrentSessionId))
+            || _transcriptViewportHost is null)
         {
             return;
         }
 
-        _resumeViewportCoordinatorAfterOverlayPending = false;
-        ActivateViewportForCurrentSession(TranscriptViewportActivationKind.OverlayResume);
+        if (!_viewportController.TryResumeAfterOverlay(
+            CurrentViewportConversationId,
+            ViewModel.IsSessionActive,
+            ViewModel.IsActivationOverlayVisible,
+            ViewModel.MessageHistory.Count > 0,
+            out var actions))
+        {
+            return;
+        }
+
+        ApplyViewportActions(actions);
         TryApplyPendingProjectionRestore();
         ApplyCurrentViewportStateIfAttached();
         TryRefreshViewportCoordinatorFromView();
@@ -770,7 +727,11 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
                 return;
             }
 
-            ActivateViewportForCurrentSession(TranscriptViewportActivationKind.WarmReturn);
+            ApplyViewportActions(_viewportController.OnConversationChanged(
+                CurrentViewportConversationId,
+                ViewModel.IsSessionActive,
+                ViewModel.IsActivationOverlayVisible,
+                ViewModel.MessageHistory.Count > 0));
             TryApplyPendingProjectionRestore();
             ApplyCurrentViewportStateIfAttached();
             TryRefreshViewportCoordinatorFromView();
