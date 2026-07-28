@@ -26,9 +26,8 @@ internal sealed class TranscriptProjectionRestoreController
     private string? _pendingConversationId;
     private int _pendingGeneration = -1;
     private int _pendingAttemptCount;
-    private int _pendingResolvedIndex = -1;
     private int _pendingRequestedMaterializationIndex = -1;
-    private bool _pendingRetryScheduled;
+    private object? _pendingRetrySchedule;
 
     public TranscriptProjectionRestoreController(int maxAttempts)
     {
@@ -48,24 +47,22 @@ internal sealed class TranscriptProjectionRestoreController
 
     public void Queue(TranscriptProjectionRestoreToken token, int generation)
     {
+        InvalidateRetrySchedule();
         _pendingToken = token;
         _pendingConversationId = token.ConversationId;
         _pendingGeneration = generation;
         _pendingAttemptCount = 0;
-        _pendingResolvedIndex = -1;
         _pendingRequestedMaterializationIndex = -1;
-        _pendingRetryScheduled = false;
     }
 
     public void Clear()
     {
+        InvalidateRetrySchedule();
         _pendingToken = null;
         _pendingConversationId = null;
         _pendingGeneration = -1;
         _pendingAttemptCount = 0;
-        _pendingResolvedIndex = -1;
         _pendingRequestedMaterializationIndex = -1;
-        _pendingRetryScheduled = false;
     }
 
     public TranscriptProjectionRestoreResult Abandon(string currentConversationId, string reason)
@@ -96,7 +93,6 @@ internal sealed class TranscriptProjectionRestoreController
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(resolveIndex);
 
-        _pendingRetryScheduled = false;
         if (_pendingToken is not { } token)
         {
             return default;
@@ -108,7 +104,7 @@ internal sealed class TranscriptProjectionRestoreController
             return Abandon(currentConversationId, "RestoreContextChanged");
         }
 
-        var index = ResolveIndex(token, messageCount, resolveIndex);
+        var index = resolveIndex(token);
         if (index < 0 || index >= messageCount)
         {
             return Unavailable("ProjectionItemMissing");
@@ -165,34 +161,52 @@ internal sealed class TranscriptProjectionRestoreController
         ArgumentNullException.ThrowIfNull(dispatcherQueue);
         ArgumentNullException.ThrowIfNull(retry);
 
-        if (_pendingRetryScheduled)
+        var retrySchedule = new object();
+        if (Interlocked.CompareExchange(ref _pendingRetrySchedule, retrySchedule, null) is not null)
         {
             return false;
         }
 
-        _pendingRetryScheduled = true;
-        _ = ScheduleRetryAsync(dispatcherQueue, retry);
+        _ = ScheduleRetryAsync(dispatcherQueue, retry, retrySchedule);
         return true;
     }
 
-    private async Task ScheduleRetryAsync(DispatcherQueue dispatcherQueue, Action retry)
+    private async Task ScheduleRetryAsync(
+        DispatcherQueue dispatcherQueue,
+        Action retry,
+        object retrySchedule)
     {
-        await Task.Delay(TimeSpan.FromMilliseconds(16)).ConfigureAwait(false);
-        _ = dispatcherQueue.TryEnqueue(retry.Invoke);
+        var retryEnqueued = false;
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(16)).ConfigureAwait(false);
+            retryEnqueued = dispatcherQueue.TryEnqueue(() => InvokeRetry(retry, retrySchedule));
+        }
+        finally
+        {
+            if (!retryEnqueued)
+            {
+                _ = TryReleaseRetrySchedule(retrySchedule);
+            }
+        }
     }
 
-    private int ResolveIndex(
-        TranscriptProjectionRestoreToken token,
-        int messageCount,
-        Func<TranscriptProjectionRestoreToken, int> resolveIndex)
+    private void InvokeRetry(Action retry, object retrySchedule)
     {
-        if (_pendingResolvedIndex >= 0 && _pendingResolvedIndex < messageCount)
+        if (TryReleaseRetrySchedule(retrySchedule))
         {
-            return _pendingResolvedIndex;
+            retry();
         }
+    }
 
-        _pendingResolvedIndex = resolveIndex(token);
-        return _pendingResolvedIndex;
+    private bool TryReleaseRetrySchedule(object retrySchedule)
+        => ReferenceEquals(
+            Interlocked.CompareExchange(ref _pendingRetrySchedule, null, retrySchedule),
+            retrySchedule);
+
+    private void InvalidateRetrySchedule()
+    {
+        _ = Interlocked.Exchange(ref _pendingRetrySchedule, null);
     }
 
     private TranscriptProjectionRestoreResult Unavailable(string reason)
