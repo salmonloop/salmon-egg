@@ -84,6 +84,58 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
+    public void OnTranscriptContentChanged_ConsecutiveRequests_OnlyLatestTokenRemainsActive()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = LoadAndActivate(sut, "conv-1");
+
+        // Act
+        var firstActions = sut.OnTranscriptContentChanged(ViewState(isAtBottom: true));
+        var secondActions = sut.OnTranscriptContentChanged(ViewState(isAtBottom: true));
+        var firstToken = Assert.Single(
+            firstActions,
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd).ScrollRequestToken;
+        var secondToken = Assert.Single(
+            secondActions,
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd).ScrollRequestToken;
+
+        // Assert
+        Assert.NotEqual(firstToken, secondToken);
+        Assert.Equal(firstToken.ActivationGeneration, secondToken.ActivationGeneration);
+        Assert.Equal("conv-1", firstToken.ConversationId);
+        Assert.Equal("conv-1", secondToken.ConversationId);
+        Assert.True(secondToken.RequestGeneration > firstToken.RequestGeneration);
+        Assert.False(sut.MatchesActiveScrollRequest(firstToken));
+        Assert.True(sut.MatchesActiveScrollRequest(secondToken));
+    }
+
+    [Fact]
+    public void OnActiveScrollObservation_StaleToken_DoesNotCompleteLatestRequest()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = LoadAndActivate(sut, "conv-1");
+        var staleToken = Assert.Single(
+            sut.OnTranscriptContentChanged(ViewState(isAtBottom: true)),
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd).ScrollRequestToken;
+        var latestToken = Assert.Single(
+            sut.OnTranscriptContentChanged(ViewState(isAtBottom: true)),
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd).ScrollRequestToken;
+
+        // Act
+        var staleActions = sut.OnActiveScrollObservation(staleToken);
+        var latestRemainedActive = sut.MatchesActiveScrollRequest(latestToken);
+        var latestActions = sut.OnActiveScrollObservation(latestToken);
+
+        // Assert
+        Assert.Empty(staleActions);
+        Assert.True(latestRemainedActive);
+        Assert.Empty(latestActions);
+        Assert.False(sut.MatchesActiveScrollRequest(latestToken));
+    }
+
+    [Fact]
     public void OnTranscriptContentChanged_WhilePinned_DoesNotRequestScrollToEnd()
     {
         // Arrange

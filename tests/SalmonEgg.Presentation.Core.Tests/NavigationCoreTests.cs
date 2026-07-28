@@ -1104,8 +1104,10 @@ public sealed class NavigationCoreTests
             var code = LoadFile(path);
 
             Assert.Contains("TranscriptScrollRequestToken requestToken", code, StringComparison.Ordinal);
+            Assert.Contains("TranscriptNativeScrollScheduler", code, StringComparison.Ordinal);
             Assert.Contains("MatchesActiveScrollRequest(", code, StringComparison.Ordinal);
             Assert.Contains("OnActiveScrollObservation(", code, StringComparison.Ordinal);
+            Assert.DoesNotContain("_queuedNativeTranscriptScrollRequestToken", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TryCaptureActiveScrollRequestToken(", code, StringComparison.Ordinal);
             Assert.DoesNotContain("TryBeginScrollToEndSchedule(", code, StringComparison.Ordinal);
             Assert.DoesNotContain("CanExecuteScrollToEndSchedule(", code, StringComparison.Ordinal);

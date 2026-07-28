@@ -27,7 +27,10 @@ public readonly record struct TranscriptViewportConversationState(
     TranscriptViewportState Mode,
     TranscriptProjectionRestoreToken? RestoreToken = null);
 
-public readonly record struct TranscriptScrollRequestToken(int Generation, string ConversationId);
+public readonly record struct TranscriptScrollRequestToken(
+    int ActivationGeneration,
+    long RequestGeneration,
+    string ConversationId);
 
 public readonly record struct TranscriptViewportViewState(
     bool HasMessages,

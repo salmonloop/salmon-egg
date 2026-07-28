@@ -22,6 +22,7 @@ public sealed class TranscriptViewportController
     private bool _programmaticScrollInFlight;
     private bool _userScrollIntentPending;
     private int _activationGeneration;
+    private long _scrollRequestGeneration;
     private TranscriptProjectionRestoreToken? _pinnedToken;
     private TranscriptScrollRequestToken _activeScrollToken;
     private bool _hasActiveScrollToken;
@@ -300,19 +301,11 @@ public sealed class TranscriptViewportController
     }
 
     public bool MatchesActiveScrollRequest(TranscriptScrollRequestToken token)
-        => _hasActiveScrollToken
-           && token.Generation == _activeScrollToken.Generation
-           && string.Equals(token.ConversationId, _activeScrollToken.ConversationId, StringComparison.Ordinal);
+        => _hasActiveScrollToken && token == _activeScrollToken;
 
-    public IReadOnlyList<TranscriptViewportControllerAction> OnActiveScrollObservation()
-    {
-        if (!_hasActiveScrollToken)
-        {
-            return [];
-        }
-
-        return OnScheduledScrollObservation(_activeScrollToken);
-    }
+    public IReadOnlyList<TranscriptViewportControllerAction> OnActiveScrollObservation(
+        TranscriptScrollRequestToken requestToken)
+        => OnScheduledScrollObservation(requestToken);
 
     private IReadOnlyList<TranscriptViewportControllerAction> ActivateConversation(
         string? conversationId,
@@ -508,7 +501,10 @@ public sealed class TranscriptViewportController
             return [];
         }
 
-        var token = new TranscriptScrollRequestToken(_activationGeneration, _conversationId);
+        var token = new TranscriptScrollRequestToken(
+            _activationGeneration,
+            ++_scrollRequestGeneration,
+            _conversationId);
         _activeScrollToken = token;
         _hasActiveScrollToken = true;
         _programmaticScrollInFlight = true;

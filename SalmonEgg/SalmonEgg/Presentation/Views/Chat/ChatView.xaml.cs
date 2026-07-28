@@ -34,6 +34,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private bool _isTranscriptChildControlLayerActive;
     private int? _pendingTranscriptMessageFocusIndex;
     private readonly TranscriptProjectionRestoreController _projectionRestoreController = new(MaxRestoreAttempts);
+    private readonly TranscriptNativeScrollScheduler _nativeScrollScheduler = new();
     private string _transcriptViewportAutomationState = "inactive";
     private INotifyCollectionChanged? _trackedMessageHistory;
     private readonly Microsoft.UI.Xaml.Input.KeyEventHandler _messagesListHandledKeyDownHandler;
@@ -42,7 +43,6 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
     private readonly TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs> _messagesListContainerContentChangingHandler;
     private readonly RoutedEventHandler _messagesListItemGotFocusHandler;
     private ITranscriptViewportHost? _transcriptViewportHost;
-    private TranscriptScrollRequestToken? _queuedNativeTranscriptScrollRequestToken;
     public ChatView()
     {
         ShellViewModel = App.ServiceProvider.GetRequiredService<ChatShellViewModel>();
@@ -209,7 +209,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
     private void DisposeTranscriptViewportHost()
     {
-        _queuedNativeTranscriptScrollRequestToken = null;
+        _nativeScrollScheduler.Clear();
         if (_transcriptViewportHost is null)
         {
             return;
@@ -847,7 +847,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 }
                 break;
             case TranscriptViewportControllerActionKind.ScrollTranscriptToEnd:
-                if (action.ScrollRequestToken.Generation >= 0)
+                if (action.ScrollRequestToken.ActivationGeneration >= 0)
                 {
                     IssueNativeTranscriptScrollRequest(action.ScrollRequestToken);
                 }
@@ -1004,35 +1004,28 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        if (_queuedNativeTranscriptScrollRequestToken == requestToken)
+        var scheduleResult = _nativeScrollScheduler.Schedule(
+            DispatcherQueue,
+            requestToken,
+            ContinueNativeTranscriptScrollRequest);
+        if (scheduleResult is not TranscriptNativeScrollScheduleResult.Coalesced)
+        {
+            RequestScrollToEnd();
+        }
+    }
+
+    private void ContinueNativeTranscriptScrollRequest(TranscriptScrollRequestToken requestToken)
+    {
+        if (!_isViewLoaded
+            || _transcriptViewportHost is null
+            || ViewModel.MessageHistory.Count <= 0
+            || !_viewportController.MatchesActiveScrollRequest(requestToken))
         {
             return;
         }
 
-        _queuedNativeTranscriptScrollRequestToken = requestToken;
         RequestScrollToEnd();
-
-        if (!DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_queuedNativeTranscriptScrollRequestToken == requestToken)
-            {
-                _queuedNativeTranscriptScrollRequestToken = null;
-            }
-
-            if (!_isViewLoaded
-                || _transcriptViewportHost is null
-                || ViewModel.MessageHistory.Count <= 0
-                || !_viewportController.MatchesActiveScrollRequest(requestToken))
-            {
-                return;
-            }
-
-            RequestScrollToEnd();
-            ScheduleTranscriptScrollRequestObservation(requestToken);
-        }))
-        {
-            _queuedNativeTranscriptScrollRequestToken = null;
-        }
+        ScheduleTranscriptScrollRequestObservation(requestToken);
     }
 
     private void ScheduleTranscriptScrollRequestObservation(TranscriptScrollRequestToken requestToken)
@@ -1047,7 +1040,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
                 return;
             }
 
-            ApplyViewportActions(_viewportController.OnActiveScrollObservation());
+            ApplyViewportActions(_viewportController.OnActiveScrollObservation(requestToken));
             ApplyCurrentViewportState();
             TryRefreshViewportCoordinatorFromView();
             UpdateTranscriptViewportAutomationState();
