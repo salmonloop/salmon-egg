@@ -61,7 +61,11 @@ public sealed class TranscriptViewportController
             : null;
     }
 
-    public void MarkUserScrollIntentStarted() => _userScrollIntentPending = true;
+    public void MarkUserScrollIntentStarted()
+    {
+        _userScrollIntentPending = true;
+        ClearTransientScrollState();
+    }
 
     public void MarkUserScrollIntentCompleted() => _userScrollIntentPending = false;
 
@@ -418,7 +422,6 @@ public sealed class TranscriptViewportController
 
         if (isUserGesture)
         {
-            _userScrollIntentPending = true;
             ClearTransientScrollState();
         }
 
@@ -496,7 +499,9 @@ public sealed class TranscriptViewportController
         TranscriptScrollRequest request,
         bool hasMessages)
     {
-        if (request.Kind == TranscriptScrollRequestKind.None || !hasMessages)
+        if (request.Kind == TranscriptScrollRequestKind.None
+            || !hasMessages
+            || _userScrollIntentPending)
         {
             return [];
         }

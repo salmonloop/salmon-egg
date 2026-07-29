@@ -752,12 +752,6 @@ public sealed partial class MiniChatView : Page, IGamepadShortcutConsumer, IGame
 
     private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (MessagesList is not null
-            && !TranscriptPointerIntentFilter.ShouldTrackViewportIntent(e.OriginalSource, MessagesList))
-        {
-            return;
-        }
-
         _viewportController.MarkUserScrollIntentCompleted();
         var releaseGeneration = _viewportController.Generation;
         _ = DispatcherQueue.TryEnqueue(() =>

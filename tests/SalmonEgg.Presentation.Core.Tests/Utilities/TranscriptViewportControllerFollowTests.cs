@@ -70,6 +70,69 @@ public sealed class TranscriptViewportControllerFollowTests
     }
 
     [Fact]
+    public void MarkUserScrollIntentStarted_WhileProgrammaticScrollActive_AllowsViewportToDetach()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        var activationActions = LoadAndActivate(sut, "conv-1");
+        var activeToken = Assert.Single(
+            activationActions,
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd).ScrollRequestToken;
+
+        // Act
+        sut.MarkUserScrollIntentStarted();
+        _ = sut.OnViewportChanged(
+            ViewState(isAtBottom: false),
+            new TranscriptProjectionRestoreToken("conv-1", "msg:a"));
+
+        // Assert
+        Assert.False(sut.MatchesActiveScrollRequest(activeToken));
+        Assert.True(sut.IsViewportDetached);
+        Assert.Equal(
+            new TranscriptProjectionRestoreToken("conv-1", "msg:a"),
+            sut.GetConversationState("conv-1")?.RestoreToken);
+    }
+
+    [Fact]
+    public void OnTranscriptContentChanged_WhilePointerIntentPending_DefersAutoFollowUntilCompletion()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = LoadAndActivate(sut, "conv-1");
+        sut.MarkUserScrollIntentStarted();
+
+        // Act
+        var pendingActions = sut.OnTranscriptContentChanged(ViewState(isAtBottom: true));
+        sut.MarkUserScrollIntentCompleted();
+        var completedActions = sut.OnTranscriptContentChanged(ViewState(isAtBottom: true));
+
+        // Assert
+        Assert.DoesNotContain(
+            pendingActions,
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+        Assert.Contains(
+            completedActions,
+            action => action.Kind == TranscriptViewportControllerActionKind.ScrollTranscriptToEnd);
+    }
+
+    [Fact]
+    public void OnUserViewportDetachIntent_ImmediateGesture_DoesNotLeavePendingPointerIntent()
+    {
+        // Arrange
+        var sut = new TranscriptViewportController();
+        _ = LoadAndActivate(sut, "conv-1");
+
+        // Act
+        _ = sut.OnUserViewportDetachIntent(
+            ViewState(isAtBottom: true),
+            new TranscriptProjectionRestoreToken("conv-1", "msg:a"));
+
+        // Assert
+        Assert.False(sut.UserScrollIntentPending);
+        Assert.True(sut.IsAutoFollowAttached);
+    }
+
+    [Fact]
     public void OnTranscriptContentChanged_WhileFollowing_RequestsScrollToEnd()
     {
         // Arrange
