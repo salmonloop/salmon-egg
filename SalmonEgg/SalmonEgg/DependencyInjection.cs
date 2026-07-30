@@ -248,6 +248,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
         services.AddSingleton<IAppSupportInfoService>(_ => new AppSupportInfoService(typeof(App).Assembly));
+        services.AddSingleton<IAiContentReportLauncher, AiContentReportLauncher>();
         services.AddSingleton<IConversationStore, ConversationStore>();
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<IPlatformRuntimeCapabilityProbe, RestrictedRuntimeCapabilityProbe>();
@@ -626,7 +627,8 @@ public static class DependencyInjection
                 sp.GetRequiredService<IChatLaunchWorkflow>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
-                sp.GetRequiredService<IAppLanguageService>()));
+                sp.GetRequiredService<IAppLanguageService>(),
+                sp.GetRequiredService<IUiInteractionService>()));
         services.AddSingleton<IChatLaunchWorkflow>(sp =>
             new ChatLaunchWorkflow(
                 sp.GetRequiredService<IChatLaunchWorkflowChatFacade>(),

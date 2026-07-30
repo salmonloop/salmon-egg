@@ -82,6 +82,8 @@ public partial class ChatViewModelTests
         IStringLocalizer<CoreStrings>? localizer = null,
         IAppLanguageService? languageService = null,
         IChatStateProjector? chatStateProjector = null,
+        IUiInteractionService? uiInteractionService = null,
+        IAiContentReportLauncher? aiContentReportLauncher = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -244,7 +246,9 @@ public partial class ChatViewModelTests
                 localSlashCommandSource: localSlashCommandSource,
                 platformShell: platformShell,
                 localizer: localizer,
-                languageService: languageService);
+                languageService: languageService,
+                uiInteractionService: uiInteractionService,
+                aiContentReportLauncher: aiContentReportLauncher);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -4218,6 +4222,150 @@ public partial class ChatViewModelTests
 
         Assert.Single(fixture.ViewModel.MessageHistory);
         Assert.Equal("hello", fixture.ViewModel.MessageHistory[0].TextContent);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenConfirmed_OpensSharedEmailReportWithMessageExcerpt()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        launcher.Setup(service => service.TryOpenReportAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                "hello"))
+            .ReturnsAsync(true);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: new TestCoreStringLocalizer(),
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report",
+                ContentType = "text",
+                TextContent = "hello",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        var message = Assert.Single(fixture.ViewModel.MessageHistory);
+        Assert.True(message.ReportContentCommand.CanExecute(null));
+        await message.ReportContentCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ConfirmAsync(
+            "Report AI content",
+            It.IsAny<string>(),
+            "Open email",
+            "Cancel"), Times.Once);
+        launcher.Verify(service => service.TryOpenReportAsync(
+            "SalmonEgg",
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            "hello"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenDialogCancelled_DoesNotOpenEmailReport()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(false);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: new TestCoreStringLocalizer(),
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report-cancel",
+                ContentType = "text",
+                TextContent = "cancel me",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        var message = Assert.Single(fixture.ViewModel.MessageHistory);
+        await message.ReportContentCommand.ExecuteAsync(null);
+
+        launcher.Verify(service => service.TryOpenReportAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ReportAiContentCommand_WhenEmailAppCannotOpen_ShowsReportSpecificFailure()
+    {
+        var syncContext = new QueueingSynchronizationContext();
+        var localizer = new TestCoreStringLocalizer();
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ConfirmAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var launcher = new Mock<IAiContentReportLauncher>();
+        launcher.SetupGet(service => service.CanReport).Returns(true);
+        launcher.Setup(service => service.TryOpenReportAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>()))
+            .ReturnsAsync(false);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            localizer: localizer,
+            uiInteractionService: ui.Object,
+            aiContentReportLauncher: launcher.Object);
+        syncContext.RunAll();
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "session-1",
+            Transcript = ImmutableList<ConversationMessageSnapshot>.Empty.Add(new ConversationMessageSnapshot
+            {
+                Id = "m-report-failed",
+                ContentType = "text",
+                TextContent = "failed report",
+                IsOutgoing = false
+            })
+        });
+        await syncContext.RunUntilIdleAsync();
+
+        await Assert.Single(fixture.ViewModel.MessageHistory).ReportContentCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["AiContentReport_OpenFailed"]), Times.Once);
     }
 
     [Fact]

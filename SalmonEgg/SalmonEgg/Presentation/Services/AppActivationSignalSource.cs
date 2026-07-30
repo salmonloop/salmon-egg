@@ -9,8 +9,20 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
 {
     private readonly object _sync = new();
     private readonly HashSet<Window> _attachedWindows = new();
+    private Window? _activeWindow;
 
     public event EventHandler? Activated;
+
+    public Window? ActiveWindow
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _activeWindow;
+            }
+        }
+    }
 
     public void Attach(Window window)
     {
@@ -22,6 +34,8 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
             {
                 return;
             }
+
+            _activeWindow ??= window;
         }
 
         window.Activated += OnWindowActivated;
@@ -38,6 +52,11 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
             {
                 return;
             }
+
+            if (ReferenceEquals(_activeWindow, window))
+            {
+                _activeWindow = null;
+            }
         }
 
         window.Activated -= OnWindowActivated;
@@ -49,6 +68,14 @@ public sealed class AppActivationSignalSource : IApplicationActivationSignalSour
         if (string.Equals(e.WindowActivationState.ToString(), "Deactivated", StringComparison.Ordinal))
         {
             return;
+        }
+
+        if (sender is Window window)
+        {
+            lock (_sync)
+            {
+                _activeWindow = window;
+            }
         }
 
         Activated?.Invoke(this, EventArgs.Empty);

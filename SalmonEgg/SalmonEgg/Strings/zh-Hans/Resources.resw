@@ -957,6 +957,9 @@
   <data name="ChatMessageCopyMenu.Text" xml:space="preserve">
     <value>复制消息</value>
   </data>
+  <data name="ChatMessageReportMenu.Text" xml:space="preserve">
+    <value>举报</value>
+  </data>
   <data name="ChatMarkdownCopyCodeButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>复制代码</value>
   </data>

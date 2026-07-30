@@ -201,12 +201,58 @@ public sealed class StartViewModelTests
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();
 
-            var suggestion = startViewModel.Suggestions[0];
-            startViewModel.ExecuteSuggestionCommand.Execute(suggestion);
+            var suggestion = startViewModel.Suggestions[1];
+            await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(suggestion);
 
+            Assert.False(suggestion.IsInformational);
             Assert.Equal(suggestion.Prompt, chat.ViewModel.CurrentPrompt);
             Assert.Equal(suggestion.Prompt, startViewModel.StartPrompt);
             workflow.Verify(w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteInformationalSuggestion_ShowsGuidanceWithoutUpdatingPrompt()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var preferences = CreatePreferences();
+            await using var chat = CreateChatViewModel(syncContext, preferences, Mock.Of<ISessionManager>());
+            var workflow = new Mock<IChatLaunchWorkflow>();
+            using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
+            var ui = new Mock<IUiInteractionService>();
+            ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var localizer = new TestCoreStringLocalizer();
+            var startViewModel = CreateStartViewModel(
+                chat,
+                preferences,
+                nav,
+                workflow.Object,
+                localizer: localizer,
+                ui: ui.Object);
+
+            chat.ViewModel.CurrentPrompt = "chat draft";
+            startViewModel.OnComposerLoaded();
+
+            var tip = startViewModel.Suggestions[0];
+            await startViewModel.ExecuteSuggestionCommand.ExecuteAsync(tip);
+
+            Assert.True(tip.IsInformational);
+            Assert.Equal("chat draft", chat.ViewModel.CurrentPrompt);
+            Assert.Equal("chat draft", startViewModel.StartPrompt);
+            ui.Verify(
+                service => service.ShowInfoAsync(localizer["StartSuggestion_ReportGuidanceDetail"]),
+                Times.Once);
+            workflow.Verify(
+                w => w.StartSessionAndSendAsync(It.IsAny<ChatLaunchRequest>(), It.IsAny<CancellationToken>()),
+                Times.Never);
         }
         finally
         {
@@ -239,23 +285,29 @@ public sealed class StartViewModelTests
                 startViewModel.Suggestions,
                 suggestion =>
                 {
-                    Assert.Equal("StartView.Suggestion.AnalyzeCodebase", suggestion.AutomationId);
-                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebaseTitle"], suggestion.Title);
-                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebaseSubtitle"], suggestion.Subtitle);
-                    Assert.Equal(localizer["StartSuggestion_AnalyzeCodebasePrompt"], suggestion.Prompt);
+                    Assert.Equal("StartView.Suggestion.ReportGuidance", suggestion.AutomationId);
+                    Assert.True(suggestion.IsInformational);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceTitle"], suggestion.Title);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_ReportGuidanceLabel"], suggestion.CategoryLabel);
+                    Assert.Equal(string.Empty, suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.RecommendTasks", suggestion.AutomationId);
+                    Assert.False(suggestion.IsInformational);
                     Assert.Equal(localizer["StartSuggestion_RecommendTasksTitle"], suggestion.Title);
                     Assert.Equal(localizer["StartSuggestion_RecommendTasksSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_QuickLaunchLabel"], suggestion.CategoryLabel);
                     Assert.Equal(localizer["StartSuggestion_RecommendTasksPrompt"], suggestion.Prompt);
                 },
                 suggestion =>
                 {
                     Assert.Equal("StartView.Suggestion.ResolveErrors", suggestion.AutomationId);
+                    Assert.False(suggestion.IsInformational);
                     Assert.Equal(localizer["StartSuggestion_ResolveErrorsTitle"], suggestion.Title);
                     Assert.Equal(localizer["StartSuggestion_ResolveErrorsSubtitle"], suggestion.Subtitle);
+                    Assert.Equal(localizer["StartSuggestion_QuickLaunchLabel"], suggestion.CategoryLabel);
                     Assert.Equal(localizer["StartSuggestion_ResolveErrorsPrompt"], suggestion.Prompt);
                 });
         }
@@ -291,13 +343,15 @@ public sealed class StartViewModelTests
                 localizer: localizer.Object,
                 languageService: languageService.Object);
 
-            Assert.Equal("zh:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+            Assert.Equal("zh:StartSuggestion_ReportGuidanceTitle", startViewModel.Suggestions[0].Title);
+            Assert.True(startViewModel.Suggestions[0].IsInformational);
 
             languagePrefix = "en";
             languageService.Raise(service => service.LanguageChanged += null, EventArgs.Empty);
 
             Assert.Equal(3, startViewModel.Suggestions.Count);
-            Assert.Equal("en:StartSuggestion_AnalyzeCodebaseTitle", startViewModel.Suggestions[0].Title);
+            Assert.Equal("en:StartSuggestion_ReportGuidanceTitle", startViewModel.Suggestions[0].Title);
+            Assert.True(startViewModel.Suggestions[0].IsInformational);
         }
         finally
         {
@@ -364,8 +418,9 @@ public sealed class StartViewModelTests
             "\uE10F",
             "Initial title",
             "Initial subtitle",
+            "Initial category",
             "Initial prompt",
-            new RelayCommand(() => { }));
+            new AsyncRelayCommand<QuickSuggestionViewModel>(_ => Task.CompletedTask));
         var changedProperties = new List<string?>();
         suggestion.PropertyChanged += (_, e) => changedProperties.Add(e.PropertyName);
 
@@ -373,17 +428,20 @@ public sealed class StartViewModelTests
         suggestion.Icon = "\uE11B";
         suggestion.Title = "Updated title";
         suggestion.Subtitle = "Updated subtitle";
+        suggestion.CategoryLabel = "Updated category";
         suggestion.Prompt = "Updated prompt";
 
         Assert.Equal("StartView.Suggestion.Updated", suggestion.AutomationId);
         Assert.Equal("\uE11B", suggestion.Icon);
         Assert.Equal("Updated title", suggestion.Title);
         Assert.Equal("Updated subtitle", suggestion.Subtitle);
+        Assert.Equal("Updated category", suggestion.CategoryLabel);
         Assert.Equal("Updated prompt", suggestion.Prompt);
         Assert.Contains(nameof(QuickSuggestionViewModel.AutomationId), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Icon), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Title), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Subtitle), changedProperties);
+        Assert.Contains(nameof(QuickSuggestionViewModel.CategoryLabel), changedProperties);
         Assert.Contains(nameof(QuickSuggestionViewModel.Prompt), changedProperties);
     }
 
@@ -3282,7 +3340,8 @@ public sealed class StartViewModelTests
         ILogger<StartViewModel>? logger = null,
         IConversationCatalogReadModel? conversationCatalog = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? ui = null)
     {
         return new StartViewModel(
             chatViewModel: chat.ViewModel,
@@ -3297,7 +3356,8 @@ public sealed class StartViewModelTests
             chatConnectionStore: chat.ConnectionStore,
             conversationCatalog: conversationCatalog,
             localizer: localizer,
-            languageService: languageService);
+            languageService: languageService,
+            ui: ui);
     }
 
     private static NewSessionDraftState CreateReadyDraft(string selectedModeId)

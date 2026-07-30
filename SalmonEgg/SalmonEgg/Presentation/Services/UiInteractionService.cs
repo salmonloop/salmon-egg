@@ -15,10 +15,14 @@ public sealed class UiInteractionService : IUiInteractionService
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
     private readonly IFolderPickerService _folderPicker;
+    private readonly AppActivationSignalSource _activationSignalSource;
 
-    public UiInteractionService(IFolderPickerService folderPicker)
+    public UiInteractionService(
+        IFolderPickerService folderPicker,
+        AppActivationSignalSource activationSignalSource)
     {
         _folderPicker = folderPicker ?? throw new ArgumentNullException(nameof(folderPicker));
+        _activationSignalSource = activationSignalSource ?? throw new ArgumentNullException(nameof(activationSignalSource));
     }
 
     public bool CanPickFolder => _folderPicker.IsSupported;
@@ -182,26 +186,32 @@ public sealed class UiInteractionService : IUiInteractionService
         return dialog.Result;
     }
 
-    private static XamlRoot? GetXamlRoot()
+    private XamlRoot? GetXamlRoot()
     {
         try
         {
-            if (App.MainWindowInstance?.Content is Frame rootFrame)
-            {
-                if (rootFrame.Content is FrameworkElement shell)
-                {
-                    return shell.XamlRoot;
-                }
-
-                return rootFrame.XamlRoot;
-            }
-
-            return (App.MainWindowInstance?.Content as FrameworkElement)?.XamlRoot;
+            return ResolveWindowXamlRoot(_activationSignalSource.ActiveWindow)
+                ?? ResolveWindowXamlRoot(App.MainWindowInstance);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static XamlRoot? ResolveWindowXamlRoot(Window? window)
+    {
+        if (window?.Content is Frame rootFrame)
+        {
+            if (rootFrame.Content is FrameworkElement shell)
+            {
+                return shell.XamlRoot;
+            }
+
+            return rootFrame.XamlRoot;
+        }
+
+        return (window?.Content as FrameworkElement)?.XamlRoot;
     }
 
     private static string ResolveResourceString(string resourceKey, string fallback)

@@ -114,7 +114,7 @@
                             Spacing="2"
                             VerticalAlignment="Center">
                     <TextBlock x:Name="HeroCardQuickLaunchLabel"
-                               x:Uid="Start_QuickLaunchLabel"
+                               Text="{x:Bind CategoryLabel, Mode=OneWay}"
                                FontSize="12"
                                FontWeight="SemiBold"
                                Visibility="Collapsed"

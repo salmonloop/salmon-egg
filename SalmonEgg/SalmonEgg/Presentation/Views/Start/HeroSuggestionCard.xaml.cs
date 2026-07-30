@@ -34,6 +34,8 @@ public sealed partial class HeroSuggestionCard : UserControl, INotifyPropertyCha
 
     public string Subtitle => Suggestion?.Subtitle ?? string.Empty;
 
+    public string CategoryLabel => Suggestion?.CategoryLabel ?? string.Empty;
+
     public ICommand? ActionCommand => Suggestion?.ActionCommand;
 
     public HeroSuggestionCard()
@@ -120,6 +122,10 @@ public sealed partial class HeroSuggestionCard : UserControl, INotifyPropertyCha
         {
             OnPropertyChanged(nameof(Subtitle));
         }
+        else if (string.Equals(e.PropertyName, nameof(QuickSuggestionViewModel.CategoryLabel), StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(CategoryLabel));
+        }
     }
 
     private void RaiseAllProjectionPropertiesChanged()
@@ -129,6 +135,7 @@ public sealed partial class HeroSuggestionCard : UserControl, INotifyPropertyCha
         OnPropertyChanged(nameof(Icon));
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Subtitle));
+        OnPropertyChanged(nameof(CategoryLabel));
         OnPropertyChanged(nameof(ActionCommand));
     }
 

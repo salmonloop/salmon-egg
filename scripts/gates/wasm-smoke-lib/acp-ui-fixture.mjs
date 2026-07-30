@@ -69,7 +69,7 @@ export async function createWebSocketProfile(page, profileName, serverUrl) {
       [
         '[aria-label="StartView.Title"]',
         '[aria-label="StartView.PromptBox"]',
-        '[aria-label="StartView.Suggestion.AnalyzeCodebase"]',
+        '[aria-label="StartView.Suggestion.ReportGuidance"]',
         '[aria-label="StartView.AgentSelector"]',
         '[aria-label="MainNavView"]'
       ].join(", "),
@@ -139,7 +139,7 @@ export async function expectPersistedProfileAfterReload(page, baseUrl, profileNa
       [
         '[aria-label="StartView.Title"]',
         '[aria-label="StartView.PromptBox"]',
-        '[aria-label="StartView.Suggestion.AnalyzeCodebase"]',
+        '[aria-label="StartView.Suggestion.ReportGuidance"]',
         '[aria-label="StartView.AgentSelector"]',
         '[aria-label="MainNavView"]'
       ].join(", "),

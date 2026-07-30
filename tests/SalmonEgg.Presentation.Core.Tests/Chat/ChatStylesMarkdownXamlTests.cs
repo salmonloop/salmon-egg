@@ -134,6 +134,36 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.DoesNotContain("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void IncomingMessageTemplate_ExposesReportContextMenuForAiContent()
+    {
+        var xaml = LoadChatStylesXaml();
+        var incomingStart = xaml.IndexOf("<DataTemplate x:Key=\"IncomingMessageTemplate\"", StringComparison.Ordinal);
+        var outgoingStart = xaml.IndexOf("<DataTemplate x:Key=\"OutgoingMessageTemplate\"", StringComparison.Ordinal);
+        Assert.True(incomingStart >= 0);
+        Assert.True(outgoingStart > incomingStart);
+
+        var incoming = xaml.Substring(incomingStart, outgoingStart - incomingStart);
+        var outgoing = xaml.Substring(outgoingStart);
+
+        Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", incoming, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", incoming, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"ChatMessageReportMenu\"", outgoing, StringComparison.Ordinal);
+        Assert.DoesNotContain("Command=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("en-US")]
+    [InlineData("zh-Hans")]
+    public void ChatMessageReportMenu_UsesTextLocalizationKey(string localeFolder)
+    {
+        var resources = LoadResourcesResw(localeFolder);
+
+        Assert.Contains("ChatMessageReportMenu.Text", resources, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChatMessageReportMenu.Content", resources, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("en")]
     [InlineData("en-US")]

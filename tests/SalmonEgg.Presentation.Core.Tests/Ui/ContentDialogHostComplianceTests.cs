@@ -32,6 +32,18 @@ public sealed class ContentDialogHostComplianceTests
     }
 
     [Fact]
+    public void UiInteractionService_ResolvesDialogHostFromActiveWindowBeforeMainWindowFallback()
+    {
+        var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Presentation\Services\UiInteractionService.cs"));
+
+        var activeWindowIndex = code.IndexOf("ResolveWindowXamlRoot(_activationSignalSource.ActiveWindow)", StringComparison.Ordinal);
+        var mainWindowIndex = code.IndexOf("ResolveWindowXamlRoot(App.MainWindowInstance)", StringComparison.Ordinal);
+
+        Assert.True(activeWindowIndex >= 0);
+        Assert.True(mainWindowIndex > activeWindowIndex);
+    }
+
+    [Fact]
     public void DataStorageSettingsPage_AttachesContentDialogsToHostTheme()
     {
         var code = File.ReadAllText(GetRepoPath(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\DataStorageSettingsPage.xaml.cs"));

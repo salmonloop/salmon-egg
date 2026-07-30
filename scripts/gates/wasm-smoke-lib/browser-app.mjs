@@ -248,7 +248,7 @@ export async function openApp(page, baseUrl) {
     [
       '[aria-label="StartView.Title"]',
       '[aria-label="StartView.PromptBox"]',
-      '[aria-label="StartView.Suggestion.AnalyzeCodebase"]',
+      '[aria-label="StartView.Suggestion.ReportGuidance"]',
       '[aria-label="StartView.AgentSelector"]',
       '[aria-label="MainNavView"]'
     ].join(", "),

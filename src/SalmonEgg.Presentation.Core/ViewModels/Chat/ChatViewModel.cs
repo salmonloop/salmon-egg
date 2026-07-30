@@ -1319,6 +1319,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly IAuthoritativeRemoteSessionRouter _authoritativeRemoteSessionRouter;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
+    private readonly IUiInteractionService? _uiInteractionService;
+    private readonly IAiContentReportLauncher? _aiContentReportLauncher;
 
     public ChatViewModel(
         IChatStore chatStore,
@@ -1357,13 +1359,17 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IConversationMutationPipeline? conversationMutationPipeline = null,
         IPlatformShellService? platformShell = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? uiInteractionService = null,
+        IAiContentReportLauncher? aiContentReportLauncher = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _authoritativeRemoteSessionRouter = authoritativeRemoteSessionRouter ?? new AuthoritativeRemoteSessionRouter(chatStore);
         _localizer = localizer;
         _languageService = languageService;
+        _uiInteractionService = uiInteractionService;
+        _aiContentReportLauncher = aiContentReportLauncher;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
@@ -2424,8 +2430,72 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
         message.ConfigureShellActions(
             _platformShell.CopyToClipboardAsync,
-            _platformShell.OpenUriAsync);
+            _platformShell.OpenUriAsync,
+            _aiContentReportLauncher?.CanReport == true && _uiInteractionService is not null
+                ? ReportAiContentAsync
+                : null);
     }
+
+    private async Task ReportAiContentAsync(ChatMessageViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (_aiContentReportLauncher is null || _uiInteractionService is null)
+        {
+            return;
+        }
+
+        var title = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmTitle",
+            "Report AI content");
+        var body = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmMessage",
+            "This opens your email app with a report draft that includes the selected AI content. Continue?");
+        var primary = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmPrimary",
+            "Open email");
+        var close = ResolveLocalizerText(
+            "Chat_ReportAiContentConfirmClose",
+            "Cancel");
+
+        var confirmed = await _uiInteractionService.ConfirmAsync(title, body, primary, close).ConfigureAwait(true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var opened = await _aiContentReportLauncher.TryOpenReportAsync(
+            appName: "SalmonEgg",
+            appVersion: ResolveAppVersion(),
+            protocolVersion: new InitializeParams().ProtocolVersion.ToString(),
+            contentExcerpt: message.DisplayBodyText).ConfigureAwait(true);
+
+        if (!opened)
+        {
+            await _uiInteractionService.ShowInfoAsync(
+                ResolveLocalizerText(
+                    "AiContentReport_OpenFailed",
+                    "Could not open the email app. Check that an email app is configured, then try again.")).ConfigureAwait(true);
+        }
+    }
+
+    private string ResolveLocalizerText(string key, string fallback)
+    {
+        if (_localizer is null)
+        {
+            return fallback;
+        }
+
+        var localized = _localizer[key];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? fallback
+            : localized.Value;
+    }
+
+    private static string ResolveAppVersion()
+        => System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
+            ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+            ?? "unknown";
 
     private void ApplyPendingInlinePermissionProjection(ChatMessageViewModel message)
     {

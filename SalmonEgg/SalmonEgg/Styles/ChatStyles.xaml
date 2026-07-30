@@ -28,6 +28,8 @@
                         <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
                                         Command="{x:Bind CopyTextCommand}"
                                         CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
+                        <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
+                                        Command="{x:Bind ReportContentCommand}" />
                     </MenuFlyout>
                 </Border.ContextFlyout>
                 <StackPanel>

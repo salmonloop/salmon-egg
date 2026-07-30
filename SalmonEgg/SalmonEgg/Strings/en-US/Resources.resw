@@ -1002,6 +1002,9 @@
   <data name="ChatMessageCopyMenu.Text" xml:space="preserve">
     <value>Copy message</value>
   </data>
+  <data name="ChatMessageReportMenu.Text" xml:space="preserve">
+    <value>Report</value>
+  </data>
   <data name="ChatMarkdownCopyCodeButton.ToolTipService.ToolTip" xml:space="preserve">
     <value>Copy code</value>
   </data>

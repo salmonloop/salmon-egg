@@ -411,6 +411,21 @@
   <data name="About_ReportAiContentBodyPrompt" xml:space="preserve">
     <value>Please describe the inappropriate AI-generated content shown in Salmon Egg.</value>
   </data>
+  <data name="Chat_ReportAiContentConfirmTitle" xml:space="preserve">
+    <value>Report AI content</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmMessage" xml:space="preserve">
+    <value>This opens your email app with a report draft that includes the selected AI content. Continue?</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmPrimary" xml:space="preserve">
+    <value>Open email</value>
+  </data>
+  <data name="Chat_ReportAiContentConfirmClose" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Chat_ReportAiContentExcerptLabel" xml:space="preserve">
+    <value>Related content:</value>
+  </data>
   <data name="About_AcknowledgementVersionFallback" xml:space="preserve">
     <value>Not listed</value>
   </data>
@@ -785,14 +800,23 @@ Create the corresponding Markdown file in:
   <data name="AcpRemoteDirectories_SaveValidationRemotePathRequired" xml:space="preserve">
     <value>Enter an absolute remote project path before saving.</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseTitle" xml:space="preserve">
-    <value>Analyze codebase</value>
+  <data name="StartSuggestion_ReportGuidanceTitle" xml:space="preserve">
+    <value>Found a problem with AI-generated content?</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebaseSubtitle" xml:space="preserve">
-    <value>Understand the project architecture and logic</value>
+  <data name="StartSuggestion_ReportGuidanceSubtitle" xml:space="preserve">
+    <value>Right-click the message to report it, or report it from About.</value>
   </data>
-  <data name="StartSuggestion_AnalyzeCodebasePrompt" xml:space="preserve">
-    <value>Analyze the current codebase architecture and core logic.</value>
+  <data name="StartSuggestion_ReportGuidanceDetail" xml:space="preserve">
+    <value>If AI-generated content looks wrong or inappropriate, right-click that message and choose Report, or open Settings &gt; About and report it there. This tip card only explains the path and cannot send a report.</value>
+  </data>
+  <data name="StartSuggestion_ReportGuidanceLabel" xml:space="preserve">
+    <value>Tip</value>
+  </data>
+  <data name="StartSuggestion_QuickLaunchLabel" xml:space="preserve">
+    <value>Quick launch</value>
+  </data>
+  <data name="AiContentReport_OpenFailed" xml:space="preserve">
+    <value>Could not open the email app. Check that an email app is configured, then try again.</value>
   </data>
   <data name="StartSuggestion_RecommendTasksTitle" xml:space="preserve">
     <value>Recommend tasks</value>

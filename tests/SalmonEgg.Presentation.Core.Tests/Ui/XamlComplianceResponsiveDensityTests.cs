@@ -248,6 +248,7 @@ public sealed class XamlComplianceResponsiveDensityTests
         Assert.Contains("Glyph=\"{x:Bind Icon, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind Title, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind Subtitle, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{x:Bind CategoryLabel, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
         Assert.Contains("CommandParameter=\"{x:Bind Suggestion, Mode=OneWay}\"", cardXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"{Binding Title", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"{Binding Subtitle", xaml, StringComparison.Ordinal);
@@ -270,7 +271,7 @@ public sealed class XamlComplianceResponsiveDensityTests
         Assert.DoesNotContain("HeroSuggestionsList.SelectedIndex", code, StringComparison.Ordinal);
         Assert.DoesNotContain("CreateSlug(", suggestionVm, StringComparison.Ordinal);
         Assert.Contains("ObservableObject", suggestionVm, StringComparison.Ordinal);
-        Assert.Contains("StartView.Suggestion.AnalyzeCodebase", startVm, StringComparison.Ordinal);
+        Assert.Contains("StartView.Suggestion.ReportGuidance", startVm, StringComparison.Ordinal);
         Assert.Contains("StartView.Suggestion.RecommendTasks", startVm, StringComparison.Ordinal);
         Assert.Contains("StartView.Suggestion.ResolveErrors", startVm, StringComparison.Ordinal);
     }

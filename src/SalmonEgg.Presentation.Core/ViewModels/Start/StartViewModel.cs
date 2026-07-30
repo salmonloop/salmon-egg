@@ -15,6 +15,7 @@ using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Mvux.Chat;
 using SalmonEgg.Presentation.Core.Services;
+using SalmonEgg.Presentation.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.ViewModels.Composer;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.Selectors;
@@ -35,6 +36,7 @@ public sealed partial class StartViewModel : ObservableObject
     private readonly IConversationCatalogReadModel _conversationCatalog;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly IAppLanguageService? _languageService;
+    private readonly IUiInteractionService? _ui;
     private readonly ILogger<StartViewModel> _logger;
     private readonly SelectorProjectionPresenter _selectorProjectionPresenter = new();
     private readonly ModeSelectorPolicy _modeSelectorPolicy = new();
@@ -188,7 +190,7 @@ public sealed partial class StartViewModel : ObservableObject
     public ComposerSelectorItemViewModel? SelectedStartProjectSelectorItem
         => StartProjectSelectorProjection.SelectedDisplayItem;
 
-    public IRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
+    public IAsyncRelayCommand<QuickSuggestionViewModel> ExecuteSuggestionCommand { get; }
 
     public IRelayCommand<SessionModeViewModel?> SelectStartModeCommand { get; }
 
@@ -289,7 +291,8 @@ public sealed partial class StartViewModel : ObservableObject
         IChatLaunchWorkflow? chatLaunchWorkflow = null,
         IConversationCatalogReadModel? conversationCatalog = null,
         IStringLocalizer<CoreStrings>? localizer = null,
-        IAppLanguageService? languageService = null)
+        IAppLanguageService? languageService = null,
+        IUiInteractionService? ui = null)
     {
         Chat = chatViewModel ?? throw new ArgumentNullException(nameof(chatViewModel));
         ArgumentNullException.ThrowIfNull(sessionManager);
@@ -303,6 +306,7 @@ public sealed partial class StartViewModel : ObservableObject
         _conversationCatalog = conversationCatalog ?? NoOpConversationCatalogReadModel.Instance;
         _localizer = localizer;
         _languageService = languageService;
+        _ui = ui;
         StartProjectOptions = new ReadOnlyObservableCollection<StartProjectOptionViewModel>(_startProjectOptions);
         _chatLaunchWorkflow = chatLaunchWorkflow ?? new ChatLaunchWorkflow(
             new ChatLaunchWorkflowChatFacadeAdapter(
@@ -312,7 +316,7 @@ public sealed partial class StartViewModel : ObservableObject
             navigationCoordinator);
 
         StartSessionAndSendCommand = new AsyncRelayCommand(StartSessionAndSendAsync, CanStartSessionAndSend);
-        ExecuteSuggestionCommand = new RelayCommand<QuickSuggestionViewModel>(ExecuteSuggestion);
+        ExecuteSuggestionCommand = new AsyncRelayCommand<QuickSuggestionViewModel>(ExecuteSuggestionAsync);
         SelectStartModeCommand = new RelayCommand<SessionModeViewModel?>(SelectStartMode);
         SelectStartModeDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModeDisplay);
         SelectStartModelDisplayCommand = new RelayCommand<ComposerSelectorItemViewModel?>(SelectStartModelDisplay);
@@ -353,17 +357,24 @@ public sealed partial class StartViewModel : ObservableObject
     private void InitializeSuggestions()
     {
         Suggestions.Add(new QuickSuggestionViewModel(
-            "StartView.Suggestion.AnalyzeCodebase",
-            "\uE943",
-            Localize("StartSuggestion_AnalyzeCodebaseTitle", "Analyze codebase"),
-            Localize("StartSuggestion_AnalyzeCodebaseSubtitle", "Understand the project architecture and logic"),
-            Localize("StartSuggestion_AnalyzeCodebasePrompt", "Analyze the current codebase architecture and core logic."),
-            ExecuteSuggestionCommand));
+            "StartView.Suggestion.ReportGuidance",
+            "\uE7BA",
+            Localize(
+                "StartSuggestion_ReportGuidanceTitle",
+                "Found a problem with AI-generated content?"),
+            Localize(
+                "StartSuggestion_ReportGuidanceSubtitle",
+                "Right-click the message to report it, or report it from About."),
+            Localize("StartSuggestion_ReportGuidanceLabel", "Tip"),
+            prompt: string.Empty,
+            actionCommand: ExecuteSuggestionCommand,
+            isInformational: true));
         Suggestions.Add(new QuickSuggestionViewModel(
             "StartView.Suggestion.RecommendTasks",
             "\uE762",
             Localize("StartSuggestion_RecommendTasksTitle", "Recommend tasks"),
             Localize("StartSuggestion_RecommendTasksSubtitle", "Clarify what to work on next"),
+            Localize("StartSuggestion_QuickLaunchLabel", "Quick launch"),
             Localize("StartSuggestion_RecommendTasksPrompt", "Based on current progress, recommend a few development tasks or improvements to tackle next."),
             ExecuteSuggestionCommand));
         Suggestions.Add(new QuickSuggestionViewModel(
@@ -371,13 +382,31 @@ public sealed partial class StartViewModel : ObservableObject
             "\uEBE8",
             Localize("StartSuggestion_ResolveErrorsTitle", "Resolve recent errors"),
             Localize("StartSuggestion_ResolveErrorsSubtitle", "Share the error log for analysis"),
+            Localize("StartSuggestion_QuickLaunchLabel", "Quick launch"),
             Localize("StartSuggestion_ResolveErrorsPrompt", "I ran into some errors. Analyze them and help fix them."),
             ExecuteSuggestionCommand));
     }
 
-    private void ExecuteSuggestion(QuickSuggestionViewModel? suggestion)
+    private async Task ExecuteSuggestionAsync(QuickSuggestionViewModel? suggestion)
     {
-        if (suggestion == null) return;
+        if (suggestion == null)
+        {
+            return;
+        }
+
+        if (suggestion.IsInformational)
+        {
+            if (_ui is not null)
+            {
+                await _ui.ShowInfoAsync(
+                    Localize(
+                        "StartSuggestion_ReportGuidanceDetail",
+                        "If AI-generated content looks wrong or inappropriate, right-click that message and choose Report, or open Settings > About and report it there. This tip card only explains the path and cannot send a report.")).ConfigureAwait(true);
+            }
+
+            return;
+        }
+
         StartPrompt = suggestion.Prompt;
     }
 

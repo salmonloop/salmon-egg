@@ -291,7 +291,7 @@ public sealed class ShellFocusedActivationSmokeTests
 
         Assert.True(
             WaitUntil(
-                () => session.IsFocusWithinAutomationId("StartView.Suggestion.AnalyzeCodebase"),
+                () => session.IsFocusWithinAutomationId("StartView.Suggestion.ReportGuidance"),
                 TimeSpan.FromSeconds(3)),
             $"Keyboard Up did not return from the start prompt box to the first hero suggestion."
             + $"{Environment.NewLine}Focus={session.DescribeFocusedElement()}"

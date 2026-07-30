@@ -141,17 +141,21 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
         private ChatMarkdownPresentationState _markdownPresentation = ChatMarkdownPresentationState.PlainStreaming;
         private Func<string, Task<bool>>? _copyTextAsync;
         private Func<Uri, Task<bool>>? _openUriAsync;
+        private Func<ChatMessageViewModel, Task>? _reportContentAsync;
 
         public ChatMessageViewModel()
         {
             CopyTextCommand = new AsyncRelayCommand<string?>(CopyTextAsync, CanCopyText);
             OpenMarkdownLinkCommand = new AsyncRelayCommand<string?>(OpenMarkdownLinkAsync, CanOpenMarkdownLink);
+            ReportContentCommand = new AsyncRelayCommand(ReportContentAsync, CanReportContent);
             RefreshMarkdownPresentation();
         }
 
         public IAsyncRelayCommand<string?> CopyTextCommand { get; }
 
         public IAsyncRelayCommand<string?> OpenMarkdownLinkCommand { get; }
+
+        public IAsyncRelayCommand ReportContentCommand { get; }
 
         public static ChatMessageViewModel CreateFromTextContent(string id, ContentBlock content, bool isOutgoing = false)
         {
@@ -379,12 +383,15 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         public void ConfigureShellActions(
              Func<string, Task<bool>> copyTextAsync,
-             Func<Uri, Task<bool>> openUriAsync)
+             Func<Uri, Task<bool>> openUriAsync,
+             Func<ChatMessageViewModel, Task>? reportContentAsync = null)
         {
             _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
             _openUriAsync = openUriAsync ?? throw new ArgumentNullException(nameof(openUriAsync));
+            _reportContentAsync = reportContentAsync;
             CopyTextCommand.NotifyCanExecuteChanged();
             OpenMarkdownLinkCommand.NotifyCanExecuteChanged();
+            ReportContentCommand.NotifyCanExecuteChanged();
         }
 
         public void MarkMarkdownRenderFailed()
@@ -470,6 +477,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
                 OnPropertyChanged(nameof(HasTextContent));
                 NotifyDisplayBodyChanged();
                 CopyTextCommand.NotifyCanExecuteChanged();
+                ReportContentCommand.NotifyCanExecuteChanged();
                 RefreshMarkdownPresentation();
                 RefreshToolCallDetails();
                 UpdateToolCallState();
@@ -484,6 +492,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
         partial void OnIsOutgoingChanged(bool value)
         {
+            ReportContentCommand.NotifyCanExecuteChanged();
             if (_applyingSnapshot)
             {
                 return;
@@ -592,6 +601,19 @@ namespace SalmonEgg.Presentation.ViewModels.Chat
 
             _ = ChatMarkdownLinkPolicy.TryResolveLaunchUri(rawLink, out var uri);
             _ = await _openUriAsync!(uri!).ConfigureAwait(true);
+        }
+
+        private bool CanReportContent()
+            => !IsOutgoing && _reportContentAsync is not null;
+
+        private async Task ReportContentAsync()
+        {
+            if (!CanReportContent())
+            {
+                return;
+            }
+
+            await _reportContentAsync!(this).ConfigureAwait(true);
         }
 
         private void UpdateToolCallState()
