@@ -240,7 +240,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         if (IsViewportDetachedByUser())
         {
-            FocusTranscriptScroller();
+            FocusTranscriptScroller(FocusState.Pointer);
             return;
         }
 
@@ -250,7 +250,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         }
 
         _viewportController.MarkUserScrollIntentStarted();
-        FocusTranscriptScroller();
+        FocusTranscriptScroller(FocusState.Pointer);
     }
 
     private void OnMessagesListPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -278,7 +278,7 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             return;
         }
 
-        RegisterUserViewportIntent();
+        RegisterUserViewportIntent(FocusState.Pointer);
     }
 
     private void OnMessagesListKeyDown(object sender, KeyRoutedEventArgs e)
@@ -456,9 +456,9 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
         return false;
     }
 
-    private void FocusTranscriptScroller()
+    private void FocusTranscriptScroller(FocusState focusState)
     {
-        _ = TryFocusTranscriptViewportSurface(FocusState.Keyboard);
+        _ = TryFocusTranscriptViewportSurface(focusState);
     }
 
     private bool TryFocusTranscriptViewportSurface(FocusState focusState)
@@ -735,7 +735,11 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
             || target.Focus(FocusState.Programmatic);
     }
 
-    private void RegisterUserViewportIntent()
+    // Parameterless overload keeps the Action-compatible signature used as a delegate
+    // (e.g. ChatTranscriptNavigationIntentHandler) and defaults to keyboard focus.
+    private void RegisterUserViewportIntent() => RegisterUserViewportIntent(FocusState.Keyboard);
+
+    private void RegisterUserViewportIntent(FocusState focusState)
     {
         if (_projectionRestoreController.HasPending)
         {
@@ -744,13 +748,13 @@ public sealed partial class ChatView : Page, INavigationIntentConsumer, IGamepad
 
         if (IsViewportDetachedByUser())
         {
-            FocusTranscriptScroller();
+            FocusTranscriptScroller(focusState);
             ApplyViewportActions(_viewportController.OnUserViewportIntent(CreateViewportViewState()));
             UpdateTranscriptViewportAutomationState();
             return;
         }
 
-        FocusTranscriptScroller();
+        FocusTranscriptScroller(focusState);
 
         if (IsListViewportAtBottom())
         {
