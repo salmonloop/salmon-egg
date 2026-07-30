@@ -361,10 +361,10 @@ public sealed partial class StartViewModel : ObservableObject
             "\uE7BA",
             Localize(
                 "StartSuggestion_ReportGuidanceTitle",
-                "Found a problem with AI-generated content?"),
+                "Report AI content"),
             Localize(
                 "StartSuggestion_ReportGuidanceSubtitle",
-                "Right-click the message to report it, or report it from About."),
+                "Right-click a message or use About"),
             Localize("StartSuggestion_ReportGuidanceLabel", "Tip"),
             prompt: string.Empty,
             actionCommand: ExecuteSuggestionCommand,

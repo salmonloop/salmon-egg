@@ -135,6 +135,15 @@
         <Grid Margin="0,8"
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
+                <Border.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
+                                        Command="{x:Bind CopyTextCommand}"
+                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
+                        <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
+                                        Command="{x:Bind ReportContentCommand}" />
+                    </MenuFlyout>
+                </Border.ContextFlyout>
                 <StackPanel>
                     <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"

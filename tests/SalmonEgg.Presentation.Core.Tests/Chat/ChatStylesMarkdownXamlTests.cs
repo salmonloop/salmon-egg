@@ -135,21 +135,48 @@ public sealed class ChatStylesMarkdownXamlTests
     }
 
     [Fact]
-    public void IncomingMessageTemplate_ExposesReportContextMenuForAiContent()
+    public void AiSideMessageTemplates_ExposeReportContextMenuButOutgoingDoesNot()
     {
         var xaml = LoadChatStylesXaml();
-        var incomingStart = xaml.IndexOf("<DataTemplate x:Key=\"IncomingMessageTemplate\"", StringComparison.Ordinal);
-        var outgoingStart = xaml.IndexOf("<DataTemplate x:Key=\"OutgoingMessageTemplate\"", StringComparison.Ordinal);
-        Assert.True(incomingStart >= 0);
-        Assert.True(outgoingStart > incomingStart);
+        var incoming = ExtractTemplate(xaml, "IncomingMessageTemplate", "OutgoingMessageTemplate");
+        var outgoing = ExtractTemplate(xaml, "OutgoingMessageTemplate", "ToolCallMessageTemplate");
+        var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
 
-        var incoming = xaml.Substring(incomingStart, outgoingStart - incomingStart);
-        var outgoing = xaml.Substring(outgoingStart);
-
+        // Report belongs on every AI-side surface (incoming markdown/plain and tool-call messages).
         Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", incoming, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", incoming, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
+
+        // Outgoing user messages copy only; they are never reportable AI content.
         Assert.DoesNotContain("x:Uid=\"ChatMessageReportMenu\"", outgoing, StringComparison.Ordinal);
         Assert.DoesNotContain("Command=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToolCallMessageTemplate_ExposesCopyAndReportContextMenu()
+    {
+        var xaml = LoadChatStylesXaml();
+        var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
+
+        Assert.Contains("<Border.ContextFlyout>", toolCall, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"ChatMessageCopyMenu\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("CommandParameter=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", toolCall, StringComparison.Ordinal);
+    }
+
+    private static string ExtractTemplate(string xaml, string key, string? nextKey)
+    {
+        var start = xaml.IndexOf($"<DataTemplate x:Key=\"{key}\"", StringComparison.Ordinal);
+        Assert.True(start >= 0, $"{key} must exist in ChatStyles.xaml.");
+
+        if (nextKey is null)
+        {
+            return xaml.Substring(start);
+        }
+
+        var end = xaml.IndexOf($"<DataTemplate x:Key=\"{nextKey}\"", StringComparison.Ordinal);
+        Assert.True(end > start, $"{nextKey} must follow {key} in ChatStyles.xaml.");
+        return xaml.Substring(start, end - start);
     }
 
     [Theory]

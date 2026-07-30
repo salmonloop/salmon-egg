@@ -801,10 +801,10 @@ Create the corresponding Markdown file in:
     <value>Enter an absolute remote project path before saving.</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceTitle" xml:space="preserve">
-    <value>Found a problem with AI-generated content?</value>
+    <value>Report AI content</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceSubtitle" xml:space="preserve">
-    <value>Right-click the message to report it, or report it from About.</value>
+    <value>Right-click a message or use About</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceDetail" xml:space="preserve">
     <value>If AI-generated content looks wrong or inappropriate, right-click that message and choose Report, or open Settings &gt; About and report it there. This tip card only explains the path and cannot send a report.</value>

@@ -807,10 +807,10 @@
     <value>请填写远程项目的绝对路径后再保存。</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceTitle" xml:space="preserve">
-    <value>发现 AI 生成的内容如果有问题</value>
+    <value>举报 AI 内容</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceSubtitle" xml:space="preserve">
-    <value>可以右键信息举报，或者在“关于”页面中举报。</value>
+    <value>右键消息或在“关于”中举报</value>
   </data>
   <data name="StartSuggestion_ReportGuidanceDetail" xml:space="preserve">
     <value>如果 AI 生成的内容有问题，可以右键该条消息选择“举报”，也可以在“设置 &gt; 关于”页面中举报。这张提示卡本身只是说明，不会发送举报。</value>
