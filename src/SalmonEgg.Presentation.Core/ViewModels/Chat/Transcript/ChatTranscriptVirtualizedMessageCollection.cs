@@ -26,8 +26,6 @@ public readonly record struct TranscriptVirtualizationRange(int FirstIndex, int 
                 : FirstIndex + Length - 1;
         }
     }
-
-    public bool Contains(int index) => index >= FirstIndex && index <= LastIndex;
 }
 
 public sealed class ChatTranscriptVirtualizedMessageCollection :
