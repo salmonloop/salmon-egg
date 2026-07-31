@@ -164,6 +164,30 @@ public sealed class ChatStylesMarkdownXamlTests
         Assert.Contains("CommandParameter=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", toolCall, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void IncomingMessageBorderStyle_SetsHitTestableBackgroundSoContextFlyoutFiresOverMarkdownGaps()
+    {
+        // Uno's Border hit-test rule is `Background != null` (Border.IsViewHitImpl); a null background
+        // makes the bubble transparent to pointer input, so right-clicks that land in the empty gaps of a
+        // markdown paragraph (line spacing, wrap gaps, indents) never reach the ContextFlyout host and the
+        // Copy/Report menu never appears. A Transparent background keeps the whole bubble hit-testable while
+        // staying visually identical. This is the shared style behind both the incoming and tool-call borders.
+        var xaml = LoadChatStylesXaml();
+        var style = ExtractIncomingMessageBorderStyle(xaml);
+
+        Assert.Contains("<Setter Property=\"Background\" Value=\"Transparent\" />", style, StringComparison.Ordinal);
+    }
+
+    private static string ExtractIncomingMessageBorderStyle(string xaml)
+    {
+        var start = xaml.IndexOf("<Style x:Key=\"IncomingMessageBorderStyle\"", StringComparison.Ordinal);
+        Assert.True(start >= 0, "IncomingMessageBorderStyle must exist in ChatStyles.xaml.");
+
+        var end = xaml.IndexOf("</Style>", start, StringComparison.Ordinal);
+        Assert.True(end > start, "IncomingMessageBorderStyle must be a closed Style element.");
+        return xaml.Substring(start, end - start);
+    }
+
     private static string ExtractTemplate(string xaml, string key, string? nextKey)
     {
         var start = xaml.IndexOf($"<DataTemplate x:Key=\"{key}\"", StringComparison.Ordinal);

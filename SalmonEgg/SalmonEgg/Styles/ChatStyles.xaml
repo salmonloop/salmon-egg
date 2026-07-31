@@ -17,6 +17,8 @@
         <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="2,0,0,0" />
         <Setter Property="Padding" Value="16,0,0,8" />
+        <!-- Transparent (non-null) background makes the whole bubble hit-testable so ContextRequested fires over markdown block gaps, not just directly on glyphs. -->
+        <Setter Property="Background" Value="Transparent" />
     </Style>
 
     <DataTemplate x:Key="IncomingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
