@@ -487,7 +487,7 @@ public sealed class NavigationCoreTests
             "private void OnMessagesListPointerPressed",
             "private void OnMessagesListPointerWheelChanged");
 
-        Assert.Contains("FocusTranscriptScroller();", section, StringComparison.Ordinal);
+        Assert.Contains("FocusTranscriptScroller(FocusState.Pointer);", section, StringComparison.Ordinal);
         Assert.DoesNotContain("RegisterUserViewportIntent();", section, StringComparison.Ordinal);
     }
 
