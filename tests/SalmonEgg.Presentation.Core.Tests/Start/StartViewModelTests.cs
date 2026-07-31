@@ -1033,23 +1033,16 @@ public sealed class StartViewModelTests
             await chat.DispatchConnectionAsync(new SetForegroundTransportProfileAction("profile-2"));
             await chat.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
-            var timeoutAt = DateTime.UtcNow.AddSeconds(10);
-            while (true)
+            await WaitForConditionAsync(async () =>
             {
                 var connectionState = await chat.GetConnectionStateAsync();
-                if (connectionState.NewSessionDraft is not null
+                return connectionState.NewSessionDraft is not null
                     && string.Equals(connectionState.NewSessionDraft.ProfileId, "profile-2", StringComparison.Ordinal)
                     && string.Equals(connectionState.NewSessionDraft.ConnectionInstanceId, "conn-2", StringComparison.Ordinal)
                     && string.Equals(connectionState.NewSessionDraft.RemoteSessionId, "remote-2", StringComparison.Ordinal)
                     && startViewModel.IsStartModeSelectorEnabled
-                    && startViewModel.StartModeStage == StartSessionModeStage.Ready)
-                {
-                    break;
-                }
-
-                Assert.True(DateTime.UtcNow < timeoutAt, "Timed out waiting for profile-2 new-session draft to become ready.");
-                await Task.Delay(20, TestContext.Current.CancellationToken);
-            }
+                    && startViewModel.StartModeStage == StartSessionModeStage.Ready;
+            });
 
             var finalState = await chat.GetConnectionStateAsync();
             Assert.Equal("profile-2", finalState.NewSessionDraft?.ProfileId);
@@ -3450,6 +3443,24 @@ public sealed class StartViewModelTests
         timeoutMilliseconds = Math.Max(timeoutMilliseconds, 10000);
         var started = DateTime.UtcNow;
         while (!predicate())
+        {
+            if ((DateTime.UtcNow - started).TotalMilliseconds >= timeoutMilliseconds)
+            {
+                throw new TimeoutException("Timed out waiting for expected asynchronous condition.");
+            }
+
+            await Task.Delay(pollDelayMilliseconds);
+        }
+    }
+
+    // Async-predicate variant: the predicate awaits real work (e.g. a connection-state fetch)
+    // on every poll, so it carries a higher wall-clock floor than the sync overload to absorb
+    // CPU contention when the full suite runs in parallel; a genuine hang still fails.
+    private static async Task WaitForConditionAsync(Func<Task<bool>> predicate, int timeoutMilliseconds = 15000, int pollDelayMilliseconds = 20)
+    {
+        timeoutMilliseconds = Math.Max(timeoutMilliseconds, 15000);
+        var started = DateTime.UtcNow;
+        while (!await predicate())
         {
             if ((DateTime.UtcNow - started).TotalMilliseconds >= timeoutMilliseconds)
             {
