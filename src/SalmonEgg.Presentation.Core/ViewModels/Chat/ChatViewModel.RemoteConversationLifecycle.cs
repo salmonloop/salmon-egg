@@ -2570,7 +2570,18 @@ public partial class ChatViewModel
         bool isSupersededCompletion = false)
     {
         await ApplySessionLoadResponseAsync(conversationId, projection.SessionLoadResponse).ConfigureAwait(true);
-        await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+
+        // 前台 LoadResponse 模式:session/load 响应投影完即视为完成,不阻塞等待 buffered replay
+        // 抽干;replay 随后以 following 追加(Transcript 视口事实源保持 follow 语义)。StrictReplay
+        // 以及所有 superseded background 完成仍必须等 drain,以保证回切为完整正文的零往返 warm reuse。
+        var awaitReplayDrain =
+            isSupersededCompletion
+            || _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay;
+        if (awaitReplayDrain)
+        {
+            await AwaitBufferedSessionReplayProjectionAsync(cancellationToken, hydrationAttemptId).ConfigureAwait(false);
+        }
+
         if (isSupersededCompletion)
         {
             // 被 supersede 的完成必须走 reducer 内的原子守卫:与同会话更新激活竞争时,

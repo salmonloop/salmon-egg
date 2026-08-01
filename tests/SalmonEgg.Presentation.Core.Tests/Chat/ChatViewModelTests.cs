@@ -12031,6 +12031,102 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenLoadResponseAndCachedSnapshotExists_DoesNotDoubleWriteAgainstReplay()
+    {
+        // Regression: LoadResponse returns the foreground before buffered replay drains. The
+        // restore-if-empty fallback must NOT run inline against the still-empty mid-replay
+        // transcript — otherwise it wholesale-restores the cached snapshot and the subsequent
+        // replay append (same ProtocolMessageId) concatenates into corrupted duplicate text.
+        var syncContext = new QueueingSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-1", @"C:\repo\one");
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return Task.FromResult(fixture.Preferences.IsLoaded);
+        });
+        fixture.Preferences.AcpHydrationCompletionMode = "LoadResponse";
+
+        fixture.Workspace.UpsertConversationSnapshot(
+            new ConversationWorkspaceSnapshot(
+                ConversationId: "conv-1",
+                Transcript:
+                [
+                    new ConversationMessageSnapshot
+                    {
+                        Id = "cached-1",
+                        IsOutgoing = false,
+                        ContentType = "text",
+                        TextContent = "replayed answer",
+                        ProtocolMessageId = "m1"
+                    }
+                ],
+                Plan: [],
+                ShowPlanPanel: false,
+                CreatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                LastUpdatedAt: new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
+                ConnectionInstanceId: "conn-1"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+
+        ReplayLoadChatService? innerChatService = null;
+        innerChatService = new ReplayLoadChatService
+        {
+            AgentCapabilities = new AgentCapabilities(loadSession: true),
+            OnLoadSessionAsync = (_, _) =>
+            {
+                // Replay re-emits the same authoritative message carried by the cached snapshot.
+                innerChatService!.RaiseSessionUpdate(new SessionUpdateEventArgs(
+                    "remote-1",
+                    new AgentMessageUpdate(new TextContentBlock("replayed answer")) { MessageId = "m1" }));
+                return Task.FromResult(SessionLoadResponse.Completed);
+            }
+        };
+
+        AcpChatServiceAdapter? adapter = null;
+        var eventAdapter = new AcpEventAdapter(
+            update => adapter!.PublishBufferedUpdate(update),
+            syncContext);
+        adapter = new AcpChatServiceAdapter(innerChatService, eventAdapter);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(adapter, TestContext.Current.CancellationToken));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-1"));
+        syncContext.RunAll();
+
+        var hydrationTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
+        await syncContext.RunUntilCompletedAsync(hydrationTask);
+        Assert.True(await hydrationTask, fixture.ViewModel.ErrorMessage);
+
+        // Let the background replay drain + deferred reconciliation settle.
+        await WaitForConditionAsync(() =>
+        {
+            syncContext.RunAll();
+            return fixture.GetStateAsync().ContinueWith(task =>
+                (task.Result.ResolveContentSlice("conv-1")?.Transcript ?? ImmutableList<ConversationMessageSnapshot>.Empty)
+                    .Any(message => string.Equals(message.TextContent, "replayed answer", StringComparison.Ordinal)));
+        });
+        syncContext.RunAll();
+
+        var finalTranscript = (await fixture.GetStateAsync()).ResolveContentSlice("conv-1")?.Transcript
+            ?? ImmutableList<ConversationMessageSnapshot>.Empty;
+        var replayedMessages = finalTranscript
+            .Where(message => (message.TextContent ?? string.Empty).Contains("replayed answer", StringComparison.Ordinal))
+            .ToList();
+        Assert.Single(replayedMessages);
+        Assert.Equal("replayed answer", replayedMessages[0].TextContent);
+        Assert.DoesNotContain(
+            finalTranscript,
+            message => string.Equals(message.TextContent, "replayed answerreplayed answer", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenReplayStartsWithPlanUpdate_ProjectsReplayFacts()
     {
         var syncContext = new QueueingSynchronizationContext();
