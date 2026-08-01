@@ -122,14 +122,19 @@ public sealed class ChatStylesMarkdownXamlTests
     }
 
     [Fact]
-    public void MessageTemplate_EnablesPlainTextSelectionAndCopyContextMenu()
+    public void MessageTemplate_EnablesPlainTextSelectionAndLeafOwnedCopyContextMenu()
     {
+        // ContextFlyout must live on the selectable text leaf, not the message Border. Selectable
+        // text installs its own TextCommandBarFlyout and marks the bubbling ContextRequested handled,
+        // so a Border-level flyout only fires in the empty left-rule/padding gap — never over the
+        // body text (AGENTS.md §7 leaf-owned ContextFlyout, mirrors MainPage project/session menus).
         var xaml = LoadChatStylesXaml();
 
         Assert.Contains("IsTextSelectionEnabled=\"True\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("<Border.ContextFlyout>", xaml, StringComparison.Ordinal);
+        Assert.Contains("<TextBlock.ContextFlyout>", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Uid=\"ChatMessageCopyMenu\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind CopyTextCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border.ContextFlyout>", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsEnabled=\"{x:Bind HasTextContent", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Click=\"OnCopyMessageClick\"", xaml, StringComparison.Ordinal);
     }
@@ -142,26 +147,34 @@ public sealed class ChatStylesMarkdownXamlTests
         var outgoing = ExtractTemplate(xaml, "OutgoingMessageTemplate", "ToolCallMessageTemplate");
         var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
 
-        // Report belongs on every AI-side surface (incoming markdown/plain and tool-call messages).
+        // Report belongs on every AI-side surface. Incoming leaves host the menu item directly
+        // (plain TextBlock + markdown host); the tool-call pill owns its menu internally, so the
+        // template projects the Report command into the pill via its ReportCommand DP instead.
         Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", incoming, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", incoming, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"ChatMessageReportMenu\"", toolCall, StringComparison.Ordinal);
-        Assert.Contains("Command=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("ReportCommand=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
 
         // Outgoing user messages copy only; they are never reportable AI content.
         Assert.DoesNotContain("x:Uid=\"ChatMessageReportMenu\"", outgoing, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReportCommand=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
         Assert.DoesNotContain("Command=\"{x:Bind ReportContentCommand}\"", outgoing, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ToolCallMessageTemplate_ExposesCopyAndReportContextMenu()
+    public void ToolCallMessageTemplate_ProjectsCopyAndReportCommandsIntoPillLeaf()
     {
+        // The tool-call pill owns its right-click menu internally (its selectable
+        // title/summary/detail/raw text each install a text-selection command bar that
+        // marks ContextRequested handled, so a template Border flyout never fires over
+        // the pill body). The message template must therefore project Copy/Report into
+        // the pill via command DPs, not host a Border-level ContextFlyout.
         var xaml = LoadChatStylesXaml();
         var toolCall = ExtractTemplate(xaml, "ToolCallMessageTemplate", null);
 
-        Assert.Contains("<Border.ContextFlyout>", toolCall, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"ChatMessageCopyMenu\"", toolCall, StringComparison.Ordinal);
-        Assert.Contains("CommandParameter=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", toolCall, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Border.ContextFlyout>", toolCall, StringComparison.Ordinal);
+        Assert.Contains("CopyCommand=\"{x:Bind CopyTextCommand}\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("CopyCommandParameter=\"{x:Bind DisplayBodyText, Mode=OneWay}\"", toolCall, StringComparison.Ordinal);
+        Assert.Contains("ReportCommand=\"{x:Bind ReportContentCommand}\"", toolCall, StringComparison.Ordinal);
     }
 
     [Fact]

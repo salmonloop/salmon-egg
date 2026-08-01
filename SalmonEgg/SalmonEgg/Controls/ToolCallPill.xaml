@@ -133,6 +133,26 @@
         Padding="0"
         HorizontalAlignment="Left"
         AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
+        <!--
+          Copy/Report right-click menu is leaf-owned on the pill root. The pill's always-visible
+          surface (tool name, summary, status icon, expander chrome) is non-selectable, so
+          ContextRequested bubbles here natively. Selectable expanded detail (detail/diff/terminal
+          templates) and the raw-payload popup keep their own native text-selection command bars;
+          Report/Copy stay reachable via the header on every pill. Commands are projected in from the
+          ChatMessageViewModel through the message template DPs (AGENTS.md §7 leaf-owned ContextFlyout;
+          no data-model command pollution and no visual-tree patching to reach DataTemplate leaves).
+        -->
+        <Border.ContextFlyout>
+            <MenuFlyout>
+                <MenuFlyoutItem
+                    x:Uid="ChatMessageCopyMenu"
+                    Command="{x:Bind CopyCommand, Mode=OneWay}"
+                    CommandParameter="{x:Bind CopyCommandParameter, Mode=OneWay}" />
+                <MenuFlyoutItem
+                    x:Uid="ChatMessageReportMenu"
+                    Command="{x:Bind ReportCommand, Mode=OneWay}" />
+            </MenuFlyout>
+        </Border.ContextFlyout>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="AdaptiveStates">
                 <VisualState x:Name="NarrowState">

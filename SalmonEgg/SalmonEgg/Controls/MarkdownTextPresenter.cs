@@ -2,6 +2,7 @@ using System.Windows.Input;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using SalmonEgg.Presentation.ViewModels.Chat;
@@ -128,6 +129,18 @@ public sealed partial class MarkdownTextPresenter : Grid
         typeof(MarkdownTextPresenter),
         new PropertyMetadata(null));
 
+    // The app-owned right-click menu (Copy/Report). A selectable markdown host normally
+    // installs its own text-selection command bar and marks ContextRequested handled, so
+    // that event never bubbles to the message bubble's ancestor. We forward this flyout
+    // onto the single markdown host control we own — never by walking the rendered runs —
+    // so right-click over markdown body opens our menu natively (AGENTS.md §7 leaf-owned
+    // ContextFlyout; no visual-tree patching).
+    public static readonly DependencyProperty ContextMenuFlyoutProperty = DependencyProperty.Register(
+        nameof(ContextMenuFlyout),
+        typeof(FlyoutBase),
+        typeof(MarkdownTextPresenter),
+        new PropertyMetadata(null, OnContextMenuFlyoutChanged));
+
     public MarkdownTextPresenter()
     {
         _requestedIsTextSelectionEnabled = false;
@@ -246,6 +259,33 @@ public sealed partial class MarkdownTextPresenter : Grid
     {
         get => (ICommand?)GetValue(LinkCommandProperty);
         set => SetValue(LinkCommandProperty, value);
+    }
+
+    public FlyoutBase? ContextMenuFlyout
+    {
+        get => (FlyoutBase?)GetValue(ContextMenuFlyoutProperty);
+        set => SetValue(ContextMenuFlyoutProperty, value);
+    }
+
+    private static void OnContextMenuFlyoutChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MarkdownTextPresenter presenter)
+        {
+            presenter.ApplyContextMenuFlyout();
+        }
+    }
+
+    private void ApplyContextMenuFlyout()
+    {
+        var flyout = ContextMenuFlyout;
+#if WINDOWS
+        // Both host instances carry the same menu so the flyout survives selectable/
+        // non-selectable host swaps without re-reading a shared field on each swap.
+        _selectableMarkdown.ContextFlyout = flyout;
+        _nonSelectableMarkdown.ContextFlyout = flyout;
+#else
+        _markdown.ContextFlyout = flyout;
+#endif
     }
 
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

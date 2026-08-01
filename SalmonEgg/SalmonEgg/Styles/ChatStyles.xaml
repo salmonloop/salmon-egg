@@ -24,16 +24,14 @@
     <DataTemplate x:Key="IncomingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
+            <!-- ContextFlyout is leaf-owned, not on this Border. The body text (plain TextBlock
+                 and the markdown host) has IsTextSelectionEnabled, so each installs its own
+                 text-selection command bar and marks the bubbling ContextRequested handled; a
+                 Border-level flyout would only ever fire in the empty left-rule/padding gap, never
+                 over the text. Copy/Report therefore live on the actual right-click leaves — the
+                 plain TextBlock directly, and the markdown host via MarkdownTextPresenter's
+                 ContextMenuFlyout forward (AGENTS.md §7). -->
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
-                <Border.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
-                                        Command="{x:Bind CopyTextCommand}"
-                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
-                        <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
-                                        Command="{x:Bind ReportContentCommand}" />
-                    </MenuFlyout>
-                </Border.ContextFlyout>
                 <StackPanel>
                     <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
@@ -52,7 +50,17 @@
                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                    LineHeight="22"
                                    LineStackingStrategy="BlockLineHeight"
-                                   IsTextSelectionEnabled="True"/>
+                                   IsTextSelectionEnabled="True">
+                            <TextBlock.ContextFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
+                                                    Command="{x:Bind CopyTextCommand}"
+                                                    CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
+                                    <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
+                                                    Command="{x:Bind ReportContentCommand}" />
+                                </MenuFlyout>
+                            </TextBlock.ContextFlyout>
+                        </TextBlock>
 
                         <controls:MarkdownTextPresenter x:Name="IncomingMarkdownPresenter"
                                                         x:Load="{x:Bind MarkdownPresentation.ShouldRenderMarkdown, Mode=OneWay}"
@@ -72,7 +80,17 @@
                                                         QuoteBorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                                         TableBorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                                         LinkCommand="{x:Bind OpenMarkdownLinkCommand}"
-                                                        IsTextSelectionEnabled="{x:Bind MarkdownPresentation.AllowsNativeSelection, Mode=OneWay}"/>
+                                                        IsTextSelectionEnabled="{x:Bind MarkdownPresentation.AllowsNativeSelection, Mode=OneWay}">
+                            <controls:MarkdownTextPresenter.ContextMenuFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
+                                                    Command="{x:Bind CopyTextCommand}"
+                                                    CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
+                                    <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
+                                                    Command="{x:Bind ReportContentCommand}" />
+                                </MenuFlyout>
+                            </controls:MarkdownTextPresenter.ContextMenuFlyout>
+                        </controls:MarkdownTextPresenter>
 
                         <Button x:Name="IncomingMarkdownCopyCodeButton"
                                 x:Uid="ChatMarkdownCopyCodeButton"
@@ -100,19 +118,16 @@
     <DataTemplate x:Key="OutgoingMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
+            <!-- ContextFlyout is leaf-owned, not on this Border. OutgoingPlainTextBlock has
+                 IsTextSelectionEnabled, so it installs its own text-selection command bar and marks
+                 the bubbling ContextRequested handled; a Border-level flyout would never fire over
+                 the text. Copy therefore lives on the text leaf (AGENTS.md §7). -->
             <Border CornerRadius="12,12,0,12"
                     Padding="16,10"
                     BorderThickness="0">
                 <Border.Background>
                     <SolidColorBrush Color="{ThemeResource SystemAccentColor}" Opacity="0.15" />
                 </Border.Background>
-                <Border.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
-                                        Command="{x:Bind CopyTextCommand}"
-                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
-                    </MenuFlyout>
-                </Border.ContextFlyout>
                 <StackPanel x:Name="OutgoingMessageContentRoot">
                     <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
@@ -127,7 +142,15 @@
                                Text="{x:Bind DisplayBodyText, Mode=OneWay}"
                                TextWrapping="Wrap"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                               IsTextSelectionEnabled="True"/>
+                               IsTextSelectionEnabled="True">
+                        <TextBlock.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
+                                                Command="{x:Bind CopyTextCommand}"
+                                                CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
+                            </MenuFlyout>
+                        </TextBlock.ContextFlyout>
+                    </TextBlock>
                 </StackPanel>
             </Border>
         </Grid>
@@ -136,16 +159,11 @@
     <DataTemplate x:Key="ToolCallMessageTemplate" x:DataType="vm:ChatMessageViewModel">
         <Grid Margin="0,8"
               HorizontalAlignment="{x:Bind IsOutgoing, Mode=OneWay, Converter={StaticResource MessageDirectionToAlignmentConverter}}">
+            <!-- ContextFlyout is leaf-owned inside the pill, not on this Border. The pill hosts
+                 selectable text (title/summary/detail/raw), so a Border-level flyout would only fire
+                 in the empty left-rule/padding gap. Copy/Report are projected into the pill's command
+                 DPs; the pill installs the right-click menu on its own root leaf (AGENTS.md §7). -->
             <Border Style="{StaticResource IncomingMessageBorderStyle}">
-                <Border.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem x:Uid="ChatMessageCopyMenu"
-                                        Command="{x:Bind CopyTextCommand}"
-                                        CommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}" />
-                        <MenuFlyoutItem x:Uid="ChatMessageReportMenu"
-                                        Command="{x:Bind ReportContentCommand}" />
-                    </MenuFlyout>
-                </Border.ContextFlyout>
                 <StackPanel>
                     <!-- Header Metadata: only shown when the message carries an authoritative time. -->
                     <TextBlock Text="{x:Bind Timestamp, Mode=OneWay, Converter={StaticResource TimeFormatConverter}}"
@@ -158,6 +176,9 @@
                     <controls:ToolCallPill x:Name="ToolCallMessagePill"
                                            x:Load="{x:Bind ShouldShowToolCallPill, Mode=OneWay}"
                                            Visibility="{x:Bind ShouldShowToolCallPill, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           CopyCommand="{x:Bind CopyTextCommand}"
+                                           CopyCommandParameter="{x:Bind DisplayBodyText, Mode=OneWay}"
+                                           ReportCommand="{x:Bind ReportContentCommand}"
                                            ToolTitle="{x:Bind Title, Mode=OneWay}"
                                            ToolKind="{x:Bind ToolCallKind, Mode=OneWay}"
                                            Status="{x:Bind ToolCallStatus, Mode=OneWay}"

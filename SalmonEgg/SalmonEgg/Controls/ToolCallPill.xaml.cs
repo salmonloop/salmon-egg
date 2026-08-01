@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SalmonEgg.Acp.Tool;
@@ -72,6 +73,20 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
 
     public static readonly DependencyProperty IsCancelledProperty =
         DependencyProperty.Register(nameof(IsCancelled), typeof(bool), typeof(ToolCallPill), new PropertyMetadata(false, OnVisualStateInputChanged));
+
+    // Copy/Report are the AI-side message commands, projected in from the ChatMessageViewModel
+    // via the message template. The pill owns the right-click menu leaves internally because its
+    // selectable text (title/summary/detail/raw) installs its own text-selection command bar and
+    // marks ContextRequested handled, so a bubble-level ContextFlyout never fires over the pill
+    // body (AGENTS.md §7 leaf-owned ContextFlyout; whole-pill coverage per product intent).
+    public static readonly DependencyProperty CopyCommandProperty =
+        DependencyProperty.Register(nameof(CopyCommand), typeof(ICommand), typeof(ToolCallPill), new PropertyMetadata(null));
+
+    public static readonly DependencyProperty CopyCommandParameterProperty =
+        DependencyProperty.Register(nameof(CopyCommandParameter), typeof(object), typeof(ToolCallPill), new PropertyMetadata(null));
+
+    public static readonly DependencyProperty ReportCommandProperty =
+        DependencyProperty.Register(nameof(ReportCommand), typeof(ICommand), typeof(ToolCallPill), new PropertyMetadata(null));
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -145,6 +160,24 @@ public sealed partial class ToolCallPill : UserControl, INotifyPropertyChanged
     {
         get => (bool)GetValue(IsCancelledProperty);
         set => SetValue(IsCancelledProperty, value);
+    }
+
+    public ICommand? CopyCommand
+    {
+        get => (ICommand?)GetValue(CopyCommandProperty);
+        set => SetValue(CopyCommandProperty, value);
+    }
+
+    public object? CopyCommandParameter
+    {
+        get => GetValue(CopyCommandParameterProperty);
+        set => SetValue(CopyCommandParameterProperty, value);
+    }
+
+    public ICommand? ReportCommand
+    {
+        get => (ICommand?)GetValue(ReportCommandProperty);
+        set => SetValue(ReportCommandProperty, value);
     }
 
     public string DisplayToolName => ResolveToolName();
