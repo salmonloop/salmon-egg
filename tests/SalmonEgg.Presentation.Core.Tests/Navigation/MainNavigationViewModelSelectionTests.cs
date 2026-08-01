@@ -1237,6 +1237,48 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void SessionSelection_ForSessionNotInCatalog_ProjectsNothingRatherThanStart()
+    {
+        // Regression: a persisted/committed session selection whose session is not (yet)
+        // in the catalog — e.g. deferred conversation restore on cold start — must project
+        // to "nothing selected", NOT Start. Painting Start for the deferred session caused
+        // the native NavigationView to briefly highlight Start and then the session, leaving
+        // two items highlighted. Projecting null keeps exactly one (or zero) highlight.
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            presenter.Refresh(CreateSnapshot(chatCatalog.GetKnownConversationIds()));
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out var selectionStore,
+                out _,
+                presenter);
+
+            navVm.RebuildTree();
+            SetSessionSelection(selectionStore, "missing-session");
+
+            Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
+            Assert.Null(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void PaneStateChange_DoesNotAlterProjectedSelection()
     {
         // When the pane closes (e.g. during a display-mode transition from Expanded

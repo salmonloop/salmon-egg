@@ -1178,7 +1178,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private void ApplySelectionProjection()
     {
         var previousProjection = _projection;
-        var projectedSelection = GetProjectedSelectionState();
+        // Project the semantic selection faithfully. An in-flight / not-yet-materialized
+        // session must project to "nothing selected" (the projector yields
+        // ControlSelectedItem: null for an unresolved session), NOT to Start. Painting
+        // Start for a deferred session made the native NavigationView briefly highlight
+        // Start and then the session, leaving two items highlighted when the highlight
+        // move to a not-yet-realized nested child failed to clear Start.
+        var projectedSelection = CurrentSelection;
 
         if (projectedSelection is NavigationSelectionState.Session selectionState
             && !string.IsNullOrWhiteSpace(selectionState.SessionId)
@@ -1213,18 +1219,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         {
             OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }
-    }
-
-    private NavigationSelectionState GetProjectedSelectionState()
-    {
-        if (CurrentSelection is NavigationSelectionState.Session currentSession
-            && (string.IsNullOrWhiteSpace(currentSession.SessionId)
-                || !_sessionIndex.ContainsKey(currentSession.SessionId)))
-        {
-            return NavigationSelectionState.StartSelection;
-        }
-
-        return CurrentSelection;
     }
 
     private bool TryMaterializeSelectedSession()
