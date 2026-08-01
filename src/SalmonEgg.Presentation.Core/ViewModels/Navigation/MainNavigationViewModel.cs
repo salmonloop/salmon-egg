@@ -977,12 +977,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
             if (sessionVm == null)
             {
-                // Look for it elsewhere in children to avoid full re-creation if it moved
+                // Look for it elsewhere in children to avoid full re-creation if it moved.
                 sessionVm = children.OfType<SessionNavItemViewModel>().FirstOrDefault(v => string.Equals(v.SessionId, session.ConversationId, StringComparison.Ordinal));
                 if (sessionVm != null)
                 {
-                    // Note: We don't dispose here because we are re-inserting it at a new position
-                    children.Remove(sessionVm);
+                    // The session already owns a realized NavigationViewItem container. Relocate it
+                    // with a single Move (not Remove+Insert): NavigationView translates the existing
+                    // container and carries its native selection visual with it. Remove+Insert instead
+                    // recycles a container for a different data item and can strand the selected gray
+                    // mask on the vacated slot, so several sessions end up masked at once.
+                    var existingIndex = children.IndexOf(sessionVm);
+                    if (existingIndex != childIndex)
+                    {
+                        children.Move(existingIndex, childIndex);
+                    }
+
                     sessionVm.Title = title;
                     sessionVm.RemoteSessionId = session.RemoteSessionId;
                     sessionVm.RelativeTimeText = relative;
@@ -1003,8 +1012,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                             uiDispatcher: _uiDispatcher,
                 localizer: _localizer);
                     sessionVm.HasUnreadAttention = session.HasUnreadAttention;
+                    children.Insert(childIndex, sessionVm);
                 }
-                children.Insert(childIndex, sessionVm);
             }
 
             targetSessionIndex[session.ConversationId] = sessionVm;

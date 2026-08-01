@@ -876,6 +876,134 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void RebuildTree_ReordersSessionWithSingleMove_SoNativeSelectionVisualIsNotStranded()
+    {
+        // The native NavigationView paints its selection (the gray mask + pill) on the realized
+        // container for SelectedItem. If a reorder is expressed as Remove+Add, NavigationView
+        // recycles a container onto a different data item and can strand the gray mask on the
+        // vacated slot — that is the "several sessions masked at once" regression. A single Move
+        // translates the existing container and carries its selection visual with it, so the
+        // relocated session MUST raise exactly one Move (and zero Remove/Add) on Children.
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-new", "session-old");
+
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            var oldUpdated = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc);
+            var newUpdated = new DateTime(2026, 3, 1, 0, 3, 0, DateTimeKind.Utc);
+
+            var snapshot = new[]
+            {
+                new ConversationCatalogItem(
+                    "session-old",
+                    "Old Session",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                    oldUpdated,
+                    oldUpdated),
+                new ConversationCatalogItem(
+                    "session-new",
+                    "New Session",
+                    @"C:\repo\demo",
+                    new DateTime(2026, 3, 1, 0, 2, 0, DateTimeKind.Utc),
+                    newUpdated,
+                    newUpdated)
+            };
+            presenter.Refresh(snapshot);
+
+            using var navVm = new MainNavigationViewModel(
+                chatCatalog,
+                CreateProjectPreferences(preferences),
+                new Mock<IUiInteractionService>().Object,
+                new StubNavigationCoordinator(),
+                new Mock<ILogger<MainNavigationViewModel>>().Object,
+                navState,
+                new Mock<IShellLayoutMetricsSink>().Object,
+                new NavigationSelectionProjector(),
+                new ShellSelectionStateStore(),
+                new ShellNavigationRuntimeStateStore(),
+                presenter,
+                new ProjectAffinityResolver(),
+                new ImmediateUiDispatcher(),
+                Mock.Of<IStringLocalizer<CoreStrings>>());
+
+            navVm.RebuildTree();
+
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
+            var orderedBefore = project.Children
+                .OfType<SessionNavItemViewModel>()
+                .Select(child => child.SessionId)
+                .ToArray();
+            Assert.Equal(new[] { "session-new", "session-old" }, orderedBefore);
+
+            var moveCount = 0;
+            var removeCount = 0;
+            var addCount = 0;
+            void OnChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+            {
+                switch (e.Action)
+                {
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Move:
+                        moveCount++;
+                        break;
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
+                        removeCount++;
+                        break;
+                    case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
+                        addCount++;
+                        break;
+                }
+            }
+
+            project.Children.CollectionChanged += OnChanged;
+            try
+            {
+                // session-old now becomes the most recently updated -> it must move to the top.
+                // Ordering keys off Updated (the 5th arg), not access time, so bump Updated past
+                // newUpdated; see RebuildTree_KeepsLastUpdatedOrderingWhenOnlyAccessTimesChange.
+                var reorderedUpdated = new DateTime(2026, 3, 3, 0, 0, 0, DateTimeKind.Utc);
+                var reorderedSnapshot = new[]
+                {
+                    new ConversationCatalogItem(
+                        "session-old",
+                        "Old Session",
+                        @"C:\repo\demo",
+                        new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        reorderedUpdated,
+                        reorderedUpdated),
+                    snapshot[1]
+                };
+                presenter.Refresh(reorderedSnapshot);
+                navVm.RebuildTree();
+            }
+            finally
+            {
+                project.Children.CollectionChanged -= OnChanged;
+            }
+
+            var orderedAfter = project.Children
+                .OfType<SessionNavItemViewModel>()
+                .Select(child => child.SessionId)
+                .ToArray();
+            Assert.Equal(new[] { "session-old", "session-new" }, orderedAfter);
+
+            Assert.Equal(1, moveCount);
+            Assert.Equal(0, removeCount);
+            Assert.Equal(0, addCount);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void RebuildTree_GroupsRemoteConversationByResolverOutput()
     {
         var originalContext = SynchronizationContext.Current;
