@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Presentation.Core.Mvux.ShellLayout;
@@ -71,6 +73,57 @@ public sealed class ShellLayoutStoreTests
         Assert.Equal(store.CurrentSnapshot.IsNavPaneOpen, converged!.IsNavPaneOpen);
         GC.KeepAlive(stateOwner);
         GC.KeepAlive(snapshotOwner);
+    }
+
+    [Fact]
+    public void Dispatch_DoesNotReintroduceConfigureAwaitFalse_SoLayoutProjectionStaysUiAffine()
+    {
+        // Architecture lock (removed-compensation guard): Dispatch must NOT use
+        // ConfigureAwait(false). The layout projection is UI-affine — a UI-thread caller has
+        // to keep its captured context across the gate and both feed updates so the Changed
+        // fan-out resumes inline on the UI thread and subscribers apply in a single hop.
+        // Blanket ConfigureAwait(false) pushed the continuation onto the thread pool under
+        // contention, forcing every subscriber to re-marshal via the dispatcher — an extra
+        // queue hop that showed up as a visible stutter on nav switches. The dispatch gate
+        // still serializes reduce → commit → snapshot → Changed on its own.
+        var source = LoadShellLayoutStoreSource();
+        var dispatchBody = ExtractDispatchBody(source);
+
+        // Match an actual call (leading dot), so the explanatory comment naming
+        // ConfigureAwait(false) does not trip the guard.
+        Assert.DoesNotContain(".ConfigureAwait(false)", dispatchBody, StringComparison.Ordinal);
+        // The serialization gate that fixed cross-caller tearing must remain.
+        Assert.Contains("_dispatchGate.WaitAsync()", dispatchBody, StringComparison.Ordinal);
+        Assert.Contains("_dispatchGate.Release()", dispatchBody, StringComparison.Ordinal);
+    }
+
+    private static string ExtractDispatchBody(string source)
+    {
+        var start = source.IndexOf("public async ValueTask Dispatch(", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ShellLayoutStore.Dispatch must exist.");
+        return source.Substring(start);
+    }
+
+    private static string LoadShellLayoutStoreSource()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "SalmonEgg.sln")))
+            {
+                return File.ReadAllText(Path.Combine(
+                    directory.FullName,
+                    "src",
+                    "SalmonEgg.Presentation.Core",
+                    "Mvux",
+                    "ShellLayout",
+                    "ShellLayoutStore.cs"));
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Repository root (SalmonEgg.sln) not found.");
     }
 
     private static async Task<ShellLayoutSnapshot?> WaitForSnapshotAsync(

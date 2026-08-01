@@ -55,7 +55,15 @@ public sealed class ShellLayoutStore : IShellLayoutStore
 
     public async ValueTask Dispatch(ShellLayoutAction action)
     {
-        await _dispatchGate.WaitAsync().ConfigureAwait(false);
+        // No ConfigureAwait(false) here on purpose: the layout projection is UI-affine.
+        // A UI-thread caller must keep its captured context across the gate and the two
+        // feed updates so the Changed fan-out below resumes inline on the UI thread and
+        // subscribers apply the ~28 projected properties in a single hop. Blanket
+        // ConfigureAwait(false) pushed the continuation onto the thread pool under
+        // contention, forcing every subscriber to re-marshal via the dispatcher — an
+        // extra queue hop that showed up as a visible stutter on nav switches. The gate
+        // still serializes reduce → commit → snapshot → Changed as one indivisible unit.
+        await _dispatchGate.WaitAsync();
         try
         {
             ShellLayoutReduced? reduced = null;
@@ -64,7 +72,7 @@ public sealed class ShellLayoutStore : IShellLayoutStore
             {
                 reduced = ShellLayoutReducer.Reduce(s!, action);
                 return reduced.State;
-            }, default).ConfigureAwait(false);
+            }, default);
 
             if (reduced is null)
             {
@@ -73,7 +81,7 @@ public sealed class ShellLayoutStore : IShellLayoutStore
 
             CurrentState = reduced.State;
             CurrentSnapshot = reduced.Snapshot;
-            await _snapshotState.Update(_ => reduced.Snapshot, default).ConfigureAwait(false);
+            await _snapshotState.Update(_ => reduced.Snapshot, default);
             Changed?.Invoke(this, new ShellLayoutChangedEventArgs(CurrentState, CurrentSnapshot));
         }
         finally
