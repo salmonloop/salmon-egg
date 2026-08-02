@@ -38,6 +38,11 @@ exit /b 1
 
 :runapp
 :msix
+call :parse_config "%~2"
+if errorlevel 1 (
+  popd >nul
+  exit /b 1
+)
 set "PWSH_EXE="
 for /f "usebackq delims=" %%I in (`where pwsh 2^>nul`) do (
   set "PWSH_EXE=%%I"
@@ -45,34 +50,44 @@ for /f "usebackq delims=" %%I in (`where pwsh 2^>nul`) do (
 )
 :gotpwsh
 if defined PWSH_EXE (
-  "%PWSH_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%.tools\run-winui3-msix.ps1" -Configuration Debug
+  "%PWSH_EXE%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%.tools\run-winui3-msix.ps1" -Configuration %SALMON_CONFIG%
 ) else (
-  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%.tools\run-winui3-msix.ps1" -Configuration Debug
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%.tools\run-winui3-msix.ps1" -Configuration %SALMON_CONFIG%
 )
 set "EC=%errorlevel%"
 popd >nul
 exit /b %EC%
 
 :desktop
+call :parse_config "%~2"
+if errorlevel 1 (
+  popd >nul
+  exit /b 1
+)
 if /I "%OS%"=="Windows_NT" call :require_vcredist_x64
 if errorlevel 1 (
   set "EC=%errorlevel%"
   popd >nul
   exit /b %EC%
 )
-dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-desktop
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-desktop -c %SALMON_CONFIG%
 set "EC=%errorlevel%"
 popd >nul
 exit /b %EC%
 
 :wasm
+call :parse_config "%~2"
+if errorlevel 1 (
+  popd >nul
+  exit /b 1
+)
 echo ========================================
 echo SalmonEgg WebAssembly Run
 echo ========================================
 echo.
 echo Starting dev server at http://localhost:5000
 echo.
-dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-browserwasm
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj --framework net10.0-browserwasm -c %SALMON_CONFIG%
 set "EC=%errorlevel%"
 popd >nul
 exit /b %EC%
@@ -80,13 +95,27 @@ exit /b %EC%
 :usage
 echo.
 echo Usage:
-echo   run.bat            ^(default: msix^)
-echo   run.bat msix       ^(build/install/run WinUI 3 MSIX^)
-echo   run.bat desktop    ^(dotnet run net10.0-desktop^)
-echo   run.bat wasm      ^(dotnet run net10.0-browserwasm^)
+echo   run.bat                    ^(default: msix Debug^)
+echo   run.bat msix [config]      ^(build/install/run WinUI 3 MSIX^)
+echo   run.bat desktop [config]   ^(dotnet run net10.0-desktop^)
+echo   run.bat wasm [config]      ^(dotnet run net10.0-browserwasm^)
+echo.
+echo   [config] is optional: Debug ^(default^) or Release.
+echo   e.g. run.bat msix release
 echo.
 popd >nul
 exit /b 0
+
+:parse_config
+set "SALMON_CONFIG=Debug"
+if "%~1"=="" exit /b 0
+if /I "%~1"=="debug" exit /b 0
+if /I "%~1"=="release" (
+  set "SALMON_CONFIG=Release"
+  exit /b 0
+)
+echo ERROR: Unknown configuration "%~1". Valid values: Debug, Release.
+exit /b 1
 
 :require_vcredist_x64
 if exist "%SystemRoot%\System32\vcruntime140.dll" if exist "%SystemRoot%\System32\vcruntime140_1.dll" if exist "%SystemRoot%\System32\msvcp140.dll" exit /b 0
