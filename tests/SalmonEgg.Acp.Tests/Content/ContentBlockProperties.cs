@@ -487,6 +487,108 @@ namespace SalmonEgg.Acp.Tests.Content
         }
 
         /// <summary>
+        /// 类型契约:annotations.priority 提供了却非 JSON number 时必须抛错,
+        /// 不得静默降级为「未提供」。协议宽松度只允许缺省可空字段回落 null,
+        /// 一旦字段出现且类型错误(如字符串)仍须拒绝(AGENTS.md §82)。
+        /// </summary>
+        [Fact]
+        public void ContentBlock_AnnotationsPriorityWrongType_Throws()
+        {
+            var json = """
+            {
+              "type": "text",
+              "text": "hello",
+              "annotations": {
+                "priority": "high"
+              }
+            }
+            """;
+
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+        }
+
+        /// <summary>
+        /// 类型契约:resource_link.size 提供了却非 JSON integer 时必须抛错。
+        /// 与 priority 同理,缺省回落 null 合法,类型错误则拒绝。
+        /// </summary>
+        [Fact]
+        public void ContentBlock_ResourceLinkSizeWrongType_Throws()
+        {
+            var json = """
+            {
+              "type": "resource_link",
+              "uri": "file:///tmp/a.bin",
+              "size": "1024"
+            }
+            """;
+
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+        }
+
+        /// <summary>
+        /// 类型契约:resource content 类型缺失必填 resource 字段时读取即拒绝(fail-fast),
+        /// 不得存 null 延迟到序列化才 NRE。官方 content schema 中 resource 变体的
+        /// resource 字段为 required。
+        /// </summary>
+        [Fact]
+        public void ContentBlock_ResourceMissingRequiredResource_Throws()
+        {
+            var json = """
+            {
+              "type": "resource",
+              "annotations": {
+                "priority": 0.5
+              }
+            }
+            """;
+
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+        }
+
+        /// <summary>
+        /// 类型契约:必填字符串字段(如 text.text)提供了却非 JSON string 时,
+        /// 必须抛 JsonException——与本层其余读取器的异常类型保持一致,
+        /// 不得外泄裸 InvalidOperationException(嵌套反序列化时会污染调用方)。
+        /// </summary>
+        [Fact]
+        public void ContentBlock_StringFieldWrongType_ThrowsJsonException()
+        {
+            var json = """
+            {
+              "type": "text",
+              "text": 42
+            }
+            """;
+
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+        }
+
+        /// <summary>
+        /// 类型契约:字符串数组字段(annotations.audience)含非字符串元素时必须抛 JsonException,
+        /// 不得静默 null 化或外泄裸 InvalidOperationException。
+        /// </summary>
+        [Fact]
+        public void ContentBlock_StringListWrongElementType_ThrowsJsonException()
+        {
+            var json = """
+            {
+              "type": "text",
+              "text": "hello",
+              "annotations": {
+                "audience": ["user", 7]
+              }
+            }
+            """;
+
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<ContentBlock>(json, _jsonOptions));
+        }
+
+        /// <summary>
         /// 属性 7：内容块多态序列化和反序列化
         /// </summary>
         [Fact]

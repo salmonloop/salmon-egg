@@ -173,11 +173,15 @@ namespace SalmonEgg.Acp.Content
 
         private static ResourceContentBlock ReadResource(JsonElement root)
         {
+            if (!root.TryGetProperty("resource", out var resourceElement)
+                || resourceElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                throw new JsonException("ContentBlock 'resource' is required for the resource content type.");
+            }
+
             var block = new ResourceContentBlock
             {
-                Resource = root.TryGetProperty("resource", out var resourceElement)
-                    ? ReadEmbeddedResource(resourceElement)
-                    : null!,
+                Resource = ReadEmbeddedResource(resourceElement),
                 Annotations = ReadAnnotations(root),
                 Meta = AcpMetaJson.Read(root)
             };
@@ -255,6 +259,11 @@ namespace SalmonEgg.Acp.Content
             var values = new List<string>();
             foreach (var item in property.EnumerateArray())
             {
+                if (item.ValueKind != JsonValueKind.String)
+                {
+                    throw new JsonException($"ContentBlock '{propertyName}' entries must be JSON strings.");
+                }
+
                 values.Add(item.GetString()!);
             }
 
@@ -263,27 +272,50 @@ namespace SalmonEgg.Acp.Content
 
         private static string? ReadString(JsonElement root, string propertyName)
         {
-            return root.TryGetProperty(propertyName, out var property)
-                ? property.ValueKind == JsonValueKind.Null ? null : property.GetString()
-                : null;
+            if (!root.TryGetProperty(propertyName, out var property)
+                || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (property.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON string.");
+            }
+
+            return property.GetString();
         }
 
         private static double? ReadDouble(JsonElement root, string propertyName)
         {
-            return root.TryGetProperty(propertyName, out var property)
-                && property.ValueKind == JsonValueKind.Number
-                && property.TryGetDouble(out var value)
-                    ? value
-                    : null;
+            if (!root.TryGetProperty(propertyName, out var property)
+                || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (property.ValueKind != JsonValueKind.Number || !property.TryGetDouble(out var value))
+            {
+                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON number.");
+            }
+
+            return value;
         }
 
         private static long? ReadInt64(JsonElement root, string propertyName)
         {
-            return root.TryGetProperty(propertyName, out var property)
-                && property.ValueKind == JsonValueKind.Number
-                && property.TryGetInt64(out var value)
-                    ? value
-                    : null;
+            if (!root.TryGetProperty(propertyName, out var property)
+                || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (property.ValueKind != JsonValueKind.Number || !property.TryGetInt64(out var value))
+            {
+                throw new JsonException($"ContentBlock '{propertyName}' must be a JSON integer.");
+            }
+
+            return value;
         }
 
         private static void WriteText(Utf8JsonWriter writer, TextContentBlock value, JsonSerializerOptions options)
