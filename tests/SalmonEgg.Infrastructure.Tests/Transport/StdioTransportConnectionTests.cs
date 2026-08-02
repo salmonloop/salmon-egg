@@ -83,6 +83,36 @@ public sealed class StdioTransportConnectionTests
         Assert.True(Directory.Exists(workingDirectory));
     }
 
+    /// <summary>
+    /// 回归保护:构造期(以及 working-directory 解析)不得创建目录副作用。
+    /// AGENTS.md 缓存/持久化边界:构造函数/getter/VM-init/DI 不得触发真实 FS 写入。
+    /// 当 currentDirectory 落在 WindowsApps 沙箱时,ResolveWorkingDirectory 必须返回一个
+    /// <em>构造调用之前就已存在</em>的 fallback 目录,而不是现场创建 LocalAppData/SalmonEgg。
+    /// </summary>
+    [Fact]
+    public void ResolveWorkingDirectory_WhenFallingBack_DoesNotCreateDirectoryAsSideEffect()
+    {
+        var snapshot = Directory.GetCurrentDirectory();
+        try
+        {
+            // 选一个保证不存在的 probe 目录,用作 currentDirectory 触发 fallback,
+            // 同时确认 ResolveWorkingDirectory 不会顺手把它创建出来。
+            var probeMissing = Path.Combine(Path.GetTempPath(), "stdio-fallback-probe", Guid.NewGuid().ToString("N"), "absent");
+            Assert.False(Directory.Exists(probeMissing));
+
+            var workingDirectory = StdioTransport.ResolveWorkingDirectory("agent-command", currentDirectory: probeMissing);
+
+            // 返回的 fallback 目录必须在调用之前就已存在(非本副作用创建)。
+            Assert.True(Directory.Exists(workingDirectory));
+            // probe 目录仍不得被创建。
+            Assert.False(Directory.Exists(probeMissing));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(snapshot);
+        }
+    }
+
     [Fact]
     public async Task ConnectAsync_WhenProcessExitsImmediately_ShouldSurfaceStderrOutput()
     {

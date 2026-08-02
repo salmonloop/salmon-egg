@@ -396,9 +396,16 @@ namespace SalmonEgg.Infrastructure.Transport
                 return Path.GetFullPath(candidate!);
             }
 
+            // Fallback candidates are resolved without side effects. The constructor
+            // must not create directories (AGENTS.md cache/persistence boundary:
+            // ctors/getters/VM-init/DI may not trigger real FS writes); an absent
+            // candidate simply falls through to the next existing one. The app's
+            // own LocalAppData/SalmonEgg root is created lazily by the services that
+            // actually own it (StorageLocationService / LoggingConfiguration etc.),
+            // not by transport construction.
             foreach (var fallback in GetFallbackWorkingDirectoryCandidates())
             {
-                if (IsSafeWorkingDirectory(fallback, ensureExists: true))
+                if (IsSafeWorkingDirectory(fallback))
                 {
                     return Path.GetFullPath(fallback);
                 }
@@ -407,7 +414,7 @@ namespace SalmonEgg.Infrastructure.Transport
             return Path.GetTempPath();
         }
 
-        private static bool IsSafeWorkingDirectory(string? path, bool ensureExists = false)
+        private static bool IsSafeWorkingDirectory(string? path)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -420,11 +427,6 @@ namespace SalmonEgg.Infrastructure.Transport
                 if (IsWindowsAppsPath(fullPath))
                 {
                     return false;
-                }
-
-                if (ensureExists)
-                {
-                    Directory.CreateDirectory(fullPath);
                 }
 
                 if (!Directory.Exists(fullPath))
