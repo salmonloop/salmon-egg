@@ -2467,7 +2467,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         var opened = await _aiContentReportLauncher.TryOpenReportAsync(
             appName: "SalmonEgg",
             appVersion: ResolveAppVersion(),
-            protocolVersion: new InitializeParams().ProtocolVersion.ToString(),
+            protocolVersion: AcpProtocolVersion.Latest.ToString(),
             contentExcerpt: message.DisplayBodyText).ConfigureAwait(true);
 
         if (!opened)

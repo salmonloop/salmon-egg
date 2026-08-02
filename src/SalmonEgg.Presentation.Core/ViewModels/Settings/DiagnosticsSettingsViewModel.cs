@@ -38,7 +38,7 @@ public sealed partial class DiagnosticsSettingsViewModel : ObservableObject
         ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "unknown";
 
-    public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
+    public string ProtocolVersion => AcpProtocolVersion.Latest.ToString();
 
     public string OsDescription => System.Runtime.InteropServices.RuntimeInformation.OSDescription;
 

@@ -32,7 +32,7 @@ public sealed partial class AboutViewModel : ObservableObject
         ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
         ?? "unknown";
 
-    public string ProtocolVersion => new InitializeParams().ProtocolVersion.ToString();
+    public string ProtocolVersion => AcpProtocolVersion.Latest.ToString();
 
     public string DocsRootPath => _documents.DocsRootPath;
 
