@@ -2467,6 +2467,63 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task OnErrorOccurred_WhenTransportDiesWhileProjectionConnected_ReconcilesProjectionToDisconnected()
+    {
+        await using var fixture = CreateViewModel(
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        // Transport genuinely dies: the service now reports disconnected while the projection is Connected.
+        chatService.SetupGet(service => service.IsConnected).Returns(false);
+        chatService.Raise(
+            service => service.ErrorOccurred += null,
+            chatService.Object,
+            "Failed to send message: broken pipe");
+
+        await WaitForConditionAsync(async () =>
+        {
+            var state = await fixture.GetConnectionStateAsync();
+            return state.Phase == ConnectionPhase.Disconnected;
+        });
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Disconnected, connectionState.Phase);
+    }
+
+    [Fact]
+    public async Task OnErrorOccurred_WhenServiceStillConnected_LeavesProjectionConnected()
+    {
+        await using var fixture = CreateViewModel(
+            acpConnectionCoordinatorFactory: store => new AcpConnectionCoordinator(
+                store,
+                NullLogger<AcpConnectionCoordinator>.Instance,
+                new StaticMcpResolver([]),
+                new AcpRemoteSessionRecoveryContextResolver(
+                    NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
+        var chatService = CreateConnectedChatService();
+        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
+
+        // A transient error that did not tear the transport down must not flip the projection.
+        chatService.Raise(
+            service => service.ErrorOccurred += null,
+            chatService.Object,
+            "Transient hiccup");
+
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+
+        var connectionState = await fixture.GetConnectionStateAsync();
+        Assert.Equal(ConnectionPhase.Connected, connectionState.Phase);
+    }
+
+    [Fact]
     public async Task ProcessSessionUpdateAsync_BackgroundAgentMessage_DoesNotRouteWorkspaceOnlyBinding()
     {
         var syncContext = new ImmediateSynchronizationContext();

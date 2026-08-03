@@ -2037,7 +2037,30 @@ public partial class ChatViewModel
             PublishConversationOperationFailure(conversationOwner, error);
             Logger.LogError(error);
         });
+        _ = ReconcileConnectionProjectionOnTransportLossAsync(error);
         QueueActiveRemoteConnectionRecovery(error);
+    }
+
+    // When the underlying transport genuinely dies, the connection projection can otherwise keep
+    // showing a healthy "Connected" state while the transcript surface errors ("connected up top,
+    // not-ready down below"). If the service now reports disconnected but the projection still
+    // believes it is live, reconcile it. We only correct a Connected projection so this never
+    // clobbers an in-flight Connecting/Initializing handshake, and never double-publishes over an
+    // already Disconnected/Error state (the WebSocket recovery path publishes its own disconnect).
+    // Transient send conflicts no longer flip the service's IsConnected, so this fires only on a
+    // real disconnect.
+    private async Task ReconcileConnectionProjectionOnTransportLossAsync(string error)
+    {
+        if (_chatService is not { IsConnected: false })
+        {
+            return;
+        }
+
+        var connectionState = await _chatConnectionStore.GetCurrentStateAsync().ConfigureAwait(false);
+        if (connectionState.Phase == ConnectionPhase.Connected)
+        {
+            await PublishDisconnectedConnectionStateAsync(error).ConfigureAwait(false);
+        }
     }
 
     private Task<bool> TryAuthenticateAsync(CancellationToken cancellationToken)
