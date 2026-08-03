@@ -620,6 +620,66 @@ public sealed class MainNavigationViewModelSelectionTests
     }
 
     [Fact]
+    public void ActiveSessionActivationPreview_MaterializesOverflowSessionBeforeSemanticCommit()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var preferences = CreatePreferencesWithProject();
+            var sessionIds = Enumerable.Range(1, 25)
+                .Select(index => $"session-{index:00}")
+                .ToArray();
+            var chatCatalog = CreateChatSessionCatalog(sessionIds);
+            var presenter = new MutableConversationCatalogDisplayReadModel();
+            presenter.SetLoading(false);
+            var baseline = new DateTime(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc);
+            presenter.Refresh(sessionIds.Select((id, index) => new ConversationCatalogItem(
+                id,
+                $"Session {index + 1:00}",
+                @"C:\repo\demo",
+                baseline.AddMinutes(-index),
+                baseline.AddMinutes(-index),
+                baseline.AddMinutes(-index))));
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                Mock.Of<ISessionManager>(),
+                preferences,
+                navState,
+                out _,
+                out var runtimeState,
+                presenter);
+
+            navVm.RebuildTree();
+            var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), item => item.ProjectId == "project-1");
+            Assert.DoesNotContain(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
+
+            runtimeState.LatestActivationToken = 1;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-25",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.SelectingConversation);
+
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-25", projected.SessionId);
+            AssertProjectedSelectionIsMaterializedInMenuSource(navVm);
+            Assert.Contains(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            var more = Assert.Single(project.Children.OfType<MoreSessionsNavItemViewModel>());
+            Assert.Equal(4, more.Count);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public void RebuildTree_UsesCatalogSnapshotAsSingleReadSource()
     {
         var originalContext = SynchronizationContext.Current;
@@ -1294,13 +1354,15 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
 
             runtimeState.ActiveSessionActivation = null;
@@ -1349,11 +1411,102 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "missing-session",
                 "project-1",
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SessionActivationPreview_IgnoresStaleActivationVersion()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out var selectionStore,
+                out var runtimeState);
+
+            navVm.RebuildTree();
+            selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 2;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.NavigatingToChatShell);
+
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
+    public void SessionActivationPreview_IgnoresSessionActivation_WhenPendingShellContentIsNotChat()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var chatCatalog = CreateChatSessionCatalog("session-1");
+
+            using var navVm = CreateNavigationViewModel(
+                chatCatalog,
+                sessionManager.Object,
+                preferences,
+                navState,
+                out var selectionStore,
+                out var runtimeState);
+
+            navVm.RebuildTree();
+            selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 1;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                "session-1",
+                "project-1",
+                Version: 1,
+                SessionActivationPhase.NavigatingToChatShell);
+
+            Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+
+            runtimeState.PendingShellContent = ShellNavigationContent.Start;
 
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
             Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
@@ -1619,6 +1772,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
             selectionStore.SetSelection(NavigationSelectionState.StartSelection);
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
@@ -1627,7 +1781,10 @@ public sealed class MainNavigationViewModelSelectionTests
             navVm.RefreshSelectionProjection();
 
             Assert.False(navVm.StartItem.IsLogicallySelected);
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
+            Assert.True(projected.IsLogicallySelected);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
         {
@@ -1674,6 +1831,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 }
             };
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
@@ -1718,7 +1876,7 @@ public sealed class MainNavigationViewModelSelectionTests
 
             navVm.RebuildTree();
             selectionStore.SetSelection(NavigationSelectionState.StartSelection);
-            var projectedBefore = Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
 
             var projectedSelectionChanged = 0;
             navVm.PropertyChanged += (_, e) =>
@@ -1729,14 +1887,17 @@ public sealed class MainNavigationViewModelSelectionTests
                 }
             };
 
+            runtimeState.LatestActivationToken = 1;
             runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 "session-1",
                 "project-1",
                 Version: 1,
                 SessionActivationPhase.NavigatingToChatShell);
 
-            Assert.IsType<StartNavItemViewModel>(navVm.ProjectedControlSelectedItem);
-            Assert.Equal(0, projectedSelectionChanged);
+            var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
+            Assert.Equal("session-1", projected.SessionId);
+            Assert.Equal(1, projectedSelectionChanged);
+            Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
         {
