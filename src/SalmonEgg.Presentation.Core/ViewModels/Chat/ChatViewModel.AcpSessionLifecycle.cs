@@ -909,16 +909,24 @@ public partial class ChatViewModel
     {
         var sessionId = failureContext.ConversationId;
         var activationVersion = failureContext.ActivationVersion;
-        Logger.LogError(ex, "Switching session failed (SessionId={SessionId})", sessionId);
 
-        if (!_conversationActivationOutcomePublisher.CanPublish(activationVersion))
+        // A superseded (no longer the latest intent) or canceled activation is expected churn during
+        // rapid session switching, not a real failure. Log it at Information and stop before surfacing
+        // any user-facing failure, so these do not masquerade as [ERR] "Switching session failed".
+        var superseded = !_conversationActivationOutcomePublisher.CanPublish(activationVersion);
+        var canceled = ex is OperationCanceledException;
+        if (superseded || canceled)
         {
             Logger.LogInformation(
-                "Discarding stale conversation activation failure because the chat shell no longer owns the latest intent. conversationId={ConversationId} activationVersion={ActivationVersion}",
+                ex,
+                "Conversation activation stopped without surfacing an error because it was {Outcome}. conversationId={ConversationId} activationVersion={ActivationVersion}",
+                superseded ? "superseded by a newer activation" : "canceled",
                 sessionId,
                 activationVersion);
             return;
         }
+
+        Logger.LogError(ex, "Switching session failed (SessionId={SessionId})", sessionId);
 
         await PublishConversationFailureAsync(
                 failureContext,
