@@ -145,9 +145,7 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
         => PropertyChanged?.Invoke(this, e);
 
     private string? GetActiveConversationId()
-        => _shellSelection.CurrentSelection is NavigationSelectionState.Session session
-            ? session.SessionId
-            : null;
+        => NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(_shellSelection.CurrentSelection);
 
     private async Task<ConversationMutationResult> RunMutationAsync(
         Func<Task<ConversationMutationResult>> mutation,

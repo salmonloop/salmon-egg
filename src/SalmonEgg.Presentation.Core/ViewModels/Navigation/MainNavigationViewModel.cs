@@ -536,8 +536,8 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private bool ShouldSurfaceSessionActivationFailureInfo(string sessionId)
     {
         // Once selection commits to the target session, the chat callout owns the failure surface.
-        if (CurrentSelection is NavigationSelectionState.Session selected
-            && string.Equals(selected.SessionId, sessionId, StringComparison.Ordinal))
+        var currentSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection);
+        if (string.Equals(currentSessionId, sessionId, StringComparison.Ordinal))
         {
             return false;
         }
@@ -808,14 +808,14 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             var sessionsByProject = GetSessionsByProject(projects);
             var removedItemsToDispose = new List<MainNavItemViewModel>();
 #if DEBUG
-            if (CurrentSelection is NavigationSelectionState.Session selectedSession
-                && !string.IsNullOrWhiteSpace(selectedSession.SessionId))
+            var debugSelectedSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection);
+            if (debugSelectedSessionId is not null)
             {
                 var currentCatalogItem = _conversationCatalogPresenter.Snapshot
-                    .FirstOrDefault(item => string.Equals(item.ConversationId, selectedSession.SessionId, StringComparison.Ordinal));
+                    .FirstOrDefault(item => string.Equals(item.ConversationId, debugSelectedSessionId, StringComparison.Ordinal));
                 _logger.LogInformation(
                     "Navigation rebuild evaluating selected session. SessionId={SessionId} CatalogCwd={CatalogCwd} BoundProfileId={BoundProfileId} RemoteSessionId={RemoteSessionId} SnapshotCount={SnapshotCount}",
-                    selectedSession.SessionId,
+                    debugSelectedSessionId,
                     currentCatalogItem?.Cwd,
                     currentCatalogItem?.BoundProfileId,
                     currentCatalogItem?.RemoteSessionId,
@@ -1211,13 +1211,13 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             return;
         }
 
-        if (projectedSelection is NavigationSelectionState.Session selectionState
-            && !string.IsNullOrWhiteSpace(selectionState.SessionId)
-            && _sessionIndex.TryGetValue(selectionState.SessionId, out var sessionItem))
+        var projectedSessionId = NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(projectedSelection);
+        if (projectedSessionId is not null
+            && _sessionIndex.TryGetValue(projectedSessionId, out var sessionItem))
         {
             _logger.LogDebug(
                 "SelectionProjection sessionId={SessionId} projectId={ProjectId} paneOpen={PaneOpen} projectIndexHas={ProjectIndexHas} semantic={SemanticSelection} previewActive={PreviewActive}",
-                selectionState.SessionId,
+                projectedSessionId,
                 sessionItem.ProjectId,
                 _navigationState.IsPaneOpen,
                 _projectIndex.ContainsKey(sessionItem.ProjectId),
@@ -1250,11 +1250,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection));
 
     private bool TryMaterializeProjectedSession(NavigationSelectionState selection)
-    {
-        return selection is NavigationSelectionState.Session sessionSelection
-            ? TryMaterializeSession(sessionSelection.SessionId)
-            : false;
-    }
+        => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(selection));
 
     private bool TryMaterializeSession(string? sessionId)
     {
