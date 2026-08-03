@@ -33,6 +33,11 @@ namespace SalmonEgg.Infrastructure.Transport
         private bool _disposed;
         private readonly object _lock = new();
 
+        // Serializes writes to the single stdin StreamWriter. A StreamWriter forbids concurrent
+        // async writes (throws ThrowAsyncIOInProgress); multiple in-flight ACP requests (e.g. a
+        // session/list and a session/load racing on the shared client) would otherwise overlap.
+        private readonly SemaphoreSlim _sendGate = new(1, 1);
+
         /// <summary>
         /// 消息接收事件。
         /// </summary>
@@ -266,16 +271,31 @@ namespace SalmonEgg.Infrastructure.Transport
 
             try
             {
+                await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Raced with Dispose: the transport is gone. Treat as not connected.
+                return false;
+            }
+
+            try
+            {
                 _logger.Information("[StdioTransport.SendMessage] Sending message. Length={Length}", message.Length);
 
                 // 发送消息后添加换行符
-                await _stdin.WriteAsync(message + Environment.NewLine).ConfigureAwait(false);
+                await _stdin.WriteAsync((message + Environment.NewLine).AsMemory(), cancellationToken).ConfigureAwait(false);
                 _logger.Debug("[StdioTransport.SendMessage] Wrote stdin; flushing...");
 
-                await _stdin.FlushAsync().ConfigureAwait(false);
+                await _stdin.FlushAsync(cancellationToken).ConfigureAwait(false);
                 _logger.Debug("[StdioTransport.SendMessage] Flush completed");
 
                 return true;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Caller-initiated cancellation is not a transport fault; do not tear the pipe down.
+                throw;
             }
             catch (Exception ex)
             {
@@ -284,10 +304,32 @@ namespace SalmonEgg.Infrastructure.Transport
                     $"Failed to send message: {ex.Message}",
                     ex,
                     TransportErrorKind.SendFailed));
-                IsConnected = false;
+
+                // Only a genuinely broken pipe / dead process is a permanent disconnect. A transient
+                // write conflict (e.g. InvalidOperationException from an overlapping write) is
+                // recoverable and must not zombify the transport or cancel all in-flight requests.
+                if (IsFatalSendFailure(ex))
+                {
+                    IsConnected = false;
+                }
+
                 return false;
             }
+            finally
+            {
+                // Guard against a Dispose that raced in while this send held the gate.
+                try { _sendGate.Release(); }
+                catch (ObjectDisposedException) { }
+            }
         }
+
+        // A send fault is fatal only when the underlying pipe/process is actually gone. IO errors and
+        // a confirmed process exit are terminal; everything else (notably InvalidOperationException from
+        // a transient stream-in-use overlap) is recoverable and leaves the connection intact.
+        private bool IsFatalSendFailure(Exception ex)
+            => ex is IOException
+               || ex is ObjectDisposedException
+               || (_process is { HasExited: true });
 
         /// <summary>
         /// 读取输出循环。
@@ -528,6 +570,7 @@ namespace SalmonEgg.Infrastructure.Transport
             stdout?.Dispose();
             stderr?.Dispose();
             process?.Dispose();
+            _sendGate.Dispose();
             GC.SuppressFinalize(this);
         }
 
