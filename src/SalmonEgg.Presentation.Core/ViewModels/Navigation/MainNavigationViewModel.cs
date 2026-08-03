@@ -1081,7 +1081,10 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     private List<ConversationCatalogDisplayItem> BuildVisibleSessionsForProject(List<ConversationCatalogDisplayItem> sessions)
     {
         var visible = sessions.Take(VisibleSessionsPerProjectLimit).ToList();
-        EnsureRequiredVisibleSession(sessions, visible, ResolveCurrentSelectionSessionId());
+        EnsureRequiredVisibleSession(
+            sessions,
+            visible,
+            NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection));
         EnsureRequiredVisibleSession(sessions, visible, ResolveActiveSessionActivationProjectionSessionId());
         return visible;
     }
@@ -1244,7 +1247,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     }
 
     private bool TryMaterializeSelectedSession()
-        => TryMaterializeSession(ResolveCurrentSelectionSessionId());
+        => TryMaterializeSession(NavigationSelectionProjectionPolicy.ResolveSelectionSessionId(CurrentSelection));
 
     private bool TryMaterializeProjectedSession(NavigationSelectionState selection)
     {
@@ -1267,49 +1270,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
     }
 
     private NavigationSelectionState ResolveProjectedSelection()
-    {
-        var activeSessionId = ResolveActiveSessionActivationProjectionSessionId();
-        if (!string.IsNullOrWhiteSpace(activeSessionId)
-            && (_sessionIndex.ContainsKey(activeSessionId) || CanMaterializeSelectedSession(activeSessionId)))
-        {
-            return new NavigationSelectionState.Session(activeSessionId);
-        }
-
-        return CurrentSelection;
-    }
-
-    private string? ResolveCurrentSelectionSessionId()
-        => CurrentSelection is NavigationSelectionState.Session currentSession
-            ? currentSession.SessionId
-            : null;
+        => NavigationSelectionProjectionPolicy.ResolveProjectedSelection(
+            CurrentSelection,
+            _shellRuntimeState.ActiveSessionActivation,
+            _shellRuntimeState.PendingShellContent,
+            _shellRuntimeState.LatestActivationToken,
+            CanProjectSession);
 
     private string? ResolveActiveSessionActivationProjectionSessionId()
-    {
-        var activeActivation = _shellRuntimeState.ActiveSessionActivation;
-        if (activeActivation is null
-            || string.IsNullOrWhiteSpace(activeActivation.SessionId)
-            || IsTerminalSessionActivationPhase(activeActivation.Phase))
-        {
-            return null;
-        }
+        => NavigationSelectionProjectionPolicy.ResolveActiveSessionActivationProjectionSessionId(
+            _shellRuntimeState.ActiveSessionActivation,
+            _shellRuntimeState.PendingShellContent,
+            _shellRuntimeState.LatestActivationToken);
 
-        if (_shellRuntimeState.PendingShellContent is { } pendingShellContent
-            && pendingShellContent != ShellNavigationContent.Chat)
-        {
-            return null;
-        }
-
-        if (_shellRuntimeState.LatestActivationToken > 0
-            && activeActivation.Version != _shellRuntimeState.LatestActivationToken)
-        {
-            return null;
-        }
-
-        return activeActivation.SessionId;
-    }
-
-    private static bool IsTerminalSessionActivationPhase(SessionActivationPhase phase)
-        => phase is SessionActivationPhase.None or SessionActivationPhase.Hydrated or SessionActivationPhase.Faulted;
+    private bool CanProjectSession(string sessionId)
+        => _sessionIndex.ContainsKey(sessionId) || CanMaterializeSelectedSession(sessionId);
 
     private bool CanMaterializeSelectedSession(string sessionId)
     {
