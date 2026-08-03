@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.ViewModels.Navigation;
@@ -12,71 +11,26 @@ public sealed class NavigationSelectionProjector : INavigationSelectionProjector
         StartNavItemViewModel startItem,
         DiscoverSessionsNavItemViewModel discoverSessionsItem,
         SettingsNavItemViewModel settingsItem,
-        IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
+        IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex)
     {
-        var activeProjects = new HashSet<string>(StringComparer.Ordinal);
-        var selectedSessions = new HashSet<string>(StringComparer.Ordinal);
-
         switch (selection)
         {
             case NavigationSelectionState.Start:
-                return new NavigationViewProjection(
-                    ControlSelectedItem: startItem,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
+                return new NavigationViewProjection(startItem, IsSettingsSelected: false);
 
             case NavigationSelectionState.DiscoverSessions:
-                return new NavigationViewProjection(
-                    ControlSelectedItem: discoverSessionsItem,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
+                return new NavigationViewProjection(discoverSessionsItem, IsSettingsSelected: false);
 
             case NavigationSelectionState.Settings:
-                return new NavigationViewProjection(
-                    ControlSelectedItem: settingsItem,
-                    IsSettingsSelected: true,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
+                return new NavigationViewProjection(settingsItem, IsSettingsSelected: true);
 
             case NavigationSelectionState.Session sessionSelection
                 when !string.IsNullOrWhiteSpace(sessionSelection.SessionId)
                      && sessionIndex.TryGetValue(sessionSelection.SessionId, out var sessionItem):
-                selectedSessions.Add(sessionItem.SessionId);
-
-                if (projectIndex.TryGetValue(sessionItem.ProjectId, out var projectItem))
-                {
-                    activeProjects.Add(projectItem.ProjectId);
-
-                    return new NavigationViewProjection(
-                        ControlSelectedItem: sessionItem,
-                        IsSettingsSelected: false,
-                        ActiveProjectIds: activeProjects,
-                        SelectedSessionIds: selectedSessions);
-                }
-
-                return new NavigationViewProjection(
-                    ControlSelectedItem: sessionItem,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
-
-            case NavigationSelectionState.Session sessionSelection
-                when !string.IsNullOrWhiteSpace(sessionSelection.SessionId):
-                return new NavigationViewProjection(
-                    ControlSelectedItem: null,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
+                return new NavigationViewProjection(sessionItem, IsSettingsSelected: false);
 
             default:
-                return new NavigationViewProjection(
-                    ControlSelectedItem: null,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: activeProjects,
-                    SelectedSessionIds: selectedSessions);
+                return new NavigationViewProjection(ControlSelectedItem: null, IsSettingsSelected: false);
         }
     }
 }

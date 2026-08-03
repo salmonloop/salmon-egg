@@ -253,11 +253,9 @@ public sealed class MainNavigationViewModelSelectionTests
             SetSessionSelection(selectionStore, "session-1");
 
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
             var projectedSession = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.Equal("session-1", projectedSession.SessionId);
             var selectedSession = Assert.Single(project.Children.OfType<SessionNavItemViewModel>(), s => s.SessionId == "session-1");
-            Assert.True(selectedSession.IsLogicallySelected);
             Assert.Equal("session-1", selectedSession.SessionId);
         }
         finally
@@ -290,11 +288,9 @@ public sealed class MainNavigationViewModelSelectionTests
             SetSessionSelection(selectionStore, "session-1");
 
             var project = Assert.Single(navVm.Items.OfType<ProjectNavItemViewModel>(), p => p.ProjectId == "project-1");
-            Assert.True(project.IsActiveDescendant);
 
             navState.SetPaneOpen(true);
 
-            Assert.True(project.IsActiveDescendant);
         }
         finally
         {
@@ -607,7 +603,6 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal("session-25", projected.SessionId);
             AssertProjectedSelectionIsMaterializedInMenuSource(navVm);
             Assert.Contains(project.Children.OfType<SessionNavItemViewModel>(), item => item.SessionId == "session-25");
-            Assert.True(project.IsActiveDescendant);
             var selection = Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
             Assert.Equal("session-25", selection.SessionId);
             var more = Assert.Single(project.Children.OfType<MoreSessionsNavItemViewModel>());
@@ -1293,9 +1288,7 @@ public sealed class MainNavigationViewModelSelectionTests
                 new Mock<IShellLayoutMetricsSink>().Object,
                 new StubNavigationSelectionProjector(new NavigationViewProjection(
                     ControlSelectedItem: sentinelItem,
-                    IsSettingsSelected: false,
-                    ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
-                    SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal))),
+                    IsSettingsSelected: false)),
                 selectionStore,
                 runtimeState,
                 presenter,
@@ -1662,7 +1655,6 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(0, projectedNotifies);
             Assert.Same(projectedAtStart, navVm.ProjectedControlSelectedItem);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
 
             // Phase 2: stay in Compact, toggle pane open/close (overlay)
             navState.SetPaneOpen(true);
@@ -1679,7 +1671,6 @@ public sealed class MainNavigationViewModelSelectionTests
             Assert.Equal(0, projectedNotifies);
             Assert.Same(projectedAtStart, navVm.ProjectedControlSelectedItem);
             Assert.IsType<NavigationSelectionState.Session>(navVm.CurrentSelection);
-            Assert.True(project.IsActiveDescendant);
 
             // Final: the exact same object reference throughout
             var sessionVm = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
@@ -1780,10 +1771,8 @@ public sealed class MainNavigationViewModelSelectionTests
                 SessionActivationPhase.SelectingConversation);
             navVm.RefreshSelectionProjection();
 
-            Assert.False(navVm.StartItem.IsLogicallySelected);
             var projected = Assert.IsType<SessionNavItemViewModel>(navVm.ProjectedControlSelectedItem);
             Assert.Equal("session-1", projected.SessionId);
-            Assert.True(projected.IsLogicallySelected);
             Assert.Equal(NavigationSelectionState.StartSelection, navVm.CurrentSelection);
         }
         finally
@@ -3399,8 +3388,7 @@ public sealed class MainNavigationViewModelSelectionTests
             StartNavItemViewModel startItem,
             DiscoverSessionsNavItemViewModel discoverSessionsItem,
             SettingsNavItemViewModel settingsItem,
-            IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-            IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex)
+            IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex)
             => _projection;
     }
 }

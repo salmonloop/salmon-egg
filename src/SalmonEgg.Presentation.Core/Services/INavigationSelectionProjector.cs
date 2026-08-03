@@ -11,6 +11,5 @@ public interface INavigationSelectionProjector
         StartNavItemViewModel startItem,
         DiscoverSessionsNavItemViewModel discoverSessionsItem,
         SettingsNavItemViewModel settingsItem,
-        IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex,
-        IReadOnlyDictionary<string, ProjectNavItemViewModel> projectIndex);
+        IReadOnlyDictionary<string, SessionNavItemViewModel> sessionIndex);
 }

@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
-using SalmonEgg.Domain.Models;
 using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Models.Navigation;
@@ -20,11 +19,6 @@ public sealed class NavigationSelectionProjectorTests
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: true);
         var start = new StartNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
-        var project = new ProjectNavItemViewModel(
-            new ProjectDefinition { ProjectId = "project-1", Name = "Demo", RootPath = @"C:\repo\demo" },
-            isSystemProject: false,
-            createSessionAsync: _ => Task.CompletedTask,
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
         var session = new SessionNavItemViewModel(
             sessionId: "session-1",
             projectId: "project-1",
@@ -41,12 +35,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("project-1", projection.ActiveProjectIds);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
         Assert.False(projection.IsSettingsSelected);
     }
 
@@ -55,11 +46,6 @@ public sealed class NavigationSelectionProjectorTests
     {
         var navState = new FakeNavigationPaneState(isPaneOpen: false);
         var start = new StartNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
-        var project = new ProjectNavItemViewModel(
-            new ProjectDefinition { ProjectId = "project-1", Name = "Demo", RootPath = @"C:\repo\demo" },
-            isSystemProject: false,
-            createSessionAsync: _ => Task.CompletedTask,
-            navigationState: navState, uiDispatcher: new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher());
         var session = new SessionNavItemViewModel(
             sessionId: "session-1",
             projectId: "project-1",
@@ -76,12 +62,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel> { ["project-1"] = project });
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("project-1", projection.ActiveProjectIds);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
     }
 
     [Fact]
@@ -105,11 +88,9 @@ public sealed class NavigationSelectionProjectorTests
             start,
             new DiscoverSessionsNavItemViewModel(navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
             new SettingsNavItemViewModel("Settings", navState, new SalmonEgg.Presentation.Core.Tests.Threading.ImmediateUiDispatcher()),
-            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session },
-            new Dictionary<string, ProjectNavItemViewModel>());
+            new Dictionary<string, SessionNavItemViewModel> { ["session-1"] = session });
 
         Assert.Same(session, projection.ControlSelectedItem);
-        Assert.Contains("session-1", projection.SelectedSessionIds);
     }
 
     [Fact]
@@ -126,8 +107,7 @@ public sealed class NavigationSelectionProjectorTests
             start,
             discover,
             settings,
-            new Dictionary<string, SessionNavItemViewModel>(),
-            new Dictionary<string, ProjectNavItemViewModel>());
+            new Dictionary<string, SessionNavItemViewModel>());
 
         Assert.Same(settings, projection.ControlSelectedItem);
         Assert.True(projection.IsSettingsSelected);

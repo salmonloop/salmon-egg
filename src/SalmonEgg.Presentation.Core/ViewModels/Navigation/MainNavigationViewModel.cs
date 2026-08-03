@@ -76,9 +76,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private NavigationViewProjection _projection = new(
         ControlSelectedItem: null,
-        IsSettingsSelected: false,
-        ActiveProjectIds: new HashSet<string>(StringComparer.Ordinal),
-        SelectedSessionIds: new HashSet<string>(StringComparer.Ordinal));
+        IsSettingsSelected: false);
 
     public NavigationSelectionState CurrentSelection => _shellSelection.CurrentSelection;
 
@@ -1189,9 +1187,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
                 StartItem,
                 DiscoverSessionsItem,
                 SettingsItem,
-                _sessionIndex,
-                _projectIndex);
-            ApplyVisualSelectionState(_projection);
+                _sessionIndex);
             OnPropertyChanged(nameof(IsSettingsSelected));
             OnPropertyChanged(nameof(ProjectedControlSelectedItem));
         }
@@ -1230,11 +1226,9 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             StartItem,
             DiscoverSessionsItem,
             SettingsItem,
-            _sessionIndex,
-            _projectIndex);
+            _sessionIndex);
 
         _projection = nextProjection;
-        ApplyVisualSelectionState(_projection);
         if (previousProjection.IsSettingsSelected != _projection.IsSettingsSelected)
         {
             OnPropertyChanged(nameof(IsSettingsSelected));
@@ -1295,32 +1289,6 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
         return _projectIndex.ContainsKey(projectId)
             || GetProjectDefinitions().Any(
                 project => string.Equals(project.Project.ProjectId, projectId, StringComparison.Ordinal));
-    }
-
-    private void ApplyVisualSelectionState(NavigationViewProjection projection)
-    {
-        // Visual selection state is now handled by NavigationView's native projection behavior
-        // We only need to maintain the logical state for our internal logic
-        SessionsLabelItem.IsLogicallySelected = false;
-        AddProjectItem.IsLogicallySelected = false;
-
-        foreach (var project in _projectVms.Values)
-        {
-            project.IsLogicallySelected = false;
-            project.IsActiveDescendant = projection.ActiveProjectIds.Contains(project.ProjectId);
-
-            foreach (var child in project.Children)
-            {
-                if (child is SessionNavItemViewModel sessionItem)
-                {
-                    child.IsLogicallySelected = projection.SelectedSessionIds.Contains(sessionItem.SessionId);
-                }
-                else
-                {
-                    child.IsLogicallySelected = false;
-                }
-            }
-        }
     }
 
     private void RefreshRelativeTimes()

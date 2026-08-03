@@ -82,7 +82,6 @@ public sealed partial class SettingsNavItemViewModel : MainNavItemViewModel
 public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
 {
     public string ProjectId { get; }
-    private bool _isActiveDescendant;
     private string _title = string.Empty;
     public string Title
     {
@@ -100,12 +99,6 @@ public sealed partial class ProjectNavItemViewModel : MainNavItemViewModel
     {
         get => _isExpanded;
         set => SetProperty(ref _isExpanded, value);
-    }
-
-    public bool IsActiveDescendant
-    {
-        get => _isActiveDescendant;
-        set => SetProperty(ref _isActiveDescendant, value);
     }
 
     public ProjectNavItemViewModel(
