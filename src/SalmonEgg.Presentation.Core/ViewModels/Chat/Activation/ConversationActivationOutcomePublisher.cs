@@ -119,13 +119,19 @@ internal sealed class ConversationActivationOutcomePublisher
                 return;
             }
 
-            if (phase != SessionActivationPhase.Faulted
-                && activeActivation.Phase == SessionActivationPhase.Faulted)
+            if (activeActivation.Phase == SessionActivationPhase.Faulted)
             {
-                return;
+                // A prior fault self-heals only on a genuine success terminal (Hydrated) for the
+                // same latest-intent snapshot. CanPublish + the Version match above already restrict
+                // this to the current owner's own recovery, so a superseded/stale callback cannot
+                // un-fault it. Any non-Hydrated phase (e.g. a late SelectingConversation) is stale
+                // relative to the fault and must not silently clear it.
+                if (phase != SessionActivationPhase.Hydrated)
+                {
+                    return;
+                }
             }
-
-            if (phase != SessionActivationPhase.Faulted
+            else if (phase != SessionActivationPhase.Faulted
                 && phase < activeActivation.Phase)
             {
                 return;

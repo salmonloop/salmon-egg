@@ -210,8 +210,11 @@ public sealed class ConversationActivationOutcomePublisherTests
     }
 
     [Fact]
-    public async Task TryPublishPhaseAsync_WhenActivationAlreadyFaulted_DoesNotOverwriteTerminalFault()
+    public async Task TryPublishPhaseAsync_WhenFaultedThenHydratedForSameSnapshot_SelfHealsToHydrated()
     {
+        // A transient fault (e.g. a recoverable RemoteConnectionNotReady) must not strand the
+        // activation banner. When the same latest-intent snapshot subsequently hydrates
+        // successfully, the fault self-heals to Hydrated.
         var runtimeState = new ShellNavigationRuntimeStateStore
         {
             CurrentShellContent = ShellNavigationContent.Chat,
@@ -234,10 +237,41 @@ public sealed class ConversationActivationOutcomePublisherTests
             SessionActivationPhase.Hydrated,
             "Hydrated");
 
-        Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
-        Assert.Equal("RemoteConnectionNotReady", runtimeState.ActiveSessionActivation?.Reason);
+        Assert.Equal(SessionActivationPhase.Hydrated, runtimeState.ActiveSessionActivation?.Phase);
+        Assert.Equal("Hydrated", runtimeState.ActiveSessionActivation?.Reason);
         Assert.False(runtimeState.IsSessionActivationInProgress);
         Assert.Equal(0, runtimeState.ActiveSessionActivationVersion);
+    }
+
+    [Fact]
+    public async Task TryPublishPhaseAsync_WhenFaultedThenStaleLowerPhase_KeepsFault()
+    {
+        // Only a genuine success terminal recovers a fault. A late, lower-ordinal phase
+        // (e.g. a straggling SelectingConversation) must not silently un-fault the snapshot.
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat,
+            LatestActivationToken = 9,
+            ActiveSessionActivationVersion = 0,
+            IsSessionActivationInProgress = false,
+            ActiveSessionActivation = new SessionActivationSnapshot(
+                "conv-1",
+                "project-1",
+                9,
+                SessionActivationPhase.Faulted,
+                "RemoteConnectionNotReady")
+        };
+        var publisher = CreatePublisher(runtimeState);
+
+        await publisher.TryPublishPhaseAsync(
+            "conv-1",
+            9,
+            expectedSnapshotVersion: 9,
+            SessionActivationPhase.SelectingConversation,
+            "SelectingConversation");
+
+        Assert.Equal(SessionActivationPhase.Faulted, runtimeState.ActiveSessionActivation?.Phase);
+        Assert.Equal("RemoteConnectionNotReady", runtimeState.ActiveSessionActivation?.Reason);
     }
 
     [Fact]
