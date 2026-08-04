@@ -119,6 +119,77 @@ public static class SkiaDesktopGuiSeedWriter
         return JsonSerializer.Serialize(document);
     }
 
+    /// <summary>
+    /// Multi-session stress seed for the left-nav gray-mask runtime probe. Writes N
+    /// sessions under one project with deliberately staggered CatalogUpdatedAt timestamps
+    /// so subsequent catalog ticks reorder the Children ObservableCollection while a
+    /// selection exists — the precise trigger surface for the stranded-selection visual.
+    /// Pair with SALMONEGG_NAV_MASK_PROBE=1 so the app self-drives activation across the
+    /// set and audits the realized NavigationViewItem tree on every rebuild.
+    /// </summary>
+    public static SeedPaths WriteMultiSessionStressSeed(string appDataRoot, int sessionCount = 6)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appDataRoot);
+        if (sessionCount < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sessionCount), "Stress seed requires at least two sessions.");
+        }
+
+        var paths = SeedPaths.Create(appDataRoot);
+        Directory.CreateDirectory(paths.ConfigDirectory);
+        Directory.CreateDirectory(paths.ConversationsDirectory);
+        Directory.CreateDirectory(paths.ProjectRootPath);
+
+        File.WriteAllText(paths.AppYamlPath, BuildAppYaml(paths.ProjectRootPath), Encoding.UTF8);
+        File.WriteAllText(paths.ConversationsPath, BuildMultiSessionStressConversationsJson(paths.ProjectRootPath, sessionCount), Encoding.UTF8);
+
+        return paths;
+    }
+
+    public static string BuildMultiSessionStressConversationsJson(string projectRootPath, int sessionCount)
+    {
+        // Base time and per-session offsets chosen so each session has a distinct,
+        // monotonically increasing CatalogUpdatedAt. A later probe pass can bump these
+        // (via a catalog refresh) to force a Move on the selected project's Children.
+        var baseTime = new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero);
+        var conversations = new List<object>();
+        for (var i = 0; i < sessionCount; i++)
+        {
+            var sessionId = $"skia-stress-session-{i + 1:D2}";
+            var sessionTime = baseTime.AddMinutes(i);
+            conversations.Add(new
+            {
+                conversationId = sessionId,
+                displayName = $"Stress Session {i + 1}",
+                createdAt = sessionTime,
+                lastUpdatedAt = sessionTime,
+                lastAccessedAt = sessionTime,
+                cwd = projectRootPath,
+                messages = new object[]
+                {
+                    new
+                    {
+                        id = $"{sessionId}-user-1",
+                        timestamp = sessionTime,
+                        contentType = "text",
+                        textContent = $"Seed message for {sessionId}.",
+                        isOutgoing = true
+                    }
+                }
+            });
+        }
+
+        var document = new
+        {
+            version = 1,
+            // Restore the first session so the app boots into a selected state.
+            lastActiveConversationId = "skia-stress-session-01",
+            conversations = conversations
+        };
+
+        return JsonSerializer.Serialize(document);
+    }
+
     public static string BuildAppYaml(string projectRootPath)
     {
         return string.Join(

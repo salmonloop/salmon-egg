@@ -23,6 +23,7 @@ using SalmonEgg.Presentation.Core.Services.Input;
 using SalmonEgg.Presentation.Core.Services.Shortcuts;
 using SalmonEgg.Presentation.Core.ViewModels.Chat.TaskOverview;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
+using SalmonEgg.Presentation.Diagnostics;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Search;
 using SalmonEgg.Presentation.Models.Settings;
@@ -730,6 +731,11 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
             });
         InitializeTray();
         await _startupWorkflow.InitializeRuntimeAsync().ConfigureAwait(true);
+
+        // Diagnostics-only left-nav selection-mask stress driver. It owns its own dependencies and
+        // self-gates on the environment; the shell only offers it the service provider once the
+        // navigation tree is live. No-op unless explicitly enabled.
+        NavigationMaskProbeDriver.TryStart(App.ServiceProvider);
     }
 
     private void AttachGamepadInput()
@@ -1163,6 +1169,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         var state = BuildMainNavAutomationSelectionState();
         MainNavAutomationSelectionStateText.Text = state;
         AutomationProperties.SetName(MainNavAutomationSelectionStateText, state);
+        AuditRealizedNavSelection();
     }
 
     private string BuildMainNavAutomationSelectionState()
@@ -1248,6 +1255,74 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
            && container.Visibility == Visibility.Visible
            && container.ActualWidth > 0
            && container.ActualHeight > 0;
+
+    /// <summary>
+    /// Reports every realized <see cref="NavigationViewItem"/> under the pane together with its
+    /// <see cref="NavigationViewItem.IsSelected"/> flag.
+    /// </summary>
+    /// <remarks>
+    /// NavigationView guarantees that "the entire NavigationView will show no more than one
+    /// selection indicator", so more than one selected container is a defect. Counting them needs
+    /// the realized container tree, which only the view can reach; the existing automation reader
+    /// resolves three known containers and cannot see a strand on any other row. This is a
+    /// read-only observation written to boot.log alongside the other automation markers.
+    /// </remarks>
+    [Conditional("DEBUG")]
+    private void AuditRealizedNavSelection()
+    {
+#if DEBUG
+        if (!IsGuiAutomationMode)
+        {
+            return;
+        }
+
+        var containers = new List<NavigationViewItem>();
+        CollectNavigationViewItems(MainNavView, containers);
+
+        var selectedCount = 0;
+        var descriptions = new List<string>(containers.Count);
+        foreach (var container in containers)
+        {
+            if (container.IsSelected)
+            {
+                selectedCount++;
+            }
+
+            descriptions.Add($"{DescribeNavContainer(container)}:IsSelected={container.IsSelected}");
+        }
+
+        App.BootLog(
+            $"NavSelectionAudit realized={containers.Count} selectedCount={selectedCount}"
+            + $" controlSelectedItem={DescribeNavSelection(MainNavView.SelectedItem)}"
+            + $" containers=[{string.Join(" | ", descriptions)}]");
+#endif
+    }
+
+    private static string DescribeNavContainer(NavigationViewItem container)
+    {
+        var automationId = container.GetValue(AutomationProperties.AutomationIdProperty) as string;
+        return string.IsNullOrWhiteSpace(automationId)
+            ? container.DataContext?.GetType().Name ?? container.GetType().Name
+            : automationId;
+    }
+
+    private static void CollectNavigationViewItems(DependencyObject root, List<NavigationViewItem> sink)
+    {
+        if (root is NavigationViewItem item)
+        {
+            sink.Add(item);
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is not null)
+            {
+                CollectNavigationViewItems(child, sink);
+            }
+        }
+    }
 
     private static string ResolveResourceString(string resourceKey, string fallback)
     {
