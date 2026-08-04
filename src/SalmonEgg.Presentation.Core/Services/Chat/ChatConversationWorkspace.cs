@@ -990,6 +990,25 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         _saveGate.Dispose();
     }
 
+    public async Task FlushPendingSaveAsync(CancellationToken cancellationToken = default)
+    {
+        if (_disposed || _preferences.SaveLocalHistory == false)
+        {
+            return;
+        }
+
+        // Claim the scheduled write instead of waiting for its debounce to elapse. Cancelling first
+        // means the timer cannot fire a second, redundant write behind this one.
+        var hadPendingSave = _saveCts is not null;
+        CancelScheduledSave();
+        if (!hadPendingSave)
+        {
+            return;
+        }
+
+        await SaveAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private void CancelScheduledSave()
     {
         _saveCts?.Cancel();

@@ -258,6 +258,57 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task FlushPendingSaveAsync_WithinSaveDebounceWindow_PersistsTheNewestState()
+    {
+        // Conversation state reaches disk through a debounce, so a process that ends inside that
+        // window would lose the newest turn unless the pending write is forced out.
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        store.Reset();
+
+        workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "session-1",
+            Transcript: [CreateTextMessage("m-1", "newest turn")],
+            Plan: Array.Empty<ConversationPlanEntrySnapshot>(),
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc)));
+        store.Reset();
+
+        // Schedules the debounced write; nothing has reached the store yet.
+        workspace.UpdateProjectAffinityOverride("session-1", "project-newest");
+        Assert.Null(store.LastSavedDocument);
+
+        await workspace.FlushPendingSaveAsync(TestContext.Current.CancellationToken);
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var conversation = Assert.Single(saved.Conversations);
+        Assert.Equal("project-newest", conversation.ProjectAffinityOverrideProjectId);
+    }
+
+    [Fact]
+    public async Task FlushPendingSaveAsync_WithNothingPending_DoesNotWrite()
+    {
+        // Teardown runs on every exit, including exits with no unsaved work; it must not manufacture
+        // a redundant write.
+        var syncContext = new ImmediateSynchronizationContext();
+        var store = new CapturingConversationStore();
+        var sessionManager = new FakeSessionManager();
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        store.Reset();
+
+        await workspace.FlushPendingSaveAsync(TestContext.Current.CancellationToken);
+
+        Assert.Null(store.LastSavedDocument);
+    }
+
+    [Fact]
     public async Task SaveAsync_PersistsConversationSessionState()
     {
         var syncContext = new ImmediateSynchronizationContext();
@@ -3228,6 +3279,11 @@ public sealed class ChatConversationWorkspaceTests
             LastSavedDocument = document;
             return Task.CompletedTask;
         }
+
+        /// <summary>
+        /// Forgets writes made during setup so a test can assert on writes it actually caused.
+        /// </summary>
+        public void Reset() => LastSavedDocument = null;
     }
 
     private sealed class LoadFailingConversationStore : IConversationStore

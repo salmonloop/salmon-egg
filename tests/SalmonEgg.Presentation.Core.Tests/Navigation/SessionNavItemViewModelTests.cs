@@ -198,6 +198,8 @@ public sealed class SessionNavItemViewModelTests
 
         public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+        public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
         public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
             => Task.FromResult(ArchiveResult);
 

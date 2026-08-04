@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Input;
 using SalmonEgg.Platforms.Windows;
@@ -101,9 +102,10 @@ public sealed partial class MainPage
 
     private void ExitFromTray()
     {
-        _allowClose = true;
         DisposePlatformTray();
-        App.MainWindowInstance?.Close();
+        // Tray exit is a second process boundary and must persist state like the window close path.
+        // The shutdown workflow is idempotent, so both paths can drive it.
+        _ = FlushRuntimeThenCloseAsync();
     }
 
     private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -113,13 +115,31 @@ public sealed partial class MainPage
             return;
         }
 
-        if (!Preferences.MinimizeToTray)
+        if (Preferences.MinimizeToTray)
         {
+            args.Cancel = true;
+            sender.Hide();
             return;
         }
 
+        // This is the WinUI process boundary. Teardown is asynchronous, so cancel this pass, flush,
+        // then close for real: the closing event cannot be awaited and a window that is already gone
+        // can no longer persist anything.
         args.Cancel = true;
-        sender.Hide();
+        _ = FlushRuntimeThenCloseAsync();
+    }
+
+    private async Task FlushRuntimeThenCloseAsync()
+    {
+        try
+        {
+            await App.ShutdownRuntimeAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _allowClose = true;
+            App.MainWindowInstance?.Close();
+        }
     }
 
     partial void AttachDebugKeyLogging()

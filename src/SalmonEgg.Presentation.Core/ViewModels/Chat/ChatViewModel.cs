@@ -62,7 +62,7 @@ namespace SalmonEgg.Presentation.ViewModels.Chat;
 /// Orchestrates the lifecycle of conversations, ACP agent connectivity, and UI state projection.
 /// Follows the MVVM pattern where the View is driven strictly by this ViewModel and its projected state.
 /// </summary>
-public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection, IChatRuntimeInitialization
+public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordinatorSink, IConversationSessionSwitcher, IConversationPanelCleanup, IConversationActivationOrchestratorSink, ISettingsForegroundChatConnection, IChatRuntimeInitialization, IChatRuntimePersistence
 {
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
     private const int TaskOverviewPlanPreviewLimit = 4;
@@ -2202,6 +2202,9 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
 
     Task<bool> IChatRuntimeInitialization.RestoreConversationsAsync()
         => EnsureConversationWorkspaceRestoredAsync();
+
+    Task IChatRuntimePersistence.FlushPendingStateAsync(CancellationToken cancellationToken)
+        => _conversationWorkspace.FlushPendingSaveAsync(cancellationToken);
 
     private Task<bool> EnsureConversationWorkspaceRestoredAsync(CancellationToken cancellationToken = default)
     {

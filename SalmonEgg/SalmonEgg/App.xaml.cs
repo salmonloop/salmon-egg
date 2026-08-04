@@ -260,6 +260,22 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         BootLog("OnLaunched: window activated");
     }
 
+    /// <summary>
+    /// Runs application teardown before the process ends.
+    /// </summary>
+    /// <remarks>
+    /// Every close path routes here so that runtime state is flushed exactly once by its owning
+    /// workflow. Hosts must await this before letting the window close; the window closing itself is
+    /// not a durability boundary because the flush is asynchronous.
+    /// </remarks>
+    internal static Task ShutdownRuntimeAsync()
+    {
+        var shutdown = ServiceProvider?.GetService<IApplicationShutdownWorkflow>();
+        return shutdown is null
+            ? Task.CompletedTask
+            : shutdown.ShutdownAsync();
+    }
+
     void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
     {
         throw new InvalidOperationException($"Failed to load {e.SourcePageType.FullName}: {e.Exception}");

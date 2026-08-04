@@ -58,6 +58,9 @@ public sealed class ConversationCatalogFacade : IConversationCatalog, IDisposabl
     public Task RestoreAsync(CancellationToken cancellationToken = default)
         => _workspace.RestoreAsync(cancellationToken);
 
+    public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default)
+        => _workspace.FlushPendingSaveAsync(cancellationToken);
+
     public async Task RegisterConversationAsync(
         string conversationId,
         CancellationToken cancellationToken = default)

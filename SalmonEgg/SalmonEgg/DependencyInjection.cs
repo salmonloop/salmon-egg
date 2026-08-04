@@ -489,6 +489,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<IConversationSessionSwitcher>(sp => sp.GetRequiredService<ChatViewModel>());
         services.AddSingleton<IChatRuntimeInitialization>(sp => sp.GetRequiredService<ChatViewModel>());
+        services.AddSingleton<IChatRuntimePersistence>(sp => sp.GetRequiredService<ChatViewModel>());
 
         services.AddSingleton<ChatShellViewModel>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
@@ -583,6 +584,10 @@ public static class DependencyInjection
             new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>()));
+        services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
+            new ApplicationShutdownWorkflow(
+                sp.GetRequiredService<IChatRuntimePersistence>(),
+                sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>()));
 
         // Global search
         services.AddSingleton<IGlobalSearchPipeline, DefaultGlobalSearchPipeline>();
