@@ -1286,6 +1286,92 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task SwitchConversationAsync_WhenConnectionIdentityChangesDuringHydration_ReachesTerminalActivationPhase()
+    {
+        // The recovery projection is discarded when the connection instance changes mid-hydration,
+        // and that path restores the runtime slice without touching the activation surface. Nothing
+        // supersedes this activation, so it must still reach a terminal phase; otherwise the shell
+        // sits on RemoteHydrationPending forever, neither settling nor reporting a failure.
+        var syncContext = new ImmediateSynchronizationContext();
+        var sessionManager = CreateSessionManagerWithStore();
+        await sessionManager.Object.CreateSessionAsync("conv-remote", @"C:\repo\remote");
+
+        var loadEntered = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowLoadCompletion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The navigation coordinator owns the activation snapshot in production. The orchestrator
+        // assigns the activation version, so mirror it into the snapshot the way the coordinator
+        // does: the outcome publisher only accepts a snapshot whose Version matches the activation.
+        var runtimeState = new ShellNavigationRuntimeStateStore
+        {
+            CurrentShellContent = ShellNavigationContent.Chat
+        };
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities).Returns(new AgentCapabilities(loadSession: true));
+        chatService.Setup(service => service.LoadSessionAsync(
+                It.Is<SessionLoadParams>(parameters =>
+                    string.Equals(parameters.SessionId, "remote-1", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .Returns<SessionLoadParams, CancellationToken>(async (_, cancellationToken) =>
+            {
+                loadEntered.TrySetResult(null);
+                await allowLoadCompletion.Task.WaitAsync(cancellationToken);
+                return SessionLoadResponse.Completed;
+            });
+
+        await using var fixture = CreateViewModel(
+            syncContext,
+            sessionManager: sessionManager,
+            shellNavigationRuntimeState: runtimeState);
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        fixture.Workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
+            ConversationId: "conv-remote",
+            Transcript: [],
+            Plan: [],
+            ShowPlanPanel: false,
+            CreatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            LastUpdatedAt: new DateTime(2026, 5, 14, 0, 0, 1, DateTimeKind.Utc),
+            ConnectionInstanceId: "conn-old"),
+            ConversationWorkspaceSnapshotOrigin.RuntimeProjection);
+        await fixture.UpdateStateAsync(state => state with
+        {
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-remote", new ConversationBindingSlice("conv-remote", "remote-1", "profile-1"))
+        });
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-old"));
+
+        // Mirror the coordinator: it publishes the activation snapshot before handing control to the
+        // chat view model. Both the coordinator token and the orchestrator version start at zero and
+        // advance once per activation, so this single activation carries version 1.
+        runtimeState.LatestActivationToken = 1;
+        runtimeState.ActiveSessionActivationVersion = 1;
+        runtimeState.IsSessionActivationInProgress = true;
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-remote",
+            "project-1",
+            1,
+            SessionActivationPhase.Selected);
+
+        var switchTask = fixture.ViewModel.SwitchConversationAsync("conv-remote", TestContext.Current.CancellationToken);
+        await WaitForConditionAsync(
+            () => Task.FromResult(loadEntered.Task.IsCompleted),
+            timeoutMilliseconds: 5000);
+
+        // The transport reconnects underneath the in-flight hydration. No new activation is issued.
+        await fixture.DispatchConnectionAsync(new SetConnectionInstanceIdAction("conn-new"));
+        allowLoadCompletion.TrySetResult(null);
+        await switchTask;
+
+        var activation = runtimeState.ActiveSessionActivation;
+        Assert.NotNull(activation);
+        Assert.True(
+            activation!.Phase is SessionActivationPhase.Hydrated or SessionActivationPhase.Faulted,
+            $"Activation must reach a terminal phase; observed {activation.Phase} (reason {activation.Reason ?? "<null>"}).");
+        Assert.False(runtimeState.IsSessionActivationInProgress);
+    }
+
+    [Fact]
     public async Task SwitchConversationAsync_WhenSameRemoteSessionMovesToNewConnectionInstance_CancelsOldRecoveryAndStartsNewLoad()
     {
         var syncContext = new ImmediateSynchronizationContext();

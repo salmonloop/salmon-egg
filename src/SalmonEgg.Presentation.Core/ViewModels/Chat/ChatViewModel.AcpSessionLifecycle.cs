@@ -892,6 +892,21 @@ public partial class ChatViewModel
                     reason: "Hydrated")
                 .ConfigureAwait(false);
         }
+        else if (!hydrated && activationStillCurrent)
+        {
+            // Hydration can end without a terminal phase: a recovery projection is discarded when
+            // the binding or the remote connection identity changes mid-flight, and that path
+            // restores the runtime slice without touching the activation surface. Nothing further
+            // downstream publishes a terminal phase either, so the activation would sit on a
+            // non-terminal phase forever and the shell would neither settle nor report a failure.
+            // Publishing here is the terminal backstop for this owner's own activation; the
+            // publisher keeps an already-published, more specific fault reason.
+            await PublishConversationActivationPhaseAsync(
+                    failureContext,
+                    SessionActivationPhase.Faulted,
+                    reason: "RemoteHydrationStalled")
+                .ConfigureAwait(false);
+        }
         var succeeded = hydrated && activationStillCurrent;
         Logger.LogInformation(
             "Conversation remote activation completed. ConversationId={ConversationId} Succeeded={Succeeded} Hydrated={Hydrated} ActivationStillCurrent={ActivationStillCurrent} ElapsedMs={ElapsedMs}",
