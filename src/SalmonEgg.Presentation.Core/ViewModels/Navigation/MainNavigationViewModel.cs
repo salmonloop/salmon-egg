@@ -950,9 +950,22 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
 
     private void SyncSessions(ProjectNavItemViewModel projectVm, List<ConversationCatalogDisplayItem> sessions, Dictionary<string, SessionNavItemViewModel> targetSessionIndex)
     {
-        var top = BuildVisibleSessionsForProject(sessions);
-        var remainingCount = Math.Max(0, sessions.Count - top.Count);
         var children = projectVm.Children;
+        var top = BuildVisibleSessionsForProject(sessions);
+        // While the pane is unsettled, hold already-rendered rows in place instead of applying a
+        // fresh recency order. Reordering a rendered row makes Uno's ItemsRepeater recycle its
+        // container (Move is decomposed into Remove+Add); the recycle pool keeps the selected flag
+        // and NavigationView's deselect of the previous item no-ops once the container is gone, so
+        // the mask strands across rows. See NavigationSessionOrderPolicy for the full rationale.
+        top = NavigationSessionOrderPolicy.ResolveAppliedOrder(
+            top,
+            children.OfType<SessionNavItemViewModel>()
+                .Where(session => !session.IsPlaceholder)
+                .Select(session => session.SessionId)
+                .ToList(),
+            ShouldPreserveRenderedSessionOrder(),
+            static session => session.ConversationId);
+        var remainingCount = Math.Max(0, sessions.Count - top.Count);
 
         int childIndex = 0;
         foreach (var session in top)
@@ -1075,6 +1088,21 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             DisposeItem(item);
         }
     }
+
+    /// <summary>
+    /// Whether the pane is currently unsettled, in which case already-rendered session rows must
+    /// keep their positions so no realized container is recycled mid-selection.
+    /// </summary>
+    /// <remarks>
+    /// Unsettled means a session activation is in flight (the control has already self-selected the
+    /// invoked leaf via <c>SelectsOnInvoked</c> while the outgoing row is still painted selected) or
+    /// the conversation catalog is still loading and therefore still churning the sort key. Both are
+    /// navigation-owned state; nothing here reads or writes the control's own selection.
+    /// </remarks>
+    private bool ShouldPreserveRenderedSessionOrder()
+        => IsConversationListLoading
+           || _shellRuntimeState.IsSessionActivationInProgress
+           || ResolveActiveSessionActivationProjectionSessionId() is not null;
 
     private List<ConversationCatalogDisplayItem> BuildVisibleSessionsForProject(List<ConversationCatalogDisplayItem> sessions)
     {

@@ -2916,6 +2916,201 @@ public sealed class MainNavigationViewModelSelectionTests
         }
     }
 
+    // --- Session order cadence ---
+    // Reordering a rendered row makes Uno's ItemsRepeater recycle its realized container (Move is
+    // decomposed into Remove+Add). The recycled container keeps NavigationView's selected flag and
+    // the deselect of the previous item no-ops once that container is gone, so the selection mask
+    // strands across rows. The pane therefore holds rendered rows while unsettled and converges to
+    // recency order once quiet.
+
+    [Fact]
+    public void SessionOrder_WhenSettled_AppliesRecencyOrder()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+
+            harness.PublishRecency("session-3", "session-1", "session-2");
+            harness.Rebuild();
+            Assert.Equal(["session-3", "session-1", "session-2"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileActivationInFlight_HoldsRenderedRowsInPlace()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.BeginActivation("session-1");
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileConversationListLoading_HoldsRenderedRowsInPlace()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.SetLoading(true);
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_AfterActivationSettles_ConvergesToRecencyOrder()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2", "session-3");
+            harness.Rebuild();
+
+            harness.BeginActivation("session-1");
+            harness.PublishRecency("session-3", "session-2", "session-1");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+
+            // The hold must not starve: a terminal activation lets the pending order apply.
+            harness.CompleteActivation();
+            harness.Rebuild();
+            Assert.Equal(["session-3", "session-2", "session-1"], harness.RenderedSessionIds());
+        });
+    }
+
+    [Fact]
+    public void SessionOrder_WhileUnsettled_StillAdmitsNewSessions()
+    {
+        RunWithImmediateContext(() =>
+        {
+            using var harness = CreateSessionOrderHarness("session-1", "session-2", "session-3");
+
+            harness.PublishRecency("session-1", "session-2");
+            harness.Rebuild();
+            Assert.Equal(["session-1", "session-2"], harness.RenderedSessionIds());
+
+            harness.BeginActivation("session-1");
+            // A newly catalogued session tops recency; it must still appear, appended after the
+            // held rows rather than displacing them (an insert does not recycle its siblings).
+            harness.PublishRecency("session-3", "session-1", "session-2");
+            harness.Rebuild();
+
+            Assert.Equal(["session-1", "session-2", "session-3"], harness.RenderedSessionIds());
+        });
+    }
+
+    private static void RunWithImmediateContext(Action body)
+    {
+        var originalContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new ImmediateSynchronizationContext());
+        try
+        {
+            body();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    private static SessionOrderHarness CreateSessionOrderHarness(params string[] sessionIds)
+    {
+        var navState = new FakeNavigationPaneState();
+        navState.SetPaneOpen(true);
+        var presenter = new MutableConversationCatalogDisplayReadModel();
+        presenter.SetLoading(false);
+
+        var navVm = CreateNavigationViewModel(
+            CreateChatSessionCatalog(sessionIds),
+            Mock.Of<ISessionManager>(),
+            CreatePreferencesWithProject(),
+            navState,
+            out _,
+            out var runtimeState,
+            presenter);
+
+        return new SessionOrderHarness(navVm, presenter, runtimeState);
+    }
+
+    private sealed class SessionOrderHarness(
+        MainNavigationViewModel navVm,
+        MutableConversationCatalogDisplayReadModel presenter,
+        ShellNavigationRuntimeStateStore runtimeState) : IDisposable
+    {
+        private static readonly DateTime OrderBaseline = new(2026, 4, 21, 12, 0, 0, DateTimeKind.Utc);
+        private long _activationVersion;
+
+        public void PublishRecency(params string[] sessionIdsMostRecentFirst)
+            => presenter.Refresh(sessionIdsMostRecentFirst.Select((id, index) => new ConversationCatalogItem(
+                id,
+                id,
+                @"C:\repo\demo",
+                OrderBaseline.AddMinutes(-index),
+                OrderBaseline.AddMinutes(-index),
+                OrderBaseline.AddMinutes(-index))));
+
+        public void SetLoading(bool value) => presenter.SetLoading(value);
+
+        public void BeginActivation(string sessionId)
+        {
+            _activationVersion++;
+            runtimeState.LatestActivationToken = _activationVersion;
+            runtimeState.ActiveSessionActivationVersion = _activationVersion;
+            runtimeState.IsSessionActivationInProgress = true;
+            runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+                sessionId,
+                "project-1",
+                _activationVersion,
+                SessionActivationPhase.SelectingConversation);
+        }
+
+        public void CompleteActivation()
+        {
+            var activation = runtimeState.ActiveSessionActivation;
+            runtimeState.IsSessionActivationInProgress = false;
+            runtimeState.ActiveSessionActivationVersion = 0;
+            if (activation is not null)
+            {
+                runtimeState.ActiveSessionActivation = activation with
+                {
+                    Phase = SessionActivationPhase.Hydrated
+                };
+            }
+        }
+
+        public void Rebuild() => navVm.RebuildTree();
+
+        public string[] RenderedSessionIds()
+            => navVm.Items
+                .OfType<ProjectNavItemViewModel>()
+                .SelectMany(project => project.Children.OfType<SessionNavItemViewModel>())
+                .Where(session => !session.IsPlaceholder)
+                .Select(session => session.SessionId)
+                .ToArray();
+
+        public void Dispose() => navVm.Dispose();
+    }
+
     private static MainNavigationViewModel CreateNavigationViewModel(
         IConversationCatalog chatCatalog,
         ISessionManager sessionManager,
