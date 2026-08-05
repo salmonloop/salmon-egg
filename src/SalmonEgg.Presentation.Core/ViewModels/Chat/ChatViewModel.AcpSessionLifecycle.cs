@@ -1135,50 +1135,15 @@ public partial class ChatViewModel
             return;
         }
 
-        var ownsShellActivation = RetireRemovedConversationShellActivation(conversationId);
+        // The activation fields travel as a set, so report the removal to the runtime state and let it
+        // retire them together rather than clearing individual fields from here.
+        var ownsShellActivation = _shellNavigationRuntimeState?.TryRetireSession(conversationId) == true;
         _ = RemoveConversationOverlayOwners(conversationId);
         if (ownsShellActivation
             || string.Equals(CurrentSessionId, conversationId, StringComparison.Ordinal))
         {
             _conversationActivationOrchestrator.SupersedeCurrentActivation("ConversationRemoved");
         }
-    }
-
-    private bool RetireRemovedConversationShellActivation(string conversationId)
-    {
-        if (_shellNavigationRuntimeState is null)
-        {
-            return false;
-        }
-
-        var activeActivation = _shellNavigationRuntimeState.ActiveSessionActivation;
-        var ownsShellActivation =
-            activeActivation?.Matches(conversationId) == true
-            || string.Equals(_shellNavigationRuntimeState.DesiredSessionId, conversationId, StringComparison.Ordinal)
-            || string.Equals(_shellNavigationRuntimeState.CommittedSessionId, conversationId, StringComparison.Ordinal);
-        if (!ownsShellActivation)
-        {
-            return false;
-        }
-
-        if (activeActivation?.Matches(conversationId) == true)
-        {
-            _shellNavigationRuntimeState.ActiveSessionActivation = null;
-        }
-
-        if (string.Equals(_shellNavigationRuntimeState.DesiredSessionId, conversationId, StringComparison.Ordinal))
-        {
-            _shellNavigationRuntimeState.DesiredSessionId = null;
-        }
-
-        if (string.Equals(_shellNavigationRuntimeState.CommittedSessionId, conversationId, StringComparison.Ordinal))
-        {
-            _shellNavigationRuntimeState.CommittedSessionId = null;
-        }
-
-        _shellNavigationRuntimeState.IsSessionActivationInProgress = false;
-        _shellNavigationRuntimeState.ActiveSessionActivationVersion = 0;
-        return true;
     }
 
     private bool RemoveConversationOverlayOwners(string conversationId)

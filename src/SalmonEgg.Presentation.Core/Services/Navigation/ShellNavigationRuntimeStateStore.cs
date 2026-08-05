@@ -28,4 +28,42 @@ public sealed partial class ShellNavigationRuntimeStateStore : ObservableObject,
 
     [ObservableProperty]
     private ShellNavigationContent? _pendingShellContent;
+
+    public bool TryRetireSession(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+
+        var ownsActivation =
+            ActiveSessionActivation?.Matches(sessionId) == true
+            || string.Equals(DesiredSessionId, sessionId, StringComparison.Ordinal)
+            || string.Equals(CommittedSessionId, sessionId, StringComparison.Ordinal);
+        if (!ownsActivation)
+        {
+            return false;
+        }
+
+        if (ActiveSessionActivation?.Matches(sessionId) == true)
+        {
+            ActiveSessionActivation = null;
+        }
+
+        if (string.Equals(DesiredSessionId, sessionId, StringComparison.Ordinal))
+        {
+            DesiredSessionId = null;
+        }
+
+        // The committed id and its version describe one fact, so they retire together.
+        if (string.Equals(CommittedSessionId, sessionId, StringComparison.Ordinal))
+        {
+            CommittedSessionId = null;
+            CommittedSessionActivationVersion = 0;
+        }
+
+        IsSessionActivationInProgress = false;
+        ActiveSessionActivationVersion = 0;
+        return true;
+    }
 }
