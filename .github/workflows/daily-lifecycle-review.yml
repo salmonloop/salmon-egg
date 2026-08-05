@@ -5,6 +5,13 @@ on:
     - cron: '0 0 * * *' # Run daily at midnight UTC
   workflow_dispatch: # Allow manual trigger
 
+env:
+  DOTNET_VERSION: "10.0.x"
+  SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
+  SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
+  SALMONEGG_ONEDRIVE_REDIRECT_URI: ${{ secrets.SALMONEGG_ONEDRIVE_REDIRECT_URI || vars.SALMONEGG_ONEDRIVE_REDIRECT_URI }}
+  SALMONEGG_ONEDRIVE_SCOPES: ${{ secrets.SALMONEGG_ONEDRIVE_SCOPES || vars.SALMONEGG_ONEDRIVE_SCOPES }}
+
 jobs:
   jules_task:
     runs-on: ubuntu-latest
