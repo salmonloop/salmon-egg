@@ -3480,43 +3480,6 @@ public sealed class MainNavigationViewModelSelectionTests
         return preferences;
     }
 
-    private sealed class FakeChatSessionCatalog : IConversationCatalog
-    {
-        private readonly List<string> _conversationIds;
-
-        public FakeChatSessionCatalog(params string[] conversationIds)
-        {
-            _conversationIds = new List<string>(conversationIds);
-        }
-
-        public bool IsConversationListLoading { get; set; }
-
-        public int ConversationListVersion { get; private set; }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public string[] GetKnownConversationIds() => _conversationIds.ToArray();
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public void RaiseConversationListChanged()
-        {
-            ConversationListVersion++;
-            RaisePropertyChanged(nameof(ConversationListVersion));
-        }
-
-        public void RaisePropertyChanged(string propertyName)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-
     private sealed class ControllableNavigationCoordinator : INavigationCoordinator
     {
         public bool SettingsActivationResult { get; set; } = true;

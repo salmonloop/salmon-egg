@@ -22,7 +22,7 @@ public sealed class SessionNavItemViewModelTests
         var ui = new RecordingUiInteractionService();
         var item = CreateItem(
             ui,
-            new RecordingChatSessionCatalog(),
+            new FakeChatSessionCatalog(),
             remoteSessionId: "remote-session-42",
             shell: shell);
 
@@ -39,7 +39,7 @@ public sealed class SessionNavItemViewModelTests
         var ui = new RecordingUiInteractionService();
         var item = CreateItem(
             ui,
-            new RecordingChatSessionCatalog(),
+            new FakeChatSessionCatalog(),
             remoteSessionId: "remote-session-42",
             shell: shell);
 
@@ -61,7 +61,7 @@ public sealed class SessionNavItemViewModelTests
         var ui = new RecordingUiInteractionService();
         var item = CreateItem(
             ui,
-            new RecordingChatSessionCatalog(),
+            new FakeChatSessionCatalog(),
             remoteSessionId: "remote-session-42",
             shell: shell);
 
@@ -79,7 +79,7 @@ public sealed class SessionNavItemViewModelTests
         var shell = new RecordingPlatformShellService();
         var item = CreateItem(
             new RecordingUiInteractionService(),
-            new RecordingChatSessionCatalog(),
+            new FakeChatSessionCatalog(),
             remoteSessionId: null,
             shell: shell);
 
@@ -98,9 +98,9 @@ public sealed class SessionNavItemViewModelTests
     public async Task ArchiveCommand_OnFailure_ShowsUserFeedback()
     {
         var ui = new RecordingUiInteractionService();
-        var catalog = new RecordingChatSessionCatalog
+        var catalog = new FakeChatSessionCatalog
         {
-            ArchiveResult = new ConversationMutationResult(false, false, "ConversationRemovalPersistFailed"),
+            MutationResult = new ConversationMutationResult(false, false, "ConversationRemovalPersistFailed"),
         };
         var item = CreateItem(ui, catalog);
 
@@ -114,7 +114,7 @@ public sealed class SessionNavItemViewModelTests
     public async Task ArchiveCommand_OnSuccess_DoesNotShowFeedback()
     {
         var ui = new RecordingUiInteractionService();
-        var catalog = new RecordingChatSessionCatalog();
+        var catalog = new FakeChatSessionCatalog();
         var item = CreateItem(ui, catalog);
 
         await item.ArchiveCommand.ExecuteAsync(null);
@@ -178,34 +178,6 @@ public sealed class SessionNavItemViewModelTests
 
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession)
             => Task.CompletedTask;
-    }
-
-    private sealed class RecordingChatSessionCatalog : IChatSessionCatalog
-    {
-        public ConversationMutationResult ArchiveResult { get; set; } = new(true, false, null);
-
-        public bool IsConversationListLoading => false;
-
-        public int ConversationListVersion => 0;
-
-        public event PropertyChangedEventHandler? PropertyChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public string[] GetKnownConversationIds() => [];
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(ArchiveResult);
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(ArchiveResult);
-
     }
 
     private sealed class RecordingPlatformShellService : IPlatformShellService

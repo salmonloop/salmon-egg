@@ -350,24 +350,23 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void DependencyInjection_RegistersPlainTextSecureStorageFallback()
+    public void DependencyInjection_UsesWasmPersistenceAndPlainTextSecureStorage()
     {
+        // Scoped to what is WASM-specific: the browser has no platform secret store, so this head
+        // must land on the plaintext one. The platform keychain matrix is asserted once, by
+        // SecureStorageRegistrationContractTests; name-level only per §5.5.
         var code = LoadFile(@"SalmonEgg\SalmonEgg\DependencyInjection.cs");
 
-        Assert.Contains("services.AddSingleton<IFileSystemPersistence, WasmFileSystemPersistence>();", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<IFileSystemPersistence, NoOpFileSystemPersistence>();", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", code, StringComparison.Ordinal);
-        Assert.Contains("sp.GetRequiredService<IConfigChangeSignal>()", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", code, StringComparison.Ordinal);
-        // Name-level only: asserting the constructor argument list would break on any dependency
-        // change without a behavior change, which §5.5 rules out. FallbackSecureStorageTests covers
-        // the behavior these two registrations exist for.
-        Assert.Contains("FallbackSecureStorage", code, StringComparison.Ordinal);
-        Assert.Contains("LinuxSecretServiceSecureStorage", code, StringComparison.Ordinal);
-        Assert.Contains("MacOSKeychainSecureStorage", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", code, StringComparison.Ordinal);
-        Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", code, StringComparison.Ordinal);
+        Assert.Contains("WasmFileSystemPersistence", code, StringComparison.Ordinal);
+        Assert.Contains("NoOpFileSystemPersistence", code, StringComparison.Ordinal);
+        Assert.Contains("PlainTextFileSecureStorage", code, StringComparison.Ordinal);
         Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Storage\PlainTextFileSecureStorage.cs")));
+
+        // The WASM branch must keep resolving ISecureStorage to the plaintext store; the contract
+        // test covers the other platforms but not this one.
+        var wasmBranch = ExtractWasmSecureStorageBranch(code);
+        Assert.Contains("ISecureStorage", wasmBranch, StringComparison.Ordinal);
+        Assert.Contains("PlainTextFileSecureStorage", wasmBranch, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -466,6 +465,27 @@ public sealed class WasmStartupAssetsTests
 
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
+
+    /// <summary>
+    /// Returns the <c>__WASM__</c> arm of the secure-storage conditional, so an assertion about the
+    /// WASM registration cannot be satisfied by another platform's arm.
+    /// </summary>
+    private static string ExtractWasmSecureStorageBranch(string code)
+    {
+        // The file has several __WASM__ arms, so anchor on the secure-storage conditional rather than
+        // the first marker: otherwise this reads an unrelated branch and passes for the wrong reason.
+        var conditionalStart = code.IndexOf("services.AddSingleton<ISecureStorage", StringComparison.Ordinal);
+        Assert.True(conditionalStart >= 0, "DependencyInjection.cs no longer registers ISecureStorage.");
+
+        const string marker = "#elif __WASM__";
+        var searchFrom = code.LastIndexOf("#if ", conditionalStart, StringComparison.Ordinal);
+        var start = code.IndexOf(marker, searchFrom < 0 ? 0 : searchFrom, StringComparison.Ordinal);
+        Assert.True(start >= 0, "DependencyInjection.cs no longer has a __WASM__ secure-storage branch.");
+
+        var rest = code[(start + marker.Length)..];
+        var end = rest.IndexOf('#', StringComparison.Ordinal);
+        return end < 0 ? rest : rest[..end];
+    }
 
     private static XElement LoadBrowserWasmPropertyGroup()
     {

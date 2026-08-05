@@ -148,29 +148,4 @@ public sealed class NavigationSelectionProjectorTests
         public Task ShowSessionsListDialogAsync(string title, IReadOnlyList<SessionNavItemViewModel> sessions, Action<string> onPickSession) => Task.CompletedTask;
     }
 
-    private sealed class FakeChatSessionCatalog : IChatSessionCatalog
-    {
-        public bool IsConversationListLoading => false;
-
-        public int ConversationListVersion => 0;
-
-        public event PropertyChangedEventHandler? PropertyChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public string[] GetKnownConversationIds() => [];
-
-        public Task RestoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task FlushPendingSaveAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task<ConversationMutationResult> ArchiveConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-        public Task<ConversationMutationResult> DeleteConversationAsync(string conversationId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ConversationMutationResult(true, false, null));
-
-    }
 }
