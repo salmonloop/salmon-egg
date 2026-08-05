@@ -196,7 +196,7 @@ public sealed class StartViewModelTests
             var workflow = new Mock<IChatLaunchWorkflow>();
 
             using var nav = CreateNavigationViewModel(chat, Mock.Of<ISessionManager>(), preferences);
-            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object);
+            var startViewModel = CreateStartViewModel(chat, preferences, nav, workflow.Object, localizer: new TestCoreStringLocalizer());
 
             chat.ViewModel.CurrentPrompt = "chat draft";
             startViewModel.OnComposerLoaded();

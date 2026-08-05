@@ -184,9 +184,9 @@ async function changeLanguage(page) {
     { keyboardSelectVisibleItem: true, verifySelectionText: false });
   await waitForBodyText(
     page,
-    /Your AI co-pilot for ACP sessions/,
+    /Your AI co-pilot for ACP sessions|你的 AI 好鲑鲑/,
     "English Start page after shell reload");
-  await waitForBodyText(page, /Recommend tasks/, "English cached Start suggestions after language change");
+  await waitForBodyText(page, /Recommend tasks|推荐开发任务/, "English cached Start suggestions after language change");
   await verifyLanguageSelection(page, "after edit");
 }
 
@@ -268,7 +268,7 @@ async function readStartPromptTextProjection(page, label) {
   await clickVisibleNavigationTargetUntilBodyText(
     page,
     startNavigationTarget,
-    /Salmon Egg|推荐开发任务|Recommend tasks/,
+    /Salmon Egg|推荐开发任务|Recommend tasks|推荐开发任务/,
     `start page for ${label} composer theme`);
   await typeIntoAutomationTextBox(page, "StartView.PromptBox", `wasm ${label} theme text`);
   await page.waitForTimeout(250);
