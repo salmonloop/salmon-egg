@@ -136,9 +136,26 @@ namespace SalmonEgg.Application.Services.Chat
             {
                 if (e.Update != null)
                 {
-                    var entry = CreateSessionUpdateEntry(e.Update, e.SessionId);
-                    var session = await GetOrCreateSessionAsync(e.SessionId).ConfigureAwait(false);
-                    session.AddHistoryEntry(entry);
+                    // A session id only exists because we established it through session/new, load or
+                    // resume, and each of those carries the cwd. An update for an id we do not track is
+                    // therefore either late (the session was closed or rolled back) or the peer is out
+                    // of step; materialising a session from it would invent one with no cwd, which is
+                    // not a state a session can legitimately be in. Record and skip local tracking.
+                    // Forwarding below is deliberately left intact so subscribers still observe it.
+                    var session = _sessionManager.GetSession(e.SessionId);
+                    if (session is null)
+                    {
+                        _errorLogger.LogError(new ErrorLogEntry(
+                            "Session update received for an untracked session",
+                            "The update was not recorded locally because the session is not established.",
+                            ErrorSeverity.Warning,
+                            nameof(OnSessionUpdateReceived),
+                            e.SessionId));
+                    }
+                    else
+                    {
+                        session.AddHistoryEntry(CreateSessionUpdateEntry(e.Update, e.SessionId));
+                    }
 
                     // CRITICAL PATH: Syncing Agent's internal state (Plan, Mode) with our local variables.
                     // This allows the ViewModel to access the latest state without parsing history.
@@ -430,7 +447,6 @@ namespace SalmonEgg.Application.Services.Chat
                     sessionId,
                     false,
                     configOptionsAuthoritative,
-                    null,
                     SessionState.Active,
                     null,
                     []);
@@ -440,7 +456,6 @@ namespace SalmonEgg.Application.Services.Chat
                 sessionId,
                 true,
                 configOptionsAuthoritative,
-                session.Cwd,
                 session.State,
                 CloneModeState(session.Mode),
                 session.History.ToList());
@@ -459,7 +474,8 @@ namespace SalmonEgg.Application.Services.Chat
                 snapshot.SessionId,
                 session =>
                 {
-                    session.Cwd = snapshot.Cwd;
+                    // Cwd is established when the session is created and never changes, so a
+                    // rollback has nothing to restore for it.
                     session.State = snapshot.State;
                     session.Mode = CloneModeState(snapshot.Mode) ?? new SessionModeState();
                     session.History.Clear();
@@ -499,7 +515,6 @@ namespace SalmonEgg.Application.Services.Chat
                 string sessionId,
                 bool existed,
                 bool configOptionsAuthoritative,
-                string? cwd,
                 SessionState state,
                 SessionModeState? mode,
                 List<SessionUpdateEntry> history)
@@ -507,7 +522,6 @@ namespace SalmonEgg.Application.Services.Chat
                 SessionId = sessionId;
                 Existed = existed;
                 ConfigOptionsAuthoritative = configOptionsAuthoritative;
-                Cwd = cwd;
                 State = state;
                 Mode = mode;
                 History = history;
@@ -518,8 +532,6 @@ namespace SalmonEgg.Application.Services.Chat
             public bool Existed { get; }
 
             public bool ConfigOptionsAuthoritative { get; }
-
-            public string? Cwd { get; }
 
             public SessionState State { get; }
 
@@ -621,17 +633,15 @@ namespace SalmonEgg.Application.Services.Chat
 
             try
             {
+                // The slot is created carrying this cwd, and a session's cwd never changes, so there is
+                // nothing to re-assign here.
                 _sessionManager.GetOrCreateTrackingSlot(@params.SessionId, @params.Cwd);
 
                 // Clear history before loading to ensure we don't have duplicate entries
                 // if the server replays the history during the load process.
                 _sessionManager.UpdateSession(
                     @params.SessionId,
-                    s =>
-                    {
-                        s.Cwd = @params.Cwd;
-                        s.History.Clear();
-                    },
+                    s => s.History.Clear(),
                     updateActivity: false);
 
                 var response = await _acpClient.LoadSessionAsync(@params, cancellationToken).ConfigureAwait(false);
@@ -639,11 +649,7 @@ namespace SalmonEgg.Application.Services.Chat
                 {
                     _sessionManager.UpdateSession(
                         @params.SessionId,
-                        s =>
-                        {
-                            s.Cwd = @params.Cwd;
-                            s.State = SessionState.Active;
-                        },
+                        s => s.State = SessionState.Active,
                         updateActivity: false);
                     lock (_stateGate)
                     {
@@ -724,20 +730,13 @@ namespace SalmonEgg.Application.Services.Chat
 
             try
             {
+                // The slot is created carrying this cwd, and a session's cwd never changes.
                 _sessionManager.GetOrCreateTrackingSlot(@params.SessionId, @params.Cwd);
-                _sessionManager.UpdateSession(
-                    @params.SessionId,
-                    s => s.Cwd = @params.Cwd,
-                    updateActivity: false);
 
                 var response = await _acpClient.ResumeSessionAsync(@params, cancellationToken).ConfigureAwait(false);
                 _sessionManager.UpdateSession(
                     @params.SessionId,
-                    s =>
-                    {
-                        s.Cwd = @params.Cwd;
-                        s.State = SessionState.Active;
-                    },
+                    s => s.State = SessionState.Active,
                     updateActivity: false);
                 lock (_stateGate)
                 {

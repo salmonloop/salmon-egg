@@ -110,7 +110,7 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpRestoredConversationCwd()
+    public async Task RestoreAsync_WhenPersistedConversationCarriesSessionInfoCwd_EstablishesSessionWithIt()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore
@@ -121,47 +121,7 @@ public sealed class ChatConversationWorkspaceTests
                 {
                     new ConversationRecord
                     {
-                        ConversationId = "session-existing",
-                        DisplayName = "Session Existing",
-                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
-                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
-                        Cwd = @"C:\repo\restored"
-                    }
-                }
-            }
-        };
-
-        var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-existing", null);
-        var existing = sessionManager.GetSession("session-existing");
-        Assert.NotNull(existing);
-        Assert.Null(existing!.Cwd);
-
-        var preferences = CreatePreferences(syncContext);
-        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
-
-        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
-
-        var session = sessionManager.GetSession("session-existing");
-        Assert.NotNull(session);
-        Assert.Equal(@"C:\repo\restored", session!.Cwd);
-        var catalogItem = Assert.Single(workspace.GetCatalog(), item => item.ConversationId == "session-existing");
-        Assert.Equal(@"C:\repo\restored", catalogItem.Cwd);
-    }
-
-    [Fact]
-    public async Task RestoreAsync_ExistingSessionWithMissingCwd_PicksUpSessionInfoCwd()
-    {
-        var syncContext = new ImmediateSynchronizationContext();
-        var store = new CapturingConversationStore
-        {
-            LoadResult = new ConversationDocument
-            {
-                Conversations =
-                {
-                    new ConversationRecord
-                    {
-                        ConversationId = "session-existing-info",
+                        ConversationId = "session-info-only",
                         DisplayName = "Session Existing",
                         CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
                         LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
@@ -175,16 +135,16 @@ public sealed class ChatConversationWorkspaceTests
         };
 
         var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-existing-info", null);
-
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
 
         await workspace.RestoreAsync(TestContext.Current.CancellationToken);
 
-        var session = sessionManager.GetSession("session-existing-info");
+        var session = sessionManager.GetSession("session-info-only");
         Assert.NotNull(session);
         Assert.Equal(@"C:\repo\info", session!.Cwd);
+        var catalogItem = Assert.Single(workspace.GetCatalog(), item => item.ConversationId == "session-info-only");
+        Assert.Equal(@"C:\repo\info", catalogItem.Cwd);
     }
 
     [Fact]
@@ -2132,14 +2092,17 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
-    public async Task GetCatalog_WhenSessionManagerCwdDrifts_UsesWorkspaceSessionInfoCwdForProjection()
+    public async Task GetCatalog_WhenWorkspaceSessionInfoCarriesCwd_ProjectsItAheadOfTheLocalSession()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
         var preferences = CreatePreferences(syncContext);
 
-        var session = await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
+        // The local session and the workspace snapshot disagree. That cannot happen for an
+        // established conversation any more, but the projection order still has to be pinned: the
+        // catalog reports what the remote told us the session runs in, not a locally derived guess.
+        await sessionManager.CreateSessionAsync("session-1", @"C:\Users\shang\AppData\Local\SalmonEgg");
 
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
         workspace.UpsertConversationSnapshot(new ConversationWorkspaceSnapshot(
@@ -2154,8 +2117,6 @@ public sealed class ChatConversationWorkspaceTests
                 Title = "Original title",
                 Cwd = @"C:\repo\one"
             }));
-
-        session.Cwd = @"C:\Users\shang\AppData\Local\SalmonEgg";
 
         var item = Assert.Single(workspace.GetCatalog());
         Assert.Equal(@"C:\repo\one", item.Cwd);

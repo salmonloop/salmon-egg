@@ -23,12 +23,14 @@ namespace SalmonEgg.Infrastructure.Services
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
         /// <returns>创建后的会话对象</returns>
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
                 throw new ArgumentException("Session ID cannot be empty.", nameof(sessionId));
             }
+
+            ArgumentException.ThrowIfNullOrWhiteSpace(cwd);
 
             var session = new Session(sessionId, cwd);
             session.DisplayName = SessionNamePolicy.CreateDefault(sessionId);
@@ -71,12 +73,14 @@ namespace SalmonEgg.Infrastructure.Services
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录（仅在本调用实际创建追踪槽时生效）</param>
         /// <returns>已存在或新建的运行时追踪槽</returns>
-        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
             {
                 throw new ArgumentException("Session ID cannot be empty.", nameof(sessionId));
             }
+
+            ArgumentNullException.ThrowIfNull(cwd);
 
             return _sessions.GetOrAdd(sessionId, static (id, arg) =>
             {

@@ -17,7 +17,7 @@ namespace SalmonEgg.Domain.Services
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
         /// <returns>创建后的会话对象</returns>
-        Task<Session> CreateSessionAsync(string sessionId, string? cwd = null);
+        Task<Session> CreateSessionAsync(string sessionId, string cwd);
 
         /// <summary>
         /// 根据会话 ID 获取会话。
@@ -38,7 +38,7 @@ namespace SalmonEgg.Domain.Services
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录（仅本调用实际新建容器时生效）</param>
         /// <returns>现有或新创建的运行时追踪容器</returns>
-        Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null);
+        Session GetOrCreateTrackingSlot(string sessionId, string cwd);
 
         /// <summary>
         /// 在会话锁下拷贝历史记录，返回快照。

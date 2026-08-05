@@ -3219,13 +3219,11 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _authenticationCoordinator.ClearAuthenticationRequirement(_acpConnectionCoordinator);
             _ = _authenticationCoordinator.UpdateAgentInfoAsync(_chatService, _chatStore, SelectedProfileId);
 
-            if (string.IsNullOrWhiteSpace(CurrentSessionId))
-            {
-                var sessionId = Guid.NewGuid().ToString("N");
-                await _sessionManager.CreateSessionAsync(sessionId, GetActiveSessionCwdOrDefault()).ConfigureAwait(false);
-                await ActivateConversationAsync(sessionId).ConfigureAwait(false);
-            }
-
+            // Applying a transport configuration does not start a conversation. It used to open one
+            // here, but the cwd it passed was read from the current conversation while this branch only
+            // runs when there is none, so it could only ever create a session with no working
+            // directory: a session that cannot be resolved to a project and has to be corrected later.
+            // Starting a conversation is its own explicit action, and that path collects a cwd.
             ShowTransportConfigPanel = false;
         }
         catch (OperationCanceledException)

@@ -9,7 +9,7 @@ public sealed class SessionManagerDisplayNameTests
     public async Task CreateSession_SetsDefaultDisplayName()
     {
         var manager = new SessionManager();
-        var s = await manager.CreateSessionAsync("1234567890");
+        var s = await manager.CreateSessionAsync("1234567890", @"C:\repo\demo");
 
         Assert.Equal("Session 12345678", s.DisplayName);
         Assert.Equal("Session 12345678", manager.GetSession("1234567890")!.DisplayName);
@@ -19,7 +19,7 @@ public sealed class SessionManagerDisplayNameTests
     public async Task UpdateSession_AllowsRenaming()
     {
         var manager = new SessionManager();
-        await manager.CreateSessionAsync("abc");
+        await manager.CreateSessionAsync("abc", @"C:\repo\demo");
 
         var ok = manager.UpdateSession("abc", s => s.DisplayName = "My Session");
         Assert.True(ok);
@@ -30,7 +30,7 @@ public sealed class SessionManagerDisplayNameTests
     public async Task UpdateSession_CanSkipActivityUpdate()
     {
         var manager = new SessionManager();
-        await manager.CreateSessionAsync("abc");
+        await manager.CreateSessionAsync("abc", @"C:\repo\demo");
 
         var original = manager.GetSession("abc")!.LastActivityAt;
         var ok = manager.UpdateSession("abc", s => s.DisplayName = "My Session", updateActivity: false);

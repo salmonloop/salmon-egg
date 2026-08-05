@@ -100,19 +100,19 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 continue;
             }
 
-            var restoredCwd = ResolveConversationRecordCwd(conversation);
-            var existingSession = _sessionManager.GetSession(conversation.ConversationId);
-            if (existingSession is not null)
+            // An already-tracked session carries the cwd it was established with, so there is nothing
+            // to reconcile for it here.
+            if (_sessionManager.GetSession(conversation.ConversationId) is not null)
             {
-                if (!string.IsNullOrWhiteSpace(restoredCwd)
-                    && string.IsNullOrWhiteSpace(existingSession.Cwd))
-                {
-                    _sessionManager.UpdateSession(
-                        conversation.ConversationId,
-                        session => session.Cwd = restoredCwd,
-                        updateActivity: false);
-                }
+                continue;
+            }
 
+            var restoredCwd = ResolveConversationRecordCwd(conversation);
+            if (string.IsNullOrWhiteSpace(restoredCwd))
+            {
+                _logger.LogDebug(
+                    "Persisted conversation has no working directory; not establishing a session. ConversationId={ConversationId}",
+                    conversation.ConversationId);
                 continue;
             }
 
@@ -707,18 +707,31 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
+        var establishedCwd = string.IsNullOrWhiteSpace(sessionInfo.Cwd) ? null : sessionInfo.Cwd.Trim();
         if (_sessionManager.GetSession(conversationId) == null)
         {
-            try
-            {
-                await _sessionManager.CreateSessionAsync(conversationId).ConfigureAwait(false);
-            }
-            catch (Exception ex)
+            // Session info is metadata: it may refresh title and timestamps, but it can only establish
+            // a session when it actually carries the working directory, because a session without one
+            // cannot be resolved to a project and would have to be corrected afterwards.
+            if (establishedCwd is null)
             {
                 _logger.LogDebug(
-                    ex,
-                    "Failed to create missing session for session info update (ConversationId={ConversationId})",
+                    "Session info update carries no working directory; not establishing a session. ConversationId={ConversationId}",
                     conversationId);
+            }
+            else
+            {
+                try
+                {
+                    await _sessionManager.CreateSessionAsync(conversationId, establishedCwd).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(
+                        ex,
+                        "Failed to create missing session for session info update (ConversationId={ConversationId})",
+                        conversationId);
+                }
             }
         }
 
@@ -773,10 +786,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 }
 
                 var normalizedCwd = string.IsNullOrWhiteSpace(mergedSessionInfo?.Cwd) ? null : mergedSessionInfo.Cwd.Trim();
-                if (!string.IsNullOrWhiteSpace(normalizedCwd))
+                if (normalizedCwd is not null)
                 {
-                    var existingCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
-                    if (!string.Equals(existingCwd, normalizedCwd, StringComparison.Ordinal)
+                    // Session info comes from the agent, which is authoritative for where the session
+                    // actually runs. Our persisted copy can be stale, so adopt the reported value: this
+                    // corrects our record rather than changing the session's working directory.
+                    var localCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
+                    if (!string.Equals(localCwd, normalizedCwd, StringComparison.Ordinal)
                         && _sessionManager.UpdateSession(conversationId, session => session.Cwd = normalizedCwd, updateActivity: false))
                     {
                         metadataChanged = true;
@@ -1119,10 +1135,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         session.LastActivityAt = binding.LastAccessedAt > binding.LastUpdatedAt
                             ? binding.LastAccessedAt
                             : binding.LastUpdatedAt;
-                        if (!string.IsNullOrWhiteSpace(restoredCwd))
-                        {
-                            session.Cwd = restoredCwd;
-                        }
                     },
                     updateActivity: false);
             }

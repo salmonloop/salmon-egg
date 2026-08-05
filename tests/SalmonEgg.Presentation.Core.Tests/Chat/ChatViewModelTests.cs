@@ -16180,6 +16180,8 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
+        // The recovery lease is keyed on the working directory, so adopting an authoritative
+        // correction is what makes the next hydration a replacement rather than a reuse.
         sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>
@@ -16278,6 +16280,7 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
+        // See above: the corrected cwd is what distinguishes the replacement request.
         sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
         using var secondHydrateCts = new CancellationTokenSource();
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(secondHydrateCts.Token);
@@ -16383,6 +16386,7 @@ public partial class ChatViewModelTests
             return Task.FromResult(firstLoadStarted.Task.IsCompleted);
         }, timeoutMilliseconds: 2000);
 
+        // See above: the corrected cwd is what distinguishes the replacement request.
         sessionManager.Object.UpdateSession("conv-remote", session => session.Cwd = @"C:\repo\new", updateActivity: false);
         var secondHydrateTask = fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
         await WaitForConditionAsync(() =>

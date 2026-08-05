@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -57,8 +58,15 @@ namespace SalmonEgg.Domain.Models.Session
         /// <summary>
         /// 会话的工作目录。
         /// </summary>
+        /// <remarks>
+        /// ACP 要求 <c>session/new</c>、<c>session/load</c>、<c>session/resume</c> 都携带 cwd，所以一个
+        /// 会话不可能没有工作目录——声明为非空必填，避免"先建会话、之后再补 cwd"这种信息不全就落地的形态。
+        /// 但它可写：协议没有改变既有会话 cwd 的方法，可我们持久化的这份**副本**可能过期或错误，
+        /// 而 <c>session/list</c> 报告的是权威值。写入只应表示"采纳权威值纠正本地副本"，
+        /// 不表示会话的工作目录真的变了。
+        /// </remarks>
         [JsonPropertyName("cwd")]
-        public string? Cwd { get; set; }
+        public required string Cwd { get; set; }
 
         /// <summary>
         /// 创建新的会话实例。
@@ -74,7 +82,8 @@ namespace SalmonEgg.Domain.Models.Session
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
         /// <param name="cwd">工作目录</param>
-        public Session(string sessionId, string? cwd = null)
+        [SetsRequiredMembers]
+        public Session(string sessionId, string cwd)
         {
             SessionId = sessionId;
             Cwd = cwd;

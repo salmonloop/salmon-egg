@@ -12,7 +12,7 @@ public sealed class SessionManagerTests
     {
         var manager = new SessionManager();
 
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => manager.CreateSessionAsync(" "));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => manager.CreateSessionAsync(" ", @"C:\repo\demo"));
 
         Assert.Equal("sessionId", ex.ParamName);
         Assert.Contains("Session ID cannot be empty", ex.Message, StringComparison.Ordinal);
@@ -22,9 +22,9 @@ public sealed class SessionManagerTests
     public async Task CreateSessionAsync_WhenSessionAlreadyExists_ThrowsEnglishInvalidOperationException()
     {
         var manager = new SessionManager();
-        await manager.CreateSessionAsync("session-1");
+        await manager.CreateSessionAsync("session-1", @"C:\repo\demo");
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => manager.CreateSessionAsync("session-1"));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => manager.CreateSessionAsync("session-1", @"C:\repo\demo"));
 
         Assert.Contains("Session 'session-1' already exists", ex.Message, StringComparison.Ordinal);
     }

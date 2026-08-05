@@ -56,6 +56,9 @@ public sealed class ChatServiceSessionTests
 
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
+        // An update is only recorded against a session we established, so stand one up first.
+        sessionManager.GetOrCreateTrackingSlot("s1", Environment.CurrentDirectory);
+
         var update = new AgentMessageUpdate(new TextContentBlock("hello"));
         acpClient.Raise(
             c => c.SessionUpdateReceived += null,
@@ -88,6 +91,7 @@ public sealed class ChatServiceSessionTests
             new SessionUpdateEventArgs(
                 "current",
                 new PlanUpdate([new PlanEntry("current plan")])));
+        sessionManager.GetOrCreateTrackingSlot("background", Environment.CurrentDirectory);
         acpClient.Raise(
             c => c.SessionUpdateReceived += null,
             new SessionUpdateEventArgs(
@@ -525,6 +529,7 @@ public sealed class ChatServiceSessionTests
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
+        sessionManager.GetOrCreateTrackingSlot("background", Environment.CurrentDirectory);
         acpClient.Raise(
             client => client.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("background", new CurrentModeUpdate("plan")));
