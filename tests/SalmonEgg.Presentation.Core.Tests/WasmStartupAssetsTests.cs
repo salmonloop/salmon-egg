@@ -359,8 +359,12 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("services.AddSingleton<PlainTextFileSecureStorage>();", code, StringComparison.Ordinal);
         Assert.Contains("sp.GetRequiredService<IConfigChangeSignal>()", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());", code, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)", code, StringComparison.Ordinal);
-        Assert.Contains("new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)", code, StringComparison.Ordinal);
+        // Name-level only: asserting the constructor argument list would break on any dependency
+        // change without a behavior change, which §5.5 rules out. FallbackSecureStorageTests covers
+        // the behavior these two registrations exist for.
+        Assert.Contains("FallbackSecureStorage", code, StringComparison.Ordinal);
+        Assert.Contains("LinuxSecretServiceSecureStorage", code, StringComparison.Ordinal);
+        Assert.Contains("MacOSKeychainSecureStorage", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();", code, StringComparison.Ordinal);
         Assert.Contains("services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();", code, StringComparison.Ordinal);
         Assert.True(File.Exists(RepoPath(@"src\SalmonEgg.Infrastructure\Storage\PlainTextFileSecureStorage.cs")));

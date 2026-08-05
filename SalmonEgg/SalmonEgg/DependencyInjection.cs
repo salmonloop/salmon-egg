@@ -236,10 +236,11 @@ public static class DependencyInjection
         services.AddSingleton<ISecureStorage>(sp =>
         {
             var fallback = sp.GetRequiredService<PlainTextFileSecureStorage>();
+            var fallbackLogger = sp.GetRequiredService<ILogger<FallbackSecureStorage>>();
             return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ? new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback)
+                ? new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback, fallbackLogger)
                 : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback)
+                    ? new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback, fallbackLogger)
                     : fallback;
         });
 #endif
