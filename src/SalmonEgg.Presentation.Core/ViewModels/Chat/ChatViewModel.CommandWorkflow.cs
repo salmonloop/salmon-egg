@@ -258,7 +258,7 @@ public partial class ChatViewModel
         }
     }
 
-    private async Task<string> CreateAndActivateLocalConversationAsync(string? cwd)
+    private async Task<string> CreateAndActivateLocalConversationAsync(string cwd)
     {
         var localConversationId = Guid.NewGuid().ToString("N");
         await _sessionManager.CreateSessionAsync(localConversationId, cwd).ConfigureAwait(false);

@@ -72,9 +72,18 @@ public sealed class ChatLaunchWorkflow : IChatLaunchWorkflow
             return ChatLaunchCompletion.Incomplete;
         }
 
-        var sessionId = Guid.NewGuid().ToString("N");
         var cwd = request.Cwd;
+        if (string.IsNullOrWhiteSpace(cwd))
+        {
+            // A session cannot be established without a working directory (the session manager
+            // rejects an empty one, and a launch with no resolved root is not a transient hiccup
+            // worth retrying — it needs the caller to surface a project picker). Fail the launch
+            // cleanly rather than letting CreateSessionAsync throw ArgumentException on both tries.
+            _logger.LogWarning("Start workflow stopped: no working directory resolved for the launch.");
+            return ChatLaunchCompletion.Failed;
+        }
 
+        var sessionId = Guid.NewGuid().ToString("N");
         try
         {
             await _sessionManager.CreateSessionAsync(sessionId, cwd).ConfigureAwait(true);

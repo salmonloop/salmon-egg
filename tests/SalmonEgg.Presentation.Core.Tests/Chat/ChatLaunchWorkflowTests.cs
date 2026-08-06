@@ -97,6 +97,37 @@ public sealed class ChatLaunchWorkflowTests
     }
 
     [Fact]
+    public async Task StartSessionAndSendAsync_WhenNoWorkingDirectory_FailsWithoutCreatingSession()
+    {
+        // A launch whose working directory could not be resolved must not reach the session manager
+        // (which rejects an empty cwd with ArgumentException and would otherwise throw on both the
+        // initial attempt and the retry). It should fail the launch cleanly instead.
+        var sessionManager = new Mock<ISessionManager>();
+        sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
+            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+
+        var chat = new FakeChatLaunchWorkflowChatFacade { IsConnected = true };
+        var navigation = new RecordingNavigationCoordinator(chat) { ApplyActivatedSessionToChat = true };
+
+        var workflow = new ChatLaunchWorkflow(
+            chat,
+            sessionManager.Object,
+            navigation,
+            Mock.Of<ILogger<ChatLaunchWorkflow>>());
+
+        var completion = await workflow.StartSessionAndSendAsync(
+            CreateRequest(cwd: null),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(ChatLaunchCompletion.Failed, completion);
+        sessionManager.Verify(
+            s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()),
+            Times.Never);
+        Assert.Equal(0, navigation.ActivateSessionCount);
+        Assert.Equal(0, chat.SendPromptCount);
+    }
+
+    [Fact]
     public async Task StartSessionAndSendAsync_WhenAutoConnectStillInProgress_DoesNotOpenSettingsOrSend()
     {
         var sessionManager = new Mock<ISessionManager>();
