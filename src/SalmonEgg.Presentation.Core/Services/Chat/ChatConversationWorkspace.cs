@@ -933,6 +933,11 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         binding.CreatedAt,
                         binding.LastUpdatedAt,
                         binding.LastAccessedAt,
+                        // Resolve the working directory here, while the binding is still in hand and under
+                        // the state gate. Re-reading it downstream would only have the conversation id to
+                        // go on, and a remote-backed session is tracked under its remote id, so that read
+                        // would miss and persist no working directory at all.
+                        ResolveEstablishedConversationCwd(binding),
                         binding.RemoteSessionId,
                         binding.BoundProfileId,
                         binding.ProjectAffinityOverride?.ProjectId,
@@ -960,7 +965,6 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         foreach (var conversationState in conversationStates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var session = _sessionManager.GetSession(conversationState.ConversationId);
             var record = new ConversationRecord
             {
                 ConversationId = conversationState.ConversationId,
@@ -970,7 +974,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                 LastAccessedAt = conversationState.LastAccessedAt == default
                     ? conversationState.LastUpdatedAt
                     : conversationState.LastAccessedAt,
-                Cwd = session?.Cwd,
+                Cwd = conversationState.Cwd,
                 RemoteSessionId = conversationState.RemoteSessionId,
                 BoundProfileId = conversationState.BoundProfileId,
                 ProjectAffinityOverrideProjectId = conversationState.ProjectAffinityOverrideProjectId,
@@ -1566,6 +1570,7 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
         DateTime CreatedAt,
         DateTime LastUpdatedAt,
         DateTime LastAccessedAt,
+        string? Cwd,
         string? RemoteSessionId,
         string? BoundProfileId,
         string? ProjectAffinityOverrideProjectId,

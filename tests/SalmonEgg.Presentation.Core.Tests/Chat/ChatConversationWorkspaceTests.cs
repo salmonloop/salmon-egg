@@ -2038,6 +2038,49 @@ public sealed class ChatConversationWorkspaceTests
     }
 
     [Fact]
+    public async Task SaveAsync_RemoteTrackingUnderRemoteIdOnly_PersistsCwdFromRemoteSessionSlot()
+    {
+        // A remote-backed conversation restored from a document with no persisted working directory,
+        // whose live session is tracked only under the remote id (not the conversation id). The session
+        // manager has no entry under the conversation id, so a save path that resolves the working
+        // directory through GetSession(conversationId) alone would miss and persist nothing. The save
+        // path must instead resolve through the binding, which hops to the remote-id tracking slot.
+        var syncContext = new ImmediateSynchronizationContext();
+        const string remoteCwd = @"C:\remote\workspace";
+        var store = new CapturingConversationStore
+        {
+            LoadResult = new ConversationDocument
+            {
+                Conversations =
+                {
+                    new ConversationRecord
+                    {
+                        ConversationId = "session-1",
+                        DisplayName = "Remote session",
+                        CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                        LastUpdatedAt = new DateTime(2026, 3, 1, 0, 1, 0, DateTimeKind.Utc),
+                        RemoteSessionId = "remote-1",
+                        BoundProfileId = "profile-1"
+                    }
+                }
+            }
+        };
+        var sessionManager = new FakeSessionManager();
+        // Tracked only under the remote id — the conversation id has no slot.
+        var remoteSlot = sessionManager.GetOrCreateTrackingSlot("remote-1", remoteCwd);
+        remoteSlot.DisplayName = "Remote session";
+
+        var preferences = CreatePreferences(syncContext);
+        using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
+        await workspace.RestoreAsync(TestContext.Current.CancellationToken);
+        await workspace.SaveAsync(TestContext.Current.CancellationToken);
+
+        var saved = Assert.IsType<ConversationDocument>(store.LastSavedDocument);
+        var savedRecord = Assert.Single(saved.Conversations);
+        Assert.Equal(remoteCwd, savedRecord.Cwd);
+    }
+
+    [Fact]
     public async Task DeleteConversationAsync_Tombstone_IsPersistedBeforeRestart()
     {
         var syncContext = new ImmediateSynchronizationContext();
