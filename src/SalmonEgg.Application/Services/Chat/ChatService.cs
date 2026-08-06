@@ -104,7 +104,7 @@ namespace SalmonEgg.Application.Services.Chat
             return _sessionManager.GetSession(sessionId);
         }
 
-        private async Task<Session> GetOrCreateSessionAsync(string sessionId, string? cwd = null)
+        private async Task<Session> GetOrCreateSessionAsync(string sessionId, string cwd)
         {
             var existing = _sessionManager.GetSession(sessionId);
             if (existing != null)

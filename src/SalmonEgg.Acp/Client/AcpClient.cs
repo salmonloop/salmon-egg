@@ -948,7 +948,7 @@ namespace SalmonEgg.Acp.Client
         /// 使 SendPromptAsync 的存在性快速失败门不会误拦官方 load/resume→prompt 主流程。
         /// 本地条目只是可选的快速失败优化,存在性事实源仍在 Agent(未声明能力时不收紧)。
         /// </summary>
-        private async Task RegisterSessionAsync(string sessionId, string? cwd)
+        private async Task RegisterSessionAsync(string sessionId, string cwd)
         {
             if (string.IsNullOrWhiteSpace(sessionId) || _sessionStore.ContainsSession(sessionId))
             {

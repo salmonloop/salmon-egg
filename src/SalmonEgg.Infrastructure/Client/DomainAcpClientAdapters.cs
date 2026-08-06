@@ -94,7 +94,7 @@ internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
     public bool ContainsSession(string sessionId)
         => _inner.GetSession(sessionId) is not null;
 
-    public async Task CreateSessionAsync(string sessionId, string? cwd = null)
+    public async Task CreateSessionAsync(string sessionId, string cwd)
     {
         await _inner.CreateSessionAsync(sessionId, cwd).ConfigureAwait(false);
     }

@@ -2989,13 +2989,13 @@ namespace SalmonEgg.Acp.Tests.Client
 
         private sealed class RecordingAcpClientSessionStore : IAcpClientSessionStore
         {
-            private readonly ConcurrentDictionary<string, string?> _sessions = new();
+            private readonly ConcurrentDictionary<string, string> _sessions = new();
             private readonly ConcurrentDictionary<string, string> _currentModes = new();
 
             public bool ContainsSession(string sessionId)
                 => !string.IsNullOrWhiteSpace(sessionId) && _sessions.ContainsKey(sessionId);
 
-            public Task CreateSessionAsync(string sessionId, string? cwd = null)
+            public Task CreateSessionAsync(string sessionId, string cwd)
             {
                 if (!string.IsNullOrWhiteSpace(sessionId))
                 {
