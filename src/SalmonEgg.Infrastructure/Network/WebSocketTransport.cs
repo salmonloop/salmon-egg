@@ -214,9 +214,26 @@ namespace SalmonEgg.Infrastructure.Network
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to send message: {Message}", message);
+                // A fatal send failure (the connection is actually gone) must be reflected in the
+                // transport state so downstream IsConnected projections flip and in-flight requests
+                // are faulted rather than hanging until timeout. A transient failure leaves the
+                // connection intact. Mirrors StreamableHttpTransport.MarkTransportErrored.
+                if (IsFatalSendFailure(ex))
+                {
+                    _stateSubject.OnNext(TransportState.Error);
+                }
                 throw;
             }
         }
+
+        /// <summary>
+        /// A send fault is fatal only when the underlying connection is gone: a WebSocketException
+        /// from the closed socket, or the client no longer running. Other failures (transient
+        /// library-internal contention, a still-running client) leave the connection usable.
+        /// </summary>
+        private bool IsFatalSendFailure(Exception ex)
+            => ex is System.Net.WebSockets.WebSocketException
+               || (_client is { IsRunning: false });
 
         /// <summary>
         /// Subscribes to WebSocket client events and forwards them to observables.

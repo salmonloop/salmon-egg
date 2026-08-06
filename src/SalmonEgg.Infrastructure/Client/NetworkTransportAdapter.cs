@@ -16,6 +16,12 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
     private readonly List<IDisposable> _subscriptions = new();
     private bool _isConnected;
     private bool _disposed;
+    // Managed thread id of an in-flight send, or 0 when none. A fatal send fault makes the inner
+    // transport push TransportState.Error from inside the same synchronous send call, which would
+    // otherwise report the break twice: once as General from the state subscription and once with a
+    // precise kind from the send catch. Matching on the thread id suppresses only that reentrant
+    // push; an Error arriving on the transport's own reader thread still reports normally.
+    private volatile int _sendingThreadId;
 
     public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
 
@@ -36,7 +42,7 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
                     MessageReceived?.Invoke(this, new MessageReceivedEventArgs(message));
                 }
             },
-            ex => RaiseError("Transport message stream error", ex)));
+            ex => RaiseError("Transport message stream error", ex, TransportErrorKind.General)));
 
         _subscriptions.Add(_inner.StateChanges.Subscribe(
             state =>
@@ -44,10 +50,16 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
                 _isConnected = state == TransportState.Connected;
                 if (state == TransportState.Error)
                 {
-                    RaiseError("Transport entered error state", null);
+                    // A reentrant push from inside the current send call is that send's own failure;
+                    // its catch reports it with a precise kind, so do not also report it as General.
+                    if (_sendingThreadId == Environment.CurrentManagedThreadId)
+                    {
+                        return;
+                    }
+                    RaiseError("Transport entered error state", null, TransportErrorKind.General);
                 }
             },
-            ex => RaiseError("Transport state stream error", ex)));
+            ex => RaiseError("Transport state stream error", ex, TransportErrorKind.General)));
     }
 
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
@@ -60,7 +72,7 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
         catch (Exception ex)
         {
-            RaiseError("Failed to connect transport", ex);
+            RaiseError("Failed to connect transport", ex, TransportErrorKind.General);
             _isConnected = false;
             return false;
         }
@@ -76,7 +88,7 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
         catch (Exception ex)
         {
-            RaiseError("Failed to disconnect transport", ex);
+            RaiseError("Failed to disconnect transport", ex, TransportErrorKind.DisconnectFailed);
             return false;
         }
     }
@@ -88,6 +100,10 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
             return false;
         }
 
+        // Claim the send so a reentrant Error push from the inner transport is attributed to this
+        // send rather than reported separately as General.
+        var wasConnected = _isConnected;
+        _sendingThreadId = Environment.CurrentManagedThreadId;
         try
         {
             await _inner.SendAsync(message, cancellationToken).ConfigureAwait(false);
@@ -95,8 +111,18 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
         catch (Exception ex)
         {
-            RaiseError("Failed to send message", ex);
+            // Distinguish "there was no connection to send on" from "the send itself failed", the
+            // same split the stdio transport reports. A fatal send fault also arrives as
+            // TransportState.Error, which flips IsConnected to false so the ACP client faults its
+            // in-flight requests instead of leaving them to hang; a transient fault leaves the
+            // connection intact and only reports SendFailed.
+            var kind = wasConnected ? TransportErrorKind.SendFailed : TransportErrorKind.NotConnected;
+            RaiseError("Failed to send message", ex, kind);
             return false;
+        }
+        finally
+        {
+            _sendingThreadId = 0;
         }
     }
 
@@ -132,8 +158,8 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
     }
 
-    private void RaiseError(string message, Exception? exception)
+    private void RaiseError(string message, Exception? exception, TransportErrorKind kind)
     {
-        ErrorOccurred?.Invoke(this, new TransportErrorEventArgs(message, exception));
+        ErrorOccurred?.Invoke(this, new TransportErrorEventArgs(message, exception, kind));
     }
 }

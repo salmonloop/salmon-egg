@@ -166,6 +166,80 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenSocketFailed_ShouldProjectErrorState()
+        {
+            // A send that fails because the socket is gone must surface as Error on the state stream:
+            // downstream projections derive IsConnected from it, and without the transition the ACP
+            // client leaves its in-flight requests hanging instead of faulting them.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Throws(new WebSocketException("socket closed"));
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            await Assert.ThrowsAsync<WebSocketException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Contains(TransportState.Error, states);
+        }
+
+        [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenTransientFailureOnLiveSocket_ShouldKeepConnectedState()
+        {
+            // A send failure on a socket that is still running is transient. Projecting Error here
+            // would tear down a usable connection and cancel in-flight requests that could still
+            // complete, so the state stream must stay on Connected.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Throws(new InvalidOperationException("send buffer busy"));
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.DoesNotContain(TransportState.Error, states);
+        }
+
+        [Fact]
         public async Task StreamableHttpTransport_ConnectAsync_ShouldThrowArgumentException_WhenUrlIsEmpty()
         {
             // Arrange
