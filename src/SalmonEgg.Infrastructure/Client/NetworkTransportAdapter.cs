@@ -14,14 +14,19 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
     private readonly NetworkTransport _inner;
     private readonly string _url;
     private readonly List<IDisposable> _subscriptions = new();
-    private bool _isConnected;
+    // Written from the transport's own notification thread and from connect/disconnect continuations,
+    // read by callers deciding whether to fault in-flight work. Volatile so the latest value is the
+    // one they see; there is no invariant spanning it and another field, so no lock is needed.
+    private volatile bool _isConnected;
     private bool _disposed;
-    // Managed thread id of an in-flight send, or 0 when none. A fatal send fault makes the inner
-    // transport push TransportState.Error from inside the same synchronous send call, which would
-    // otherwise report the break twice: once as General from the state subscription and once with a
-    // precise kind from the send catch. Matching on the thread id suppresses only that reentrant
-    // push; an Error arriving on the transport's own reader thread still reports normally.
-    private volatile int _sendingThreadId;
+    // True for the duration of an in-flight send on this execution context. A fatal send fault makes
+    // the inner transport report the break as TransportState.Error from inside the send call, which
+    // would otherwise be reported twice: once as General by the state subscription and once with a
+    // precise kind by the send catch. The reentrant push is a causal child of the send, so the scope
+    // that identifies it is the execution context, not the thread — an async transport resumes the
+    // send on a different thread, and concurrent sends each need their own answer. An Error raised on
+    // the transport's own reader thread carries no send scope and still reports normally.
+    private readonly AsyncLocal<bool> _sendInProgress = new();
 
     public event EventHandler<MessageReceivedEventArgs>? MessageReceived;
 
@@ -50,9 +55,9 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
                 _isConnected = state == TransportState.Connected;
                 if (state == TransportState.Error)
                 {
-                    // A reentrant push from inside the current send call is that send's own failure;
-                    // its catch reports it with a precise kind, so do not also report it as General.
-                    if (_sendingThreadId == Environment.CurrentManagedThreadId)
+                    // A push raised from inside the current send is that send's own failure; its catch
+                    // reports it with a precise kind, so do not also report it as General.
+                    if (_sendInProgress.Value)
                     {
                         return;
                     }
@@ -103,7 +108,7 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         // Claim the send so a reentrant Error push from the inner transport is attributed to this
         // send rather than reported separately as General.
         var wasConnected = _isConnected;
-        _sendingThreadId = Environment.CurrentManagedThreadId;
+        _sendInProgress.Value = true;
         try
         {
             await _inner.SendAsync(message, cancellationToken).ConfigureAwait(false);
@@ -122,7 +127,7 @@ public sealed class NetworkTransportAdapter : DomainTransport, IDisposable
         }
         finally
         {
-            _sendingThreadId = 0;
+            _sendInProgress.Value = false;
         }
     }
 

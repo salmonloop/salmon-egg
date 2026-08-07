@@ -21,7 +21,10 @@ namespace SalmonEgg.Infrastructure.Network
         private readonly ILogger _logger;
         private readonly ProxyConfig _proxyConfiguration;
         private readonly Func<Uri, ProxyConfig, IWebsocketClient> _clientFactory;
-        private IWebsocketClient? _client;
+        // Replaced on connect and cleared on teardown, both of which can run while a send is in
+        // flight. Volatile so a send sees the current handle, and every path that uses it more than
+        // once captures it into a local first so it cannot be swapped mid-decision.
+        private volatile IWebsocketClient? _client;
         private IDisposable? _clientSubscriptions;
         private readonly Subject<string> _messagesSubject;
         private readonly BehaviorSubject<TransportState> _stateSubject;
@@ -73,7 +76,8 @@ namespace SalmonEgg.Infrastructure.Network
                 throw new ArgumentException("URL cannot be null or empty", nameof(url));
             }
 
-            if (_client != null && _client.IsRunning)
+            var existingClient = _client;
+            if (existingClient != null && existingClient.IsRunning)
             {
                 _logger.Warning("WebSocket is already connected to {Url}", url);
                 return;
@@ -168,7 +172,8 @@ namespace SalmonEgg.Infrastructure.Network
         /// <inheritdoc />
         public async Task DisconnectAsync()
         {
-            if (_client == null || !_client.IsRunning)
+            var client = _client;
+            if (client == null || !client.IsRunning)
             {
                 _logger.Warning("WebSocket is not connected");
                 return;
@@ -179,7 +184,7 @@ namespace SalmonEgg.Infrastructure.Network
                 _stateSubject.OnNext(TransportState.Disconnecting);
                 _logger.Information("Disconnecting from WebSocket server");
 
-                await _client.Stop(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "Client disconnecting");
+                await client.Stop(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "Client disconnecting");
 
                 _stateSubject.OnNext(TransportState.Disconnected);
                 _logger.Information("Successfully disconnected from WebSocket server");
@@ -200,7 +205,11 @@ namespace SalmonEgg.Infrastructure.Network
                 throw new ArgumentException("Message cannot be null or empty", nameof(message));
             }
 
-            if (_client == null || !_client.IsRunning)
+            // One capture for the whole send: teardown can null the field at any point, and re-reading
+            // it would let the guard, the send and the fatality decision disagree about which client
+            // they are talking about.
+            var client = _client;
+            if (client == null || !client.IsRunning)
             {
                 throw new InvalidOperationException("WebSocket is not connected. Call ConnectAsync first.");
             }
@@ -208,7 +217,7 @@ namespace SalmonEgg.Infrastructure.Network
             try
             {
                 _logger.Debug("Sending message: {Message}", message);
-                _client.Send(message);
+                client.Send(message);
                 await Task.CompletedTask; // Make method async-compatible
             }
             catch (Exception ex)
@@ -218,7 +227,7 @@ namespace SalmonEgg.Infrastructure.Network
                 // transport state so downstream IsConnected projections flip and in-flight requests
                 // are faulted rather than hanging until timeout. A transient failure leaves the
                 // connection intact. Mirrors StreamableHttpTransport.MarkTransportErrored.
-                if (IsFatalSendFailure(ex))
+                if (IsFatalSendFailure(ex, client))
                 {
                     _stateSubject.OnNext(TransportState.Error);
                 }
@@ -231,9 +240,27 @@ namespace SalmonEgg.Infrastructure.Network
         /// from the closed socket, or the client no longer running. Other failures (transient
         /// library-internal contention, a still-running client) leave the connection usable.
         /// </summary>
-        private bool IsFatalSendFailure(Exception ex)
-            => ex is System.Net.WebSockets.WebSocketException
-               || (_client is { IsRunning: false });
+        /// <remarks>
+        /// Takes the client the send actually used. A concurrent teardown can dispose it, which makes
+        /// reading its state throw; that only confirms the connection is gone, and the throw must not
+        /// escape here because it would replace the send failure the caller needs to see.
+        /// </remarks>
+        private static bool IsFatalSendFailure(Exception ex, IWebsocketClient client)
+        {
+            if (ex is System.Net.WebSockets.WebSocketException)
+            {
+                return true;
+            }
+
+            try
+            {
+                return !client.IsRunning;
+            }
+            catch (ObjectDisposedException)
+            {
+                return true;
+            }
+        }
 
         /// <summary>
         /// Subscribes to WebSocket client events and forwards them to observables.

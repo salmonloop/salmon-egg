@@ -139,6 +139,80 @@ public sealed class NetworkTransportAdapterTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_WhenAsyncTransportReportsBreakAfterAwaiting_ReportsSendFailedOnce()
+    {
+        // The same fatal send as above, from a transport that actually awaits before reporting the
+        // break. The reentrant report has to be attributed to the send that caused it even though the
+        // send resumes on another thread, or the break is reported twice: once as the generic kind by
+        // the state subscription and once with the precise kind by the send catch.
+        var messages = new Subject<string>();
+        var states = new Subject<TransportState>();
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, CancellationToken _) =>
+            {
+                await Task.Yield();
+                states.OnNext(TransportState.Error);
+                throw new System.Net.WebSockets.WebSocketException("socket closed");
+            });
+
+        var adapter = new NetworkTransportAdapter(inner.Object, "wss://example.com/socket");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, args) => errors.Add(args);
+
+        var result = await adapter.SendMessageAsync("{}", CancellationToken.None);
+
+        Assert.False(result);
+        Assert.False(adapter.IsConnected);
+        var error = Assert.Single(errors);
+        Assert.Equal(TransportErrorKind.SendFailed, error.Kind);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WhenAnotherSendCompletesMidFlight_StillReportsTheBreakOnce()
+    {
+        // Two sends overlap: one is suspended when the other finishes. Whether a break belongs to the
+        // suspended send cannot be tracked in state shared between sends, because the send that
+        // finishes first would clear the other's claim and the suspended send's own break would then
+        // also be reported as a generic transport error.
+        var messages = new Subject<string>();
+        var states = new Subject<TransportState>();
+        var suspended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var inner = new Mock<ITransport>();
+        inner.SetupGet(x => x.Messages).Returns(messages);
+        inner.SetupGet(x => x.StateChanges).Returns(states);
+        inner.Setup(x => x.SendAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string message, CancellationToken _) =>
+            {
+                if (message != "slow")
+                {
+                    return;
+                }
+
+                await suspended.Task.ConfigureAwait(false);
+                states.OnNext(TransportState.Error);
+                throw new System.Net.WebSockets.WebSocketException("socket closed");
+            });
+
+        var adapter = new NetworkTransportAdapter(inner.Object, "wss://example.com/socket");
+        states.OnNext(TransportState.Connected);
+        var errors = new List<TransportErrorEventArgs>();
+        adapter.ErrorOccurred += (_, args) => errors.Add(args);
+
+        var slowSend = adapter.SendMessageAsync("slow", CancellationToken.None);
+        Assert.True(await adapter.SendMessageAsync("fast", CancellationToken.None));
+
+        suspended.SetResult();
+        Assert.False(await slowSend);
+
+        var error = Assert.Single(errors);
+        Assert.Equal(TransportErrorKind.SendFailed, error.Kind);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_WhenTransientSendFault_ReportsSendFailedAndStaysConnected()
     {
         // A transient send fault leaves the connection usable: no Error state is pushed, so

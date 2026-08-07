@@ -203,6 +203,50 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenClientDisposedConcurrently_ShouldSurfaceTheSendFailure()
+        {
+            // Teardown can dispose the client while a send is in flight, which makes reading its state
+            // throw. That read only confirms the connection is gone, so it must not replace the send
+            // failure the caller has to see, and the break must still reach the state stream.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+            var states = new List<TransportState>();
+            transport.StateChanges.Subscribe(states.Add);
+
+            // The send fails, and by the time its fatality is judged the client has been disposed.
+            var disposed = false;
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Callback(() => disposed = true)
+                .Throws(new InvalidOperationException("send failed"));
+            client.SetupGet(x => x.IsRunning).Returns(() =>
+                disposed ? throw new ObjectDisposedException(nameof(IWebsocketClient)) : isRunning.Value);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Equal("send failed", exception.Message);
+            Assert.Contains(TransportState.Error, states);
+        }
+
+        [Fact]
         public async Task WebSocketTransport_SendAsync_WhenTransientFailureOnLiveSocket_ShouldKeepConnectedState()
         {
             // A send failure on a socket that is still running is transient. Projecting Error here
