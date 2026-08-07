@@ -414,6 +414,27 @@ public sealed class DiscoverSessionsViewModelTests
     }
 
     [Fact]
+    public void LoadSessionCommand_WhenSessionCwdIsEmpty_CannotExecute()
+    {
+        var profile = CreateProfile();
+        var profilesViewModel = CreateProfilesViewModel(profile);
+        using var viewModel = CreateViewModel(
+            profilesViewModel,
+            new FakeDiscoverSessionsConnectionFacade(),
+            new StubNavigationCoordinator());
+
+        var cwdlessItem = new DiscoverSessionItemViewModel(
+            "remote-no-cwd",
+            "No Working Directory",
+            "Invalid session",
+            new DateTime(2026, 3, 27, 12, 0, 0, DateTimeKind.Local),
+            viewModel.LoadSessionCommand,
+            sessionCwd: null);
+
+        Assert.False(viewModel.LoadSessionCommand.CanExecute(cwdlessItem));
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_WhenProfileChangesBeforeImportCompletes_DropsStaleErrorState()
     {
         var syncContext = new CountingSynchronizationContext();

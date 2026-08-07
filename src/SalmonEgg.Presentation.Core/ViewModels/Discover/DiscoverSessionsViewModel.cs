@@ -516,6 +516,7 @@ public sealed partial class DiscoverSessionsViewModel : ObservableObject, IDispo
 
     private bool CanLoadSession(DiscoverSessionItemViewModel? session)
         => session != null
+            && !string.IsNullOrWhiteSpace(session.SessionCwd)
             && SelectedProfile != null
             && AreSessionActionsEnabled;
 
