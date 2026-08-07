@@ -3105,7 +3105,7 @@ public sealed class ChatConversationWorkspaceTests
         var syncContext = new ImmediateSynchronizationContext();
         var store = new FailingConversationStore(new System.InvalidOperationException("simulated persistence failure"));
         var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-1");
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
@@ -3130,7 +3130,7 @@ public sealed class ChatConversationWorkspaceTests
         var syncContext = new ImmediateSynchronizationContext();
         var store = new CapturingConversationStore();
         var sessionManager = new FakeSessionManager();
-        await sessionManager.CreateSessionAsync("session-1");
+        await sessionManager.CreateSessionAsync("session-1", @"C:\repo\one");
 
         var preferences = CreatePreferences(syncContext);
         using var workspace = CreateWorkspace(store, sessionManager, preferences, syncContext);
@@ -3333,7 +3333,7 @@ public sealed class ChatConversationWorkspaceTests
     {
         private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd);
             _sessions[sessionId] = session;
@@ -3368,7 +3368,7 @@ public sealed class ChatConversationWorkspaceTests
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
 
-        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
             {

@@ -97,6 +97,9 @@ public sealed class ShellNavigationRuntimeStateStoreRetirementTests
         // The unrelated in-flight activation keeps its own identity.
         Assert.Equal("conv-incoming", store.ActiveSessionActivation?.SessionId);
         Assert.Equal("conv-incoming", store.DesiredSessionId);
+        // The progress flags belong to the in-flight activation and must not be cleared.
+        Assert.True(store.IsSessionActivationInProgress);
+        Assert.Equal(11, store.ActiveSessionActivationVersion);
     }
 
     [Fact]

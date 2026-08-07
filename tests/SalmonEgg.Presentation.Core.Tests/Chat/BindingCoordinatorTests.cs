@@ -703,7 +703,7 @@ private static ChatConversationWorkspace CreateWorkspace(
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd)
             {
@@ -734,7 +734,7 @@ private static ChatConversationWorkspace CreateWorkspace(
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
-        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
             {

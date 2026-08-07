@@ -651,7 +651,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
         {
             var session = new Session(sessionId, cwd);
             _sessions[sessionId] = session;
@@ -686,7 +686,7 @@ public sealed class ChatLaunchWorkflowTests
         public bool RemoveSession(string sessionId)
             => _sessions.Remove(sessionId);
 
-        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
         {
             if (_sessions.TryGetValue(sessionId, out var existing))
             {

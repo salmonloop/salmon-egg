@@ -1120,7 +1120,7 @@ public sealed class WorkspaceWriterTests
 
     private sealed class FakeSessionManager : ISessionManager
     {
-        public Task<Session> CreateSessionAsync(string sessionId, string? cwd = null)
+        public Task<Session> CreateSessionAsync(string sessionId, string cwd)
             => Task.FromResult(new Session(sessionId, cwd));
 
         public Session? GetSession(string sessionId) => null;
@@ -1135,7 +1135,7 @@ public sealed class WorkspaceWriterTests
 
         public bool RemoveSession(string sessionId) => false;
 
-        public Session GetOrCreateTrackingSlot(string sessionId, string? cwd = null)
+        public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
             => new(sessionId, cwd);
 
         public System.Collections.Generic.IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)

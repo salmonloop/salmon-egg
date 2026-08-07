@@ -36,8 +36,9 @@ public sealed partial class ShellNavigationRuntimeStateStore : ObservableObject,
             return false;
         }
 
+        var ownsInFlightActivation = ActiveSessionActivation?.Matches(sessionId) == true;
         var ownsActivation =
-            ActiveSessionActivation?.Matches(sessionId) == true
+            ownsInFlightActivation
             || string.Equals(DesiredSessionId, sessionId, StringComparison.Ordinal)
             || string.Equals(CommittedSessionId, sessionId, StringComparison.Ordinal);
         if (!ownsActivation)
@@ -45,7 +46,7 @@ public sealed partial class ShellNavigationRuntimeStateStore : ObservableObject,
             return false;
         }
 
-        if (ActiveSessionActivation?.Matches(sessionId) == true)
+        if (ownsInFlightActivation)
         {
             ActiveSessionActivation = null;
         }
@@ -62,8 +63,16 @@ public sealed partial class ShellNavigationRuntimeStateStore : ObservableObject,
             CommittedSessionActivationVersion = 0;
         }
 
-        IsSessionActivationInProgress = false;
-        ActiveSessionActivationVersion = 0;
+        // The progress flags describe ActiveSessionActivation, so retire them with it. When only the
+        // committed or desired id matched, a different conversation owns the in-flight activation and
+        // its progress must survive: clearing it would leave that activation running behind a runtime
+        // that reports nothing in progress.
+        if (ownsInFlightActivation)
+        {
+            IsSessionActivationInProgress = false;
+            ActiveSessionActivationVersion = 0;
+        }
+
         return true;
     }
 }
