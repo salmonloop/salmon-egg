@@ -28,7 +28,7 @@ public sealed class FallbackSecureStorageTests
     }
 
     [Fact]
-    public async Task SaveAsync_WhenPlatformStoreWorks_DoesNotTouchFallbackOrWarn()
+    public async Task SaveAsync_WhenPlatformStoreWorks_LeavesNoSecretInFallbackAndDoesNotWarn()
     {
         var primary = new RecordingSecureStorage();
         var fallback = new RecordingSecureStorage();
@@ -40,6 +40,23 @@ public sealed class FallbackSecureStorageTests
         Assert.Equal("secret-value", Assert.Contains("token", primary.Values));
         Assert.Empty(fallback.Values);
         Assert.Empty(logger.Levels);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenPlatformStoreRecovers_RetiresTheEarlierDowngradedSecret()
+    {
+        // A secret downgraded while the platform store was unavailable must not outlive being
+        // overwritten: if it stays in the weaker store, the next read that falls through — during the
+        // same kind of outage that caused the downgrade — resurrects the superseded secret.
+        var primary = new RecordingSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        var sut = new FallbackSecureStorage(primary, fallback);
+        fallback.Values["token"] = "superseded-value";
+
+        await sut.SaveAsync("token", "rotated-value");
+
+        Assert.Equal("rotated-value", Assert.Contains("token", primary.Values));
+        Assert.Empty(fallback.Values);
     }
 
     [Fact]

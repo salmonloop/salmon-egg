@@ -31,9 +31,11 @@ public sealed class FallbackSecureStorage : ISecureStorage
 
     public async Task SaveAsync(string key, string value)
     {
+        var storedInPrimary = false;
         try
         {
             await _primary.SaveAsync(key, value).ConfigureAwait(false);
+            storedInPrimary = true;
         }
         catch (SecureStorageUnavailableException ex)
         {
@@ -45,6 +47,18 @@ public sealed class FallbackSecureStorage : ISecureStorage
                 _fallback.GetType().Name);
             await _fallback.SaveAsync(key, value).ConfigureAwait(false);
         }
+
+        if (!storedInPrimary)
+        {
+            return;
+        }
+
+        // An earlier downgrade may have left a superseded copy of this key in the weaker store.
+        // Leaving it there lets the old secret come back the next time the platform store is
+        // unavailable and a read falls through, so an overwrite has to retire it, exactly as a delete
+        // does. Kept out of the try above so a fallback failure is never mistaken for the platform
+        // store being unavailable.
+        await _fallback.DeleteAsync(key).ConfigureAwait(false);
     }
 
     public async Task<string?> LoadAsync(string key)
