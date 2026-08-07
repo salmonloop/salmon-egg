@@ -575,16 +575,8 @@ public sealed class NavigationCoordinatorTests
         {
             var navState = new FakeNavigationPaneState();
             var sessionManager = CreateSessionManager(
-                new Session("session-1", @"C:\repo\demo")
-                {
-                    DisplayName = "Session 1",
-                    LastActivityAt = DateTime.UtcNow.AddMinutes(-2)
-                },
-                new Session("session-2", @"C:\repo\demo")
-                {
-                    DisplayName = "Session 2",
-                    LastActivityAt = DateTime.UtcNow.AddMinutes(-1)
-                });
+                CreateSessionWithLastActivity("session-1", "Session 1", DateTime.UtcNow.AddMinutes(-2)),
+                CreateSessionWithLastActivity("session-2", "Session 2", DateTime.UtcNow.AddMinutes(-1)));
             var preferences = CreatePreferencesWithProject();
             var shellNavigation = CreateShellNavigationService();
             var ui = new Mock<IUiInteractionService>();
@@ -1908,6 +1900,20 @@ public sealed class NavigationCoordinatorTests
         sessionManager.Setup(s => s.GetAllSessions()).Returns(sessions);
 
         return sessionManager;
+    }
+
+    /// <summary>
+    /// 造一个"最后活动时间是过去某刻"的会话。时间戳只能经 <see cref="Session.RestoreTimestamps"/>
+    /// 写入（会话自己持锁，不再暴露可写属性），对象初始化器里做不到，故用本工厂。
+    /// </summary>
+    private static Session CreateSessionWithLastActivity(string sessionId, string displayName, DateTime lastActivityAt)
+    {
+        var session = new Session(sessionId, @"C:\repo\demo")
+        {
+            DisplayName = displayName
+        };
+        session.RestoreTimestamps(session.CreatedAt, lastActivityAt);
+        return session;
     }
 
     private static async Task SetConnectedProfileAsync(

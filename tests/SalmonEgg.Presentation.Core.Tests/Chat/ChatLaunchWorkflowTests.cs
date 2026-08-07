@@ -33,7 +33,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -68,7 +68,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -104,7 +104,7 @@ public sealed class ChatLaunchWorkflowTests
         // initial attempt and the retry). It should fail the launch cleanly instead.
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade { IsConnected = true };
         var navigation = new RecordingNavigationCoordinator(chat) { ApplyActivatedSessionToChat = true };
@@ -132,7 +132,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -171,7 +171,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -211,7 +211,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -367,7 +367,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -396,7 +396,7 @@ public sealed class ChatLaunchWorkflowTests
     {
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(s => s.CreateSessionAsync(It.IsAny<string>(), It.IsAny<string?>()))
-            .ReturnsAsync((string id, string? cwd) => new Session { SessionId = id, Cwd = cwd });
+            .ReturnsAsync((string id, string? cwd) => new Session(id, cwd));
 
         var chat = new FakeChatLaunchWorkflowChatFacade
         {
@@ -661,22 +661,6 @@ public sealed class ChatLaunchWorkflowTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.UpdateActivity();
-            }
-
-            return true;
-        }
-
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
@@ -697,11 +681,6 @@ public sealed class ChatLaunchWorkflowTests
             _sessions[sessionId] = session;
             return session;
         }
-
-        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
-            => _sessions.TryGetValue(sessionId, out var session)
-                ? session.History.ToList()
-                : Array.Empty<SessionUpdateEntry>();
     }
 
     private static ChatConversationWorkspace CreateWorkspace(

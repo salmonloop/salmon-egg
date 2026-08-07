@@ -3037,10 +3037,10 @@ public sealed class ChatConversationWorkspaceTests
                 UpdatedAtUtc = new DateTime(2026, 3, 1, 0, 20, 0, DateTimeKind.Utc)
             }, cancellationToken: TestContext.Current.CancellationToken);
 
-        sessionManager.UpdateSession(
-            "session-1",
-            session => session.LastActivityAt = new DateTime(2026, 3, 1, 0, 30, 0, DateTimeKind.Utc),
-            updateActivity: false);
+        var trackedSession = sessionManager.GetSession("session-1")!;
+        trackedSession.RestoreTimestamps(
+            trackedSession.CreatedAt,
+            new DateTime(2026, 3, 1, 0, 30, 0, DateTimeKind.Utc));
 
         Assert.Equal(new[] { "session-2", "session-1" }, workspace.GetKnownConversationIds());
 
@@ -3343,22 +3343,6 @@ public sealed class ChatConversationWorkspaceTests
         public Session? GetSession(string sessionId)
             => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.UpdateActivity();
-            }
-
-            return true;
-        }
-
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
@@ -3378,11 +3362,6 @@ public sealed class ChatConversationWorkspaceTests
 
             return session;
         }
-
-        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
-            => _sessions.TryGetValue(sessionId, out var session)
-                ? session.History.ToList()
-                : Array.Empty<SessionUpdateEntry>();
     }
 
 }

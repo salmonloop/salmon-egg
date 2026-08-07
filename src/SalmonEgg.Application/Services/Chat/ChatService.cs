@@ -42,8 +42,8 @@ namespace SalmonEgg.Application.Services.Chat
         public AgentInfo? AgentInfo => _acpClient.AgentInfo;
         public AgentCapabilities? AgentCapabilities => _acpClient.AgentCapabilities;
 
-        // 返回快照而非 live List:pump 会并发向同一 Session.History 追加,直接把内部 List
-        // 交给 UI 枚举会触发并发修改异常。SnapshotHistory 在 SessionManager 锁下拷贝。
+        // 返回快照而非 live List:pump 会并发向同一会话追加历史,直接把内部 List
+        // 交给 UI 枚举会触发并发修改异常。Session.SnapshotHistory 在会话自己的锁下拷贝。
         public IReadOnlyList<SessionUpdateEntry> SessionHistory
         {
             get
@@ -59,7 +59,8 @@ namespace SalmonEgg.Application.Services.Chat
                     return Array.Empty<SessionUpdateEntry>();
                 }
 
-                return _sessionManager.SnapshotHistory(sessionId);
+                return _sessionManager.GetSession(sessionId)?.SnapshotHistory()
+                    ?? Array.Empty<SessionUpdateEntry>();
             }
         }
 
@@ -154,7 +155,7 @@ namespace SalmonEgg.Application.Services.Chat
                     }
                     else
                     {
-                        session.AddHistoryEntry(CreateSessionUpdateEntry(e.Update, e.SessionId));
+                        session.AppendHistory(CreateSessionUpdateEntry(e.Update, e.SessionId));
                     }
 
                     // CRITICAL PATH: Syncing Agent's internal state (Plan, Mode) with our local variables.
@@ -329,8 +330,8 @@ namespace SalmonEgg.Application.Services.Chat
 
         // 以下 Apply*/Capture*/Restore* 系列约定:调用方必须已持 _stateGate。
         // 它们读改写 _currentMode/_currentSessionId/_configAuthoritativeSessionIds 并可能
-        // 调用 _sessionManager(走 SessionManager 自己的独立锁,单向嵌套 _stateGate→_lock,
-        // SessionManager 从不回调本类,故无死锁)。
+        // 调用 Session 上的具名操作(走会话自己的独立锁,单向嵌套 _stateGate→Session 内部锁,
+        // 会话从不回调本类,故无死锁)。
         private void ApplySessionResponseModeState(
             string sessionId,
             SessionModesState? modes,
@@ -348,7 +349,7 @@ namespace SalmonEgg.Application.Services.Chat
 
         private void ApplyCurrentModeId(string sessionId, string modeId)
         {
-            var sessionMode = _sessionManager.GetSession(sessionId)?.Mode;
+            var sessionMode = _sessionManager.GetSession(sessionId)?.SnapshotMode();
             var source = string.Equals(_currentSessionId, sessionId, StringComparison.Ordinal)
                 ? _currentMode ?? sessionMode
                 : sessionMode;
@@ -372,10 +373,8 @@ namespace SalmonEgg.Application.Services.Chat
                 _currentMode = state;
             }
 
-            _sessionManager.UpdateSession(
-                sessionId,
-                session => session.Mode = CloneModeState(projectedState) ?? new SessionModeState(),
-                updateActivity: false);
+            // SetMode 自己存深拷贝,这里不必再克隆一次。
+            _sessionManager.GetSession(sessionId)?.SetMode(projectedState);
         }
 
         private static SessionModeState? BuildModeState(SessionModesState? modes)
@@ -401,22 +400,7 @@ namespace SalmonEgg.Application.Services.Chat
         }
 
         private static SessionModeState? CloneModeState(SessionModeState? source)
-        {
-            if (source is null)
-            {
-                return null;
-            }
-
-            var clone = new SessionModeState
-            {
-                CurrentModeId = source.CurrentModeId,
-                AvailableModes = source.AvailableModes
-                    .Select(static mode => new DomainSessionMode(mode.Id, mode.Name, mode.Description))
-                    .ToList()
-            };
-            clone.CurrentMode = clone.GetModeById(clone.CurrentModeId);
-            return clone;
-        }
+            => source?.DeepCopy();
 
         private static Plan? ClonePlan(Plan? source)
         {
@@ -457,8 +441,8 @@ namespace SalmonEgg.Application.Services.Chat
                 true,
                 configOptionsAuthoritative,
                 session.State,
-                CloneModeState(session.Mode),
-                session.History.ToList());
+                session.SnapshotMode(),
+                session.SnapshotHistory());
         }
 
         private void RestoreSessionSnapshot(SessionSnapshot snapshot)
@@ -470,21 +454,11 @@ namespace SalmonEgg.Application.Services.Chat
                 return;
             }
 
-            _sessionManager.UpdateSession(
-                snapshot.SessionId,
-                session =>
-                {
-                    // Cwd is established when the session is created and never changes, so a
-                    // rollback has nothing to restore for it.
-                    session.State = snapshot.State;
-                    session.Mode = CloneModeState(snapshot.Mode) ?? new SessionModeState();
-                    session.History.Clear();
-                    foreach (var entry in snapshot.History)
-                    {
-                        session.History.Add(entry);
-                    }
-                },
-                updateActivity: false);
+            // 状态、模式、历史必须一次性回滚:分三次写入会让并发读者看到"改了一半"的会话。
+            _sessionManager.GetSession(snapshot.SessionId)?.RestoreSnapshot(
+                snapshot.State,
+                snapshot.Mode,
+                snapshot.History);
             RestoreConfigAuthority(snapshot);
         }
 
@@ -517,7 +491,7 @@ namespace SalmonEgg.Application.Services.Chat
                 bool configOptionsAuthoritative,
                 SessionState state,
                 SessionModeState? mode,
-                List<SessionUpdateEntry> history)
+                IReadOnlyList<SessionUpdateEntry> history)
             {
                 SessionId = sessionId;
                 Existed = existed;
@@ -537,7 +511,7 @@ namespace SalmonEgg.Application.Services.Chat
 
             public SessionModeState? Mode { get; }
 
-            public List<SessionUpdateEntry> History { get; }
+            public IReadOnlyList<SessionUpdateEntry> History { get; }
         }
 
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params)
@@ -570,14 +544,7 @@ namespace SalmonEgg.Application.Services.Chat
                 if (!string.IsNullOrWhiteSpace(response.SessionId))
                 {
                     await GetOrCreateSessionAsync(response.SessionId, @params.Cwd).ConfigureAwait(false);
-                    _sessionManager.UpdateSession(
-                        response.SessionId,
-                        session =>
-                        {
-                            session.History.Clear();
-                            session.State = SessionState.Active;
-                        },
-                        updateActivity: false);
+                    _sessionManager.GetSession(response.SessionId)?.ResetForNewSession();
                 }
 
                 lock (_stateGate)
@@ -639,18 +606,12 @@ namespace SalmonEgg.Application.Services.Chat
 
                 // Clear history before loading to ensure we don't have duplicate entries
                 // if the server replays the history during the load process.
-                _sessionManager.UpdateSession(
-                    @params.SessionId,
-                    s => s.History.Clear(),
-                    updateActivity: false);
+                _sessionManager.GetSession(@params.SessionId)?.ClearHistory();
 
                 var response = await _acpClient.LoadSessionAsync(@params, cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    _sessionManager.UpdateSession(
-                        @params.SessionId,
-                        s => s.State = SessionState.Active,
-                        updateActivity: false);
+                    _sessionManager.GetSession(@params.SessionId)?.SetState(SessionState.Active);
                     lock (_stateGate)
                     {
                         ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
@@ -734,10 +695,7 @@ namespace SalmonEgg.Application.Services.Chat
                 _sessionManager.GetOrCreateTrackingSlot(@params.SessionId, @params.Cwd);
 
                 var response = await _acpClient.ResumeSessionAsync(@params, cancellationToken).ConfigureAwait(false);
-                _sessionManager.UpdateSession(
-                    @params.SessionId,
-                    s => s.State = SessionState.Active,
-                    updateActivity: false);
+                _sessionManager.GetSession(@params.SessionId)?.SetState(SessionState.Active);
                 lock (_stateGate)
                 {
                     ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
@@ -895,10 +853,9 @@ namespace SalmonEgg.Application.Services.Chat
             try
             {
                 await _acpClient.CancelSessionAsync(@params).ConfigureAwait(false);
-                _sessionManager.UpdateSession(@params.SessionId, s =>
-                {
-                    s.State = SessionState.Cancelled;
-                });
+                // Agent 已接受取消,这里只是把权威结果投影到本地容器,因此无条件写入;
+                // 而 SessionManager.CancelSessionAsync 走 TryCancel,那里"能否取消"才是一次判定。
+                _sessionManager.GetSession(@params.SessionId)?.SetState(SessionState.Cancelled);
             }
             catch (Exception ex)
             {
@@ -1063,7 +1020,7 @@ namespace SalmonEgg.Application.Services.Chat
 
             if (!string.IsNullOrWhiteSpace(sessionId))
             {
-                _sessionManager.UpdateSession(sessionId, s => s.History.Clear());
+                _sessionManager.GetSession(sessionId)?.ClearHistory();
             }
         }
 

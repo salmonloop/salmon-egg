@@ -103,10 +103,17 @@ internal sealed class DomainAcpClientSessionStore : IAcpClientSessionStore
         => _inner.RemoveSession(sessionId);
 
     public bool UpdateCurrentMode(string sessionId, string modeId)
-        => _inner.UpdateSession(sessionId, session =>
+    {
+        if (_inner.GetSession(sessionId) is not { } session)
         {
-            session.Mode.CurrentModeId = modeId;
-        });
+            return false;
+        }
+
+        // 模式切换的写入与「当前模式对象」的重新解析必须一起发生，这个不可分性属于会话自身，
+        // 因此交给 Session 在其内部临界区完成，而不是在这里拿到引用后逐字段改。
+        session.SetCurrentModeId(modeId);
+        return true;
+    }
 
     public Task<bool> CancelSessionAsync(string sessionId)
         => _inner.CancelSessionAsync(sessionId);

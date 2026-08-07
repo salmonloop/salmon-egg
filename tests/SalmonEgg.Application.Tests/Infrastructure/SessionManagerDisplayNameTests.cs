@@ -16,27 +16,30 @@ public sealed class SessionManagerDisplayNameTests
     }
 
     [Fact]
-    public async Task UpdateSession_AllowsRenaming()
+    public async Task GetSession_HandsOutLiveReference_SoRenamingIsVisibleThroughTheManager()
     {
         var manager = new SessionManager();
         await manager.CreateSessionAsync("abc", @"C:\repo\demo");
 
-        var ok = manager.UpdateSession("abc", s => s.DisplayName = "My Session");
-        Assert.True(ok);
+        manager.GetSession("abc")!.DisplayName = "My Session";
+
         Assert.Equal("My Session", manager.GetSession("abc")!.DisplayName);
     }
 
     [Fact]
-    public async Task UpdateSession_CanSkipActivityUpdate()
+    public async Task Renaming_IsNotSessionActivity()
     {
         var manager = new SessionManager();
         await manager.CreateSessionAsync("abc", @"C:\repo\demo");
+        var session = manager.GetSession("abc")!;
+        var original = session.LastActivityAt;
 
-        var original = manager.GetSession("abc")!.LastActivityAt;
-        var ok = manager.UpdateSession("abc", s => s.DisplayName = "My Session", updateActivity: false);
+        // 活动时间的语义现在内建于每个具名操作:改个显示名不是一次会话活动,
+        // 追加历史才是。以前这个区分靠调用方传 updateActivity 标志,容易传错。
+        session.DisplayName = "My Session";
+        Assert.Equal(original, session.LastActivityAt);
 
-        Assert.True(ok);
-        Assert.Equal("My Session", manager.GetSession("abc")!.DisplayName);
-        Assert.Equal(original, manager.GetSession("abc")!.LastActivityAt);
+        session.AppendHistory(SessionUpdateEntry.CreateTextMessage("chunk"));
+        Assert.True(session.LastActivityAt > original);
     }
 }

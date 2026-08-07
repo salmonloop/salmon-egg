@@ -1125,8 +1125,6 @@ public sealed class WorkspaceWriterTests
 
         public Session? GetSession(string sessionId) => null;
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true) => false;
-
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(false);
 
@@ -1137,8 +1135,5 @@ public sealed class WorkspaceWriterTests
 
         public Session GetOrCreateTrackingSlot(string sessionId, string cwd)
             => new(sessionId, cwd);
-
-        public System.Collections.Generic.IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
-            => Array.Empty<SessionUpdateEntry>();
     }
 }

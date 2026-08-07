@@ -15,7 +15,7 @@ public sealed class ChatConversationPanelRuntimeCoordinatorTests
         var coordinator = new ChatConversationPanelRuntimeCoordinator();
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(x => x.GetSession("conversation-1"))
-            .Returns(new Session { SessionId = "conversation-1", Cwd = "C:\\repo" });
+            .Returns(new Session("conversation-1", "C:\\repo"));
 
         var cwd = coordinator.ResolveLocalTerminalSessionInfoCwd(sessionManager.Object, "conversation-1", ChatState.Empty);
 

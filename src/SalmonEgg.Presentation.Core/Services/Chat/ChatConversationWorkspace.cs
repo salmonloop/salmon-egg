@@ -785,8 +785,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                         ? SessionNamePolicy.CreateDefault(conversationId)
                         : sanitized;
 
-                    if (_sessionManager.UpdateSession(conversationId, session => session.DisplayName = finalName, updateActivity: false))
+                    if (_sessionManager.GetSession(conversationId) is { } titledSession)
                     {
+                        titledSession.DisplayName = finalName;
                         metadataChanged = true;
                     }
                 }
@@ -797,9 +798,9 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
                     // Session info comes from the agent, which is authoritative for where the session
                     // actually runs. Our persisted copy can be stale, so adopt the reported value: this
                     // corrects our record rather than changing the session's working directory.
-                    var localCwd = _sessionManager.GetSession(conversationId)?.Cwd?.Trim();
-                    if (!string.Equals(localCwd, normalizedCwd, StringComparison.Ordinal)
-                        && _sessionManager.UpdateSession(conversationId, session => session.Cwd = normalizedCwd, updateActivity: false))
+                    // 比较与写入合并成一次原子操作:分开做的话,两次调用之间的并发写入会让
+                    // "是否真的改了"的判定失效。
+                    if (_sessionManager.GetSession(conversationId)?.AdoptAuthoritativeCwd(normalizedCwd) == true)
                     {
                         metadataChanged = true;
                     }
@@ -1156,17 +1157,15 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
 
                 var displayName = ResolveRestoredDisplayName(conversation);
 
-                _sessionManager.UpdateSession(
-                    conversation.ConversationId,
-                    session =>
-                    {
-                        session.DisplayName = displayName;
-                        session.CreatedAt = binding.CreatedAt;
-                        session.LastActivityAt = binding.LastAccessedAt > binding.LastUpdatedAt
+                if (_sessionManager.GetSession(conversation.ConversationId) is { } restoredSession)
+                {
+                    restoredSession.DisplayName = displayName;
+                    restoredSession.RestoreTimestamps(
+                        binding.CreatedAt,
+                        binding.LastAccessedAt > binding.LastUpdatedAt
                             ? binding.LastAccessedAt
-                            : binding.LastUpdatedAt;
-                    },
-                    updateActivity: false);
+                            : binding.LastUpdatedAt);
+                }
             }
 
             var lastActiveConversationId = document.LastActiveConversationId;

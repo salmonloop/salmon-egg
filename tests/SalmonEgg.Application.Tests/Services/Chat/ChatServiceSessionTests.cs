@@ -66,9 +66,9 @@ public sealed class ChatServiceSessionTests
 
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
-        Assert.Single(session!.History);
-        Assert.Equal("text", session.History[0].ContentType);
-        Assert.Equal("hello", session.History[0].TextContent);
+        Assert.Single(session!.SnapshotHistory());
+        Assert.Equal("text", session.SnapshotHistory()[0].ContentType);
+        Assert.Equal("hello", session.SnapshotHistory()[0].TextContent);
 
         sut.Dispose();
     }
@@ -99,7 +99,7 @@ public sealed class ChatServiceSessionTests
                 new PlanUpdate([new PlanEntry("background plan")])));
 
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
-        var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.History);
+        var backgroundEntry = Assert.Single(sessionManager.GetSession("background")!.SnapshotHistory());
         Assert.Equal("background plan", Assert.Single(backgroundEntry.PlanEntries!).Content);
 
         sut.Dispose();
@@ -138,16 +138,17 @@ public sealed class ChatServiceSessionTests
 
         // Seed cached history for the target session.
         await sessionManager.CreateSessionAsync("s2", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession("s2", s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached")));
+        sessionManager.GetSession("s2")!.AppendHistory(
+            SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached"));
 
-        var before = sessionManager.GetSession("s2")!.History.Count;
+        var before = sessionManager.GetSession("s2")!.SnapshotHistory().Count;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.LoadSessionAsync(new SessionLoadParams("s2", Environment.CurrentDirectory), TestContext.Current.CancellationToken));
 
         Assert.Equal("s1", sut.CurrentSessionId);
         Assert.Equal("current plan", Assert.Single(sut.CurrentPlan!.Entries).Content);
-        Assert.Equal(before, sessionManager.GetSession("s2")!.History.Count);
+        Assert.Equal(before, sessionManager.GetSession("s2")!.SnapshotHistory().Count);
 
         sut.Dispose();
     }
@@ -208,17 +209,15 @@ public sealed class ChatServiceSessionTests
             .ThrowsAsync(new InvalidOperationException("load failed"));
 
         await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession(
-            "remote-1",
-            session =>
-            {
-                session.Mode.CurrentModeId = "code";
-                session.Mode.AvailableModes =
-                [
-                    new SalmonEgg.Domain.Models.Session.SessionMode("code", "Code"),
-                    new SalmonEgg.Domain.Models.Session.SessionMode("plan", "Plan")
-                ];
-            });
+        sessionManager.GetSession("remote-1")!.SetMode(new SalmonEgg.Domain.Models.Session.SessionModeState
+        {
+            CurrentModeId = "code",
+            AvailableModes =
+            [
+                new SalmonEgg.Domain.Models.Session.SessionMode("code", "Code"),
+                new SalmonEgg.Domain.Models.Session.SessionMode("plan", "Plan")
+            ]
+        });
         var sut = new ChatService(acpClient.Object, errorLogger.Object, sessionManager);
 
         await sut.CreateSessionAsync(new SessionNewParams { Cwd = Environment.CurrentDirectory });
@@ -229,7 +228,7 @@ public sealed class ChatServiceSessionTests
             c => c.SessionUpdateReceived += null,
             new SessionUpdateEventArgs("remote-1", new CurrentModeUpdate("plan")));
 
-        var mode = sessionManager.GetSession("remote-1")!.Mode;
+        var mode = sessionManager.GetSession("remote-1")!.SnapshotMode();
         Assert.Equal("plan", mode.CurrentModeId);
         Assert.Equal(2, mode.AvailableModes.Count);
 
@@ -302,7 +301,7 @@ public sealed class ChatServiceSessionTests
         Assert.NotNull(session);
         Assert.Equal(Environment.CurrentDirectory, session!.Cwd);
         Assert.Equal(SessionState.Active, session.State);
-        Assert.Empty(session.History);
+        Assert.Empty(session.SnapshotHistory());
 
         sut.Dispose();
     }
@@ -315,9 +314,8 @@ public sealed class ChatServiceSessionTests
         var sessionManager = new SessionManager();
 
         await sessionManager.CreateSessionAsync("remote-1", cwd: Environment.CurrentDirectory);
-        sessionManager.UpdateSession(
-            "remote-1",
-            s => s.AddHistoryEntry(SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached")));
+        sessionManager.GetSession("remote-1")!.AppendHistory(
+            SalmonEgg.Domain.Models.Session.SessionUpdateEntry.CreateTextMessage("cached"));
 
         acpClient.SetupGet(c => c.IsInitialized).Returns(true);
         acpClient.SetupGet(c => c.IsConnected).Returns(true);
@@ -333,9 +331,9 @@ public sealed class ChatServiceSessionTests
 
         var session = sessionManager.GetSession("remote-1");
         Assert.NotNull(session);
-        Assert.Single(session!.History);
-        Assert.Equal("text", session.History[0].ContentType);
-        Assert.Equal("cached", session.History[0].TextContent);
+        Assert.Single(session!.SnapshotHistory());
+        Assert.Equal("text", session.SnapshotHistory()[0].ContentType);
+        Assert.Equal("cached", session.SnapshotHistory()[0].TextContent);
 
         sut.Dispose();
     }
@@ -501,7 +499,7 @@ public sealed class ChatServiceSessionTests
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
         var session = sessionManager.GetSession("s1");
         Assert.NotNull(session);
-        Assert.Equal("code", session!.History.Single().ModeId);
+        Assert.Equal("code", session!.SnapshotHistory().Single().ModeId);
 
         sut.Dispose();
     }
@@ -535,7 +533,7 @@ public sealed class ChatServiceSessionTests
             new SessionUpdateEventArgs("background", new CurrentModeUpdate("plan")));
 
         Assert.Equal("code", sut.CurrentMode?.CurrentModeId);
-        var backgroundMode = sessionManager.GetSession("background")!.Mode;
+        var backgroundMode = sessionManager.GetSession("background")!.SnapshotMode();
         Assert.Equal("plan", backgroundMode.CurrentModeId);
         Assert.Empty(backgroundMode.AvailableModes);
 
@@ -582,7 +580,7 @@ public sealed class ChatServiceSessionTests
         Assert.Equal("Code", sut.CurrentMode?.CurrentMode?.Name);
         Assert.NotNull(modes);
         Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
-        Assert.Equal("code", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+        Assert.Equal("code", sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
 
         sut.Dispose();
     }
@@ -622,8 +620,8 @@ public sealed class ChatServiceSessionTests
         Assert.Equal("Plan", sut.CurrentMode?.CurrentMode?.Name);
         Assert.NotNull(modes);
         Assert.Equal(["code", "plan"], modes!.Select(mode => mode.Id).ToArray());
-        Assert.Equal("plan", sessionManager.GetSession("s1")!.Mode.CurrentModeId);
-        Assert.Equal(2, sessionManager.GetSession("s1")!.Mode.AvailableModes.Count);
+        Assert.Equal("plan", sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
+        Assert.Equal(2, sessionManager.GetSession("s1")!.SnapshotMode().AvailableModes.Count);
 
         sut.Dispose();
     }
@@ -659,8 +657,8 @@ public sealed class ChatServiceSessionTests
 
         Assert.Null(sut.CurrentMode);
         Assert.Null(modes);
-        Assert.Empty(sessionManager.GetSession("s1")!.Mode.AvailableModes);
-        Assert.Equal(string.Empty, sessionManager.GetSession("s1")!.Mode.CurrentModeId);
+        Assert.Empty(sessionManager.GetSession("s1")!.SnapshotMode().AvailableModes);
+        Assert.Equal(string.Empty, sessionManager.GetSession("s1")!.SnapshotMode().CurrentModeId);
 
         sut.Dispose();
     }

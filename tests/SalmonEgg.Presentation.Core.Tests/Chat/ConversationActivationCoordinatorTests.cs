@@ -1325,22 +1325,6 @@ public sealed class ConversationActivationCoordinatorTests
 
         public bool RemoveSession(string sessionId) => _sessions.Remove(sessionId);
 
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (!_sessions.TryGetValue(sessionId, out var session))
-            {
-                return false;
-            }
-
-            updateAction(session);
-            if (updateActivity)
-            {
-                session.LastActivityAt = DateTime.UtcNow;
-            }
-
-            return true;
-        }
-
         public Task<bool> CancelSessionAsync(string sessionId)
             => Task.FromResult(_sessions.ContainsKey(sessionId));
 
@@ -1358,11 +1342,6 @@ public sealed class ConversationActivationCoordinatorTests
             _sessions[sessionId] = session;
             return session;
         }
-
-        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
-            => _sessions.TryGetValue(sessionId, out var session)
-                ? session.History.ToList()
-                : Array.Empty<SessionUpdateEntry>();
     }
 
     private sealed class ControlledConversationSessionSwitcher : IConversationSessionSwitcher

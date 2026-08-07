@@ -39,22 +39,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -223,22 +207,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -359,22 +327,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -547,22 +499,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -724,22 +660,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -1037,22 +957,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -1169,22 +1073,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
@@ -1386,22 +1274,6 @@ public partial class ChatViewModelTests
                 sessions[id] = session;
                 return Task.FromResult(session);
             });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
-            });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));
 
@@ -1505,22 +1377,6 @@ public partial class ChatViewModelTests
                 var session = new Session(id, cwd);
                 sessions[id] = session;
                 return Task.FromResult(session);
-            });
-        sessionManager.Setup(s => s.UpdateSession(It.IsAny<string>(), It.IsAny<Action<Session>>(), It.IsAny<bool>()))
-            .Returns<string, Action<Session>, bool>((id, update, updateActivity) =>
-            {
-                if (!sessions.TryGetValue(id, out var session))
-                {
-                    return false;
-                }
-
-                update(session);
-                if (updateActivity)
-                {
-                    session.UpdateActivity();
-                }
-
-                return true;
             });
         sessionManager.Setup(s => s.RemoveSession(It.IsAny<string>()))
             .Returns<string>(id => sessions.Remove(id));

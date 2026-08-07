@@ -12,10 +12,16 @@ namespace SalmonEgg.Infrastructure.Services
     /// 会话管理器实现。
     /// 用于管理会话的创建、检索、更新和取消。
     /// </summary>
+    /// <remarks>
+    /// 本类只负责会话的<b>身份与生命周期</b>（按 ID 建、查、删、枚举），不负责保护单个会话的内部状态：
+    /// <see cref="GetSession"/> 交出的是 live 引用，会话自身的并发安全由 <see cref="Session"/> 自己持有。
+    /// 因此这里没有、也不应该有一把保护会话字段的锁——那把锁只能保护经由本类的写入，
+    /// 拿到引用后的直接写入会绕过它，形成"单边加锁"的假象。
+    /// 会话集合的原子性由 <see cref="ConcurrentDictionary{TKey, TValue}"/> 提供。
+    /// </remarks>
     public class SessionManager : ISessionManager
     {
         private readonly ConcurrentDictionary<string, Session> _sessions = new();
-        private readonly object _lock = new();
 
         /// <summary>
         /// 创建新的会话。
@@ -65,7 +71,7 @@ namespace SalmonEgg.Infrastructure.Services
         /// 原子地获取或创建本地运行时追踪槽（tracking slot）。这里返回的 <see cref="Session"/>
         /// 是当前连接上会话的**运行时投影容器**，不是历史会话的事实源：历史正文由 Agent 在
         /// session/load(V1) 或 resume+replayFrom(V2) 时通过 session/update 重放写入，本槽只是
-        /// 承接重放的落地对象（调用方随即 History.Clear 洗净再接收权威重放）。因此"创建"绝不等于
+        /// 承接重放的落地对象（调用方随即 <see cref="Session.ClearHistory"/> 洗净再接收权威重放）。因此"创建"绝不等于
         /// 伪造一个查不到的历史会话——仅是为即将到来的权威加载准备一个空容器。
         /// 并发调用同一 ID 只会创建一个实例、都拿到同一引用、绝不抛错，消除调用方 check-then-act
         /// (先 Get 后 Create)与 <see cref="CreateSessionAsync"/> 的 TryAdd-即抛在并发下"一方必抛"的竞态。
@@ -93,61 +99,6 @@ namespace SalmonEgg.Infrastructure.Services
         }
 
         /// <summary>
-        /// 在写锁下拷贝会话历史，返回快照。用于把 live <see cref="Session.History"/> 与并发的
-        /// <see cref="Session.AddHistoryEntry"/> 隔离，避免调用方枚举 live 列表时被并发修改破坏。
-        /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <returns>历史快照；会话不存在时返回空列表</returns>
-        public IReadOnlyList<SessionUpdateEntry> SnapshotHistory(string sessionId)
-        {
-            if (string.IsNullOrWhiteSpace(sessionId)
-                || !_sessions.TryGetValue(sessionId, out var session))
-            {
-                return Array.Empty<SessionUpdateEntry>();
-            }
-
-            lock (_lock)
-            {
-                return session.History.ToArray();
-            }
-        }
-
-        /// <summary>
-        /// 更新会话。
-        /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="updateAction">更新操作</param>
-        /// <param name="updateActivity">是否同步更新最后活动时间</param>
-        /// <returns>是否成功更新</returns>
-        public bool UpdateSession(string sessionId, Action<Session> updateAction, bool updateActivity = true)
-        {
-            if (string.IsNullOrWhiteSpace(sessionId))
-            {
-                return false;
-            }
-
-            if (updateAction == null)
-            {
-                throw new ArgumentNullException(nameof(updateAction));
-            }
-
-            if (_sessions.TryGetValue(sessionId, out var session))
-            {
-                lock (_lock)
-                {
-                    updateAction(session);
-                    if (updateActivity)
-                    {
-                        session.UpdateActivity();
-                    }
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// 取消会话。
         /// </summary>
         /// <param name="sessionId">会话 ID</param>
@@ -161,19 +112,9 @@ namespace SalmonEgg.Infrastructure.Services
 
             if (_sessions.TryGetValue(sessionId, out var session))
             {
-                lock (_lock)
-                {
-                    if (session.IsTerminated)
-                    {
-                        // 会话已经终止
-                        return Task.FromResult(false);
-                    }
-
-                    session.State = SessionState.Cancelled;
-                    session.UpdateActivity();
-
-                }
-                return Task.FromResult(true);
+                // 「未终止则取消」的判定与写入必须原子完成，这个不可分性属于会话自身，
+                // 因此由 Session.TryCancel 在其内部临界区内保证。
+                return Task.FromResult(session.TryCancel());
             }
 
             return Task.FromResult(false);

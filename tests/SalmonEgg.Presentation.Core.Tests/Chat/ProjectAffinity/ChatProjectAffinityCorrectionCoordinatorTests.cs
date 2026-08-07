@@ -19,7 +19,7 @@ public sealed class ChatProjectAffinityCorrectionCoordinatorTests
         var coordinator = new ChatProjectAffinityCorrectionCoordinator(resolver);
         var sessionManager = new Mock<ISessionManager>();
         sessionManager.Setup(x => x.GetSession("conversation-1"))
-            .Returns(new Session { SessionId = "conversation-1", Cwd = "C:\\repo" });
+            .Returns(new Session("conversation-1", "C:\\repo"));
         var workspace = new ChatConversationWorkspace(
             sessionManager.Object,
             Mock.Of<IConversationStore>(),
