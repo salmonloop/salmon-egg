@@ -28,6 +28,12 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly Dictionary<string, ConversationBinding> _conversationBindings = new(StringComparer.Ordinal);
     private readonly HashSet<string> _deletedConversationTombstones = new(StringComparer.Ordinal);
+    // Guards the debounce handle only. Scheduling runs on whichever thread mutated the workspace
+    // while a flush runs on the closing thread, so deciding whether a write is pending and claiming
+    // it has to be one step: sampling it separately lets a schedule land in between and be cancelled
+    // by a flush that already concluded there was nothing to write. Held for the handle swap only,
+    // never across the write itself.
+    private readonly object _saveScheduleGate = new();
     private CancellationTokenSource? _saveCts;
     private bool _disposed;
     private bool _recoveryDocumentRestored;
@@ -864,9 +870,13 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
-        CancelScheduledSave();
-        _saveCts = new CancellationTokenSource();
-        var token = _saveCts.Token;
+        CancellationToken token;
+        lock (_saveScheduleGate)
+        {
+            CancelScheduledSaveCore();
+            _saveCts = new CancellationTokenSource();
+            token = _saveCts.Token;
+        }
 
         _ = Task.Run(async () =>
         {
@@ -1017,10 +1027,18 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
             return;
         }
 
-        // Claim the scheduled write instead of waiting for its debounce to elapse. Cancelling first
-        // means the timer cannot fire a second, redundant write behind this one.
-        var hadPendingSave = _saveCts is not null;
-        CancelScheduledSave();
+        // Claim the scheduled write instead of waiting for its debounce to elapse. Sampling and
+        // cancelling under one lock keeps the claim honest: a schedule that lands mid-flush is either
+        // claimed by this flush or left with its timer intact, never cancelled by a flush that had
+        // already decided nothing was pending. Cancelling also stops the timer firing a second,
+        // redundant write behind this one.
+        bool hadPendingSave;
+        lock (_saveScheduleGate)
+        {
+            hadPendingSave = _saveCts is not null;
+            CancelScheduledSaveCore();
+        }
+
         if (!hadPendingSave)
         {
             return;
@@ -1030,6 +1048,14 @@ public sealed class ChatConversationWorkspace : ObservableObject, IConversationC
     }
 
     private void CancelScheduledSave()
+    {
+        lock (_saveScheduleGate)
+        {
+            CancelScheduledSaveCore();
+        }
+    }
+
+    private void CancelScheduledSaveCore()
     {
         _saveCts?.Cancel();
         _saveCts?.Dispose();
