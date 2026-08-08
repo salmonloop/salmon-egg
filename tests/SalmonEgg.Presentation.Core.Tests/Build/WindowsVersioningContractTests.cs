@@ -59,6 +59,22 @@ public sealed class WindowsVersioningContractTests
         Assert.Contains("Publisher=\"CN=0B694F0E-510C-433A-A6F7-1484D6A39E19\"", packageManifestTemplate, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReleaseWorkflow_UsesProjectVersionAndValidatesMsixSigningIdentity()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var releaseWorkflow = File.ReadAllText(
+            Path.Combine(repositoryRoot, ".github", "workflows", "release-packaging.yml"));
+
+        Assert.Contains("$displayVersion", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Version=\"1.0.0\"", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("Import-PfxCertificate", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("$certificate.HasPrivateKey", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("$certificate.Subject -ne $expectedPublisher", releaseWorkflow, StringComparison.Ordinal);
+        Assert.Contains("PackageCertificateThumbprint", releaseWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("PackageCertificateKeyFile", releaseWorkflow, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

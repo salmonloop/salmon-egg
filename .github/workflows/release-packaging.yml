@@ -81,6 +81,12 @@ jobs:
           $installerDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\installer"
           New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
 
+          [xml]$projectXml = Get-Content (Join-Path $env:GITHUB_WORKSPACE "SalmonEgg\SalmonEgg\SalmonEgg.csproj")
+          $displayVersion = $projectXml.Project.PropertyGroup.SalmonEggDisplayVersion | Select-Object -First 1
+          if ($displayVersion -notmatch '^\d+\.\d+\.\d+$') {
+            throw "SalmonEggDisplayVersion must be a three-part numeric version, got: $displayVersion"
+          }
+
           $harvestPath = Join-Path $installerDir "Harvest.wxs"
           heat dir $desktopDir `
             -cg SalmonEggDesktopFiles `
@@ -96,7 +102,7 @@ jobs:
           $productXml = @(
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">'
-            '  <Product Id="*" Name="SalmonEgg (Desktop)" Language="1033" Version="1.0.0" Manufacturer="SalmonLoop" UpgradeCode="A2F958DF-D4A4-4E9A-A487-E7CFF31E3271">'
+            "  <Product Id=`"*`" Name=`"SalmonEgg (Desktop)`" Language=`"1033`" Version=`"$displayVersion`" Manufacturer=`"SalmonLoop`" UpgradeCode=`"A2F958DF-D4A4-4E9A-A487-E7CFF31E3271`">"
             '    <Package InstallerVersion="500" Compressed="yes" InstallScope="perUser" InstallPrivileges="limited" />'
             '    <MajorUpgrade DowngradeErrorMessage="A newer version of SalmonEgg is already installed." />'
             '    <MediaTemplate EmbedCab="yes" />'
@@ -206,6 +212,25 @@ jobs:
           $pfxPath = Join-Path $certDir "salmonegg-msix.pfx"
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
 
+          $expectedPublisher = "CN=0B694F0E-510C-433A-A6F7-1484D6A39E19"
+          $certPassword = ConvertTo-SecureString $env:MSIX_PFX_PASSWORD -AsPlainText -Force
+          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfxPath,
+            $env:MSIX_PFX_PASSWORD,
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet -bor
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+          if (-not $certificate.HasPrivateKey) {
+            throw "MSIX signing certificate does not contain a private key."
+          }
+          if ($certificate.Subject -ne $expectedPublisher) {
+            throw "MSIX signing certificate subject '$($certificate.Subject)' does not match '$expectedPublisher'."
+          }
+          if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
+            throw "MSIX signing certificate expired at $($certificate.NotAfter.ToUniversalTime().ToString('o'))."
+          }
+          Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $certPassword | Out-Null
+          "MSIX_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Publish Windows MSIX
         shell: pwsh
         run: |
@@ -220,8 +245,7 @@ jobs:
             /p:BuildProjectReferences=false `
             /p:DisableCustomWinSdkXamlReferences=true `
             /p:AppxPackageSigningEnabled=true `
-            /p:PackageCertificateKeyFile="${{ github.workspace }}\artifacts\signing\salmonegg-msix.pfx" `
-            /p:PackageCertificatePassword="${{ secrets.MSIX_PFX_PASSWORD }}" `
+            /p:PackageCertificateThumbprint="$env:MSIX_CERT_THUMBPRINT" `
             /p:Restore=false `
             /v:minimal
 
