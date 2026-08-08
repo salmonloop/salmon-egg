@@ -97,7 +97,14 @@ namespace SalmonEgg.Domain.Interfaces.Transport
         StdoutReadFailed,
         StderrReadFailed,
         DisconnectFailed,
-        NotConnected
+        NotConnected,
+
+        /// <summary>
+        /// The agent wrote something to stdout that was never an ACP frame. ACP reserves stdout
+        /// for protocol messages and directs diagnostics to stderr, so this is misrouted agent
+        /// logging rather than a failure of ours — treated like <see cref="AgentStderr"/>.
+        /// </summary>
+        StdoutProtocolViolation
     }
 
     public class TransportErrorEventArgs : EventArgs

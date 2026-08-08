@@ -13,7 +13,14 @@ namespace SalmonEgg.Acp.JsonRpc
         /// 对应请求的唯一标识符。
         /// 必须与请求消息中的 id 值相同。
         /// </summary>
+        /// <remarks>
+        /// Always serialized, overriding the envelope-wide WhenWritingNull policy. JSON-RPC 2.0
+        /// requires every Response to carry an id, and mandates an explicit null when the id could
+        /// not be determined (parse error / invalid request). Omitting the member instead would
+        /// make the payload a Notification rather than a Response.
+        /// </remarks>
         [JsonPropertyName("id")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
         public object? Id { get; set; }
 
         /// <summary>
@@ -66,11 +73,20 @@ namespace SalmonEgg.Acp.JsonRpc
         /// <summary>
         /// 判断响应是否成功。
         /// </summary>
+        /// <remarks>
+        /// Local convenience only. A JSON-RPC 2.0 Response carries exactly jsonrpc/id/result/error,
+        /// so this must never reach the wire.
+        /// </remarks>
+        [JsonIgnore]
         public bool IsSuccess => Error == null && Result.HasValue;
 
         /// <summary>
         /// 判断响应是否失败。
         /// </summary>
+        /// <remarks>
+        /// Local convenience only; see <see cref="IsSuccess"/>. Not part of the JSON-RPC envelope.
+        /// </remarks>
+        [JsonIgnore]
         public bool IsError => Error != null;
     }
 }

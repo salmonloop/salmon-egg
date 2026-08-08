@@ -941,6 +941,66 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
+        public void TransportErrors_WhenStdoutProtocolViolation_ShouldNotPublishUserError()
+        {
+            // ACP: "The agent MUST NOT write anything to its stdout that is not a valid ACP
+            // message", and diagnostics belong on stderr. Such a line is the agent's spec
+            // violation, not a client failure, and carries no request to answer — so it must not
+            // reach the user as an error (it would otherwise strand a toast reading
+            // "Failed to process message: Invalid JSON: '0xEF' is an invalid start of a value").
+            var client = CreateClient();
+            var receivedErrors = new List<string>();
+            client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
+
+            _transportMock.Raise(
+                t => t.ErrorOccurred += null,
+                new AcpTransportErrorEventArgs(
+                    "Agent wrote non-ACP output to stdout: Running database migrations [hex: 52 75 6E 6E 69 6E 67]",
+                    kind: AcpTransportErrorKind.StdoutProtocolViolation));
+
+            Assert.Empty(receivedErrors);
+            _loggerMock.Verify(
+                logger => logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "AGENT_STDOUT_VIOLATION",
+                    It.Is<string>(message => message.Contains("non-ACP output", StringComparison.Ordinal)),
+                    It.IsAny<string?>(),
+                    It.IsAny<Exception?>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public void OnMessageReceived_WhenFrameFailsToParse_ShouldReportAndReplyParseError()
+        {
+            // A '{'-leading line did look like a frame, so the agent intended to send something.
+            // JSON-RPC 2.0 covers this case: reply -32700 with an explicit null id, since no id
+            // could be recovered. This is the boundary against the case above, which gets no reply.
+            var client = CreateClient();
+            var receivedErrors = new List<string>();
+            client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
+            var sent = new List<string>();
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns((string message, CancellationToken _) =>
+                {
+                    sent.Add(message);
+                    return Task.FromResult(true);
+                });
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new AcpTransportMessageReceivedEventArgs("{\"jsonrpc\":\"2.0\",\"method\":"));
+
+            Assert.Contains(receivedErrors, error => error.Contains("Failed to process message", StringComparison.Ordinal));
+
+            var reply = Assert.Single(sent);
+            using var document = JsonDocument.Parse(reply);
+            Assert.True(document.RootElement.TryGetProperty("id", out var id), $"Reply must carry an id; got: {reply}");
+            Assert.Equal(JsonValueKind.Null, id.ValueKind);
+            Assert.Equal(-32700, document.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+        }
+
+        [Fact]
         public async Task LoadSessionAsync_SlowButValidResponse_CompletesWhenResponseEventuallyArrives()
         {
             var parser = new MessageParser();

@@ -46,7 +46,14 @@ namespace SalmonEgg.Acp.Client
         StdoutReadFailed,
         StderrReadFailed,
         DisconnectFailed,
-        NotConnected
+        NotConnected,
+
+        /// <summary>
+        /// The peer wrote something to the protocol stream that was never an ACP frame. ACP
+        /// reserves stdout for protocol messages and directs diagnostics to stderr, so this is
+        /// misrouted logging rather than a transport failure — treated like <see cref="AgentStderr"/>.
+        /// </summary>
+        StdoutProtocolViolation
     }
 
     public sealed class AcpTransportErrorEventArgs : EventArgs

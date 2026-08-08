@@ -78,6 +78,7 @@ internal sealed class DomainAcpTransportAdapter : IAcpTransport
             TransportErrorKind.StderrReadFailed => AcpTransportErrorKind.StderrReadFailed,
             TransportErrorKind.DisconnectFailed => AcpTransportErrorKind.DisconnectFailed,
             TransportErrorKind.NotConnected => AcpTransportErrorKind.NotConnected,
+            TransportErrorKind.StdoutProtocolViolation => AcpTransportErrorKind.StdoutProtocolViolation,
             _ => AcpTransportErrorKind.General
         };
 }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Content;
@@ -531,6 +532,66 @@ public class MessageParserTests
         Assert.NotNull(meta);
         Assert.Equal("unit-test", ReadMetaValue(meta!["source"]));
         Assert.Equal("3", ReadMetaValue(meta["rank"]));
+    }
+
+    [Fact]
+    public void SerializeMessage_ParseErrorResponse_ShouldWriteExplicitNullId()
+    {
+        // JSON-RPC 2.0: a Response MUST carry an id, and it MUST be null when the id could not be
+        // determined (parse error). The envelope context sets DefaultIgnoreCondition =
+        // WhenWritingNull, which would drop the member and silently turn the reply into a
+        // Notification; JsonRpcResponse.Id overrides that. Source generation must honour the
+        // per-property override, so assert on the wire text rather than trusting it.
+        var parser = new MessageParser();
+
+        var json = parser.SerializeMessage(new JsonRpcResponse(
+            id: null,
+            error: JsonRpcError.CreateParseError("Invalid JSON: unexpected end of input")));
+
+        using var document = JsonDocument.Parse(json);
+        Assert.True(
+            document.RootElement.TryGetProperty("id", out var id),
+            $"Response must carry an explicit id member; got: {json}");
+        Assert.Equal(JsonValueKind.Null, id.ValueKind);
+        Assert.Equal(
+            JsonRpcErrorCode.ParseError,
+            document.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+    }
+
+    [Fact]
+    public void SerializeMessage_Response_ShouldEmitOnlyEnvelopeMembers()
+    {
+        // A JSON-RPC 2.0 Response carries exactly jsonrpc/id/result/error. IsSuccess/IsError are
+        // local conveniences; without [JsonIgnore] they serialize as "isSuccess"/"isError" on every
+        // response we send the agent (permission requests, fs reads).
+        var parser = new MessageParser();
+
+        var json = parser.SerializeMessage(new JsonRpcResponse(
+            id: "req-1",
+            error: JsonRpcError.CreateParseError("boom")));
+
+        using var document = JsonDocument.Parse(json);
+        var members = document.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
+
+        Assert.DoesNotContain("isSuccess", members);
+        Assert.DoesNotContain("isError", members);
+        Assert.All(
+            members,
+            name => Assert.Contains(name, new[] { "jsonrpc", "id", "result", "error" }));
+    }
+
+    [Fact]
+    public void SerializeMessage_ResponseWithId_ShouldRoundTripThatId()
+    {
+        // The override must not disturb ordinary responses.
+        var parser = new MessageParser();
+
+        var json = parser.SerializeMessage(new JsonRpcResponse(
+            id: "req-7",
+            error: JsonRpcError.CreateParseError("boom")));
+
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal("req-7", document.RootElement.GetProperty("id").GetString());
     }
 
     private static string? ReadMetaValue(object? value)

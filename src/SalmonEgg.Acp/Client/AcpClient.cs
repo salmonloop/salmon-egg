@@ -1026,9 +1026,41 @@ namespace SalmonEgg.Acp.Client
                     HandleNotification(notification);
                 }
             }
+            catch (AcpException ex) when (ex.ErrorCode == JsonRpcErrorCode.ParseError)
+            {
+                // The frame looked like an ACP message (the transport only forwards '{'-leading
+                // lines) but did not parse, so the agent did intend to send something. JSON-RPC 2.0
+                // covers exactly this: reply -32700 with an explicit null id, since no id could be
+                // recovered. Lines that never looked like frames are filtered upstream as
+                // StdoutProtocolViolation and deliberately get no reply.
+                OnErrorOccurred($"Failed to process message: {ex.Message}");
+                _ = SendParseErrorResponseAsync(ex.Message);
+            }
             catch (Exception ex)
             {
                 OnErrorOccurred($"Failed to process message: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Replies to an unparseable ACP frame per JSON-RPC 2.0: code -32700, id explicitly null.
+        /// </summary>
+        private async Task SendParseErrorResponseAsync(string detail)
+        {
+            try
+            {
+                await SendResponseAsync(new JsonRpcResponse(
+                        id: null,
+                        error: JsonRpcError.CreateParseError(detail)))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Never let the courtesy reply become a second failure surface.
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "PARSE_ERROR_REPLY_FAILED",
+                    ex.Message);
             }
         }
 
@@ -1791,6 +1823,20 @@ namespace SalmonEgg.Acp.Client
                 _logger.Log(
                     AcpClientLogLevel.Information,
                     "AGENT_STDERR",
+                    e.ErrorMessage);
+                return;
+            }
+
+            // A line that never looked like an ACP frame is agent diagnostics written to the stream
+            // ACP reserves for the protocol; the spec directs such output to stderr. It carries no
+            // request to answer, so replying -32700 would be a category error, and raising it as a
+            // client error would blame the user for the agent's spec violation. Log it and move on,
+            // exactly as AgentStderr above — the transport keeps reading either way.
+            if (e.Kind == AcpTransportErrorKind.StdoutProtocolViolation)
+            {
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "AGENT_STDOUT_VIOLATION",
                     e.ErrorMessage);
                 return;
             }
