@@ -100,6 +100,77 @@ public sealed class StdioTransportTeardownTests
     }
 
     [Fact]
+    public async Task Dispose_AfterConnectCancelledMidStartup_ShouldReapChildAndStaySilent()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses /bin/sh and pgrep to observe the child.");
+
+        // The path TryBeginTeardown does not cover. ConnectAsync starts the child, then awaits the
+        // startup observation window; cancelling inside it returns false with IsConnected never set,
+        // so teardown declines and never cancels the read token. Two things then have to hold:
+        // Dispose must reap the child it started — Process.Dispose only releases the handle and there
+        // is no finalizer — and it must not report an exit it is itself causing.
+        var marker = $"salmonegg-teardown-test-{Guid.NewGuid():N}";
+        var errors = new List<TransportErrorEventArgs>();
+
+        var transport = new StdioTransport("/bin/sh", ["-c", $"# {marker}\nsleep 300"]);
+        transport.ErrorOccurred += (_, e) => { lock (errors) { errors.Add(e); } };
+
+        try
+        {
+            using var connectCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(150));
+            try
+            {
+                await transport.ConnectAsync(connectCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Either shape is fine; what matters is that IsConnected was never set.
+            }
+
+            Assert.Equal(1, CountMatchingProcesses(marker));
+
+            int beforeDispose;
+            lock (errors)
+            {
+                beforeDispose = errors.Count;
+            }
+
+            transport.Dispose();
+            await Task.Delay(Settle, TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, CountMatchingProcesses(marker));
+
+            lock (errors)
+            {
+                Assert.Empty(errors.Skip(beforeDispose));
+            }
+        }
+        finally
+        {
+            // Never let a failure here leave a stray child behind.
+            if (CountMatchingProcesses(marker) > 0)
+            {
+                using var pkill = System.Diagnostics.Process.Start("/usr/bin/pkill", ["-f", marker]);
+                await pkill!.WaitForExitAsync(TestContext.Current.CancellationToken);
+            }
+        }
+    }
+
+    private static int CountMatchingProcesses(string marker)
+    {
+        using var pgrep = System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo("/usr/bin/pgrep", $"-fc {marker}")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            })!;
+
+        var text = pgrep.StandardOutput.ReadToEnd().Trim();
+        pgrep.WaitForExit();
+        return int.TryParse(text, out var count) ? count : 0;
+    }
+
+    [Fact]
     public async Task DisconnectAsync_AfterAgentAlreadyExited_ShouldNotAddTeardownErrors()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses /bin/sh to exit with a chosen code.");

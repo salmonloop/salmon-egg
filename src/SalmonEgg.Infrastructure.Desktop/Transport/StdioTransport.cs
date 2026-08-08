@@ -340,8 +340,18 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 _logger.Information("[StdioTransport.ReadLoop] Starting. PID={Pid}", _process?.Id);
                 int lineCount = 0;
+
+                // Captured once: teardown clears _stdout when it takes ownership, so re-reading the
+                // field each iteration would race — the null check could pass and the field be
+                // cleared before the read. The loop ends on cancellation or end of stream instead.
+                var stdout = _stdout;
+                if (stdout is null)
+                {
+                    return;
+                }
+
                 // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
-                while (!cancellationToken.IsCancellationRequested && _stdout != null)
+                while (!cancellationToken.IsCancellationRequested)
                 {
                     // Pass the token: the parameterless overload cannot be interrupted, so a
                     // deliberate teardown disposes the reader out from under a parked read and
@@ -349,7 +359,7 @@ namespace SalmonEgg.Infrastructure.Transport
                     // like a fault and was reported as StdoutReadFailed. With the token the parked
                     // read throws OperationCanceledException instead, which the catch below already
                     // treats as the expected end of a teardown.
-                    var line = await _stdout.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    var line = await stdout.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null)
                     {
                         _logger.Warning("[StdioTransport.ReadLoop] ReadLine returned null; stream may have ended");
@@ -409,11 +419,18 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 _logger.Information("[StdioTransport.ReadError] Starting. PID={Pid}", _process?.Id);
 
-                while (!cancellationToken.IsCancellationRequested && _stderr != null)
+                // Captured once, for the same reason as the stdout loop.
+                var stderr = _stderr;
+                if (stderr is null)
+                {
+                    return;
+                }
+
+                while (!cancellationToken.IsCancellationRequested)
                 {
                     // Token-aware for the same reason as the stdout loop: a deliberate teardown must
                     // end this read via cancellation, not via a disposed-stream IOException.
-                    var line = await _stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    var line = await stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null) break;
                     _logger.Verbose("[StdioTransport.ReadError] Received stderr line. Length={Length}", line.Length);
 
@@ -646,7 +663,21 @@ namespace SalmonEgg.Infrastructure.Transport
 
             _disposed = true;
             var began = TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr);
+
+            // Before the kill below, not after: TryBeginTeardown only cancels when IsConnected was
+            // true, so a connect that started the read loops and then failed or was cancelled reaches
+            // here with the token unsignalled. Killing first would fire Process.Exited while
+            // IsTearingDown still reads false, reporting an exit we are in the middle of causing.
+            // Cancelling also ends those still-running loops.
+            _readCts?.Cancel();
+
             CloseStandardInput(stdin);
+
+            // `began` now means "we took ownership and are the one reaping", which holds even when
+            // IsConnected was never set — a connect that started the child and then failed or was
+            // cancelled inside the startup observation window leaves it alive, and neither
+            // process.Dispose() nor the GC terminates it (there is no finalizer;
+            // GC.SuppressFinalize below). Whoever tears down second gets nulls and skips this.
             if (began && process is { HasExited: false })
             {
                 try
@@ -662,6 +693,15 @@ namespace SalmonEgg.Infrastructure.Transport
             stdout?.Dispose();
             stderr?.Dispose();
             process?.Dispose();
+
+            // Safe to release once cancellation has been signalled above: the loops hold the token by
+            // value, and a captured token whose source is disposed still reports cancellation
+            // correctly. The field is deliberately neither nulled nor reassigned — IsTearingDown
+            // reads IsCancellationRequested off it, which keeps returning the last state after
+            // disposal but would read false if the field were cleared, silently restoring the
+            // spurious "Agent process exited" this class reports for an exit it caused itself.
+            _readCts?.Dispose();
+
             _sendGate.Dispose();
             GC.SuppressFinalize(this);
         }
@@ -678,7 +718,25 @@ namespace SalmonEgg.Infrastructure.Transport
                 stdin = _stdin;
                 stdout = _stdout;
                 stderr = _stderr;
-                if (!IsConnected)
+
+                // Hand over ownership: the caller now reaps and disposes these, so clear the fields.
+                // Whoever arrives second gets nulls and does nothing, which is what makes teardown
+                // single-shot without a separate "already torn down" flag to keep in sync. Reading
+                // HasExited on an already-disposed Process throws, so the second caller must not see
+                // it at all.
+                //
+                // Deliberately keyed on having something to tear down rather than on IsConnected: a
+                // connect that started the child and then failed or was cancelled inside the startup
+                // observation window never set IsConnected, and gating on it there left the child
+                // alive with nobody to reap it.
+                //
+                // _readCts is NOT cleared — IsTearingDown reads IsCancellationRequested off it.
+                _process = null;
+                _stdin = null;
+                _stdout = null;
+                _stderr = null;
+
+                if (process is null)
                 {
                     return false;
                 }
