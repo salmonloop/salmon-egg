@@ -247,6 +247,46 @@ namespace SalmonEgg.Infrastructure.Tests.Network
         }
 
         [Fact]
+        public async Task WebSocketTransport_SendAsync_WhenDisposedConcurrently_ShouldStillSurfaceTheSendFailure()
+        {
+            // Shutdown can dispose the transport while a send is in flight. The send's error path
+            // projects the break onto the state stream, so it must not be turned into an
+            // ObjectDisposedException from a completed subject — the caller has to see why the send
+            // failed, not a teardown artifact.
+            var reconnections = new Subject<ReconnectionInfo>();
+            var disconnections = new Subject<DisconnectionInfo>();
+            var messages = new Subject<ResponseMessage>();
+            var client = CreateMockClient(reconnections, disconnections, messages, out var isRunning);
+            var transport = new WebSocketTransport(
+                _mockLogger.Object,
+                proxyConfiguration: null,
+                connectTimeout: TimeSpan.FromSeconds(5),
+                clientFactory: (_, _) => client.Object);
+
+            client
+                .Setup(x => x.Start())
+                .Returns(Task.CompletedTask)
+                .Callback(() =>
+                {
+                    isRunning.Value = true;
+                    reconnections.OnNext(ReconnectionInfo.Create(ReconnectionType.Initial));
+                });
+
+            await transport.ConnectAsync("ws://localhost:3012/acp/ws", CancellationToken.None);
+
+            // The transport is disposed from inside the send, i.e. exactly while the error path is
+            // about to publish the break.
+            client.Setup(x => x.Send(It.IsAny<string>()))
+                .Callback(() => transport.Dispose())
+                .Throws(new System.Net.WebSockets.WebSocketException("socket is gone"));
+
+            var exception = await Assert.ThrowsAsync<System.Net.WebSockets.WebSocketException>(() =>
+                transport.SendAsync("{}", CancellationToken.None));
+
+            Assert.Equal("socket is gone", exception.Message);
+        }
+
+        [Fact]
         public async Task WebSocketTransport_SendAsync_WhenTransientFailureOnLiveSocket_ShouldKeepConnectedState()
         {
             // A send failure on a socket that is still running is transient. Projecting Error here

@@ -86,7 +86,7 @@ namespace SalmonEgg.Infrastructure.Network
             try
             {
                 var stopwatch = Stopwatch.StartNew();
-                _stateSubject.OnNext(TransportState.Connecting);
+                PublishState(TransportState.Connecting);
                 _logger.Information(
                     "Connecting to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
                     url,
@@ -150,7 +150,7 @@ namespace SalmonEgg.Infrastructure.Network
 
                 if (!connectionStateProjectedByEvent)
                 {
-                    _stateSubject.OnNext(TransportState.Connected);
+                    PublishState(TransportState.Connected);
                 }
 
                 _logger.Information("Successfully connected to WebSocket server at {Url}", url);
@@ -158,7 +158,7 @@ namespace SalmonEgg.Infrastructure.Network
             catch (Exception ex)
             {
                 DisposeClient();
-                _stateSubject.OnNext(TransportState.Error);
+                PublishState(TransportState.Error);
                 _logger.Error(
                     ex,
                     "Failed to connect to WebSocket server at {Url}. proxyMode={ProxyMode} timeoutSeconds={TimeoutSeconds}",
@@ -181,17 +181,17 @@ namespace SalmonEgg.Infrastructure.Network
 
             try
             {
-                _stateSubject.OnNext(TransportState.Disconnecting);
+                PublishState(TransportState.Disconnecting);
                 _logger.Information("Disconnecting from WebSocket server");
 
                 await client.Stop(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "Client disconnecting");
 
-                _stateSubject.OnNext(TransportState.Disconnected);
+                PublishState(TransportState.Disconnected);
                 _logger.Information("Successfully disconnected from WebSocket server");
             }
             catch (Exception ex)
             {
-                _stateSubject.OnNext(TransportState.Error);
+                PublishState(TransportState.Error);
                 _logger.Error(ex, "Error while disconnecting from WebSocket server");
                 throw;
             }
@@ -229,7 +229,7 @@ namespace SalmonEgg.Infrastructure.Network
                 // connection intact. Mirrors StreamableHttpTransport.MarkTransportErrored.
                 if (IsFatalSendFailure(ex, client))
                 {
-                    _stateSubject.OnNext(TransportState.Error);
+                    PublishState(TransportState.Error);
                 }
                 throw;
             }
@@ -283,13 +283,13 @@ namespace SalmonEgg.Infrastructure.Network
                         }
 
                         _logger.Debug("Received message: {Message}", text);
-                        _messagesSubject.OnNext(text);
+                        PublishMessage(text);
                     }
                 }),
                 client.ReconnectionHappened.Subscribe(info =>
                 {
                     _logger.Information("WebSocket reconnection happened: {Type}", info.Type);
-                    _stateSubject.OnNext(TransportState.Connected);
+                    PublishState(TransportState.Connected);
                 }),
                 client.DisconnectionHappened.Subscribe(info =>
                 {
@@ -302,11 +302,11 @@ namespace SalmonEgg.Infrastructure.Network
 
                     if (info.Type != DisconnectionType.Exit)
                     {
-                        _stateSubject.OnNext(TransportState.Error);
+                        PublishState(TransportState.Error);
                     }
                     else
                     {
-                        _stateSubject.OnNext(TransportState.Disconnected);
+                        PublishState(TransportState.Disconnected);
                     }
                 }));
         }
@@ -331,6 +331,11 @@ namespace SalmonEgg.Infrastructure.Network
                 return;
             }
 
+            // 先立标志再拆流，与 StreamableHttpTransport.Dispose 一致。反过来的话，标志尚未立起
+            // 而流已经完成，这中间另一个线程的发送/断开会通过守卫、发到已完成的流上。本文件的
+            // 测试盯不到这个跨线程窗口（它在同一线程内 Dispose），窗口本身仍然真实存在。
+            _disposed = true;
+
             if (disposing)
             {
                 try
@@ -354,8 +359,34 @@ namespace SalmonEgg.Infrastructure.Network
                     _logger.Error(ex, "Error during WebSocketTransport disposal");
                 }
             }
+        }
 
-            _disposed = true;
+        /// <summary>
+        /// 发布一次状态。流一旦拆掉就不再发——此时已无订阅者，硬发只会让
+        /// <see cref="ObjectDisposedException"/> 顶替调用方真正要看的失败原因。
+        /// 规则集中在这里，而不是散在每个发射点上。
+        /// </summary>
+        private void PublishState(TransportState state)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _stateSubject.OnNext(state);
+        }
+
+        /// <summary>
+        /// 转发一条收到的消息。与 <see cref="PublishState"/> 同理：流已拆则丢弃。
+        /// </summary>
+        private void PublishMessage(string message)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _messagesSubject.OnNext(message);
         }
 
         private void DisposeClient()
