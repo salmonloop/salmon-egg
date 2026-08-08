@@ -116,15 +116,18 @@ namespace SalmonEgg.Infrastructure.Transport
                 return true;
             }
 
+            // Held locally until Start() succeeds; see the publication comment below.
+            Process? starting = null;
+
             try
             {
                 _readCts = new CancellationTokenSource();
 
                 var processInfo = CreateProcessStartInfo();
 
-                _process = new Process { StartInfo = processInfo };
-                _process.EnableRaisingEvents = true;
-                _process.Exited += OnProcessExited;
+                starting = new Process { StartInfo = processInfo };
+                starting.EnableRaisingEvents = true;
+                starting.Exited += OnProcessExited;
 
                 _logger.Information("[StdioTransport.Connect] Starting process. Command={Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
 
@@ -133,14 +136,29 @@ namespace SalmonEgg.Infrastructure.Transport
                 {
                     lock (_lock)
                     {
-                        _process.Start();
-                        _logger.Information("[StdioTransport.Connect] Process started. PID={Pid}", _process.Id);
+                        starting.Start();
+
+                        // Published only once Start() has returned. Teardown reads this field to decide
+                        // it owns a child that needs reaping, so the field has to mean exactly that: a
+                        // Process whose Start() threw owns no child, and reading HasExited on it throws
+                        // InvalidOperationException("No process is associated with this object") — from
+                        // a pattern match that sits outside the try guarding the kill, so it escapes
+                        // Dispose entirely. Publishing after the start makes "field is set" equal to
+                        // "a child exists" by construction, which is what lets both kill sites stay
+                        // free of defensive checks.
+                        _process = starting;
+                        _logger.Information("[StdioTransport.Connect] Process started. PID={Pid}", starting.Id);
                     }
                 }, cancellationToken).ConfigureAwait(false);
 
-                _stdin = _process.StandardInput;
-                _stdout = _process.StandardOutput;
-                _stderr = _process.StandardError;
+                // Everything below works off the local, not the field: teardown clears _process when it
+                // takes ownership, so a disconnect arriving mid-connect would otherwise turn these into
+                // a NullReferenceException. Reading the local can still throw once teardown has
+                // disposed the Process, which the catch below reports as a failed start — the right
+                // answer for a connect that raced a disconnect.
+                _stdin = starting.StandardInput;
+                _stdout = starting.StandardOutput;
+                _stderr = starting.StandardError;
 
                 // 读循环必须在启动观察窗之前开始消费两条管道:
                 // 子进程启动即写满 stdout/stderr 管道缓冲时会阻塞在写端,
@@ -150,24 +168,32 @@ namespace SalmonEgg.Infrastructure.Transport
 
                 await Task.Delay(StartupObservationTimeout, cancellationToken).ConfigureAwait(false);
 
-                if (!_process.HasExited)
+                if (!starting.HasExited)
                 {
                     IsConnected = true;
 
-                    _logger.Information("[StdioTransport.Connect] Connected. PID={Pid}", _process.Id);
+                    _logger.Information("[StdioTransport.Connect] Connected. PID={Pid}", starting.Id);
                     return true;
                 }
                 else
                 {
-                    _logger.Warning("[StdioTransport.Connect] Process exited. ExitCode={ExitCode}", _process.ExitCode);
+                    _logger.Warning("[StdioTransport.Connect] Process exited. ExitCode={ExitCode}", starting.ExitCode);
                     OnErrorOccurred(new TransportErrorEventArgs(
-                        $"Process exited immediately after start. ExitCode={_process.ExitCode}",
+                        $"Process exited immediately after start. ExitCode={starting.ExitCode}",
                         kind: TransportErrorKind.ProcessStartFailed));
                     return false;
                 }
             }
             catch (Exception ex)
             {
+                // If Start() failed before publication, teardown cannot see this Process and nothing
+                // else will release it. Once it has been published, teardown owns the child and can
+                // clear _process before this catch runs; a second Dispose() of the handle is harmless.
+                if (_process is null)
+                {
+                    starting?.Dispose();
+                }
+
                 _logger.Error(ex, "[StdioTransport.Connect] Start failed");
                 OnErrorOccurred(new TransportErrorEventArgs(
                     $"Unable to start process: {ex.Message}",
@@ -219,7 +245,13 @@ namespace SalmonEgg.Infrastructure.Transport
                 {
                     try
                     {
-                        process.Kill();
+                        // entireProcessTree, because the child is often not the agent. A Windows agent
+                        // installed via npm resolves to a .CMD (see StdioCommandResolver's PATHEXT
+                        // default) and is launched through cmd.exe /c, which makes the real agent a
+                        // grandchild; killing only the direct child leaves it running and holding the
+                        // session's resources. Measured with a shell wrapping a long sleep: the plain
+                        // overload leaves one of two processes alive, this one reaps both.
+                        process.Kill(entireProcessTree: true);
                         await process.WaitForExitAsync().ConfigureAwait(false);
                     }
                     catch
@@ -664,11 +696,12 @@ namespace SalmonEgg.Infrastructure.Transport
             _disposed = true;
             var began = TryBeginTeardown(out var process, out var stdin, out var stdout, out var stderr);
 
-            // Before the kill below, not after: TryBeginTeardown only cancels when IsConnected was
-            // true, so a connect that started the read loops and then failed or was cancelled reaches
-            // here with the token unsignalled. Killing first would fire Process.Exited while
-            // IsTearingDown still reads false, reporting an exit we are in the middle of causing.
-            // Cancelling also ends those still-running loops.
+            // Before the kill below, never after: killing first fires Process.Exited while
+            // IsTearingDown still reads false, which reports an exit we are in the middle of causing.
+            // TryBeginTeardown above already cancels on every path that returns true, so this is
+            // belt-and-braces rather than the sole mechanism — kept unconditional so that the ordering
+            // Dispose depends on cannot be broken by a later change to that method's gate, which is
+            // how the spurious exit report got introduced the first time.
             _readCts?.Cancel();
 
             CloseStandardInput(stdin);
@@ -682,7 +715,9 @@ namespace SalmonEgg.Infrastructure.Transport
             {
                 try
                 {
-                    process.Kill();
+                    // entireProcessTree for the same reason as DisconnectAsync: the agent is a
+                    // grandchild whenever a launcher sits in between.
+                    process.Kill(entireProcessTree: true);
                 }
                 catch
                 {

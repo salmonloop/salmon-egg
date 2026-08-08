@@ -156,18 +156,82 @@ public sealed class StdioTransportTeardownTests
         }
     }
 
-    private static int CountMatchingProcesses(string marker)
+    [Fact]
+    public async Task Dispose_AfterProcessStartFailed_ShouldNotThrow()
     {
-        using var pgrep = System.Diagnostics.Process.Start(
-            new System.Diagnostics.ProcessStartInfo("/usr/bin/pgrep", $"-fc {marker}")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            })!;
+        // Start() now publishes _process only after it has actually returned, so an executable that
+        // does not exist fails before ownership is published. Dispose still has to stay safe on that
+        // failed-connect path, because callers will still clean up the transport object itself.
+        var transport = new StdioTransport("/definitely/not/a/real/binary-" + Guid.NewGuid().ToString("N"), []);
+        var errors = new List<TransportErrorEventArgs>();
+        transport.ErrorOccurred += (_, e) => { lock (errors) { errors.Add(e); } };
 
-        var text = pgrep.StandardOutput.ReadToEnd().Trim();
-        pgrep.WaitForExit();
-        return int.TryParse(text, out var count) ? count : 0;
+        Assert.False(await transport.ConnectAsync(TestContext.Current.CancellationToken));
+        lock (errors)
+        {
+            Assert.Contains(errors, e => e.Kind == TransportErrorKind.ProcessStartFailed);
+        }
+
+        transport.Dispose();
+    }
+
+    [Fact]
+    public async Task Dispose_Twice_AfterProcessStartFailed_ShouldNotThrow()
+    {
+        // Disposal is idempotent by contract, and the `using` in the tests above plus the DI container
+        // both make a second call ordinary.
+        var transport = new StdioTransport("/definitely/not/a/real/binary-" + Guid.NewGuid().ToString("N"), []);
+
+        Assert.False(await transport.ConnectAsync(TestContext.Current.CancellationToken));
+
+        transport.Dispose();
+        transport.Dispose();
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_AgentBehindALauncher_ShouldReapTheGrandchild()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses /bin/sh and pgrep to observe the tree.");
+
+        // The direct child is not always the agent. On Windows an npm-installed agent resolves to a
+        // .CMD (StdioCommandResolver's PATHEXT default lists it) and runs under cmd.exe /c, so the real
+        // agent is a grandchild; Process.Kill() terminates only the direct child, and MS documents that
+        // WaitForExit and HasExited do not reflect descendants either. A shell that execs a long sleep
+        // as a separate process reproduces that shape portably.
+        var marker = $"salmonegg-grandchild-test-{Guid.NewGuid():N}";
+        // The grandchild needs the marker in its own command line for pgrep to see it, so it is a
+        // nested shell rather than a bare sleep — a bare `sleep 300 &` carries only its own argv.
+        using var transport = new StdioTransport(
+            "/bin/sh",
+            ["-c", $"# {marker}\n/bin/sh -c '# {marker}\nsleep 300' &\nwait"]);
+
+        try
+        {
+            Assert.True(await transport.ConnectAsync(TestContext.Current.CancellationToken));
+
+            // Poll rather than sleep a fixed span: the grandchild appears when the shell gets to it.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (CountMatchingProcesses(marker) < 2 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+            }
+
+            Assert.Equal(2, CountMatchingProcesses(marker));   // the shell plus the sleep it started
+
+            await transport.DisconnectAsync();
+            await Task.Delay(Settle, TestContext.Current.CancellationToken);
+
+            // With the plain Kill() overload this is 1: the shell dies, the sleep outlives the session.
+            Assert.Equal(0, CountMatchingProcesses(marker));
+        }
+        finally
+        {
+            if (CountMatchingProcesses(marker) > 0)
+            {
+                using var pkill = System.Diagnostics.Process.Start("/usr/bin/pkill", ["-f", marker]);
+                await pkill!.WaitForExitAsync(TestContext.Current.CancellationToken);
+            }
+        }
     }
 
     [Fact]
@@ -206,5 +270,19 @@ public sealed class StdioTransportTeardownTests
             Assert.DoesNotContain(errors, e => e.Kind == TransportErrorKind.StderrReadFailed);
             Assert.DoesNotContain(errors, e => e.Kind == TransportErrorKind.DisconnectFailed);
         }
+    }
+
+    private static int CountMatchingProcesses(string marker)
+    {
+        using var pgrep = System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo("/usr/bin/pgrep", $"-fc {marker}")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            })!;
+
+        var text = pgrep.StandardOutput.ReadToEnd().Trim();
+        pgrep.WaitForExit();
+        return int.TryParse(text, out var count) ? count : 0;
     }
 }
