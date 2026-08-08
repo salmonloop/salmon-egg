@@ -24,6 +24,7 @@ SalmonEgg.Acp.Content.ResourceContentBlock
 SalmonEgg.Acp.Content.ResourceLinkContentBlock
 SalmonEgg.Acp.Content.TextContentBlock
 SalmonEgg.Acp.JsonRpc.AcpException
+SalmonEgg.Acp.JsonRpc.AcpFrame
 SalmonEgg.Acp.JsonRpc.JsonRpcErrorCode
 SalmonEgg.Acp.Mcp.CustomMcpServer
 SalmonEgg.Acp.Mcp.HttpMcpServer

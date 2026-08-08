@@ -969,6 +969,57 @@ namespace SalmonEgg.Acp.Tests.Client
                 Times.Once);
         }
 
+        [Theory]
+        [InlineData("Running database migrations")]
+        [InlineData("[1;32mINFO[0m ready")]
+        [InlineData("﻿")]
+        public void OnMessageReceived_WhenPeerSendsNonFrame_ShouldIgnoreWithoutErrorOrReply(string message)
+        {
+            // Stdio filters these before they arrive, but a bridge relaying an agent's stdout over
+            // WebSocket/HTTP delivers the same line verbatim as a frame — the transport cannot
+            // classify because it has no stderr to contrast with. The answer must not depend on
+            // which transport carried it: no user-facing error, and no -32700 for something that
+            // was never a request.
+            var client = CreateClient();
+            var receivedErrors = new List<string>();
+            client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
+            var sent = new List<string>();
+            _transportMock
+                .Setup(t => t.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns((string payload, CancellationToken _) =>
+                {
+                    sent.Add(payload);
+                    return Task.FromResult(true);
+                });
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new AcpTransportMessageReceivedEventArgs(message));
+
+            Assert.Empty(receivedErrors);
+            Assert.Empty(sent);
+        }
+
+        [Fact]
+        public void OnMessageReceived_WhenFrameCarriesByteOrderMark_ShouldStillDispatch()
+        {
+            // A leading byte order mark must not stop a real frame from being handled: RFC 8259 §8.1
+            // lets parsers ignore it. Over a bridge the mark arrives inside the text frame.
+            var client = CreateClient();
+            var receivedErrors = new List<string>();
+            client.ErrorOccurred += (_, error) => receivedErrors.Add(error);
+            var updates = new List<string>();
+            client.SessionUpdateReceived += (_, e) => updates.Add(e.SessionId);
+
+            _transportMock.Raise(
+                t => t.MessageReceived += null,
+                new AcpTransportMessageReceivedEventArgs(
+                    "﻿{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"s1\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"hi\"}}}}"));
+
+            Assert.Empty(receivedErrors);
+            Assert.Single(updates);
+        }
+
         [Fact]
         public void OnMessageReceived_WhenFrameFailsToParse_ShouldReportAndReplyParseError()
         {

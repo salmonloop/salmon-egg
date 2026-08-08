@@ -1000,9 +1000,28 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         private void OnMessageReceived(object? sender, AcpTransportMessageReceivedEventArgs e)
         {
+            // Not every transport can pre-classify. Stdio does, because it alone sees a stderr to
+            // contrast with, but a bridge that relays an agent's stdout over WebSocket/HTTP delivers
+            // the same non-ACP line verbatim as a frame. Guarding here keeps the answer identical on
+            // every transport: a line that was never an ACP message must not be parsed, must not be
+            // reported as a client error, and must not draw a -32700 reply.
+            if (AcpFrame.IsBlank(e.Message))
+            {
+                return;
+            }
+
+            if (!AcpFrame.LooksLikeFrame(e.Message))
+            {
+                _logger.Log(
+                    AcpClientLogLevel.Warning,
+                    "PEER_NON_ACP_MESSAGE",
+                    $"Ignoring non-ACP message from the peer, which must not send this: {AcpFrame.Describe(e.Message)}");
+                return;
+            }
+
             try
             {
-                var message = _parser.ParseMessage(e.Message);
+                var message = _parser.ParseMessage(AcpFrame.StripByteOrderMark(e.Message));
 
 
                 if (message is JsonRpcResponse response)

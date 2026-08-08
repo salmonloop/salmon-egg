@@ -362,12 +362,13 @@ namespace SalmonEgg.Infrastructure.Transport
                         case StdoutFrameKind.Diagnostic:
                             // Warning (not Debug) so the offending content is visible at the default
                             // log level; without it every cause reduces to the same parser message.
+                            var described = AcpFrame.Describe(line);
                             _logger.Warning(
                                 "[StdioTransport.ReadLoop] Ignoring non-ACP stdout line {Count}. The agent must write diagnostics to stderr. Content={Content}",
                                 lineCount,
-                                DescribeLinePrefix(line));
+                                described);
                             OnErrorOccurred(new TransportErrorEventArgs(
-                                $"Agent wrote non-ACP output to stdout: {DescribeLinePrefix(line)}",
+                                $"Agent wrote non-ACP output to stdout: {described}",
                                 kind: TransportErrorKind.StdoutProtocolViolation));
                             break;
 
@@ -454,75 +455,27 @@ namespace SalmonEgg.Infrastructure.Transport
         /// Classifies one raw stdout line and, for frames, returns the text to dispatch.
         /// </summary>
         /// <remarks>
-        /// ACP stdio guarantees stdout carries only newline-delimited ACP messages, each an
-        /// individual JSON-RPC request/notification/response — never a batch — so a frame must
-        /// begin with '{'. Anything else is the agent writing diagnostics to the stream reserved
-        /// for the protocol (the spec directs such output to stderr instead).
-        ///
-        /// A leading byte order mark is stripped rather than rejected: RFC 8259 §8.1 forbids
-        /// emitting one but explicitly permits parsers to "ignore the presence of a byte order
-        /// mark rather than treating it as an error". U+FEFF is not whitespace to
-        /// <see cref="string.IsNullOrWhiteSpace(string?)"/>, so a BOM-only line would otherwise
-        /// reach the parser and surface as a spurious protocol error for what is really a blank line.
+        /// The frame test itself lives in <see cref="AcpFrame"/> so every transport shares one
+        /// definition; what is stdio-specific is the third outcome. Only here is there a stderr to
+        /// contrast with, so only here can a non-frame be attributed to the agent writing
+        /// diagnostics to the stream ACP reserves for the protocol.
         /// </remarks>
         internal static StdoutFrameKind ClassifyStdoutLine(string? line, out string frame)
         {
             frame = string.Empty;
 
-            if (string.IsNullOrEmpty(line))
+            if (AcpFrame.IsBlank(line))
             {
                 return StdoutFrameKind.Blank;
             }
 
-            var payload = line.TrimStart('﻿');
-            if (string.IsNullOrWhiteSpace(payload))
-            {
-                return StdoutFrameKind.Blank;
-            }
-
-            if (payload.TrimStart()[0] != '{')
+            if (!AcpFrame.LooksLikeFrame(line))
             {
                 return StdoutFrameKind.Diagnostic;
             }
 
-            frame = payload;
+            frame = AcpFrame.StripByteOrderMark(line!);
             return StdoutFrameKind.Frame;
-        }
-
-        /// <summary>
-        /// Renders the leading bytes of a rejected line so the cause is identifiable from logs
-        /// alone. Distinct causes (byte order mark, U+FFFD from a decode failure, private-use
-        /// glyphs, plain agent logging) all produce the same parser message, and differ only here.
-        /// </summary>
-        internal static string DescribeLinePrefix(string line, int maxChars = 120)
-        {
-            if (string.IsNullOrEmpty(line))
-            {
-                return "<empty>";
-            }
-
-            string text;
-            if (line.Length <= maxChars)
-            {
-                text = line;
-            }
-            else
-            {
-                // Step back off a surrogate pair: this renders malformed input, so a split pair
-                // would put a lone surrogate in the log — the very noise this is meant to resolve.
-                var cut = maxChars;
-                if (char.IsLowSurrogate(line[cut]))
-                {
-                    cut--;
-                }
-
-                text = line[..cut] + "…";
-            }
-
-            var hex = string.Join(
-                ' ',
-                Encoding.UTF8.GetBytes(line).Take(8).Select(b => b.ToString("X2")));
-            return $"{text} [hex: {hex}]";
         }
 
         internal static string ResolveWorkingDirectory(string resolvedCommand, string? currentDirectory = null)

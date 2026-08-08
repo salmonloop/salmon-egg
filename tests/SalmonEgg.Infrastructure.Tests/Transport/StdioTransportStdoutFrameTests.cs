@@ -67,39 +67,4 @@ public sealed class StdioTransportStdoutFrameTests
         Assert.Equal(StdioTransport.StdoutFrameKind.Diagnostic, kind);
         Assert.Empty(frame);
     }
-
-    [Fact]
-    public void DescribeLinePrefix_ShouldExposeLeadingBytes()
-    {
-        // The distinct causes differ only in their leading bytes, so the hex prefix is what makes
-        // them identifiable from logs alone.
-        var description = StdioTransport.DescribeLinePrefix("﻿");
-
-        Assert.Contains("EF BB BF", description);
-    }
-
-    [Fact]
-    public void DescribeLinePrefix_LongLine_ShouldTruncate()
-    {
-        var description = StdioTransport.DescribeLinePrefix(new string('x', 500));
-
-        Assert.Contains("…", description);
-        Assert.True(description.Length < 300, $"Expected a bounded description; got {description.Length} chars.");
-    }
-
-    [Fact]
-    public void DescribeLinePrefix_TruncatingOnSurrogatePair_ShouldNotEmitLoneSurrogate()
-    {
-        // Truncating by UTF-16 index can split a surrogate pair. This renders malformed input, so a
-        // lone surrogate here would be the very noise the hex prefix exists to resolve.
-        const string astral = "\U0001F600"; // one code point, two UTF-16 code units
-        var line = new string('x', 119) + astral + new string('y', 40);
-
-        var description = StdioTransport.DescribeLinePrefix(line);
-
-        // A lone surrogate is not a scalar value, so rune enumeration substitutes U+FFFD for it;
-        // an exact round-trip therefore proves none survived truncation.
-        var roundTripped = string.Concat(description.EnumerateRunes());
-        Assert.Equal(description, roundTripped);
-    }
 }
