@@ -446,8 +446,17 @@ public partial class ChatViewModel
                 .ConfigureAwait(false);
             if (recoveryContext is not { } resolvedRecoveryContext)
             {
-                throw new InvalidOperationException(
-                    "Cannot recover remote session because working directory is missing.");
+                // Agent 的 session/list 与持久化副本都没给出 cwd，而 ACP 的 session/load 与
+                // session/resume 都要求它，所以这次激活确实无法完成。这不是缺陷、重试也无用,
+                // 因此和本方法前面几个守卫一样如实报给用户,而不是抛异常——异常只会被
+                // NavigationCoordinator 的兜底 catch 收敛成"请重试"的笼统文案。
+                await PublishConversationFailureAsync(
+                        failureContext,
+                        "MissingRemoteSessionCwd",
+                        "ChatOperation_LoadSessionMissingRemoteCwd",
+                        "Failed to load session: the agent did not report a working directory for it.")
+                    .ConfigureAwait(false);
+                return false;
             }
 
             AcpSessionRecoveryProjection recoveryProjection;

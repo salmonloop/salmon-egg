@@ -10090,6 +10090,53 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
+    public async Task HydrateActiveConversationAsync_WhenNeitherAgentNorFallbackReportsCwd_PublishesFailureInsteadOfThrowing()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        // 刻意不把会话建进 SessionManager：Session 构造期强制非空 cwd，一旦建了，
+        // 本地 fallback 必然有值，就走不到"两个来源都没有 cwd"的分支。
+        var sessionManager = CreateSessionManagerWithStore();
+        await using var fixture = CreateViewModel(syncContext, sessionManager: sessionManager);
+        await fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken);
+        fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
+        var chatService = CreateConnectedChatService();
+        chatService.SetupGet(service => service.AgentCapabilities)
+            .Returns(new AgentCapabilities(loadSession: true, sessionCapabilities: new SessionCapabilities()));
+        // Agent 也不报 cwd，于是权威与 fallback 双双缺失。
+        chatService.Setup(service => service.ListSessionsAsync(It.IsAny<SessionListParams>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionListResponse());
+        chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("session/load must not be called without a working directory."));
+        chatService.Setup(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
+            .Throws(new Xunit.Sdk.XunitException("session/resume must not be called without a working directory."));
+
+        await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
+        await DispatchConnectedAsync(fixture, "profile-1");
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Bindings = ImmutableDictionary<string, ConversationBindingSlice>.Empty
+                .Add("conv-1", new ConversationBindingSlice("conv-1", "remote-1", "profile-1"))
+        });
+        await WaitForConditionAsync(async () =>
+            string.Equals((await fixture.GetStateAsync()).HydratedConversationId, "conv-1", StringComparison.Ordinal));
+        await WaitForConditionAsync(() => Task.FromResult(
+            string.Equals(fixture.ViewModel.CurrentSessionId, "conv-1", StringComparison.Ordinal)));
+        SetCurrentRemoteSessionId(fixture.ViewModel, "remote-1");
+        await DispatchConnectedAsync(fixture, "profile-1");
+
+        var hydrated = await fixture.ViewModel.HydrateActiveConversationAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(hydrated);
+        Assert.Contains(
+            "did not report a working directory",
+            fixture.ViewModel.ConversationOperationFailureMessage,
+            StringComparison.Ordinal);
+        chatService.Verify(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
+        chatService.Verify(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task HydrateActiveConversationAsync_WhenRemoteConnectionIsNotReady_PublishesActivationFault()
     {
         var syncContext = new ImmediateSynchronizationContext();
