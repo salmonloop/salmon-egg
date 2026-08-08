@@ -343,7 +343,13 @@ namespace SalmonEgg.Infrastructure.Transport
                 // 移除 _stdout.EndOfStream 检查，因为它是一个同步阻塞属性，会导致 ConnectAsync 被阻塞
                 while (!cancellationToken.IsCancellationRequested && _stdout != null)
                 {
-                    var line = await _stdout.ReadLineAsync().ConfigureAwait(false);
+                    // Pass the token: the parameterless overload cannot be interrupted, so a
+                    // deliberate teardown disposes the reader out from under a parked read and
+                    // surfaces IOException("Operation canceled") — an OS errno message that reads
+                    // like a fault and was reported as StdoutReadFailed. With the token the parked
+                    // read throws OperationCanceledException instead, which the catch below already
+                    // treats as the expected end of a teardown.
+                    var line = await _stdout.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null)
                     {
                         _logger.Warning("[StdioTransport.ReadLoop] ReadLine returned null; stream may have ended");
@@ -405,7 +411,9 @@ namespace SalmonEgg.Infrastructure.Transport
 
                 while (!cancellationToken.IsCancellationRequested && _stderr != null)
                 {
-                    var line = await _stderr.ReadLineAsync().ConfigureAwait(false);
+                    // Token-aware for the same reason as the stdout loop: a deliberate teardown must
+                    // end this read via cancellation, not via a disposed-stream IOException.
+                    var line = await _stderr.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line == null) break;
                     _logger.Verbose("[StdioTransport.ReadError] Received stderr line. Length={Length}", line.Length);
 
@@ -574,12 +582,36 @@ namespace SalmonEgg.Infrastructure.Transport
         }
 
         /// <summary>
+        /// True once teardown has begun. <see cref="TryBeginTeardown"/> cancels the read token
+        /// before killing the process, so this distinguishes "we ended this" from "it died on us"
+        /// without introducing a second piece of state to keep in sync.
+        /// </summary>
+        /// <remarks>
+        /// Reads <see cref="CancellationTokenSource.IsCancellationRequested"/> rather than
+        /// <c>Token</c>: the former keeps returning the last state after the source is disposed,
+        /// whereas the latter throws <see cref="ObjectDisposedException"/>. Teardown disposes the
+        /// source, and the process-exit callback can arrive around that.
+        /// </remarks>
+        private bool IsTearingDown => _readCts?.IsCancellationRequested ?? false;
+
+        /// <summary>
         /// 进程退出事件处理。不取消读循环:让其自然读到 EOF,
         /// 否则崩溃前最后写入的 stdout/stderr(通常是失败原因)会被截断。
         /// </summary>
         private void OnProcessExited(object? sender, EventArgs e)
         {
             IsConnected = false;
+
+            // We kill the agent during teardown, so reporting its exit as an error there blames the
+            // agent for something we did — and it reaches the user, because a deliberate disconnect
+            // happens while listeners are still attached. An exit we did not ask for is still a
+            // fault and still reported.
+            if (IsTearingDown)
+            {
+                _logger.Information("[StdioTransport.ProcessExited] Agent process exited during teardown");
+                return;
+            }
+
             OnErrorOccurred(new TransportErrorEventArgs(
                 "Agent process exited",
                 kind: TransportErrorKind.ProcessExited));
