@@ -144,6 +144,75 @@ public sealed class NavigationCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateSessionAsync_WhenSwitcherAlreadyPublishedWhyItFailed_KeepsThatReasonInsteadOfTheGenericOne()
+    {
+        var originalContext = SynchronizationContext.Current;
+        var syncContext = new ImmediateSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(syncContext);
+        try
+        {
+            var navState = new FakeNavigationPaneState();
+            navState.SetPaneOpen(true);
+            var sessionManager = CreateSessionManager(new Session("session-1", @"C:\repo\demo")
+            {
+                DisplayName = "Session 1"
+            });
+            var preferences = CreatePreferencesWithProject();
+            var shellNavigation = CreateShellNavigationService();
+
+            await using var chat = CreateChatViewModel(syncContext, preferences, sessionManager.Object);
+            var selectionStore = new ShellSelectionStateStore();
+            var runtimeState = new ShellNavigationRuntimeStateStore();
+
+            // 复现真实时序:ChatViewModel 先把"为什么失败"写进快照,再向上返回 false。
+            // 导航层随后只知道"下游拒绝了",它那句占位原因不能盖掉已有的具体说明。
+            var activationCoordinator = new RecordingConversationSessionSwitcher((_, _) =>
+            {
+                if (runtimeState.ActiveSessionActivation is { } inFlight)
+                {
+                    runtimeState.ActiveSessionActivation = inFlight with
+                    {
+                        Phase = SessionActivationPhase.Faulted,
+                        Reason = "MissingRemoteSessionCwd",
+                        FailureMessage = "Failed to load session: the agent did not report a working directory for it.",
+                        FailureResourceKey = "ChatOperation_LoadSessionMissingRemoteCwd"
+                    };
+                }
+
+                return Task.FromResult(false);
+            });
+            var coordinator = CreateCoordinator(selectionStore, activationCoordinator, preferences, shellNavigation.Object, runtimeState);
+            using var navVm = CreateNavigationViewModel(
+                chat,
+                sessionManager.Object,
+                preferences,
+                navState,
+                selectionStore,
+                coordinator,
+                runtimeState: runtimeState);
+
+            navVm.RebuildTree();
+            await coordinator.ActivateSessionAsync("session-1", "project-1");
+
+            var activation = runtimeState.ActiveSessionActivation;
+            Assert.Equal(SessionActivationPhase.Faulted, activation?.Phase);
+            Assert.Equal("MissingRemoteSessionCwd", activation?.Reason);
+            Assert.Equal(
+                "Failed to load session: the agent did not report a working directory for it.",
+                activation?.FailureMessage);
+            Assert.Equal("ChatOperation_LoadSessionMissingRemoteCwd", activation?.FailureResourceKey);
+
+            // 终态语义仍须成立:意图已放弃,激活不再在飞。
+            Assert.Null(runtimeState.DesiredSessionId);
+            Assert.False(runtimeState.IsSessionActivationInProgress);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(originalContext);
+        }
+    }
+
+    [Fact]
     public async Task ActivateSessionAsync_WhenSwitcherFails_DoesNotProjectPreviewAfterActivationEnds()
     {
         var originalContext = SynchronizationContext.Current;

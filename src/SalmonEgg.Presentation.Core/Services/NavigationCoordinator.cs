@@ -429,9 +429,16 @@ public sealed class NavigationCoordinator : INavigationCoordinator
                         ActivationFaultReasons.ConversationSelectionFailed);
                 }
 
-                MarkSessionActivationFaulted(
-                    request,
-                    activated ? ActivationFaultReasons.SupersededAfterConversationSelection : ActivationFaultReasons.ConversationSelectionFailed);
+                if (activated)
+                {
+                    // 被取代是本层自己的事实,与下游成功与否无关。
+                    MarkSessionActivationFaulted(request, ActivationFaultReasons.SupersededAfterConversationSelection);
+                }
+                else
+                {
+                    PreserveOrMarkSessionActivationFaulted(request, ActivationFaultReasons.ConversationSelectionFailed);
+                }
+
                 return false;
             }
 
@@ -742,7 +749,27 @@ public sealed class NavigationCoordinator : INavigationCoordinator
         }
     }
 
+    /// <summary>
+    /// 记录一个本层自己掌握事实的终态失败（导航失败、被取代、被取消、异常逃逸）。
+    /// 这些情形下游没有、也不可能留下更具体的说明，所以整体覆写快照。
+    /// </summary>
     private void MarkSessionActivationFaulted(SessionActivationRequest request, string reason)
+        => MarkSessionActivationFaultedCore(request, reason, preserveDownstreamDetail: false);
+
+    /// <summary>
+    /// 记录一个"下游拒绝了本次激活，但本层不知道为什么"的终态失败。
+    /// 下游若已把原因写进快照（见 <see cref="SessionActivationSnapshot.FailureMessage"/>），
+    /// 那份说明比本层的占位原因具体得多，必须保留——呈现层正是按
+    /// FailureResourceKey → FailureMessage → Reason 的优先级取用的，覆写会把它降级成
+    /// "请重试"的笼统文案，而那类失败重试通常无用。
+    /// </summary>
+    private void PreserveOrMarkSessionActivationFaulted(SessionActivationRequest request, string fallbackReason)
+        => MarkSessionActivationFaultedCore(request, fallbackReason, preserveDownstreamDetail: true);
+
+    private void MarkSessionActivationFaultedCore(
+        SessionActivationRequest request,
+        string reason,
+        bool preserveDownstreamDetail)
     {
         lock (_sessionActivationSync)
         {
@@ -754,6 +781,21 @@ public sealed class NavigationCoordinator : INavigationCoordinator
             // Terminal fault: drop the desired-session intent so surface projection and
             // affinity helpers no longer treat the failed target as in-flight intent.
             _runtimeState.DesiredSessionId = null;
+
+            if (preserveDownstreamDetail
+                && _runtimeState.ActiveSessionActivation is { } published
+                && published.Matches(request.SessionId)
+                && published.Version == request.Version
+                && !string.IsNullOrWhiteSpace(published.FailureMessage))
+            {
+                // 下游已如实报过，这里只补齐终态字段，不动它的说明。
+                _runtimeState.ActiveSessionActivation = published with
+                {
+                    Phase = SessionActivationPhase.Faulted
+                };
+                return;
+            }
+
             _runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
                 request.SessionId,
                 request.ProjectId,
