@@ -224,7 +224,7 @@
     <!-- App Identifier -->
     <ApplicationId>com.companyname.salmonegg</ApplicationId>
     <!-- Keep package, assembly, and display versions derived from one source of truth. -->
-    <SalmonEggDisplayVersion>1.0.3</SalmonEggDisplayVersion>
+    <SalmonEggDisplayVersion>1.0.4</SalmonEggDisplayVersion>
     <SalmonEggPackageVersion>$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
     <!-- Versions -->
     <Version>$(SalmonEggPackageVersion)</Version>
