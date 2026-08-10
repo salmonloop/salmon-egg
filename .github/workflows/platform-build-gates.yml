@@ -82,7 +82,15 @@ jobs:
       - name: Install Android SDK platform
         shell: bash
         run: |
+          set +e
           yes | "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          sdkmanager_status=${PIPESTATUS[1]}
+          set -e
+
+          if [ "${sdkmanager_status}" -ne 0 ]; then
+            exit "${sdkmanager_status}"
+          fi
+
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Android
@@ -116,4 +124,5 @@ jobs:
           --framework net10.0-ios
           --runtime iossimulator-arm64
           -p:EnableMobileTargets=true
+          -p:EnableAndroidTarget=false
           -p:EnableIosTarget=true

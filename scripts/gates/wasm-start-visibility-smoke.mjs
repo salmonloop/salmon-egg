@@ -12,8 +12,8 @@ const browser = await chromium.launch({ headless: true });
 const expectedSuggestions = [
   {
     automationId: "StartView.Suggestion.ReportGuidance",
-    title: ["发现 AI 生成的内容如果有问题", "Found a problem with AI-generated content?"],
-    subtitle: ["可以右键信息举报，或者在“关于”页面中举报。", "Right-click the message to report it, or report it from About."]
+    title: ["举报 AI 内容", "Report AI content"],
+    subtitle: ["右键消息或在“关于”中举报", "Right-click a message or use About"]
   },
   {
     automationId: "StartView.Suggestion.RecommendTasks",

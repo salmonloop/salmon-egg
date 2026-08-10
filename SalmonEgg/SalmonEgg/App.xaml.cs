@@ -51,7 +51,8 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     {
         try
         {
-            var window = MainWindowInstance;
+            var app = Current as App;
+            var window = app?.MainWindow;
             if (window?.DispatcherQueue == null)
             {
                 return;
@@ -61,8 +62,21 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             {
                 if (window.Content is Frame frame)
                 {
-                    frame.BackStack.Clear();
-                    frame.Navigate(typeof(MainPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
+                    // BrowserWasm retains the current Page for same-frame navigation even
+                    // after clearing Frame.Content. Replacing the root Frame gives every
+                    // x:Uid resource a fresh native load after the language override.
+                    frame.NavigationFailed -= app!.OnNavigationFailed;
+                    frame.Navigated -= app.OnRootFrameFirstNavigated;
+
+                    var replacementFrame = new Frame { AllowDrop = false };
+                    // The shell theme is owned by the root content element, so the replacement
+                    // must inherit it before it renders; otherwise reloaded content falls back
+                    // to the default theme brushes.
+                    replacementFrame.RequestedTheme = frame.RequestedTheme;
+                    replacementFrame.NavigationFailed += app.OnNavigationFailed;
+                    replacementFrame.Navigated += app.OnRootFrameFirstNavigated;
+                    window.Content = replacementFrame;
+                    replacementFrame.Navigate(typeof(MainPage), null, UiMotionController.Current.CreateNavigationTransitionInfo());
                 }
             });
         }

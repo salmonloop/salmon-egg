@@ -229,6 +229,7 @@ public sealed class WasmStartupAssetsTests
         var project = XDocument.Parse(LoadFile(@"SalmonEgg\SalmonEgg\SalmonEgg.csproj"));
 
         var enableMobileTargets = project.Descendants("EnableMobileTargets").Single();
+        var enableAndroidTarget = project.Descendants("EnableAndroidTarget").Single();
         var enableIosTarget = project.Descendants("EnableIosTarget").Single();
         var androidTargets = project.Descendants("SalmonEggAndroidTargetFrameworks").Single();
         var iosTargets = project.Descendants("SalmonEggIosTargetFrameworks").Single();
@@ -236,11 +237,14 @@ public sealed class WasmStartupAssetsTests
 
         Assert.Equal("false", enableMobileTargets.Value);
         Assert.Equal("'$(EnableMobileTargets)' == ''", (string?)enableMobileTargets.Attribute("Condition"));
+        Assert.Equal("true", enableAndroidTarget.Value);
+        Assert.Equal("'$(EnableAndroidTarget)' == ''", (string?)enableAndroidTarget.Attribute("Condition"));
         Assert.Equal("false", enableIosTarget.Value);
         Assert.Equal("'$(EnableIosTarget)' == ''", (string?)enableIosTarget.Attribute("Condition"));
 
         Assert.Equal("net10.0-android36.0", androidTargets.Value);
         Assert.Contains("'$(EnableMobileTargets)' == 'true'", (string?)androidTargets.Attribute("Condition"), StringComparison.Ordinal);
+        Assert.Contains("'$(EnableAndroidTarget)' == 'true'", (string?)androidTargets.Attribute("Condition"), StringComparison.Ordinal);
         Assert.Contains("'$(AndroidSdkDirectory)' != ''", (string?)androidTargets.Attribute("Condition"), StringComparison.Ordinal);
 
         Assert.Equal("net10.0-ios", iosTargets.Value);
@@ -250,6 +254,30 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggAndroidTargetFrameworks)");
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggMobileTargetFrameworks);$(SalmonEggIosTargetFrameworks)");
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggIosTargetFrameworks)");
+    }
+
+    [Fact]
+    public void PlatformBuildGate_HandlesAndroidLicensesAndIsolatesIosTargetExpansion()
+    {
+        var gate = LoadFile(@".github\workflows\platform-build-gates.yml");
+
+        Assert.Contains("sdkmanager_status=${PIPESTATUS[1]}", gate, StringComparison.Ordinal);
+        Assert.Contains("if [ \"${sdkmanager_status}\" -ne 0 ]; then", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:EnableAndroidTarget=false", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LanguageReload_ReplacesRootFrameBeforeNavigatingToMainPage()
+    {
+        var app = LoadFile(@"SalmonEgg\SalmonEgg\App.xaml.cs");
+
+        var createFrame = app.IndexOf("var replacementFrame = new Frame { AllowDrop = false };", StringComparison.Ordinal);
+        var replaceRoot = app.IndexOf("window.Content = replacementFrame;", StringComparison.Ordinal);
+        var navigateShell = app.IndexOf("replacementFrame.Navigate(typeof(MainPage)", StringComparison.Ordinal);
+
+        Assert.True(createFrame >= 0, "Language reload must create a fresh root Frame.");
+        Assert.True(replaceRoot > createFrame, "The fresh Frame must replace the loaded root.");
+        Assert.True(navigateShell > replaceRoot, "MainPage must be recreated inside the replacement Frame.");
     }
 
     [Fact]
@@ -453,7 +481,9 @@ public sealed class WasmStartupAssetsTests
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-ui.mjs")));
         var settingsPersistenceSmoke = LoadFile(@"scripts\gates\wasm-settings-persistence-smoke.mjs");
         Assert.Contains("language: en-US", settingsPersistenceSmoke, StringComparison.Ordinal);
-        Assert.Contains("Your AI co-pilot for ACP sessions", settingsPersistenceSmoke, StringComparison.Ordinal);
+        // The shell keeps the active Settings section across a language reload, so the English
+        // assertion is anchored on the General page summary resource instead of Start copy.
+        Assert.Contains("Manage startup, window behavior, and UI language", settingsPersistenceSmoke, StringComparison.Ordinal);
         Assert.DoesNotContain("Language override is not supported on this platform", settingsPersistenceSmoke, StringComparison.Ordinal);
 
         foreach (var script in Directory.EnumerateFiles(RepoPath(@"scripts\gates"), "wasm-*.mjs", SearchOption.TopDirectoryOnly))

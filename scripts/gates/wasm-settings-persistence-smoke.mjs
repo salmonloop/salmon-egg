@@ -182,11 +182,13 @@ async function changeLanguage(page) {
     "GeneralSettings.Language",
     ["English"],
     { keyboardSelectVisibleItem: true, verifySelectionText: false });
+  // The authoritative shell selection is preserved across a language reload. The
+  // current Settings page is therefore the observable proof that x:Uid content was
+  // recreated in English; navigation is not expected to jump to Start.
   await waitForBodyText(
     page,
-    /Your AI co-pilot for ACP sessions/,
-    "English Start page after shell reload");
-  await waitForBodyText(page, /Recommend tasks/, "English cached Start suggestions after language change");
+    /Manage startup, window behavior, and UI language\.|Launch on startup/,
+    "English settings page after shell reload");
   await verifyLanguageSelection(page, "after edit");
 }
 
@@ -466,14 +468,50 @@ async function verifyMcpSettings(page, suffix = "") {
 }
 
 async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label) {
-  const projections = await page.evaluate(() => Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
-    .map(element => {
+  const projections = await page.evaluate(() => {
+    const parseColor = value => {
+      const match = String(value ?? "").match(/rgba?\(([^)]+)\)/i);
+      if (!match) {
+        return null;
+      }
+
+      const parts = match[1].split(",").map(part => Number(part.trim()));
+      return {
+        r: parts[0] ?? 0,
+        g: parts[1] ?? 0,
+        b: parts[2] ?? 0,
+        a: parts.length >= 4 ? parts[3] : 1
+      };
+    };
+    const findBackground = element => {
+      let current = element;
+      while (current) {
+        const backgroundColor = getComputedStyle(current).backgroundColor;
+        const parsed = parseColor(backgroundColor);
+        if (parsed && parsed.a > 0.05) {
+          return {
+            color: backgroundColor,
+            source: current.className?.toString?.() || current.tagName
+          };
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    };
+
+    return Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
+      .map(element => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       const type = element.getAttribute("type")?.toLowerCase() ?? "";
       const textBoxContainer = element.closest(".uno-textbox,.uno-passwordbox");
+      const background = findBackground(element);
       return {
         color: style.color,
+        backgroundColor: background?.color ?? null,
+        backgroundSource: background?.source ?? null,
         opacity: Number(style.opacity || "1"),
         value: element.value ?? element.textContent ?? "",
         placeholder: element.getAttribute("placeholder") ?? "",
@@ -501,8 +539,9 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
           && rect.left <= innerWidth
           && rect.top <= innerHeight
       };
-    })
-    .filter(projection => projection.visible));
+      })
+      .filter(projection => projection.visible);
+  });
 
   if (projections.length === 0) {
     throw new Error(`No visible settings text inputs found for ${label}.`);
@@ -511,21 +550,43 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
   const failures = projections
     .map(projection => ({
       ...projection,
-      parsedColor: parseCssColor(projection.color)
+      parsedColor: parseCssColor(projection.color),
+      parsedBackgroundColor: projection.backgroundColor ? parseCssColor(projection.backgroundColor) : null
     }))
     .map(projection => ({
       ...projection,
-      luminance: relativeLuminance(projection.parsedColor)
+      contrastRatio: projection.parsedBackgroundColor
+        ? cssContrastRatio(projection.parsedColor, projection.parsedBackgroundColor)
+        : 0
     }))
     .filter(projection => projection.opacity <= 0.1
       || projection.parsedColor.a <= 0.1
-      || projection.luminance < 120);
+      || projection.parsedBackgroundColor === null
+      || projection.contrastRatio < 4.5);
 
   if (failures.length > 0) {
     throw new Error(
-      `Settings text input foreground did not resolve to a readable dark-theme color for ${label}. `
+      `Settings text input foreground did not meet readable contrast for ${label}. `
       + `Failures=${JSON.stringify(failures)} All=${JSON.stringify(projections)}`);
   }
+}
+
+function cssContrastRatio(foreground, background) {
+  const channel = value => {
+    const normalized = value / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = color =>
+    (0.2126 * channel(color.r))
+    + (0.7152 * channel(color.g))
+    + (0.0722 * channel(color.b));
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 async function waitForLocalFileContains(page, path, requiredSnippets, label, timeoutMs = 15_000) {

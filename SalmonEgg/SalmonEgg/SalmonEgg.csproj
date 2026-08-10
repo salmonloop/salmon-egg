@@ -181,6 +181,8 @@
   <PropertyGroup>
     <!-- Mobile targets are opt-in to keep `dotnet build` working on dev machines without workloads/toolchains. -->
     <EnableMobileTargets Condition="'$(EnableMobileTargets)' == ''">false</EnableMobileTargets>
+    <!-- Android stays enabled for existing mobile builds, but can be excluded when a host also exposes an Android SDK (for example macOS iOS runners). -->
+    <EnableAndroidTarget Condition="'$(EnableAndroidTarget)' == ''">true</EnableAndroidTarget>
     <!-- iOS additionally requires a macOS/Xcode toolchain, so it has an explicit opt-in under the mobile target gate. -->
     <EnableIosTarget Condition="'$(EnableIosTarget)' == ''">false</EnableIosTarget>
     <!-- Windows dev environments need the WinUI target present during restore/design-time build so XAML-generated types resolve. -->
@@ -195,6 +197,7 @@
     <SalmonEggTargetFrameworks Condition="'$(MSBuildRuntimeType)' != 'Core' OR '$(EnableWinUIBuild)' == 'true'">net10.0-desktop;net10.0-browserwasm;net10.0-windows10.0.26100.0</SalmonEggTargetFrameworks>
     <SalmonEggAndroidTargetFrameworks Condition="
         '$(EnableMobileTargets)' == 'true'
+        AND '$(EnableAndroidTarget)' == 'true'
         AND (
           '$(AndroidSdkDirectory)' != ''
           OR '$(ANDROID_SDK_ROOT)' != ''
