@@ -15,6 +15,7 @@ SEED_WRITER_PROJECT="${REPO_ROOT}/tests/SalmonEgg.TestSupport/SalmonEgg.TestSupp
 READY_MARKER="MainPage: initial shell content activated"
 TRANSCRIPT_SEED_CONVERSATION_ID="skia-mixed-session-01"
 TRANSCRIPT_SEED_MARKER="SKIA_MD_MARKER_7f3a"
+NUMBERBOX_PROBE_COMPLETE_MARKER="NumberBoxThemeProbe: complete"
 
 DOTNET_BIN="${DOTNET_BIN:-$(command -v dotnet || true)}"
 GIT_BIN="${GIT_BIN:-$(command -v git || true)}"
@@ -142,6 +143,11 @@ EOF
     echo "Skia Desktop GUI smoke seed is missing markdown marker '${TRANSCRIPT_SEED_MARKER}'." >&2
     exit 1
   fi
+
+  if ! grep -Eq '^theme:[[:space:]]+Dark$' "${APPDATA_ROOT}/config/app.yaml"; then
+    echo "Skia Desktop GUI smoke seed did not force the dark theme required by the NumberBox contrast probe." >&2
+    exit 1
+  fi
 }
 
 case "${OS_NAME}" in
@@ -154,10 +160,10 @@ case "${OS_NAME}" in
     if [ -z "${SMOKE_DISPLAY}" ]; then
       start_xvfb "${XVFB_BIN}"
     fi
-    LAUNCH_COMMAND=(env DISPLAY="${SMOKE_DISPLAY}" SALMONEGG_GUI=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
+    LAUNCH_COMMAND=(env DISPLAY="${SMOKE_DISPLAY}" SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
     ;;
   Darwin)
-    LAUNCH_COMMAND=(env SALMONEGG_GUI=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
+    LAUNCH_COMMAND=(env SALMONEGG_GUI=1 SALMONEGG_NUMBERBOX_THEME_PROBE=1 SALMONEGG_APPDATA_ROOT="${APPDATA_ROOT}" "${APP_PATH}")
     ;;
   *)
     echo "Skia Desktop GUI smoke supports Linux and macOS. Use scripts/gates/run-gui-smoke-gates.ps1 for Windows WinUI/FlaUI." >&2
@@ -210,9 +216,10 @@ if [ "${OS_NAME}" = "Linux" ]; then
   fi
 fi
 
-deadline=$((SECONDS + 45))
+deadline=$((SECONDS + 60))
 shell_ready=0
 transcript_ready=0
+numberbox_probe_complete=0
 while [ "${SECONDS}" -lt "${deadline}" ]; do
   if ! kill -0 "${APP_PID}" 2>/dev/null; then
     cat "${STDOUT_LOG}" >&2
@@ -232,9 +239,16 @@ while [ "${SECONDS}" -lt "${deadline}" ]; do
       && grep -Eq "ChatTranscript: projected conversation=${TRANSCRIPT_SEED_CONVERSATION_ID} count=[1-9][0-9]* history=[1-9][0-9]*" "${BOOT_LOG}"; then
       transcript_ready=1
     fi
+
+    if [ "${numberbox_probe_complete}" -eq 0 ] \
+      && grep -Fq "${NUMBERBOX_PROBE_COMPLETE_MARKER}" "${BOOT_LOG}"; then
+      numberbox_probe_complete=1
+    fi
   fi
 
-  if [ "${shell_ready}" -eq 1 ] && [ "${transcript_ready}" -eq 1 ]; then
+  if [ "${shell_ready}" -eq 1 ] \
+    && [ "${transcript_ready}" -eq 1 ] \
+    && [ "${numberbox_probe_complete}" -eq 1 ]; then
     break
   fi
 
@@ -256,6 +270,64 @@ if [ "${transcript_ready}" -ne 1 ]; then
     cat "${BOOT_LOG}" >&2
   fi
   echo "Skia Desktop GUI smoke did not project seeded mixed transcript '${TRANSCRIPT_SEED_CONVERSATION_ID}'." >&2
+  exit 1
+fi
+
+if [ "${numberbox_probe_complete}" -ne 1 ]; then
+  cat "${STDOUT_LOG}" >&2
+  if [ -f "${BOOT_LOG}" ]; then
+    cat "${BOOT_LOG}" >&2
+  fi
+  echo "Skia Desktop GUI smoke did not complete the focused NumberBox theme probe." >&2
+  exit 1
+fi
+
+numberbox_sample_count="$(grep -acE 'NumberBoxThemeProbe: sample=[0-9]+' "${BOOT_LOG}" || true)"
+if [ "${numberbox_sample_count}" -lt 3 ]; then
+  cat "${BOOT_LOG}" >&2
+  echo "Skia Desktop GUI smoke collected only ${numberbox_sample_count} focused NumberBox sample(s); expected at least 3." >&2
+  exit 1
+fi
+
+if ! awk '
+  /NumberBoxThemeProbe: sample=/ {
+    samples++
+    visible = focusTransition = focused = numberBoxTheme = inputTheme = contentTheme = borderTheme = passed = ""
+    contrast = -1
+    for (fieldIndex = 1; fieldIndex <= NF; fieldIndex++) {
+      split($fieldIndex, field, "=")
+      if (field[1] == "visible") visible = field[2]
+      else if (field[1] == "focusTransition") focusTransition = field[2]
+      else if (field[1] == "focused") focused = field[2]
+      else if (field[1] == "numberBoxTheme") numberBoxTheme = field[2]
+      else if (field[1] == "inputTheme") inputTheme = field[2]
+      else if (field[1] == "contentTheme") contentTheme = field[2]
+      else if (field[1] == "borderTheme") borderTheme = field[2]
+      else if (field[1] == "contrast") contrast = field[2] + 0
+      else if (field[1] == "passed") passed = field[2]
+    }
+    if (visible != "True" ||
+        focusTransition != "True" ||
+        focused != "True" ||
+        numberBoxTheme != "Dark" ||
+        inputTheme != "Dark" ||
+        contentTheme != "Dark" ||
+        borderTheme != "Dark" ||
+        contrast < 4.5 ||
+        passed != "True") {
+      failures++
+    }
+  }
+  END { exit !(samples >= 3 && failures == 0) }
+' "${BOOT_LOG}"; then
+  cat "${BOOT_LOG}" >&2
+  echo "Skia Desktop GUI smoke observed an unreadable or theme-mismatched focused NumberBox sample." >&2
+  exit 1
+fi
+
+if ! grep -Eq 'NumberBoxThemeProbe: complete samples=3 valueUnchanged=True passed=True reason=none' "${BOOT_LOG}"; then
+  cat "${BOOT_LOG}" >&2
+  echo "Skia Desktop GUI smoke NumberBox probe did not finish with three passing, non-mutating samples." >&2
   exit 1
 fi
 

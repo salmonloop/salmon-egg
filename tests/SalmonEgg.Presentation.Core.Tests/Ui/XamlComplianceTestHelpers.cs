@@ -254,6 +254,9 @@ internal static class XamlComplianceTestHelpers
             || string.Equals(value, "Icon", StringComparison.Ordinal)
             || string.Equals(value, "boot", StringComparison.Ordinal)
             || string.Equals(value, "inactive", StringComparison.Ordinal)
+            || string.Equals(fileName, "UnoNumberBoxThemeOverrides.xaml", StringComparison.OrdinalIgnoreCase)
+                && attribute.Name.LocalName is "Text" or "Content"
+                && value is "\uE70D" or "\uE70E" or "\uE894" or "\uEC8F"
             || string.Equals(fileName, "ChatInputArea.xaml", StringComparison.OrdinalIgnoreCase)
                 && attribute.Name.LocalName == "Content"
             && value.Length <= 2;

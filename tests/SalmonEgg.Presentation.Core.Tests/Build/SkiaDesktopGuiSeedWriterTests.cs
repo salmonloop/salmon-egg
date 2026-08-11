@@ -21,6 +21,10 @@ public sealed class SkiaDesktopGuiSeedWriterTests
             Assert.True(File.Exists(paths.AppYamlPath));
             Assert.True(File.Exists(paths.ConversationsPath));
             Assert.True(Directory.Exists(paths.ProjectRootPath));
+            Assert.Contains(
+                "theme: Dark",
+                File.ReadAllText(paths.AppYamlPath),
+                StringComparison.Ordinal);
 
             using var document = JsonDocument.Parse(File.ReadAllText(paths.ConversationsPath));
             var rootElement = document.RootElement;

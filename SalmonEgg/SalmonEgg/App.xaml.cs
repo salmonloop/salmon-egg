@@ -106,6 +106,11 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         // snapping) can be clipped by the renderer. Load a small host-specific override dictionary only on Skia.
         TryAddSkiaThemeOverrides();
 #endif
+#if __UNO_SKIA__ || __WASM__
+        // Uno's NumberBox focus template has a renderer-specific theme mismatch on Skia and BrowserWasm. Keep this
+        // workaround outside the Windows WinUI 3 path until unoplatform/uno#24021 is fixed in our dependency line.
+        TryApplyUnoNumberBoxThemeOverride();
+#endif
 
         this.UnhandledException += (_, e) =>
         {
@@ -149,6 +154,32 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         catch
         {
             // Best-effort; the app should still run without overrides.
+        }
+    }
+#endif
+
+#if __UNO_SKIA__ || __WASM__
+    private void TryApplyUnoNumberBoxThemeOverride()
+    {
+        try
+        {
+            var overrides = new Microsoft.UI.Xaml.ResourceDictionary
+            {
+                Source = new Uri("ms-appx:///Styles/Skia/UnoNumberBoxThemeOverrides.xaml")
+            };
+
+            Resources.MergedDictionaries.Add(overrides);
+            if (overrides["UnoNumberBoxStyleOverride"] is not Microsoft.UI.Xaml.Style numberBoxStyle)
+            {
+                throw new InvalidOperationException("The Uno NumberBox style override was not found.");
+            }
+
+            Resources[typeof(Microsoft.UI.Xaml.Controls.NumberBox)] = numberBoxStyle;
+        }
+        catch (Exception ex)
+        {
+            // Best-effort; the app should still run with the framework default if the optional resource is unavailable.
+            _startupLogger?.LogWarning(ex, "Failed to apply the Uno NumberBox theme override.");
         }
     }
 #endif

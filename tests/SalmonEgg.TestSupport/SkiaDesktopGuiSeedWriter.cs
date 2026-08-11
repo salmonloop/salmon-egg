@@ -196,6 +196,7 @@ public static class SkiaDesktopGuiSeedWriter
             Environment.NewLine,
             [
                 "version: 1",
+                "theme: Dark",
                 "projects:",
                 $"  - id: {ProjectId}",
                 "    display_name: Skia Smoke Project",

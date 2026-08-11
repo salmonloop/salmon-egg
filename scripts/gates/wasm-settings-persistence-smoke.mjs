@@ -368,6 +368,17 @@ async function changeDataStorageSettings(page) {
     dataStorageCacheRetentionControl,
     "cache retention before edit");
   const updatedValue = selectAlternateCacheRetentionValue(initialValue);
+  await focusNumericControl(
+    page,
+    dataStorageCacheRetentionControl,
+    "cache retention focused contrast");
+  await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(
+    page,
+    "focused data storage cache retention",
+    {
+      requireFocused: true,
+      focusedControl: dataStorageCacheRetentionControl
+    });
   await setNumericControlValue(
     page,
     dataStorageCacheRetentionControl,
@@ -467,8 +478,39 @@ async function verifyMcpSettings(page, suffix = "") {
   await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
 }
 
-async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label) {
-  const projections = await page.evaluate(() => {
+async function focusNumericControl(page, controlOptions, label) {
+  await clickVisibleControl(page, controlOptions);
+  await page.waitForFunction(options => {
+    const labels = options.labels ?? [];
+    const automationIds = options.automationIds ?? [];
+    const control = window.__salmoneggSmoke.findVisibleControl(options, labels, automationIds);
+    const textInput = control?.matches("input,textarea,[contenteditable='true']")
+      ? control
+      : control?.querySelector("input,textarea,[contenteditable='true']");
+    return Boolean(textInput && document.activeElement === textInput);
+  }, controlOptions, { timeout: 5_000 });
+
+  const focused = await page.evaluate(options => {
+    const labels = options.labels ?? [];
+    const automationIds = options.automationIds ?? [];
+    const control = window.__salmoneggSmoke.findVisibleControl(options, labels, automationIds);
+    const textInput = control?.matches("input,textarea,[contenteditable='true']")
+      ? control
+      : control?.querySelector("input,textarea,[contenteditable='true']");
+    return {
+      found: Boolean(textInput),
+      focused: Boolean(textInput && document.activeElement === textInput),
+      activeClassName: document.activeElement?.className?.toString?.() ?? ""
+    };
+  }, controlOptions);
+
+  if (!focused.found || !focused.focused) {
+    throw new Error(`Expected focused numeric control for ${label}. State=${JSON.stringify(focused)}`);
+  }
+}
+
+async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, label, options = {}) {
+  const projections = await page.evaluate(focusedControl => {
     const parseColor = value => {
       const match = String(value ?? "").match(/rgba?\(([^)]+)\)/i);
       if (!match) {
@@ -483,23 +525,63 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
         a: parts.length >= 4 ? parts[3] : 1
       };
     };
-    const findBackground = element => {
+    const composite = (foreground, background) => {
+      const alpha = foreground.a + (background.a * (1 - foreground.a));
+      if (alpha <= 0) {
+        return { r: 0, g: 0, b: 0, a: 0 };
+      }
+
+      return {
+        r: ((foreground.r * foreground.a)
+          + (background.r * background.a * (1 - foreground.a))) / alpha,
+        g: ((foreground.g * foreground.a)
+          + (background.g * background.a * (1 - foreground.a))) / alpha,
+        b: ((foreground.b * foreground.a)
+          + (background.b * background.a * (1 - foreground.a))) / alpha,
+        a: alpha
+      };
+    };
+    const findEffectiveBackground = element => {
+      const layers = [];
       let current = element;
       while (current) {
         const backgroundColor = getComputedStyle(current).backgroundColor;
         const parsed = parseColor(backgroundColor);
-        if (parsed && parsed.a > 0.05) {
-          return {
-            color: backgroundColor,
+        if (parsed && parsed.a > 0) {
+          layers.push({
+            color: parsed,
             source: current.className?.toString?.() || current.tagName
-          };
+          });
         }
 
         current = current.parentElement;
       }
 
-      return null;
+      if (layers.length === 0) {
+        return null;
+      }
+
+      let effective = layers[layers.length - 1].color;
+      for (let index = layers.length - 2; index >= 0; index -= 1) {
+        effective = composite(layers[index].color, effective);
+      }
+
+      return effective.a >= 0.99
+        ? {
+            color: effective,
+            sources: layers.map(layer => layer.source)
+          }
+        : null;
     };
+    const focusedHost = focusedControl
+      ? window.__salmoneggSmoke.findVisibleControl(
+          focusedControl,
+          focusedControl.labels ?? [],
+          focusedControl.automationIds ?? [])
+      : null;
+    const focusedInput = focusedHost?.matches("input,textarea,[contenteditable='true']")
+      ? focusedHost
+      : focusedHost?.querySelector("input,textarea,[contenteditable='true']");
 
     return Array.from(document.querySelectorAll("input,textarea,[contenteditable='true']"))
       .map(element => {
@@ -507,12 +589,14 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
       const style = getComputedStyle(element);
       const type = element.getAttribute("type")?.toLowerCase() ?? "";
       const textBoxContainer = element.closest(".uno-textbox,.uno-passwordbox");
-      const background = findBackground(element);
+      const background = findEffectiveBackground(element);
       return {
         color: style.color,
         backgroundColor: background?.color ?? null,
-        backgroundSource: background?.source ?? null,
+        backgroundSources: background?.sources ?? [],
         opacity: Number(style.opacity || "1"),
+        focused: document.activeElement === element,
+        focusedTarget: element === focusedInput,
         value: element.value ?? element.textContent ?? "",
         placeholder: element.getAttribute("placeholder") ?? "",
         aria: element.getAttribute("aria-label") ?? "",
@@ -541,22 +625,35 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
       };
       })
       .filter(projection => projection.visible);
-  });
+  }, options.focusedControl ?? null);
 
   if (projections.length === 0) {
     throw new Error(`No visible settings text inputs found for ${label}.`);
+  }
+
+  if (options.requireFocused === true
+      && !projections.some(projection => projection.focused && projection.focusedTarget)) {
+    throw new Error(
+      `The target settings text input did not retain focus for ${label}. Projections=${JSON.stringify(projections)}`);
   }
 
   const failures = projections
     .map(projection => ({
       ...projection,
       parsedColor: parseCssColor(projection.color),
-      parsedBackgroundColor: projection.backgroundColor ? parseCssColor(projection.backgroundColor) : null
+      parsedBackgroundColor: projection.backgroundColor
     }))
     .map(projection => ({
       ...projection,
       contrastRatio: projection.parsedBackgroundColor
-        ? cssContrastRatio(projection.parsedColor, projection.parsedBackgroundColor)
+        ? cssContrastRatio(
+            compositeCssColor(
+              {
+                ...projection.parsedColor,
+                a: projection.parsedColor.a * projection.opacity
+              },
+              projection.parsedBackgroundColor),
+            projection.parsedBackgroundColor)
         : 0
     }))
     .filter(projection => projection.opacity <= 0.1
@@ -569,6 +666,23 @@ async function verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, l
       `Settings text input foreground did not meet readable contrast for ${label}. `
       + `Failures=${JSON.stringify(failures)} All=${JSON.stringify(projections)}`);
   }
+}
+
+function compositeCssColor(foreground, background) {
+  const alpha = foreground.a + (background.a * (1 - foreground.a));
+  if (alpha <= 0) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  return {
+    r: ((foreground.r * foreground.a)
+      + (background.r * background.a * (1 - foreground.a))) / alpha,
+    g: ((foreground.g * foreground.a)
+      + (background.g * background.a * (1 - foreground.a))) / alpha,
+    b: ((foreground.b * foreground.a)
+      + (background.b * background.a * (1 - foreground.a))) / alpha,
+    a: alpha
+  };
 }
 
 function cssContrastRatio(foreground, background) {

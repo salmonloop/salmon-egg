@@ -436,6 +436,39 @@ public sealed class XamlComplianceThemeResourcesTests
     }
 
     [Fact]
+    public void SkiaNumberBoxThemeOverride_ReplacesFrameworkScopedTemplateWithoutFocusThemeMismatch()
+    {
+        var appCode = LoadText(@"SalmonEgg\SalmonEgg\App.xaml.cs");
+        var overrideXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\Skia\UnoNumberBoxThemeOverrides.xaml");
+
+        Assert.Equal(2, CountOccurrences(appCode, "#if __UNO_SKIA__ || __WASM__"));
+        Assert.Contains("TryApplyUnoNumberBoxThemeOverride();", appCode, StringComparison.Ordinal);
+        Assert.Contains("Styles/Skia/UnoNumberBoxThemeOverrides.xaml", appCode, StringComparison.Ordinal);
+        Assert.Contains("Resources[typeof(Microsoft.UI.Xaml.Controls.NumberBox)] = numberBoxStyle;", appCode, StringComparison.Ordinal);
+        Assert.Contains("overrides[\"UnoNumberBoxStyleOverride\"]", appCode, StringComparison.Ordinal);
+        Assert.Contains("Copyright (c) Microsoft Corporation", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("Uno 6.6.166 (commit 438b300b6171b3f2712f8897f10ea620784843ca)", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("unoplatform/uno#24021", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("xmlns:skia=\"http://uno.ui/skia\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("mc:Ignorable=\"skia\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"UnoNumberBoxStyleOverride\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("TargetType=\"controls:NumberBox\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("Style=\"{StaticResource NumberBoxTextBoxStyle}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"Foreground\" Value=\"{ThemeResource TextFillColorPrimaryBrush}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"NumberBoxTextBoxStyle\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ContentElement\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"Focused\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("skia:SelectionFlyout=\"{TemplateBinding SelectionFlyout}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("skia:ScrollViewer.IsHorizontalRailEnabled=\"{TemplateBinding ScrollViewer.IsHorizontalRailEnabled}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.Contains("skia:ScrollViewer.IsVerticalRailEnabled=\"{TemplateBinding ScrollViewer.IsVerticalRailEnabled}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Storyboard.TargetProperty=\"RequestedTheme\"", overrideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScrollViewer.IsDeferredScrollingEnabled", overrideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("TextReadingOrder=\"{TemplateBinding TextReadingOrder}\"", overrideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("PreventKeyboardDisplayOnProgrammaticFocus=", overrideXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShouldConstrainToRootBounds=", overrideXaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppXaml_DoesNotDeclareASecondUiMotionControllerInstance()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\App.xaml");

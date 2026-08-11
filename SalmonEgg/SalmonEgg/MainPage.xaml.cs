@@ -736,6 +736,10 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         // self-gates on the environment; the shell only offers it the service provider once the
         // navigation tree is live. No-op unless explicitly enabled.
         NavigationMaskProbeDriver.TryStart(App.ServiceProvider);
+
+        // Diagnostics-only NumberBox theme probe. Navigation, focus cycling, and realized-template
+        // sampling remain owned by the independent probe; the page only exposes the live shell root.
+        NumberBoxThemeProbeDriver.TryStart(App.ServiceProvider, this);
     }
 
     private void AttachGamepadInput()
