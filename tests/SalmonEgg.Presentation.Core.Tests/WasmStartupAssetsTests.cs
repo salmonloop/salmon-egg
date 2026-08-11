@@ -284,6 +284,10 @@ public sealed class WasmStartupAssetsTests
         Assert.Equal(4, gate.Split("-p:SalmonEggSupportsDesktopProcessHost=false", StringSplitOptions.None).Length - 1);
         Assert.Contains("--runtime iossimulator-arm64", gate, StringComparison.Ordinal);
         Assert.Contains("--no-restore", gate, StringComparison.Ordinal);
+        Assert.Equal(2, gate.Split("-p:UseInterpreter=true", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, gate.Split("-p:TrimMode=copy", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("-p:PublishTrimmed=false", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:MtouchLink=", gate, StringComparison.Ordinal);
         Assert.Contains("DOTNET_VERSION: \"10.0.3xx\"", gate, StringComparison.Ordinal);
         Assert.Equal(
             4,

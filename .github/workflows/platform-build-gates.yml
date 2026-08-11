@@ -180,10 +180,14 @@ jobs:
       - name: Build iOS Simulator
         shell: bash
         run: |
+          # Keep the hosted simulator compile gate bounded. The documented interpreter avoids
+          # app-wide AOT, while TrimMode=copy is the supported no-trim mode for Apple platforms.
           dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
             --runtime iossimulator-arm64 \
             -p:SalmonEggTargetFrameworks=net10.0-ios \
-            -p:SalmonEggSupportsDesktopProcessHost=false
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:UseInterpreter=true \
+            -p:TrimMode=copy
 
           dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj \
             --configuration "${{ env.CONFIGURATION }}" \
@@ -191,4 +195,6 @@ jobs:
             --runtime iossimulator-arm64 \
             --no-restore \
             -p:SalmonEggTargetFrameworks=net10.0-ios \
-            -p:SalmonEggSupportsDesktopProcessHost=false
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:UseInterpreter=true \
+            -p:TrimMode=copy

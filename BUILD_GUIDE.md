@@ -209,6 +209,8 @@ scripts/gates/verify-mobile-target-contracts.sh
 
 该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源，并通过 `GenerateRestoreGraphFile` 的无 workload surrogate 确认应用级单 TFM 不会污染 Core 子项目、受限平台图不会引入 Desktop process host；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
 
+GHA 的 iOS Simulator job 是有界的 simulator compile / app-bundle gate：restore 与 build 均保持 Release 配置并显式使用 .NET for iOS 官方支持的 `UseInterpreter=true` 与 `TrimMode=copy`，避免把 hosted runner 时间消耗在 app-wide AOT。该 gate 验证本次提交的 iOS target graph、托管代码、XAML/资源与 simulator bundle；它不等同于 device/archive AOT 或签名安装验证，正式 iOS 发布必须另行执行真实 archive/device gate。官方属性说明：https://learn.microsoft.com/dotnet/ios/building-apps/build-properties#useinterpreter 。
+
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
 
