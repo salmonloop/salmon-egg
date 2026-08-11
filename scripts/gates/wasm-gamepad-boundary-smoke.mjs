@@ -98,8 +98,7 @@ async function verifyNativeBrowserNoDeviceProjection() {
 
   try {
     await openDiagnosticsGamepadSection(page);
-    await clickVisibleControl(page, gamepadRefresh);
-    await page.waitForTimeout(250);
+    await refreshGamepadDiagnostics(page, "native BrowserWasm gamepad diagnostics");
     const projection = await expectSupportedNoGamepadProjection(page, "native BrowserWasm gamepad diagnostics");
 
     await page.mouse.click(projection.startState.x, projection.startState.y);
@@ -127,8 +126,7 @@ async function verifyInjectedNonStandardGamepadIsNotMisread() {
       });
     });
 
-    await clickVisibleControl(page, gamepadRefresh);
-    await page.waitForTimeout(250);
+    await refreshGamepadDiagnostics(page, "injected non-standard Gamepad API projection");
     await expectConnectedNonStandardGamepadWithoutActiveProjection(
       page,
       "injected non-standard Gamepad API projection");
@@ -153,8 +151,7 @@ async function verifyInjectedStandardGamepadProjection() {
       });
     });
 
-    await clickVisibleControl(page, gamepadRefresh);
-    await page.waitForTimeout(250);
+    await refreshGamepadDiagnostics(page, "injected standard Gamepad API projection");
     await expectActiveStandardGamepadProjection(page, "injected standard Gamepad API projection");
 
     assertNoFatalConsoleMessages(fatalConsoleMessages);
@@ -238,14 +235,7 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         });
       }, brand.id);
 
-      await clickVisibleControl(page, gamepadRefresh);
-      await page.waitForTimeout(250);
-
-      await expectControlText(
-        page,
-        { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
-        /^1$/,
-        `${brand.label} standard gamepad count`);
+      await refreshGamepadDiagnostics(page, brand.label);
 
       // Format: "#0 {name} VID {vid} PID {pid}; family {family}; layout {layout}; ..."
       // Identity/family/layout are diagnostics labeling only; face semantics stay position-based.
@@ -257,6 +247,11 @@ async function verifyInjectedMultiBrandGamepadIdentityProjection() {
         { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
         detailsPattern,
         `${brand.label} standard details`);
+      await expectControlText(
+        page,
+        { labels: [], automationIds: ["Diagnostics.GamepadStandardCount"] },
+        /^1$/,
+        `${brand.label} standard gamepad count`);
 
       // Standard mapping slot A is position-based Activate for all brands under W3C mapping.
       await expectControlText(
@@ -359,19 +354,18 @@ async function verifyInjectedMultiBrandFaceAndTriggerSemanticsProjection() {
           });
         }, { id: brand.id, pressedButtons: sample.pressedButtons });
 
-        await clickVisibleControl(page, gamepadRefresh);
-        await page.waitForTimeout(200);
+        await refreshGamepadDiagnostics(page, `${brand.label} ${sample.label}`);
 
-        await expectControlText(
-          page,
-          { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
-          sample.activePattern,
-          `${brand.label} ${sample.label} active inputs`);
         await expectControlText(
           page,
           { labels: [], automationIds: ["Diagnostics.GamepadStandardDetails"] },
           sample.pressedPattern,
           `${brand.label} ${sample.label} pressed details`);
+        await expectControlText(
+          page,
+          { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
+          sample.activePattern,
+          `${brand.label} ${sample.label} active inputs`);
         await expectControlText(
           page,
           { labels: [], automationIds: ["Diagnostics.GamepadThumbstick"] },
@@ -424,7 +418,7 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
 
     // Standard-mapping DPadDown (index 13) must project as MoveDown intent facts.
     await setInjectedGamepadButtons(page, [13]);
-    await clickVisibleControl(page, gamepadRefresh);
+    await refreshGamepadDiagnostics(page, "gamepad DPadDown projection");
     await waitForControlText(
       page,
       { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
@@ -440,7 +434,7 @@ async function verifyInjectedStandardGamepadNativeControlBridge() {
 
     // Standard-mapping A (index 0) must project Activate intent facts for consumers.
     await setInjectedGamepadButtons(page, [0]);
-    await clickVisibleControl(page, gamepadRefresh);
+    await refreshGamepadDiagnostics(page, "gamepad Activate projection");
     await waitForControlText(
       page,
       { labels: [], automationIds: ["Diagnostics.GamepadActiveInputs"] },
@@ -659,6 +653,42 @@ async function waitForControlText(page, options, pattern, label, timeoutMs = 30_
   }
 
   throw new Error(`Timed out waiting for ${label}. State=${JSON.stringify(lastState)}`);
+}
+
+async function refreshGamepadDiagnostics(page, label) {
+  const refresh = page.locator('[aria-label="Diagnostics.GamepadRefresh"]:visible').first();
+  await refresh.scrollIntoViewIfNeeded({ timeout: 15_000 });
+  await refresh.click({ timeout: 15_000 });
+  await waitForRefreshCompletion(refresh, label, 15_000);
+}
+
+async function waitForRefreshCompletion(refresh, label, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+  let sawDisabled = false;
+  let consecutiveEnabledReadings = 0;
+
+  while (Date.now() < deadline) {
+    const found = await refresh.count() > 0;
+    const enabled = found && await refresh.isEnabled();
+    lastState = { found, enabled };
+    if (lastState?.found && !lastState.enabled) {
+      sawDisabled = true;
+      consecutiveEnabledReadings = 0;
+    } else if (lastState?.found && lastState.enabled) {
+      consecutiveEnabledReadings += 1;
+      if (sawDisabled || consecutiveEnabledReadings >= 2) {
+        return lastState;
+      }
+    } else {
+      consecutiveEnabledReadings = 0;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+
+  throw new Error(
+    `Timed out waiting for ${label} refresh completion. SawDisabled=${sawDisabled} State=${JSON.stringify(lastState)}`);
 }
 
 async function setInjectedGamepadButtons(page, pressedButtons) {
