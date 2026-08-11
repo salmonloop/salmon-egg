@@ -247,10 +247,44 @@ public sealed class AcpJsonContextTests
     }
 
     [Fact]
-    public void InitializeParams_DefaultProtocolVersion_IsLatest()
+    public void AcpProtocolVersion_DefaultAndLatest_ExposeStableAndHighestModeledVersions()
+    {
+        Assert.Equal(AcpProtocolVersion.V1, AcpProtocolVersion.Default);
+        Assert.Equal(AcpProtocolVersion.V2, AcpProtocolVersion.Latest);
+    }
+
+    [Fact]
+    public void InitializeDtos_DefaultProtocolVersion_SerializesV1WireShape()
     {
         var initializeParams = new InitializeParams();
-        Assert.Equal(AcpProtocolVersion.Latest, initializeParams.ProtocolVersion);
+        var initializeResponse = new InitializeResponse();
+
+        var initializeParamsJson = JsonSerializer.Serialize(
+            initializeParams,
+            AcpJsonContext.Default.InitializeParams);
+        var initializeResponseJson = JsonSerializer.Serialize(
+            initializeResponse,
+            AcpJsonContext.Default.InitializeResponse);
+
+        using var initializeParamsDocument = JsonDocument.Parse(initializeParamsJson);
+        using var initializeResponseDocument = JsonDocument.Parse(initializeResponseJson);
+
+        Assert.Equal(AcpProtocolVersion.Default, initializeParams.ProtocolVersion);
+        Assert.Equal(AcpProtocolVersion.Default, initializeResponse.ProtocolVersion);
+        Assert.Equal(
+            AcpProtocolVersion.V1,
+            initializeParamsDocument.RootElement.GetProperty("protocolVersion").GetInt32());
+        Assert.True(initializeParamsDocument.RootElement.TryGetProperty("clientInfo", out _));
+        Assert.True(initializeParamsDocument.RootElement.TryGetProperty("clientCapabilities", out _));
+        Assert.False(initializeParamsDocument.RootElement.TryGetProperty("info", out _));
+        Assert.False(initializeParamsDocument.RootElement.TryGetProperty("capabilities", out _));
+        Assert.Equal(
+            AcpProtocolVersion.V1,
+            initializeResponseDocument.RootElement.GetProperty("protocolVersion").GetInt32());
+        Assert.True(initializeResponseDocument.RootElement.TryGetProperty("agentInfo", out _));
+        Assert.True(initializeResponseDocument.RootElement.TryGetProperty("agentCapabilities", out _));
+        Assert.False(initializeResponseDocument.RootElement.TryGetProperty("info", out _));
+        Assert.False(initializeResponseDocument.RootElement.TryGetProperty("capabilities", out _));
     }
 
     [Fact]
@@ -261,7 +295,7 @@ public sealed class AcpJsonContextTests
             {
                 ProtocolVersion = AcpProtocolVersion.V2,
                 ClientInfo = new ClientInfo("client", "1.0.0", "Client"),
-                ClientCapabilities = ClientCapabilityDefaults.Create()
+                ClientCapabilities = new ClientCapabilities(meta: ClientCapabilityMetadata.CreateDefault())
             },
             AcpJsonContext.Default.InitializeParams);
 
@@ -270,8 +304,85 @@ public sealed class AcpJsonContextTests
         Assert.Equal(2, root.GetProperty("protocolVersion").GetInt32());
         Assert.True(root.TryGetProperty("info", out _));
         Assert.True(root.TryGetProperty("capabilities", out var capabilities));
-        Assert.True(capabilities.TryGetProperty("_meta", out _));
+        var extensions = capabilities
+            .GetProperty("_meta")
+            .GetProperty(ClientCapabilityMetadata.ExtensionsMetaKey);
+        Assert.True(extensions.GetProperty(ClientCapabilityMetadata.AskUserExtensionMethod).GetBoolean());
+        Assert.False(capabilities.TryGetProperty("fs", out _));
+        Assert.False(capabilities.TryGetProperty("terminal", out _));
+        Assert.False(capabilities.TryGetProperty("session", out _));
         Assert.False(root.TryGetProperty("clientInfo", out _));
         Assert.False(root.TryGetProperty("clientCapabilities", out _));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void InitializeParams_V2RejectsLegacyFileSystemCapability(bool readTextFile, bool writeTextFile)
+    {
+        var initializeParams = new InitializeParams
+        {
+            ProtocolVersion = AcpProtocolVersion.V2,
+            ClientCapabilities = new ClientCapabilities(fs: new FsCapability(readTextFile, writeTextFile))
+        };
+
+        var exception = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(
+            initializeParams,
+            AcpJsonContext.Default.InitializeParams));
+
+        Assert.Equal(InitializeClientProtocolPolicy.V2LegacyClientCapabilitiesMessage, exception.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InitializeParams_V2RejectsLegacyTerminalCapability(bool terminal)
+    {
+        var initializeParams = new InitializeParams
+        {
+            ProtocolVersion = AcpProtocolVersion.V2,
+            ClientCapabilities = new ClientCapabilities(terminal: terminal)
+        };
+
+        var exception = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(
+            initializeParams,
+            AcpJsonContext.Default.InitializeParams));
+
+        Assert.Equal(InitializeClientProtocolPolicy.V2LegacyClientCapabilitiesMessage, exception.Message);
+    }
+
+    [Fact]
+    public void InitializeParams_V2RejectsLegacySessionCapability()
+    {
+        var initializeParams = new InitializeParams
+        {
+            ProtocolVersion = AcpProtocolVersion.V2,
+            ClientCapabilities = new ClientCapabilities(session: new ClientSessionCapabilities())
+        };
+
+        var exception = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(
+            initializeParams,
+            AcpJsonContext.Default.InitializeParams));
+
+        Assert.Equal(InitializeClientProtocolPolicy.V2LegacyClientCapabilitiesMessage, exception.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void InitializeParams_RejectsUnsupportedProtocolVersion(int protocolVersion)
+    {
+        var initializeParams = new InitializeParams
+        {
+            ProtocolVersion = protocolVersion,
+            ClientCapabilities = new ClientCapabilities(terminal: true)
+        };
+
+        var exception = Assert.Throws<JsonException>(() => JsonSerializer.Serialize(
+            initializeParams,
+            AcpJsonContext.Default.InitializeParams));
+
+        Assert.Equal(InitializeClientProtocolPolicy.UnsupportedProtocolVersionMessage, exception.Message);
     }
 }

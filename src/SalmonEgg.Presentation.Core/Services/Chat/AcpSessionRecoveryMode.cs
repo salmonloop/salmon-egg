@@ -18,11 +18,6 @@ public static class AcpSessionRecoveryPolicy
             return AcpSessionRecoveryMode.Load;
         }
 
-        if (capabilities?.SupportsSessionResume == true)
-        {
-            return AcpSessionRecoveryMode.Resume;
-        }
-
         return AcpSessionRecoveryMode.None;
     }
 
@@ -42,18 +37,9 @@ public static class AcpSessionRecoveryPolicy
     }
 
     /// <summary>
-    /// Cold hydration always needs full history when recovery is available:
-    /// V1 session/load, or V2 session/resume with <c>replayFrom: { type: "start" }</c>.
-    /// Resync uses plain resume and must not call this helper.
+    /// Stable V1 cold hydration requires <c>session/load</c>, because V1
+    /// <c>session/resume</c> reattaches without replaying conversation history.
     /// </summary>
     public static bool ExpectsHistoryReplayForHydration(AcpSessionRecoveryMode recoveryMode)
-        => recoveryMode is AcpSessionRecoveryMode.Load or AcpSessionRecoveryMode.Resume;
-
-    /// <summary>
-    /// Hydration resume always requests full history via the official V2 start cursor.
-    /// </summary>
-    public static SessionReplayFrom? ResolveHydrationResumeReplayFrom(AcpSessionRecoveryMode recoveryMode)
-        => recoveryMode == AcpSessionRecoveryMode.Resume
-            ? SessionReplayFrom.Start
-            : null;
+        => recoveryMode == AcpSessionRecoveryMode.Load;
 }

@@ -18,7 +18,7 @@ namespace SalmonEgg.Acp.Protocol
         /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; init; } = AcpProtocolVersion.Latest;
+        public int ProtocolVersion { get; init; } = AcpProtocolVersion.Default;
 
         /// <summary>
         /// 客户端信息。
@@ -257,6 +257,33 @@ namespace SalmonEgg.Acp.Protocol
         }
     }
 
+    internal static class InitializeClientProtocolPolicy
+    {
+        internal const string UnsupportedProtocolVersionMessage =
+            "ACP initialize only supports client protocolVersion 1 or 2.";
+
+        internal const string V2LegacyClientCapabilitiesMessage =
+            "ACP v2 initialize cannot use the v1 client capability fields 'fs', 'terminal', or 'session'. Move experimental declarations to _meta or use protocolVersion 1.";
+
+        internal static void Validate(int protocolVersion, ClientCapabilities capabilities)
+        {
+            ArgumentNullException.ThrowIfNull(capabilities);
+
+            if (!AcpProtocolVersion.IsSupported(protocolVersion))
+            {
+                throw new JsonException(UnsupportedProtocolVersionMessage);
+            }
+
+            if (protocolVersion == AcpProtocolVersion.V2
+                && (capabilities.Fs is not null
+                    || capabilities.Terminal is not null
+                    || capabilities.Session is not null))
+            {
+                throw new JsonException(V2LegacyClientCapabilitiesMessage);
+            }
+        }
+    }
+
     /// <summary>
     /// Initialize 方法的响应。
     /// Agent 对初始化请求的响应。
@@ -268,7 +295,7 @@ namespace SalmonEgg.Acp.Protocol
         /// 协议版本号。必须是整数。
         /// </summary>
         [JsonPropertyName("protocolVersion")]
-        public int ProtocolVersion { get; init; } = AcpProtocolVersion.Latest;
+        public int ProtocolVersion { get; init; } = AcpProtocolVersion.Default;
 
         /// <summary>
         /// Agent 信息。
@@ -734,6 +761,8 @@ namespace SalmonEgg.Acp.Protocol
 
         public override void Write(Utf8JsonWriter writer, InitializeParams value, JsonSerializerOptions options)
         {
+            InitializeClientProtocolPolicy.Validate(value.ProtocolVersion, value.ClientCapabilities);
+
             writer.WriteStartObject();
             writer.WriteNumber("protocolVersion", value.ProtocolVersion);
 
@@ -798,7 +827,9 @@ namespace SalmonEgg.Acp.Protocol
         private static void WriteClientCapabilitiesV2(Utf8JsonWriter writer, ClientCapabilities value)
         {
             writer.WritePropertyName("capabilities");
-            JsonSerializer.Serialize(writer, value, AcpJsonContext.Default.ClientCapabilities);
+            writer.WriteStartObject();
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
         }
     }
 

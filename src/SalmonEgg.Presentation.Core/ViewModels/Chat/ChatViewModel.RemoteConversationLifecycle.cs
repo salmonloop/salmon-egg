@@ -321,7 +321,7 @@ public partial class ChatViewModel
                     failureContext,
                     "RecoveryCapabilityMissing",
                     "ChatOperation_LoadSessionRecoveryCapabilityMissing",
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+                    "Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -1878,7 +1878,7 @@ public partial class ChatViewModel
                     failureContext,
                     "RecoveryCapabilityMissing",
                     "ChatOperation_LoadSessionRecoveryCapabilityMissing",
-                    "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.")
+                    "Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.")
                 .ConfigureAwait(false);
             return false;
         }
@@ -2300,8 +2300,7 @@ public partial class ChatViewModel
                 AcpRemoteSessionRecoveryRequestFactory.CreateResumeParams(
                     remoteSessionId,
                     recoveryContext,
-                    mcpServers,
-                    AcpSessionRecoveryPolicy.ResolveHydrationResumeReplayFrom(recoveryMode)),
+                    mcpServers),
                 requestToken);
             request.TrackTransportTask(resumeTask);
             _ = ObserveRemoteSessionRecoveryTransportTaskAsync(resumeTask, recoveryMode, remoteSessionId);

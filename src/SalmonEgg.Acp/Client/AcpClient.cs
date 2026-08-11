@@ -21,6 +21,9 @@ namespace SalmonEgg.Acp.Client
     /// </summary>
     public sealed class AcpClient : IAcpClient, IDisposable
     {
+        private const string StableV1RuntimeOnlyMessage =
+            "ACP live client support is limited to stable protocolVersion 1 while newer modeled versions remain draft or incomplete.";
+
         private sealed class PendingInboundRequest
         {
             public PendingInboundRequest(
@@ -84,6 +87,9 @@ namespace SalmonEgg.Acp.Client
         private bool SupportsSessionDelete => _agentCapabilities?.SupportsSessionDelete == true;
         private bool SupportsSessionAdditionalDirectories => _agentCapabilities?.SupportsSessionAdditionalDirectories == true;
         private bool SupportsAuthenticationSurface => _authMethods is { Count: > 0 };
+        private bool SupportsAdvertisedTerminalExecution =>
+            _protocolVersion == AcpProtocolVersion.V1
+                && _clientCapabilities?.Terminal == true;
         private bool SupportsLogout =>
             _protocolVersion == AcpProtocolVersion.V2
                 ? SupportsAuthenticationSurface
@@ -176,6 +182,17 @@ namespace SalmonEgg.Acp.Client
         /// </summary>
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(@params);
+            if (AcpProtocolVersion.IsSupported(@params.ProtocolVersion)
+                && @params.ProtocolVersion != AcpProtocolVersion.V1)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.ProtocolVersionMismatch,
+                    StableV1RuntimeOnlyMessage);
+            }
+
+            InitializeClientProtocolPolicy.Validate(@params.ProtocolVersion, @params.ClientCapabilities);
+
             if (_isInitialized)
             {
                 throw new InvalidOperationException("ACP client is already initialized.");
@@ -340,6 +357,14 @@ namespace SalmonEgg.Acp.Client
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            ArgumentNullException.ThrowIfNull(@params);
+            if (_protocolVersion == AcpProtocolVersion.V1 && @params.ReplayFrom is not null)
+            {
+                throw new AcpException(
+                    JsonRpcErrorCode.InvalidParams,
+                    "session/resume replayFrom is only available in ACP v2.");
+            }
+
             if (!SupportsSessionResume)
             {
                 _logger.Log(
@@ -1134,7 +1159,7 @@ namespace SalmonEgg.Acp.Client
                 case "terminal/wait_for_exit":
                 case "terminal/kill":
                 case "terminal/release":
-                    if (_clientCapabilities?.Terminal != true)
+                    if (!SupportsAdvertisedTerminalExecution)
                     {
                         RejectUnsupportedClientRequest(request);
                         break;
@@ -1170,12 +1195,13 @@ namespace SalmonEgg.Acp.Client
         }
 
         private bool SupportsAdvertisedFileSystemCapability(string method)
-            => method switch
-            {
-                "fs/read_text_file" => _clientCapabilities?.Fs?.ReadTextFile == true,
-                "fs/write_text_file" => _clientCapabilities?.Fs?.WriteTextFile == true,
-                _ => false
-            };
+            => _protocolVersion == AcpProtocolVersion.V1
+                && (method switch
+                {
+                    "fs/read_text_file" => _clientCapabilities?.Fs?.ReadTextFile == true,
+                    "fs/write_text_file" => _clientCapabilities?.Fs?.WriteTextFile == true,
+                    _ => false
+                });
 
         private bool SupportsAdvertisedAskUserExtension(string method)
             => _clientCapabilities?.SupportsExtension(method) == true;

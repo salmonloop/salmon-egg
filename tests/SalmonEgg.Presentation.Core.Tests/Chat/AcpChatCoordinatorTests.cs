@@ -119,7 +119,7 @@ public sealed class AcpChatCoordinatorTests
         Assert.Equal("1.0.0", sink.AgentVersion);
         Assert.IsType<AcpChatServiceAdapter>(result.ChatService);
         service.Verify(x => x.InitializeAsync(It.Is<InitializeParams>(p =>
-            p.ProtocolVersion == AcpProtocolVersion.Latest
+            p.ProtocolVersion == AcpProtocolVersion.Default
             && string.Equals(p.ClientInfo.Name, "SalmonEgg", StringComparison.Ordinal)
             && string.Equals(p.ClientInfo.Title, "SalmonEgg", StringComparison.Ordinal)
             && string.Equals(p.ClientInfo.Version, "1.0.0", StringComparison.Ordinal)

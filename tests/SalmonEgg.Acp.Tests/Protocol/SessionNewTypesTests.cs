@@ -4,13 +4,14 @@ using System.Text.Json;
 using Xunit;
 using SalmonEgg.Acp.Mcp;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
 
 namespace SalmonEgg.Acp.Tests.Protocol;
 
 public sealed class SessionNewTypesTests
 {
     [Fact]
-    public void SessionNewParams_StdioMcpServers_Should_Serialize_StableProtocolShape()
+    public void SessionNewParams_StdioMcpServers_DefaultWriteContext_SerializesV1Shape()
     {
         var sessionParams = new SessionNewParams
         {
@@ -25,18 +26,41 @@ public sealed class SessionNewTypesTests
             ]
         };
 
-        var json = JsonSerializer.Serialize(sessionParams);
+        var json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionNewParams);
         var parsed = JsonDocument.Parse(json);
 
         Assert.True(parsed.RootElement.TryGetProperty("mcpServers", out var mcpServers));
         Assert.Equal(JsonValueKind.Array, mcpServers.ValueKind);
-        // 默认写入上下文为 V2 主线：stdio 显式携带 type 判别式（V2 schema 以 type 区分三种 transport）。
-        Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
+        Assert.False(mcpServers[0].TryGetProperty("type", out _));
         Assert.Equal("test-server", mcpServers[0].GetProperty("name").GetString());
         Assert.Equal("/usr/local/bin/node", mcpServers[0].GetProperty("command").GetString());
         Assert.Equal("server.js", mcpServers[0].GetProperty("args")[0].GetString());
         Assert.Equal("API_KEY", mcpServers[0].GetProperty("env")[0].GetProperty("name").GetString());
         Assert.Equal("secret", mcpServers[0].GetProperty("env")[0].GetProperty("value").GetString());
+    }
+
+    [Fact]
+    public void SessionNewParams_StdioMcpServers_ExplicitV2WriteContext_SerializesTypeDiscriminator()
+    {
+        var sessionParams = new SessionNewParams
+        {
+            Cwd = "/home/user/project",
+            McpServers =
+            [
+                new StdioMcpServer("test-server", "/usr/local/bin/node", ["server.js"])
+            ]
+        };
+
+        string json;
+        using (AcpProtocolWriteContext.Enter(AcpProtocolVersion.V2))
+        {
+            json = JsonSerializer.Serialize(sessionParams, AcpJsonContext.Default.SessionNewParams);
+        }
+
+        using var parsed = JsonDocument.Parse(json);
+        var mcpServers = parsed.RootElement.GetProperty("mcpServers");
+
+        Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
     }
 
     [Fact]

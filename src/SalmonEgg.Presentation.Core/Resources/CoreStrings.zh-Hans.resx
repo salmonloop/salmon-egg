@@ -230,7 +230,7 @@
     <value>加载会话失败：ACP 聊天服务未连接且未初始化。</value>
   </data>
   <data name="ChatOperation_LoadSessionRecoveryCapabilityMissing" xml:space="preserve">
-    <value>加载会话失败：已连接的 ACP 代理未声明远程会话恢复能力。</value>
+    <value>加载会话失败：已连接的 ACP 代理未声明稳定 ACP v1 历史恢复所需的 session/load 能力。</value>
   </data>
   <data name="ChatOperation_LoadSessionMissingBoundProfile" xml:space="preserve">
     <value>加载会话失败：远程会话未绑定 ACP 配置文件。</value>

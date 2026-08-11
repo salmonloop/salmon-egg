@@ -17,6 +17,17 @@ JSON-RPC envelopes, message parser/validator, and all JsonConverters are assembl
 - .NET 10 (`net10.0`)
 - Zero package dependencies; AOT/trim compatible (`IsAotCompatible`)
 
+## Protocol versions
+
+The live client runtime defaults to stable ACP v1 (`AcpProtocolVersion.Default`). ACP v2 is
+still an upstream Draft, so the SDK retains explicit v2 wire DTO and serializer coverage for
+development without negotiating v2 in live connections. `AcpProtocolVersion.Latest` denotes
+the highest modeled wire version; it does not mean that the live client lifecycle is complete.
+
+Do not enable live v2 connections until prompt acknowledgement/state updates, versioned update
+variants, permission subjects, config-option wire shapes, and JSON-RPC batches are implemented
+and protected by a separate experimental feature flag.
+
 ## Collection equality
 
 Wire DTOs are `record` types, but collection properties remain mutable `List<T>` /

@@ -22,7 +22,7 @@ public sealed class AcpSessionRecoveryPolicyTests
     }
 
     [Fact]
-    public void ResolveForHydration_WhenOnlyResumeIsSupported_UsesResume()
+    public void ResolveForHydration_WhenOnlyResumeIsSupported_DoesNotUseV1ResumeForHistory()
     {
         var capabilities = new AgentCapabilities(
             sessionCapabilities: new SessionCapabilities
@@ -32,9 +32,8 @@ public sealed class AcpSessionRecoveryPolicyTests
 
         var mode = AcpSessionRecoveryPolicy.ResolveForHydration(capabilities);
 
-        Assert.Equal(AcpSessionRecoveryMode.Resume, mode);
-        Assert.True(AcpSessionRecoveryPolicy.ExpectsHistoryReplayForHydration(mode));
-        Assert.Same(SessionReplayFrom.Start, AcpSessionRecoveryPolicy.ResolveHydrationResumeReplayFrom(mode));
+        Assert.Equal(AcpSessionRecoveryMode.None, mode);
+        Assert.False(AcpSessionRecoveryPolicy.ExpectsHistoryReplayForHydration(mode));
     }
 
     [Fact]
@@ -50,8 +49,7 @@ public sealed class AcpSessionRecoveryPolicyTests
         var mode = AcpSessionRecoveryPolicy.ResolveForResync(capabilities);
 
         Assert.Equal(AcpSessionRecoveryMode.Resume, mode);
-        // Resync callers use CreateResumeParams without a replay cursor (plain resume).
-        // ResolveHydrationResumeReplayFrom is hydration-only and still maps Resume -> start.
+        Assert.False(AcpSessionRecoveryPolicy.ExpectsHistoryReplayForHydration(mode));
     }
 
     [Fact]

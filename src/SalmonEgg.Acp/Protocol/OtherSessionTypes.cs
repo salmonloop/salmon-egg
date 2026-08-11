@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -182,6 +183,7 @@ namespace SalmonEgg.Acp.Protocol
     /// Official V2 known form is <c>{ "type": "start" }</c> for full history replay.
     /// Other <c>type</c> values remain open for custom/future cursors.
     /// </summary>
+    [JsonConverter(typeof(SessionReplayFromJsonConverter))]
     public sealed record SessionReplayFrom : AcpProtocolObject
     {
         /// <summary>
@@ -189,6 +191,13 @@ namespace SalmonEgg.Acp.Protocol
         /// </summary>
         [JsonPropertyName("type")]
         public string Type { get; init; } = string.Empty;
+
+        /// <summary>
+        /// Complete raw object for a custom or future cursor variant.
+        /// This is the sole wire source when present so unknown fields, order, escapes, and number tokens survive forwarding.
+        /// </summary>
+        [JsonIgnore]
+        public JsonElement RawPayload { get; init; }
 
         /// <summary>
         /// Creates an empty replay cursor.
@@ -210,6 +219,81 @@ namespace SalmonEgg.Acp.Protocol
         /// Official V2 full-history replay cursor: <c>{ "type": "start" }</c>.
         /// </summary>
         public static SessionReplayFrom Start { get; } = new("start");
+    }
+
+    internal sealed class SessionReplayFromJsonConverter : JsonConverter<SessionReplayFrom>
+    {
+        internal const string V2OnlyMessage =
+            "ACP session/resume replayFrom is only available in protocolVersion 2.";
+
+        public override SessionReplayFrom? Read(
+            ref Utf8JsonReader reader,
+            System.Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException("ACP session/resume replayFrom must be an object or null.");
+            }
+
+            if (!root.TryGetProperty("type", out var typeElement))
+            {
+                throw new JsonException(
+                    "ACP session/resume replayFrom must include required string property 'type'.");
+            }
+
+            if (typeElement.ValueKind != JsonValueKind.String)
+            {
+                throw new JsonException("ACP session/resume replayFrom.type must be a string.");
+            }
+
+            var type = typeElement.GetString()!;
+
+            return new SessionReplayFrom
+            {
+                Type = type,
+                RawPayload = string.Equals(type, "start", StringComparison.Ordinal)
+                    ? default
+                    : root.Clone(),
+                Meta = AcpMetaJson.Read(root)
+            };
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            SessionReplayFrom value,
+            JsonSerializerOptions options)
+        {
+            if (AcpProtocolWriteContext.Current != AcpProtocolVersion.V2)
+            {
+                throw new JsonException(V2OnlyMessage);
+            }
+
+            if (value.Type is null)
+            {
+                throw new JsonException("ACP session/resume replayFrom.type must be a string.");
+            }
+
+            // Unknown cursor payloads are opaque protocol facts. Forward the complete object verbatim so
+            // duplicate keys, property order, escape spelling, and number token spelling are not normalized.
+            if (value.RawPayload.ValueKind == JsonValueKind.Object)
+            {
+                writer.WriteRawValue(value.RawPayload.GetRawText());
+                return;
+            }
+
+            writer.WriteStartObject();
+            writer.WriteString("type", value.Type);
+            AcpMetaJson.Write(writer, value.Meta);
+            writer.WriteEndObject();
+        }
     }
 
     /// <summary>

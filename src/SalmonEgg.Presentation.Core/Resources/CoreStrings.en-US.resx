@@ -232,7 +232,7 @@
     <value>Failed to load session: ACP chat service is not connected and initialized.</value>
   </data>
   <data name="ChatOperation_LoadSessionRecoveryCapabilityMissing" xml:space="preserve">
-    <value>Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.</value>
+    <value>Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.</value>
   </data>
   <data name="ChatOperation_LoadSessionMissingBoundProfile" xml:space="preserve">
     <value>Failed to load session: no ACP profile is bound to the remote conversation.</value>

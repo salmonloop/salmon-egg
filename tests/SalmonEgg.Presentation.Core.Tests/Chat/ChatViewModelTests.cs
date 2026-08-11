@@ -2420,7 +2420,9 @@ public partial class ChatViewModelTests
                 new AcpRemoteSessionRecoveryContextResolver(
                     NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
         var chatService = CreateConnectedChatService();
-        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.ViewModel.ReplaceChatServiceAsync(
+            chatService.Object,
+            TestContext.Current.CancellationToken);
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
         // Transport genuinely dies: the service now reports disconnected while the projection is Connected.
@@ -2451,7 +2453,9 @@ public partial class ChatViewModelTests
                 new AcpRemoteSessionRecoveryContextResolver(
                     NullLogger<AcpRemoteSessionRecoveryContextResolver>.Instance)));
         var chatService = CreateConnectedChatService();
-        await fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object);
+        await fixture.ViewModel.ReplaceChatServiceAsync(
+            chatService.Object,
+            TestContext.Current.CancellationToken);
         await fixture.DispatchConnectionAsync(new SetConnectionPhaseAction(ConnectionPhase.Connected));
 
         // A transient error that did not tear the transport down must not flip the projection.
@@ -10047,7 +10051,7 @@ public partial class ChatViewModelTests
     }
 
     [Fact]
-    public async Task HydrateActiveConversationAsync_WhenRecoveryCapabilityIsMissing_FailsWithoutProtocolRecoveryCall()
+    public async Task HydrateActiveConversationAsync_WhenOnlyV1ResumeIsAvailable_FailsWithoutProtocolRecoveryCall()
     {
         var syncContext = new ImmediateSynchronizationContext();
         var sessionManager = CreateSessionManagerWithStore();
@@ -10057,11 +10061,16 @@ public partial class ChatViewModelTests
         fixture.Profiles.Profiles.Add(CreateConnectableStdioProfile("profile-1", "Profile 1"));
         var chatService = CreateConnectedChatService();
         chatService.SetupGet(service => service.AgentCapabilities)
-            .Returns(new AgentCapabilities(loadSession: false, sessionCapabilities: new SessionCapabilities()));
+            .Returns(new AgentCapabilities(
+                loadSession: false,
+                sessionCapabilities: new SessionCapabilities
+                {
+                    Resume = new SessionResumeCapabilities()
+                }));
         chatService.Setup(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()))
-            .Throws(new Xunit.Sdk.XunitException("session/load must not be called without recovery capability."));
+            .Throws(new Xunit.Sdk.XunitException("session/load must not be called when it is not advertised."));
         chatService.Setup(service => service.ResumeSessionAsync(It.IsAny<SessionResumeParams>(), It.IsAny<CancellationToken>()))
-            .Throws(new Xunit.Sdk.XunitException("session/resume must not be called without recovery capability."));
+            .Throws(new Xunit.Sdk.XunitException("stable v1 session/resume must not be used for cold history hydration."));
 
         await AwaitWithSynchronizationContextAsync(syncContext, fixture.ViewModel.ReplaceChatServiceAsync(chatService.Object, TestContext.Current.CancellationToken));
         await DispatchConnectedAsync(fixture, "profile-1");
@@ -10082,7 +10091,7 @@ public partial class ChatViewModelTests
 
         Assert.False(hydrated);
         Assert.Contains(
-            "does not advertise remote session recovery capabilities",
+            "does not advertise session/load",
             fixture.ViewModel.ConversationOperationFailureMessage,
             StringComparison.Ordinal);
         chatService.Verify(service => service.LoadSessionAsync(It.IsAny<SessionLoadParams>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -13165,7 +13174,7 @@ public partial class ChatViewModelTests
         Assert.Equal(string.Empty, fixture.ViewModel.PresentedSessionHeaderDisplayName);
     }
 
-        [Fact]
+    [Fact]
     public void FollowArchitecture_DoesNotKeepRestoreProjectionConversationField()
     {
         // ProjectionEpoch / restore-projection conversation fields were removed with the

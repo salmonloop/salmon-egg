@@ -63,7 +63,7 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["ChatOperation_LoadSessionMissingActiveBinding"] = "Failed to load session: no remote session binding is available for the active conversation.",
         ["ChatOperation_LoadSessionMissingProfileBinding"] = "Failed to load session: no remote session binding is available for the profile-bound conversation.",
         ["ChatOperation_LoadSessionChatServiceNotReady"] = "Failed to load session: ACP chat service is not connected and initialized.",
-        ["ChatOperation_LoadSessionRecoveryCapabilityMissing"] = "Failed to load session: the connected ACP agent does not advertise remote session recovery capabilities.",
+        ["ChatOperation_LoadSessionRecoveryCapabilityMissing"] = "Failed to load session: the connected ACP agent does not advertise session/load, which stable ACP v1 requires for history recovery.",
         ["ChatOperation_LoadSessionMissingBoundProfile"] = "Failed to load session: no ACP profile is bound to the remote conversation.",
         ["ChatOperation_LoadSessionProfileNotResolved"] = "Failed to load session: the bound ACP profile could not be resolved.",
         ["ChatOperation_LoadSessionRemoteConnectionNotReady"] = "Failed to load session: ACP profile connection did not become ready.",

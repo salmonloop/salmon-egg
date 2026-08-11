@@ -49,7 +49,6 @@ cat > "$smoke_dir/NuGet.config" <<EOF2
       <package pattern="SalmonEgg.Acp" />
     </packageSource>
     <packageSource key="nuget.org">
-      <package pattern="NETStandard.Library*" />
       <package pattern="Microsoft.*" />
       <package pattern="System.*" />
     </packageSource>
@@ -74,33 +73,47 @@ cat > "$console_dir/ACPConsumerSmoke.csproj" <<EOF2
 EOF2
 
 cat > "$console_dir/Program.cs" <<'EOF2'
+using System.Text.Json;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Acp.Serialization;
+
+var initialize = new InitializeParams(
+    new ClientInfo("PackageConsumer", "1.0.0", "Package Consumer"),
+    ClientCapabilityDefaults.Create());
+var initializeJson = JsonSerializer.Serialize(initialize, AcpJsonContext.Default.InitializeParams);
+
+using var initializeDocument = JsonDocument.Parse(initializeJson);
+var initializeRoot = initializeDocument.RootElement;
+
+Require(initialize.ProtocolVersion == AcpProtocolVersion.V1, "Default InitializeParams must use stable ACP v1.");
+Require(
+    initializeRoot.GetProperty("protocolVersion").GetInt32() == AcpProtocolVersion.V1,
+    $"Default initialize wire payload must use protocolVersion 1: {initializeJson}");
+Require(
+    initializeRoot.TryGetProperty("clientInfo", out var clientInfo)
+        && clientInfo.ValueKind == JsonValueKind.Object
+        && clientInfo.GetProperty("name").GetString() == "PackageConsumer",
+    $"Default initialize wire payload must include v1 clientInfo: {initializeJson}");
+Require(
+    initializeRoot.TryGetProperty("clientCapabilities", out var clientCapabilities)
+        && clientCapabilities.ValueKind == JsonValueKind.Object,
+    $"Default initialize wire payload must include v1 clientCapabilities: {initializeJson}");
+Require(
+    clientCapabilities.TryGetProperty("session", out var session)
+        && session.ValueKind == JsonValueKind.Object,
+    $"Default initialize wire payload must preserve v1 client session capabilities: {initializeJson}");
+Require(
+    !initializeRoot.TryGetProperty("info", out _)
+        && !initializeRoot.TryGetProperty("capabilities", out _),
+    $"Default initialize wire payload must not include ACP v2 fields: {initializeJson}");
 
 Console.WriteLine(typeof(SessionListParams).FullName);
-EOF2
 
-netstandard_dir="$smoke_dir/NetStandardSmoke"
-mkdir -p "$netstandard_dir"
-cat > "$netstandard_dir/ACPConsumerSmoke.NetStandard.csproj" <<EOF2
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="SalmonEgg.Acp" Version="$package_version" />
-  </ItemGroup>
-</Project>
-EOF2
-
-cat > "$netstandard_dir/AcpSmoke.cs" <<'EOF2'
-using SalmonEgg.Acp.Protocol;
-
-namespace ACPConsumerSmoke
+static void Require(bool condition, string message)
 {
-    public static class AcpSmoke
+    if (!condition)
     {
-        public static string TypeName => typeof(SessionListParams).FullName ?? string.Empty;
+        throw new InvalidOperationException(message);
     }
 }
 EOF2
@@ -118,8 +131,5 @@ if [ "$smoke_output" != "$expected_type_name" ]; then
 fi
 
 echo "[smoke] Runtime output: $smoke_output"
-
-"$DOTNET_BIN" restore "$netstandard_dir/ACPConsumerSmoke.NetStandard.csproj" --configfile "$smoke_dir/NuGet.config"
-"$DOTNET_BIN" build "$netstandard_dir/ACPConsumerSmoke.NetStandard.csproj" --configuration "$CONFIGURATION" --no-restore -v minimal
 
 echo "[smoke] ACP SDK package consumer smoke passed"

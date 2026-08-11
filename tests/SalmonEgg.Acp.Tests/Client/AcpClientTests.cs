@@ -41,7 +41,7 @@ namespace SalmonEgg.Acp.Tests.Client
         {
             var parser = new MessageParser(); // Use real parser for serialization
 
-            var client = CreateClient( terminalSessionManager, sessionStore);
+            var client = CreateClient(terminalSessionManager, sessionStore);
 
             // Mock InitializeAsync response
             var initResponse = new InitializeResponse(
@@ -375,30 +375,6 @@ namespace SalmonEgg.Acp.Tests.Client
         }
 
         [Fact]
-        public async Task CreateSessionAsync_WhenNegotiatedV2_WritesStdioTypeDiscriminator()
-        {
-            var parser = new MessageParser();
-            var sentMessages = new ConcurrentQueue<string>();
-            var client = await CreateInitializedClientAsync(protocolVersion: AcpProtocolVersion.V2);
-
-            SetupJsonRpcResponse(
-                "session/new",
-                JsonSerializer.SerializeToElement(new SessionNewResponse("session-123"), parser.Options),
-                parser,
-                onSend: message => sentMessages.Enqueue(message));
-
-            await client.CreateSessionAsync(new SessionNewParams(
-                AbsoluteCwd,
-                new List<McpServer> { new StdioMcpServer("filesystem", "/usr/local/bin/node", ["server.js"]) }), TestContext.Current.CancellationToken);
-
-            Assert.True(sentMessages.TryDequeue(out var requestJson));
-            using var document = JsonDocument.Parse(requestJson);
-            var mcpServers = document.RootElement.GetProperty("params").GetProperty("mcpServers");
-            // 协商为 V2：stdio 携带 type 判别式（V2 schema 要求）。
-            Assert.Equal("stdio", mcpServers[0].GetProperty("type").GetString());
-        }
-
-        [Fact]
         public async Task CreateSessionAsync_WhenNegotiatedV1_OmitsStdioTypeDiscriminator()
         {
             var parser = new MessageParser();
@@ -442,10 +418,7 @@ namespace SalmonEgg.Acp.Tests.Client
 
             await client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create())
-            {
-                ProtocolVersion = AcpProtocolVersion.V1
-            }, TestContext.Current.CancellationToken);
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken);
 
             Assert.NotNull(sentInitialize);
 
@@ -453,6 +426,9 @@ namespace SalmonEgg.Acp.Tests.Client
             var clientCapabilities = document.RootElement
                 .GetProperty("params")
                 .GetProperty("clientCapabilities");
+            Assert.Equal(
+                AcpProtocolVersion.Default,
+                document.RootElement.GetProperty("params").GetProperty("protocolVersion").GetInt32());
             var meta = clientCapabilities.GetProperty("_meta");
             var extensions = meta.GetProperty(ClientCapabilityMetadata.ExtensionsMetaKey);
 
@@ -460,6 +436,56 @@ namespace SalmonEgg.Acp.Tests.Client
             Assert.False(extensions.TryGetProperty("interaction.ask_user", out _));
             Assert.False(clientCapabilities.TryGetProperty("fs", out _));
             Assert.False(clientCapabilities.TryGetProperty("terminal", out _));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task InitializeAsync_WhenDraftV2Requested_RejectsBeforeConnectOrSend(
+            bool advertisesLegacyTerminalCapability)
+        {
+            _transportMock.SetupGet(transport => transport.IsConnected).Returns(false);
+            var client = CreateClient();
+
+            var exception = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                new ClientCapabilities(terminal: advertisesLegacyTerminalCapability ? true : null))
+            {
+                ProtocolVersion = AcpProtocolVersion.V2
+            }, TestContext.Current.CancellationToken));
+
+            Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, exception.ErrorCode);
+            Assert.Contains("limited to stable protocolVersion 1", exception.Message, StringComparison.Ordinal);
+            _transportMock.Verify(
+                transport => transport.ConnectAsync(It.IsAny<CancellationToken>()),
+                Times.Never);
+            _transportMock.Verify(
+                transport => transport.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(3)]
+        public async Task InitializeAsync_WhenClientProtocolVersionIsUnsupported_RejectsBeforeConnectOrSend(int protocolVersion)
+        {
+            _transportMock.SetupGet(transport => transport.IsConnected).Returns(false);
+            var client = CreateClient();
+
+            var exception = await Assert.ThrowsAsync<JsonException>(() => client.InitializeAsync(new InitializeParams(
+                new ClientInfo("Test", "1.0.0"),
+                new ClientCapabilities(terminal: true))
+            {
+                ProtocolVersion = protocolVersion
+            }, TestContext.Current.CancellationToken));
+
+            Assert.Equal(InitializeClientProtocolPolicy.UnsupportedProtocolVersionMessage, exception.Message);
+            _transportMock.Verify(
+                transport => transport.ConnectAsync(It.IsAny<CancellationToken>()),
+                Times.Never);
+            _transportMock.Verify(
+                transport => transport.SendMessageAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                Times.Never);
         }
 
         [Fact]
@@ -747,7 +773,7 @@ namespace SalmonEgg.Acp.Tests.Client
                         1,
                         JsonSerializer.SerializeToElement(
                             new InitializeResponse(
-                                AcpProtocolVersion.Latest + 1,
+                                AcpProtocolVersion.V2,
                                 new AgentInfo("TestAgent", "1.0.0"),
                                 new AgentCapabilities()),
                             AcpJsonContext.Default.InitializeResponse));
@@ -759,90 +785,9 @@ namespace SalmonEgg.Acp.Tests.Client
 
             var ex = await Assert.ThrowsAsync<AcpException>(() => client.InitializeAsync(new InitializeParams(
                 new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create())
-            {
-                ProtocolVersion = AcpProtocolVersion.Latest
-            }, TestContext.Current.CancellationToken));
+                ClientCapabilityDefaults.Create()), TestContext.Current.CancellationToken));
 
             Assert.Equal(JsonRpcErrorCode.ProtocolVersionMismatch, ex.ErrorCode);
-        }
-
-        [Fact]
-        public async Task InitializeAsync_WhenClientRequestsV2AndAgentAnswersV1_AcceptsNegotiatedVersion()
-        {
-            var parser = new MessageParser();
-            var client = CreateClient();
-            string? sentInitialize = null;
-
-            SetupJsonRpcResponse(
-                "initialize",
-                JsonSerializer.SerializeToElement(
-                    new InitializeResponse(
-                        AcpProtocolVersion.V1,
-                        new AgentInfo("TestAgent", "1.0.0"),
-                        new AgentCapabilities(loadSession: true)),
-                    AcpJsonContext.Default.InitializeResponse),
-                parser,
-                onSend: message => sentInitialize = message);
-
-            var response = await client.InitializeAsync(new InitializeParams(
-                new ClientInfo("Test", "1.0.0"),
-                ClientCapabilityDefaults.Create())
-            {
-                ProtocolVersion = AcpProtocolVersion.Latest
-            }, TestContext.Current.CancellationToken);
-
-            Assert.True(client.IsInitialized);
-            Assert.Equal(AcpProtocolVersion.V1, response.ProtocolVersion);
-            Assert.NotNull(sentInitialize);
-            using var document = JsonDocument.Parse(sentInitialize!);
-            var @params = document.RootElement.GetProperty("params");
-            Assert.Equal(AcpProtocolVersion.Latest, @params.GetProperty("protocolVersion").GetInt32());
-            Assert.True(@params.TryGetProperty("info", out _));
-            Assert.True(@params.TryGetProperty("capabilities", out _));
-            Assert.False(@params.TryGetProperty("clientInfo", out _));
-            Assert.False(@params.TryGetProperty("clientCapabilities", out _));
-        }
-
-        [Fact]
-        public async Task InitializeAsync_WhenV2AuthMethodsAdvertised_UsesAuthLoginAndLogoutMethods()
-        {
-            var parser = new MessageParser();
-            var client = await CreateInitializedClientAsync(
-                protocolVersion: AcpProtocolVersion.V2,
-                capabilities: new AgentCapabilities(
-                    sessionCapabilities: new SessionCapabilities
-                    {
-                        Resume = new SessionResumeCapabilities()
-                    }),
-                authMethods:
-                [
-                    new AuthMethodDefinition
-                    {
-                        Id = "agent-login",
-                        Name = "Agent login",
-                        Type = "agent"
-                    }
-                ]);
-            var sentMessages = new ConcurrentQueue<string>();
-
-            SetupJsonRpcResponse(
-                "auth/login",
-                ElementFromJson("{}"),
-                parser,
-                onSend: message => sentMessages.Enqueue(message));
-            await client.AuthenticateAsync(new AuthenticateParams("agent-login"), TestContext.Current.CancellationToken);
-
-            SetupJsonRpcResponse(
-                "auth/logout",
-                ElementFromJson("{}"),
-                parser,
-                onSend: message => sentMessages.Enqueue(message));
-            await client.LogoutAsync(new LogoutParams(), TestContext.Current.CancellationToken);
-
-            Assert.Equal(2, sentMessages.Count);
-            Assert.Contains(sentMessages, message => message.Contains("\"method\":\"auth/login\"", StringComparison.Ordinal));
-            Assert.Contains(sentMessages, message => message.Contains("\"method\":\"auth/logout\"", StringComparison.Ordinal));
         }
 
         [Fact]
@@ -1517,33 +1462,27 @@ namespace SalmonEgg.Acp.Tests.Client
             Assert.False(@params.TryGetProperty("replayFrom", out _));
         }
 
-        [Fact]
-        public async Task ResumeSessionAsync_WhenReplayFromStart_SendsReplayFromStartCursor()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task ResumeSessionAsync_WhenV1ReplayFromStartProvided_RejectsBeforeCapabilityCheckOrSend(
+            bool advertisesResume)
         {
-            var parser = new MessageParser();
-            var sentMessages = new ConcurrentQueue<string>();
             var client = await CreateInitializedClientAsync(
                 capabilities: new AgentCapabilities(sessionCapabilities: new SessionCapabilities
                 {
-                    Resume = new SessionResumeCapabilities()
+                    Resume = advertisesResume ? new SessionResumeCapabilities() : null
                 }));
 
-            SetupJsonRpcResponse(
-                "session/resume",
-                ElementFromJson("""{ }"""),
-                parser,
-                onSend: message => sentMessages.Enqueue(message));
-
-            var result = await client.ResumeSessionAsync(
+            var exception = await Assert.ThrowsAsync<AcpException>(() => client.ResumeSessionAsync(
                 new SessionResumeParams("session-123", AbsoluteCwd, replayFrom: SessionReplayFrom.Start),
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken));
 
-            Assert.NotNull(result);
-            Assert.True(sentMessages.TryDequeue(out var requestJson));
-            using var document = JsonDocument.Parse(requestJson);
-            Assert.Equal("session/resume", document.RootElement.GetProperty("method").GetString());
-            var @params = document.RootElement.GetProperty("params");
-            Assert.Equal("start", @params.GetProperty("replayFrom").GetProperty("type").GetString());
+            Assert.Equal(JsonRpcErrorCode.InvalidParams, exception.ErrorCode);
+            Assert.Contains("replayFrom", exception.Message, StringComparison.Ordinal);
+            _transportMock.Verify(
+                transport => transport.SendMessageAsync(It.IsRegex("session/resume"), It.IsAny<CancellationToken>()),
+                Times.Never);
         }
 
         [Fact]
@@ -1616,7 +1555,7 @@ namespace SalmonEgg.Acp.Tests.Client
         {
             var parser = new MessageParser();
             var sessionStore = new RecordingAcpClientSessionStore();
-            var client = CreateClient( sessionStore: sessionStore);
+            var client = CreateClient(sessionStore: sessionStore);
 
             SetupJsonRpcResponse(
                 "initialize",
@@ -1968,7 +1907,7 @@ namespace SalmonEgg.Acp.Tests.Client
             var sessionStore = new RecordingAcpClientSessionStore();
             await sessionStore.CreateSessionAsync("remote-1", AbsoluteCwd);
 
-            var client = CreateClient( sessionStore: sessionStore);
+            var client = CreateClient(sessionStore: sessionStore);
 
             _transportMock
                 .Setup(t => t.SendMessageAsync(It.IsRegex("initialize"), It.IsAny<CancellationToken>()))

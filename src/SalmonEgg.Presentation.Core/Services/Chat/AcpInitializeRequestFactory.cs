@@ -7,7 +7,7 @@ internal static class AcpInitializeRequestFactory
     public static InitializeParams CreateDefault()
         => new()
         {
-            ProtocolVersion = AcpProtocolVersion.Latest,
+            ProtocolVersion = AcpProtocolVersion.Default,
             ClientInfo = new ClientInfo
             {
                 Name = "SalmonEgg",
