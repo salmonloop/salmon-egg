@@ -30,7 +30,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.3xx"
 
       - name: Install Skia Desktop GUI smoke runtime deps
         run: |
@@ -59,7 +59,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.3xx"
 
       - name: Build GUI tests
         shell: pwsh

@@ -257,13 +257,116 @@ public sealed class WasmStartupAssetsTests
     }
 
     [Fact]
-    public void PlatformBuildGate_HandlesAndroidLicensesAndIsolatesIosTargetExpansion()
+    public void PlatformBuildGate_IsolatesMobileRestoreGraphsAndPinsIosToolchain()
     {
         var gate = LoadFile(@".github\workflows\platform-build-gates.yml");
 
         Assert.Contains("sdkmanager_status=${PIPESTATUS[1]}", gate, StringComparison.Ordinal);
         Assert.Contains("if [ \"${sdkmanager_status}\" -ne 0 ]; then", gate, StringComparison.Ordinal);
-        Assert.Contains("-p:EnableAndroidTarget=false", gate, StringComparison.Ordinal);
+        Assert.Contains("dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj", gate, StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            gate.Split("-p:SalmonEggTargetFrameworks=net10.0-android36.0", StringSplitOptions.None).Length - 1);
+        Assert.Equal(
+            2,
+            gate.Split("-p:SalmonEggTargetFrameworks=net10.0-ios", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("-p:TargetFrameworks=", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:TargetFramework=", gate, StringComparison.Ordinal);
+        Assert.Equal(4, gate.Split("-p:SalmonEggSupportsDesktopProcessHost=false", StringSplitOptions.None).Length - 1);
+        Assert.Contains("--runtime iossimulator-arm64", gate, StringComparison.Ordinal);
+        Assert.Contains("--no-restore", gate, StringComparison.Ordinal);
+        Assert.Contains("DOTNET_VERSION: \"10.0.3xx\"", gate, StringComparison.Ordinal);
+        Assert.Equal(
+            4,
+            gate.Split("dotnet-version: ${{ env.DOTNET_VERSION }}", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("global-json-file:", gate, StringComparison.Ordinal);
+        Assert.Equal(2, gate.Split("dotnet workload list", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, gate.Split("10.0.3??", StringSplitOptions.None).Length - 1);
+        Assert.True(
+            gate.IndexOf("Verify Android .NET SDK", StringComparison.Ordinal)
+            < gate.IndexOf("Install Android workload", StringComparison.Ordinal));
+        Assert.True(
+            gate.IndexOf("Verify iOS .NET SDK", StringComparison.Ordinal)
+            < gate.IndexOf("Install iOS workload", StringComparison.Ordinal));
+        Assert.Contains("runs-on: macos-15", gate, StringComparison.Ordinal);
+        Assert.Contains("xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer", gate, StringComparison.Ordinal);
+        Assert.Contains("xcodebuild -version", gate, StringComparison.Ordinal);
+        Assert.Contains("26.0*)", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DotnetWorkflows_PinRepositorySdkFeatureBand()
+    {
+        var globalJson = LoadFile("global.json");
+        var wasmSmokeGate = LoadFile(@"scripts\gates\run-wasm-smoke-gates.sh");
+        var linuxGamepadGate = LoadFile(@"scripts\gates\run-linux-gamepad-smoke-gates.sh");
+        string[] workflowPaths =
+        [
+            @".github\workflows\ci-acp-sdk.yml",
+            @".github\workflows\ci-core.yml",
+            @".github\workflows\code-quality.yml",
+            @".github\workflows\gui-smoke-gates.yml",
+            @".github\workflows\platform-build-gates.yml",
+            @".github\workflows\release-packaging.yml",
+            @".github\workflows\wasm-smoke-gates.yml"
+        ];
+
+        Assert.Contains("\"version\": \"10.0.302\"", globalJson, StringComparison.Ordinal);
+        Assert.Contains("\"rollForward\": \"latestPatch\"", globalJson, StringComparison.Ordinal);
+        foreach (var workflowPath in workflowPaths)
+        {
+            var workflow = LoadFile(workflowPath);
+            Assert.Contains("10.0.3xx", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("10.0.x", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("global-json-file:", workflow, StringComparison.Ordinal);
+        }
+
+        foreach (var gate in new[] { wasmSmokeGate, linuxGamepadGate })
+        {
+            Assert.Contains("resolve_selected_dotnet_sdk_root()", gate, StringComparison.Ordinal);
+            Assert.Contains("\"${DOTNET_BIN}\" --list-sdks", gate, StringComparison.Ordinal);
+            Assert.Contains("selected_version=\"${selected_version//$'\\r'/}\"", gate, StringComparison.Ordinal);
+            Assert.Contains("sdk_list=\"${sdk_list//$'\\r'/}\"", gate, StringComparison.Ordinal);
+            Assert.Contains("${DOTNET_SDK_ROOT}/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0", gate, StringComparison.Ordinal);
+            Assert.DoesNotContain("/sdk/10.0.302", gate, StringComparison.Ordinal);
+            Assert.DoesNotContain("${DOTNET_ROOT}/sdk/${DOTNET_SDK_VERSION}", gate, StringComparison.Ordinal);
+            Assert.True(
+                gate.IndexOf("selected_version=\"${selected_version//$'\\r'/}\"", StringComparison.Ordinal)
+                < gate.IndexOf("while read -r sdk_version sdk_parent; do", StringComparison.Ordinal));
+            Assert.True(
+                gate.IndexOf("sdk_list=\"${sdk_list//$'\\r'/}\"", StringComparison.Ordinal)
+                < gate.IndexOf("while read -r sdk_version sdk_parent; do", StringComparison.Ordinal));
+            AssertWasmRestoreCleanBuildOrder(gate);
+        }
+    }
+
+    [Fact]
+    public void WasmCapabilityBoundaryGate_RequiresStableV1InitializeShape()
+    {
+        var gate = LoadFile(@"scripts\gates\wasm-capability-boundary-smoke.mjs");
+
+        Assert.Contains("params.protocolVersion !== 1", gate, StringComparison.Ordinal);
+        Assert.Contains("Production initialize must negotiate stable ACP protocolVersion 1", gate, StringComparison.Ordinal);
+        Assert.Contains("params.clientInfo", gate, StringComparison.Ordinal);
+        Assert.Contains("params.clientCapabilities", gate, StringComparison.Ordinal);
+        Assert.Contains("must not include ACP v2 info/capabilities fields", gate, StringComparison.Ordinal);
+        Assert.Contains("WASM client must not advertise ACP fs capability", gate, StringComparison.Ordinal);
+        Assert.Contains("WASM client must not advertise ACP terminal capability", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("params.protocolVersion === 2", gate, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AcpPackageConsumerGate_SerializesStableV1InitializeShape()
+    {
+        var gate = LoadFile(@"scripts\gates\run-acp-consumer-package-smoke.sh");
+
+        Assert.Contains("JsonSerializer.Serialize(initialize, AcpJsonContext.Default.InitializeParams)", gate, StringComparison.Ordinal);
+        Assert.Contains("initialize.ProtocolVersion == AcpProtocolVersion.V1", gate, StringComparison.Ordinal);
+        Assert.Contains("initializeRoot.GetProperty(\"protocolVersion\").GetInt32() == AcpProtocolVersion.V1", gate, StringComparison.Ordinal);
+        Assert.Contains("initializeRoot.TryGetProperty(\"clientInfo\"", gate, StringComparison.Ordinal);
+        Assert.Contains("initializeRoot.TryGetProperty(\"clientCapabilities\"", gate, StringComparison.Ordinal);
+        Assert.Contains("!initializeRoot.TryGetProperty(\"info\"", gate, StringComparison.Ordinal);
+        Assert.Contains("!initializeRoot.TryGetProperty(\"capabilities\"", gate, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -287,6 +390,14 @@ public sealed class WasmStartupAssetsTests
 
         Assert.Contains("-getProperty:TargetFrameworks", gate, StringComparison.Ordinal);
         Assert.Contains("-p:EnableMobileTargets=true -p:EnableIosTarget=true", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:SalmonEggTargetFrameworks=net10.0-ios", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:SalmonEggTargetFrameworks=net10.0-android36.0", gate, StringComparison.Ordinal);
+        Assert.Contains("-t:GenerateRestoreGraphFile", gate, StringComparison.Ordinal);
+        Assert.Contains("restore-graph.json", gate, StringComparison.Ordinal);
+        Assert.Contains("SalmonEggTargetFrameworks=net10.0-desktop", gate, StringComparison.Ordinal);
+        Assert.Contains("SalmonEggSupportsDesktopProcessHost=false", gate, StringComparison.Ordinal);
+        Assert.Contains("SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj", gate, StringComparison.Ordinal);
+        Assert.Contains("restricted-platform restore graph must exclude SalmonEgg.Infrastructure.Desktop", gate, StringComparison.Ordinal);
         Assert.Contains("net10.0-android36.0;net10.0-ios", gate, StringComparison.Ordinal);
         Assert.Contains("-define:__ANDROID__", gate, StringComparison.Ordinal);
         Assert.Contains("AndroidKeyStoreSecureStorage.cs", gate, StringComparison.Ordinal);
@@ -455,6 +566,9 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("COMMIT=\"$(\"", gate, StringComparison.Ordinal);
         Assert.Contains("\"${GIT_BIN}\" -C \"${REPO_ROOT}\" rev-parse HEAD", gate, StringComparison.Ordinal);
         Assert.Contains("Refusing to run BrowserWasm smoke with Windows interop binary", gate, StringComparison.Ordinal);
+        Assert.True(
+            gate.IndexOf("if is_wsl_environment;", StringComparison.Ordinal)
+            < gate.IndexOf("DOTNET_SDK_ROOT=\"$(resolve_selected_dotnet_sdk_root)\"", StringComparison.Ordinal));
         Assert.DoesNotContain("dirname", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("grep -qiE", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("Run WASM file system availability smoke", gate, StringComparison.Ordinal);
@@ -481,6 +595,14 @@ public sealed class WasmStartupAssetsTests
         Assert.False(File.Exists(RepoPath(@"scripts\gates\wasm-smoke-lib\settings-ui.mjs")));
         var settingsPersistenceSmoke = LoadFile(@"scripts\gates\wasm-settings-persistence-smoke.mjs");
         Assert.Contains("language: en-US", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("focused data storage cache retention", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("requireFocused: true,", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("document.activeElement === textInput", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("document.activeElement === element", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("focusedControl: dataStorageCacheRetentionControl", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("projection.focused && projection.focusedTarget", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("findEffectiveBackground", settingsPersistenceSmoke, StringComparison.Ordinal);
+        Assert.Contains("compositeCssColor", settingsPersistenceSmoke, StringComparison.Ordinal);
         // The shell keeps the active Settings section across a language reload, so the English
         // assertion is anchored on the General page summary resource instead of Start copy.
         Assert.Contains("Manage startup, window behavior, and UI language", settingsPersistenceSmoke, StringComparison.Ordinal);
@@ -495,6 +617,23 @@ public sealed class WasmStartupAssetsTests
 
     private static string LoadFile(string relativePath)
         => File.ReadAllText(RepoPath(relativePath));
+
+    private static void AssertWasmRestoreCleanBuildOrder(string gate)
+    {
+        const string restoreCommand = "\"${DOTNET_BIN}\" restore \"${PROJECT}\"";
+        const string cleanCommand = "\"${DOTNET_BIN}\" clean \"${PROJECT}\" -c \"${CONFIGURATION}\" -f net10.0-browserwasm -v minimal";
+        const string buildCommand = "\"${DOTNET_BIN}\" build \"${PROJECT}\" -c \"${CONFIGURATION}\" -f net10.0-browserwasm --no-restore -v minimal";
+
+        Assert.Equal(1, gate.Split(restoreCommand, StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, gate.Split(cleanCommand, StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, gate.Split(buildCommand, StringSplitOptions.None).Length - 1);
+
+        var restoreIndex = gate.IndexOf(restoreCommand, StringComparison.Ordinal);
+        var cleanIndex = gate.IndexOf(cleanCommand, StringComparison.Ordinal);
+        var buildIndex = gate.IndexOf(buildCommand, StringComparison.Ordinal);
+        Assert.True(restoreIndex < cleanIndex);
+        Assert.True(cleanIndex < buildIndex);
+    }
 
     /// <summary>
     /// Returns the <c>__WASM__</c> arm of the secure-storage conditional, so an assertion about the

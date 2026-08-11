@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DOTNET_VERSION: "10.0.x"
+  DOTNET_VERSION: "10.0.3xx"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -76,8 +76,20 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Verify Android .NET SDK
+        run: |
+          dotnet_version="$(dotnet --version)"
+          case "${dotnet_version}" in
+            10.0.3??) ;;
+            *) echo "Expected .NET SDK 10.0.3xx, got ${dotnet_version}." >&2; exit 1 ;;
+          esac
+          echo ".NET SDK ${dotnet_version}"
+
       - name: Install Android workload
         run: dotnet workload install android --skip-manifest-update --disable-parallel --no-http-cache
+
+      - name: Report Android workload
+        run: dotnet workload list
 
       - name: Install Android SDK platform
         shell: bash
@@ -94,16 +106,25 @@ jobs:
           "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build Android
-        run: >-
-          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj
-          --configuration ${{ env.CONFIGURATION }}
-          --framework net10.0-android36.0
-          -p:EnableMobileTargets=true
-          -p:AndroidSdkDirectory=$ANDROID_SDK_ROOT
+        shell: bash
+        run: |
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT"
+
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --configuration "${{ env.CONFIGURATION }}" \
+            --framework net10.0-android36.0 \
+            --no-restore \
+            -p:SalmonEggTargetFrameworks=net10.0-android36.0 \
+            -p:SalmonEggSupportsDesktopProcessHost=false \
+            -p:AndroidSdkDirectory="$ANDROID_SDK_ROOT"
 
   ios:
     name: iOS Simulator
-    runs-on: macos-latest
+    # Pin the OS image because .NET for iOS 26.0 requires Xcode 26.0, while macos-latest can roll forward independently.
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -114,15 +135,45 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Select compatible Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer
+          xcodebuild -version
+          xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+          case "${xcode_version}" in
+            26.0*) ;;
+            *) echo "Expected Xcode 26.0.x, got ${xcode_version}." >&2; exit 1 ;;
+          esac
+
+      - name: Verify iOS .NET SDK
+        run: |
+          dotnet_version="$(dotnet --version)"
+          case "${dotnet_version}" in
+            10.0.3??) ;;
+            *) echo "Expected .NET SDK 10.0.3xx, got ${dotnet_version}." >&2; exit 1 ;;
+          esac
+          echo ".NET SDK ${dotnet_version}"
+
       - name: Install iOS workload
         run: dotnet workload install ios --skip-manifest-update --disable-parallel --no-http-cache
 
+      - name: Report iOS workload
+        run: |
+          dotnet workload list
+          xcodebuild -version
+
       - name: Build iOS Simulator
-        run: >-
-          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj
-          --configuration ${{ env.CONFIGURATION }}
-          --framework net10.0-ios
-          --runtime iossimulator-arm64
-          -p:EnableMobileTargets=true
-          -p:EnableAndroidTarget=false
-          -p:EnableIosTarget=true
+        shell: bash
+        run: |
+          dotnet restore SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --runtime iossimulator-arm64 \
+            -p:SalmonEggTargetFrameworks=net10.0-ios \
+            -p:SalmonEggSupportsDesktopProcessHost=false
+
+          dotnet build SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+            --configuration "${{ env.CONFIGURATION }}" \
+            --framework net10.0-ios \
+            --runtime iossimulator-arm64 \
+            --no-restore \
+            -p:SalmonEggTargetFrameworks=net10.0-ios \
+            -p:SalmonEggSupportsDesktopProcessHost=false

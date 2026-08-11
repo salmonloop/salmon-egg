@@ -29,7 +29,6 @@ NODE_BIN="${NODE_BIN:-$(command -v node || true)}"
 NPM_BIN="${NPM_BIN:-$(command -v npm || true)}"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
 CURL_BIN="${CURL_BIN:-$(command -v curl || true)}"
-export DOTNET_ROOT="${DOTNET_ROOT:-/home/ubuntu/.dotnet}"
 
 if [ -z "${DOTNET_BIN}" ]; then
   echo "Unable to locate dotnet in PATH." >&2
@@ -62,6 +61,43 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
+
+resolve_selected_dotnet_sdk_root() {
+  local selected_version sdk_list sdk_version sdk_parent
+  if ! selected_version="$("${DOTNET_BIN}" --version)"; then
+    return 1
+  fi
+  if ! sdk_list="$("${DOTNET_BIN}" --list-sdks)"; then
+    return 1
+  fi
+
+  selected_version="${selected_version//$'\r'/}"
+  sdk_list="${sdk_list//$'\r'/}"
+
+  while read -r sdk_version sdk_parent; do
+    if [ "${sdk_version}" != "${selected_version}" ]; then
+      continue
+    fi
+
+    sdk_parent="${sdk_parent#\[}"
+    sdk_parent="${sdk_parent%\]}"
+    case "${sdk_parent}" in
+      [a-zA-Z]:\\*)
+        if ! command -v cygpath >/dev/null 2>&1; then
+          return 1
+        fi
+        sdk_parent="$(cygpath -u "${sdk_parent}")"
+        ;;
+    esac
+
+    if [ -d "${sdk_parent}/${selected_version}" ]; then
+      printf '%s\n' "${sdk_parent}/${selected_version}"
+      return 0
+    fi
+  done <<< "${sdk_list}"
+
+  return 1
+}
 
 run_playwright_smoke() {
   if command -v xvfb-run >/dev/null 2>&1; then
@@ -100,11 +136,11 @@ echo "[linux-gamepad] Core multi-brand unit matrix"
   --timeout 3m \
   --output Normal
 
-echo "[linux-gamepad] Clean browserwasm output (avoid stale HotReload / package base assets)"
-"${DOTNET_BIN}" clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal
-
 echo "[linux-gamepad] Restore browserwasm dependencies"
 "${DOTNET_BIN}" restore "${PROJECT}"
+
+echo "[linux-gamepad] Clean browserwasm output (avoid stale HotReload / package base assets)"
+"${DOTNET_BIN}" clean "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm -v minimal
 
 echo "[linux-gamepad] Build browserwasm app for gamepad inject smoke"
 "${DOTNET_BIN}" build "${PROJECT}" -c "${CONFIGURATION}" -f net10.0-browserwasm --no-restore -v minimal
@@ -113,23 +149,28 @@ echo "[linux-gamepad] Build browserwasm app for gamepad inject smoke"
 # obj/.../hotreload but are not always copied into wwwroot/_framework by publish-less
 # `dotnet build`. Stage the known module so first-paint is not blocked on 404 retries.
 HOTRELOAD_MODULE_NAME="Microsoft.DotNet.HotReload.WebAssembly.Browser.lib.module.js"
-HOTRELOAD_CANDIDATES=(
-  "${REPO_ROOT}/SalmonEgg/SalmonEgg/obj/${CONFIGURATION}/net10.0-browserwasm/hotreload/${HOTRELOAD_MODULE_NAME}"
-  "${DOTNET_ROOT}/sdk/10.0.302/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0/${HOTRELOAD_MODULE_NAME}"
-)
-HOTRELOAD_SRC=""
-for candidate in "${HOTRELOAD_CANDIDATES[@]}"; do
-  if [ -f "${candidate}" ]; then
-    HOTRELOAD_SRC="${candidate}"
-    break
+HOTRELOAD_SRC="${REPO_ROOT}/SalmonEgg/SalmonEgg/obj/${CONFIGURATION}/net10.0-browserwasm/hotreload/${HOTRELOAD_MODULE_NAME}"
+if [ ! -f "${HOTRELOAD_SRC}" ]; then
+  HOTRELOAD_SRC=""
+fi
+if [ -z "${HOTRELOAD_SRC}" ] && [ "${CONFIGURATION}" = "Debug" ]; then
+  if ! DOTNET_SDK_ROOT="$(resolve_selected_dotnet_sdk_root)"; then
+    echo "Unable to resolve the selected .NET SDK directory from dotnet --list-sdks." >&2
+    exit 1
   fi
-done
+
+  HOTRELOAD_SDK_CANDIDATE="${DOTNET_SDK_ROOT}/Sdks/Microsoft.NET.Sdk.WebAssembly/hotreload/net10.0/${HOTRELOAD_MODULE_NAME}"
+  if [ -f "${HOTRELOAD_SDK_CANDIDATE}" ]; then
+    HOTRELOAD_SRC="${HOTRELOAD_SDK_CANDIDATE}"
+  fi
+fi
 if [ -n "${HOTRELOAD_SRC}" ]; then
   mkdir -p "${WWWROOT}/_framework"
   cp -f "${HOTRELOAD_SRC}" "${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
   echo "[linux-gamepad] Staged HotReload browser module -> ${WWWROOT}/_framework/${HOTRELOAD_MODULE_NAME}"
-else
-  echo "[linux-gamepad] WARNING: HotReload browser module not found; Debug WASM first-paint may hang on 404." >&2
+elif [ "${CONFIGURATION}" = "Debug" ]; then
+  echo "HotReload browser module was not produced by the build or selected .NET SDK." >&2
+  exit 1
 fi
 
 if [ ! -f "${WWWROOT}/index.html" ]; then
