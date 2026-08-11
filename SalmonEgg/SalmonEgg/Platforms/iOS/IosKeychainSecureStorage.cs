@@ -18,7 +18,7 @@ public sealed class IosKeychainSecureStorage : ISecureStorage
         ValidateKey(key);
         ArgumentNullException.ThrowIfNull(value);
 
-        var query = CreateQuery(key);
+        using var query = CreateQuery(key);
         var removeStatus = SecKeyChain.Remove(query);
         if (removeStatus != SecStatusCode.Success && removeStatus != SecStatusCode.ItemNotFound)
         {
@@ -26,7 +26,7 @@ public sealed class IosKeychainSecureStorage : ISecureStorage
         }
 
         using var data = NSData.FromArray(Encoding.UTF8.GetBytes(value));
-        var record = CreateQuery(key);
+        using var record = CreateQuery(key);
         record.ValueData = data;
 
         var addStatus = SecKeyChain.Add(record);
@@ -38,32 +38,29 @@ public sealed class IosKeychainSecureStorage : ISecureStorage
     {
         ValidateKey(key);
 
-        var query = CreateQuery(key);
-        query.ReturnData = true;
-        var status = SecKeyChain.QueryAsRecord(query, out var result);
+        using var query = CreateQuery(key);
+        using var result = SecKeyChain.QueryAsRecord(query, out var status);
         if (status == SecStatusCode.ItemNotFound)
         {
             return Task.FromResult<string?>(null);
         }
 
         ThrowIfFailed(status, "load");
-        using (result)
+        var valueData = result?.ValueData;
+        if (valueData is null)
         {
-            var valueData = result?.ValueData;
-            if (valueData is null)
-            {
-                return Task.FromResult<string?>(null);
-            }
-
-            return Task.FromResult<string?>(Encoding.UTF8.GetString(valueData.ToArray()));
+            return Task.FromResult<string?>(null);
         }
+
+        return Task.FromResult<string?>(Encoding.UTF8.GetString(valueData.ToArray()));
     }
 
     public Task DeleteAsync(string key)
     {
         ValidateKey(key);
 
-        var status = SecKeyChain.Remove(CreateQuery(key));
+        using var query = CreateQuery(key);
+        var status = SecKeyChain.Remove(query);
         if (status == SecStatusCode.ItemNotFound)
         {
             return Task.CompletedTask;
