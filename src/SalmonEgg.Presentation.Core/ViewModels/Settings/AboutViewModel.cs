@@ -16,6 +16,8 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 
 public sealed partial class AboutViewModel : ObservableObject
 {
+    private static readonly Uri DiscordCommunityUri = new("https://discord.gg/wAfJFrYPnf");
+
     private readonly IPlatformShellService _shell;
     private readonly IAiContentReportLauncher _aiContentReportLauncher;
     private readonly IPlatformCapabilityService _capabilities;
@@ -83,6 +85,15 @@ public sealed partial class AboutViewModel : ObservableObject
                     ? _localizer["About_AcknowledgementSourceFallback"]
                     : item.SourceUrl.Trim()))
             .ToArray();
+
+    [RelayCommand]
+    private async Task JoinDiscordCommunityAsync()
+    {
+        if (!await _shell.OpenUriAsync(DiscordCommunityUri).ConfigureAwait(true))
+        {
+            await _ui.ShowInfoAsync(_localizer["About_DiscordOpenFailed"]).ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
     private Task OpenAppDataFolderAsync()

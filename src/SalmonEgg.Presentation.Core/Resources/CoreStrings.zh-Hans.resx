@@ -438,6 +438,9 @@
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>当前平台暂不支持打开本地文件或目录。</value>
   </data>
+  <data name="About_DiscordOpenFailed" xml:space="preserve">
+    <value>无法打开 Discord 邀请链接，请检查默认浏览器后重试。</value>
+  </data>
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>当前平台暂不支持导出本地文件。</value>
   </data>

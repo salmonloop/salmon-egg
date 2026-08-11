@@ -438,6 +438,9 @@
   <data name="Platform_ExternalOpenUnsupported" xml:space="preserve">
     <value>Opening local files or folders is not supported on this platform.</value>
   </data>
+  <data name="About_DiscordOpenFailed" xml:space="preserve">
+    <value>Could not open the Discord invite. Check your default browser, then try again.</value>
+  </data>
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>Exporting local files is not supported on this platform.</value>
   </data>

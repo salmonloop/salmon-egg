@@ -121,6 +121,36 @@
                     </StackPanel>
 
                     <StackPanel Spacing="12">
+                        <TextBlock x:Uid="About_CommunityTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                  RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <StackPanel Spacing="4">
+                                    <TextBlock x:Uid="About_DiscordTitle"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="About_DiscordDescription"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <Button x:Name="AboutJoinDiscordButton"
+                                        Grid.Row="1"
+                                        x:Uid="About_JoinDiscord"
+                                        AutomationProperties.AutomationId="About.Community.JoinDiscord"
+                                        Command="{x:Bind ViewModel.JoinDiscordCommunityCommand}"
+                                        HorizontalAlignment="Left"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
                         <TextBlock x:Uid="About_SupportTitle"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 

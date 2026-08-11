@@ -14,6 +14,45 @@ namespace SalmonEgg.Presentation.Core.Tests.Settings;
 public sealed class AboutViewModelTests
 {
     [Fact]
+    public async Task JoinDiscordCommunityCommand_OpensCanonicalInviteUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.JoinDiscordCommunityCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://discord.gg/wAfJFrYPnf", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task JoinDiscordCommunityCommand_WhenInviteCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.JoinDiscordCommunityCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_DiscordOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
     public async Task ReportInappropriateAiContentCommand_WhenSupportEmailConfigured_OpensMailtoUri()
     {
         var openedUris = new List<Uri>();

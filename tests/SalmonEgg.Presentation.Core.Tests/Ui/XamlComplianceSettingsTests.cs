@@ -313,6 +313,10 @@ public sealed class XamlComplianceSettingsTests
             "About_AppNameLabel.Text",
             "About_VersionLabel.Text",
             "About_ProtocolLabel.Text",
+            "About_CommunityTitle.Text",
+            "About_DiscordTitle.Text",
+            "About_DiscordDescription.Text",
+            "About_JoinDiscord.Content",
             "About_SupportTitle.Text",
             "About_SupportActionsTitle.Text",
             "About_OpenAppData.Content",
@@ -667,6 +671,17 @@ public sealed class XamlComplianceSettingsTests
         Assert.Contains("AutomationProperties.AutomationId=\"About.Support.ReportAiContent\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.ReportInappropriateAiContentCommand}\"", xaml, StringComparison.Ordinal);
         Assert.Contains("IsEnabled=\"{x:Bind ViewModel.CanReportInappropriateAiContent, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AboutPage_CommunitySectionOpensDiscordThroughViewModelCommand()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AboutPage.xaml");
+
+        Assert.Contains("x:Uid=\"About_CommunityTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"About_DiscordDescription\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"About.Community.JoinDiscord\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.JoinDiscordCommunityCommand}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

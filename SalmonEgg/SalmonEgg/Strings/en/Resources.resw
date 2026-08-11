@@ -1029,6 +1029,18 @@
   <data name="About_ProtocolLabel.Text" xml:space="preserve">
     <value>Protocol version:</value>
   </data>
+  <data name="About_CommunityTitle.Text" xml:space="preserve">
+    <value>Community</value>
+  </data>
+  <data name="About_DiscordTitle.Text" xml:space="preserve">
+    <value>SalmonEgg on Discord</value>
+  </data>
+  <data name="About_DiscordDescription.Text" xml:space="preserve">
+    <value>Share tips, report issues, and keep up with project news.</value>
+  </data>
+  <data name="About_JoinDiscord.Content" xml:space="preserve">
+    <value>Join the Discord community</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>Support</value>
   </data>

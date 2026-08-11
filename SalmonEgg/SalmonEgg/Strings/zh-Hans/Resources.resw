@@ -498,6 +498,18 @@
   <data name="About_ProtocolLabel.Text" xml:space="preserve">
     <value>协议版本：</value>
   </data>
+  <data name="About_CommunityTitle.Text" xml:space="preserve">
+    <value>社区</value>
+  </data>
+  <data name="About_DiscordTitle.Text" xml:space="preserve">
+    <value>SalmonEgg Discord 社群</value>
+  </data>
+  <data name="About_DiscordDescription.Text" xml:space="preserve">
+    <value>交流使用经验、反馈问题，并及时了解项目动态。</value>
+  </data>
+  <data name="About_JoinDiscord.Content" xml:space="preserve">
+    <value>加入 Discord 社群</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>支持</value>
   </data>
