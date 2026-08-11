@@ -123,7 +123,7 @@ run.bat
 > 证书复用：`.tools/run-winui3-msix.ps1` 现在会复用同一张开发证书，不应再在每次 `run.bat msix` 时重建证书或反复要求安装证书。
 > 历史根因：脚本曾使用 PowerShell 中不可靠的 `$Cert.GetRSAPrivateKey()` 调用来判断私钥可用性，导致有效的 RSA 私钥被误判为不可用，进而每次重建新证书；现已改为标准的 `RSACertificateExtensions.GetRSAPrivateKey(...)`。
 > 工具链锁定：Windows SDK 10.0.26100.0，signtool 来自 SDK 10.0.22621.0。
-> Workload manifest：CI 应与 `global.json` 中的 .NET SDK patch 保持一致；当前仓库锁定 10.0.302；CI 使用 10.0.x 可前滚到同代最新 patch。
+> Workload manifest：CI 应与 `global.json` 中的 .NET SDK feature band 保持一致；当前仓库锁定 10.0.302，并使用 `rollForward: latestPatch`。所有 GHA 均使用 `setup-dotnet` 官方支持的 `10.0.3xx` 语法，只在同一 feature band 内前滚 patch，避免 workload manifest 与 Xcode 独立漂移。
 > 验证口径：`dotnet build -f net10.0-windows10.0.26100.0` 不是本仓库的权威 WinUI 3 / MSIX 门禁；Windows 原生包请以 `build.bat msix` 或 `.tools/run-winui3-msix.ps1 -SkipInstall` 为准。`dotnet build` 主要用于 Core/Skia/Desktop/Wasm 验证。
 
 #### Linux Headless Desktop
@@ -183,21 +183,22 @@ dotnet test --solution SalmonEgg.sln \
 Skia Desktop 的跨平台 GUI smoke 使用真实 `net10.0-desktop` 构建产物。Linux 下通过 Xvfb 启动并用轻量 X11 probe 验证窗口已映射、像素非空、可成为 X input focus，且 XTest 键盘事件可投递到目标窗口；macOS 下需要当前会话具备可用 GUI。该 gate 使用 Debug 构建中的 `boot.log` readiness probe 验证：
 
 1. XAML 主窗口已经完成 shell 初始内容激活；
-2. 通过 portable AppData seed（`SalmonEgg.TestSupport.SkiaDesktopGuiSeedWriter`）恢复的混排 transcript（markdown + tool_call + mode_change + image）已被权威 projection 写入 `MessageHistory`。
+2. 通过 portable AppData seed（`SalmonEgg.TestSupport.SkiaDesktopGuiSeedWriter`）恢复的混排 transcript（markdown + tool_call + mode_change + image）已被权威 projection 写入 `MessageHistory`；
+3. 深色主题下，诊断 driver 通过 `MainNavigationViewModel.ActivateSettingsAsync` 进入真实 Data & Storage 页面，让焦点先成功离开、再进入真实 cache-retention `NumberBox` 的原生 `InputBox`，并连续三次只读采集已实现模板的前景、背景、焦点和 `ActualTheme`；每次 WCAG 对比度必须不低于 4.5，且探针不得改变绑定值。
 
-种子只写真实生产文件（`conversations/conversations.v1.json` + `config/app.yaml`），不引入 AT-SPI 或 UI test hook；探针不进入 Release：
+种子只写真实生产文件（`conversations/conversations.v1.json` + `config/app.yaml`），并在临时 AppData 中固定 `theme: Dark`。NumberBox 探针使用独立、环境变量门控的 DEBUG-only driver；页面只在启动 workflow 完成后把 live shell root 交给 driver，不承载导航、负载或断言逻辑，也不创建隐藏控件或测试专用 UI。探针不进入 Release：
 
 ```bash
 scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug
 ```
 
-Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI、AutomationId 或控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容或应用内 test hook 冒充语义自动化。
+Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 AT-SPI 或完整控件语义树覆盖；本机 `dbus-run-session` + Xvfb + `org.a11y.Bus` 探测显示 SalmonEgg 进程未注册到 AT-SPI bus，强制 `GTK_MODULES=atk-bridge` 也不会产生语义 provider。NumberBox 的 DEBUG probe 不是通用语义自动化替代品：它只为已知模板回归走 authoritative 页面导航，使用生产控件已有的 `AutomationId` 定位真实 NumberBox，并读取已实现视觉树的原生状态。若后续 Uno/Skia host 暴露稳定 AT-SPI provider，应新增独立 Linux semantic GUI gate；在此之前禁止用 X11 window 属性、截图内容、隐藏测试 UI 或返回预设结果的 test hook 冒充语义自动化。
 
 该 gate 与 Windows FlaUI / WASM Playwright gate 分工不同：
 
 - Windows WinUI 3 / MSIX GUI 行为：`scripts/gates/run-gui-smoke-gates.ps1`，使用 FlaUI/UIA3；
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
-- Skia Desktop GUI readiness + seeded transcript projection：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness，并投影混排 transcript；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
+- Skia Desktop GUI readiness + seeded transcript projection + focused NumberBox contrast：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness、投影混排 transcript，并在真实 Data & Storage 页面验证深色主题 NumberBox 焦点态；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：
@@ -206,7 +207,7 @@ Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 A
 scripts/gates/verify-mobile-target-contracts.sh
 ```
 
-该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
+该 gate 会验证默认构建不包含移动 TFM、Android/iOS opt-in TFM 展开符合 `SalmonEgg.csproj` 的单一事实源，并通过 `GenerateRestoreGraphFile` 的无 workload surrogate 确认应用级单 TFM 不会污染 Core 子项目、受限平台图不会引入 Desktop process host；当本机安装了 Android ref pack 时，还会对 `AndroidKeyStoreSecureStorage` 做 Android 引用级 C# 编译检查。完整 Android 打包仍以 x64 Linux/macOS/Windows Android toolchain 或 CI 为准；iOS 打包仍需要 macOS/Xcode。
 
 #### Visual Studio 调试（推荐 / 官方）
 在 `SalmonEgg.sln` 中将 `SalmonEgg` 设为启动项目，然后在工具栏的启动配置下拉列表中选择目标平台对应的 Launch Profile 即可按 F5 调试：
