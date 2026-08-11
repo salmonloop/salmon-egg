@@ -453,7 +453,11 @@ async function changeMcpSettings(page) {
     sections.mcp.target,
     sections.mcp.bodyPattern,
     sections.mcp.label);
-  await clickVisibleControl(page, { labels: ["新建", "New", "添加服务器", "Add server"], automationIds: ["Mcp.AddServer"] });
+  // Locator actionability waits for AddServerCommand to re-enable after the page's async load.
+  const addServer = page.locator('[aria-label="Mcp.AddServer"]:visible').first();
+  await addServer.click({ timeout: 30_000 });
+  const editorClose = page.locator('[aria-label="Mcp.Editor.Close"]:visible').first();
+  await editorClose.waitFor({ state: "visible", timeout: 10_000 });
   await waitForBodyText(page, /Launch command|启动命令/, "MCP server editor");
   await verifyVisibleSettingsTextInputsResolveDarkThemeForeground(page, "MCP server editor");
   await typeIntoVisibleTextField(
@@ -461,8 +465,15 @@ async function changeMcpSettings(page) {
     { labels: ["mcp-filesystem", "Launch command", "启动命令", "Command", "命令"], automationIds: [] },
     "/usr/bin/node",
     "MCP server command");
+  // Uno WASM does not activate this bound command through locator.click(), so use the proven control helper.
   await scrollToVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
   await clickVisibleControl(page, { labels: ["保存", "Save"], automationIds: ["Mcp.SaveServer"] });
+  const savedServerToggles = page.locator('[aria-label="Mcp.Server.Enabled"]:visible');
+  await savedServerToggles.first().waitFor({ state: "visible", timeout: 30_000 });
+  const savedServerToggleCount = await savedServerToggles.count();
+  if (savedServerToggleCount !== 1) {
+    throw new Error(`Expected one saved MCP server row, found ${savedServerToggleCount}.`);
+  }
   await waitForBodyText(page, /new-mcp-server/, "saved MCP server");
   await setToggleSwitchValue(page, controls.mcpServerEnabled, false, "MCP server enabled");
   await verifyMcpSettings(page, "after edit");
