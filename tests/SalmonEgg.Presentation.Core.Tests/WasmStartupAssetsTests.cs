@@ -234,6 +234,7 @@ public sealed class WasmStartupAssetsTests
         var androidTargets = project.Descendants("SalmonEggAndroidTargetFrameworks").Single();
         var iosTargets = project.Descendants("SalmonEggIosTargetFrameworks").Single();
         var mobileTargets = project.Descendants("SalmonEggMobileTargetFrameworks").ToArray();
+        var useDefaultPublishRuntimeIdentifier = project.Descendants("UseDefaultPublishRuntimeIdentifier").Single();
 
         Assert.Equal("false", enableMobileTargets.Value);
         Assert.Equal("'$(EnableMobileTargets)' == ''", (string?)enableMobileTargets.Attribute("Condition"));
@@ -254,6 +255,11 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggAndroidTargetFrameworks)");
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggMobileTargetFrameworks);$(SalmonEggIosTargetFrameworks)");
         Assert.Contains(mobileTargets, element => element.Value == "$(SalmonEggIosTargetFrameworks)");
+
+        Assert.Equal("false", useDefaultPublishRuntimeIdentifier.Value);
+        var androidRuntimeGroupCondition = (string?)useDefaultPublishRuntimeIdentifier.Parent?.Attribute("Condition");
+        Assert.Contains("GetTargetPlatformIdentifier", androidRuntimeGroupCondition, StringComparison.Ordinal);
+        Assert.Contains("android", androidRuntimeGroupCondition, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -272,6 +278,9 @@ public sealed class WasmStartupAssetsTests
             gate.Split("-p:SalmonEggTargetFrameworks=net10.0-ios", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("-p:TargetFrameworks=", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:TargetFramework=", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("--runtime android-", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:RuntimeIdentifier=android-", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("-p:RuntimeIdentifiers=android-", gate, StringComparison.Ordinal);
         Assert.Equal(4, gate.Split("-p:SalmonEggSupportsDesktopProcessHost=false", StringSplitOptions.None).Length - 1);
         Assert.Contains("--runtime iossimulator-arm64", gate, StringComparison.Ordinal);
         Assert.Contains("--no-restore", gate, StringComparison.Ordinal);
@@ -289,9 +298,26 @@ public sealed class WasmStartupAssetsTests
             gate.IndexOf("Verify iOS .NET SDK", StringComparison.Ordinal)
             < gate.IndexOf("Install iOS workload", StringComparison.Ordinal));
         Assert.Contains("runs-on: macos-15", gate, StringComparison.Ordinal);
-        Assert.Contains("xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer", gate, StringComparison.Ordinal);
+        Assert.Contains("os.path.realpath(\"/Applications/Xcode_26.0.app/Contents/Developer\")", gate, StringComparison.Ordinal);
+        Assert.Contains("sudo xcode-select --switch \"${xcode_developer_dir}\"", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer", gate, StringComparison.Ordinal);
         Assert.Contains("xcodebuild -version", gate, StringComparison.Ordinal);
         Assert.Contains("26.0*)", gate, StringComparison.Ordinal);
+        Assert.Contains("xcrun --sdk macosx --show-sdk-path", gate, StringComparison.Ordinal);
+        Assert.Contains("xcrun --sdk iphonesimulator --show-sdk-path", gate, StringComparison.Ordinal);
+        Assert.Contains("xcrun --sdk macosx --find actool", gate, StringComparison.Ordinal);
+
+        var canonicalizeXcode = gate.IndexOf("os.path.realpath", StringComparison.Ordinal);
+        var selectXcode = gate.IndexOf("sudo xcode-select --switch", StringComparison.Ordinal);
+        var verifyMacosSdk = gate.IndexOf("xcrun --sdk macosx --show-sdk-path", StringComparison.Ordinal);
+        var verifyIosSimulatorSdk = gate.IndexOf("xcrun --sdk iphonesimulator --show-sdk-path", StringComparison.Ordinal);
+        var verifyActool = gate.IndexOf("xcrun --sdk macosx --find actool", StringComparison.Ordinal);
+        var installIosWorkload = gate.IndexOf("Install iOS workload", StringComparison.Ordinal);
+        Assert.True(canonicalizeXcode < selectXcode);
+        Assert.True(selectXcode < verifyMacosSdk);
+        Assert.True(verifyMacosSdk < verifyIosSimulatorSdk);
+        Assert.True(verifyIosSimulatorSdk < verifyActool);
+        Assert.True(verifyActool < installIosWorkload);
     }
 
     [Fact]
@@ -394,6 +420,10 @@ public sealed class WasmStartupAssetsTests
         Assert.Contains("-p:SalmonEggTargetFrameworks=net10.0-android36.0", gate, StringComparison.Ordinal);
         Assert.Contains("-t:GenerateRestoreGraphFile", gate, StringComparison.Ordinal);
         Assert.Contains("restore-graph.json", gate, StringComparison.Ordinal);
+        Assert.Contains("android-restore-graph.json", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:Configuration=Release", gate, StringComparison.Ordinal);
+        Assert.Contains("-p:NETCoreSdkPortableRuntimeIdentifier=linux-x64", gate, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.NETCore.App.Runtime.Mono.linux-x64", gate, StringComparison.Ordinal);
         Assert.Contains("SalmonEggTargetFrameworks=net10.0-desktop", gate, StringComparison.Ordinal);
         Assert.Contains("SalmonEggSupportsDesktopProcessHost=false", gate, StringComparison.Ordinal);
         Assert.Contains("SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj", gate, StringComparison.Ordinal);

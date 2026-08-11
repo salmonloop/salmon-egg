@@ -136,14 +136,29 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Select compatible Xcode
+        shell: bash
         run: |
-          sudo xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer
+          xcode_developer_dir="$(python3 - <<'PY'
+          import os
+
+          print(os.path.realpath("/Applications/Xcode_26.0.app/Contents/Developer"))
+          PY
+          )"
+          if [ ! -d "${xcode_developer_dir}" ]; then
+            echo "Resolved Xcode developer directory does not exist: ${xcode_developer_dir}" >&2
+            exit 1
+          fi
+
+          sudo xcode-select --switch "${xcode_developer_dir}"
           xcodebuild -version
           xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
           case "${xcode_version}" in
             26.0*) ;;
             *) echo "Expected Xcode 26.0.x, got ${xcode_version}." >&2; exit 1 ;;
           esac
+          xcrun --sdk macosx --show-sdk-path
+          xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk macosx --find actool
 
       - name: Verify iOS .NET SDK
         run: |

@@ -254,6 +254,11 @@
     <UnoDisableMCPSupport>true</UnoDisableMCPSupport>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <!-- Android declares its supported device RIDs; do not append the build host RID to the restore graph. -->
+    <UseDefaultPublishRuntimeIdentifier>false</UseDefaultPublishRuntimeIdentifier>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <UnoFeatures>SkiaRenderer;WebView;</UnoFeatures>
     <PlatformTarget Condition="'$(PlatformTarget)' == ''">AnyCPU</PlatformTarget>
