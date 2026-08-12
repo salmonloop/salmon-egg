@@ -42,10 +42,17 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.ViewModels.Start;
 using Serilog;
 using Uno.Extensions.Reactive;
+using SalmonEgg.Infrastructure.Observability;
 #if WINDOWS
 using SalmonEgg.Platforms.Windows;
+using SalmonEgg.Platforms.Windows.Observability;
 #elif __WASM__
 using SalmonEgg.Platforms.WebAssembly;
+using SalmonEgg.Platforms.WebAssembly.Observability;
+#elif __ANDROID__ || __IOS__
+using SalmonEgg.Platforms.Mobile.Observability;
+#elif __SKIA__
+using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
 namespace SalmonEgg;
@@ -66,6 +73,7 @@ public static class DependencyInjection
     {
         services.AddLocalization();
         ConfigureLogging(services);
+        ConfigureTelemetry(services);
         RegisterDomainServices(services);
         RegisterInfrastructureServices(services);
         services.AddSingleton<IStringLocalizer<CoreStrings>, UnoCoreStringLocalizer>();
@@ -85,6 +93,78 @@ public static class DependencyInjection
             builder.AddSerilog(logger, dispose: true);
         });
         services.AddSingleton(logger);
+    }
+
+    private static void ConfigureTelemetry(IServiceCollection services)
+    {
+        // 读取 Telemetry 配置（从环境变量或配置文件）
+        var telemetrySettings = LoadTelemetrySettings();
+
+        if (!telemetrySettings.Enabled)
+        {
+            return;
+        }
+
+        // 注册平台特定的 Telemetry 导出器工厂
+#if __SKIA__
+        services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
+#elif __WASM__
+        services.AddSingleton<ITelemetryExporterFactory, WasmTelemetryExporterFactory>();
+#elif WINDOWS
+        services.AddSingleton<ITelemetryExporterFactory, WinUI3TelemetryExporterFactory>();
+#elif __ANDROID__ || __IOS__
+        services.AddSingleton<ITelemetryExporterFactory, MobileTelemetryExporterFactory>();
+#endif
+
+        // 注册 TelemetrySettings 和 TelemetryManager
+        services.AddSingleton(telemetrySettings);
+        services.AddSingleton<ITelemetryManager, TelemetryManager>();
+
+        // TelemetryManager 的 Initialize() 必须在容器构建完成后调用，
+        // 由 App 启动流程负责（App.xaml.cs 构造函数 BuildServiceProvider 之后）。
+        // 禁止在 DI 注册阶段调用 services.BuildServiceProvider() ——
+        // 那会构建第二个临时容器，违反单例原则且生命周期管理混乱。
+    }
+
+    private static TelemetrySettings LoadTelemetrySettings()
+    {
+        // 从环境变量读取配置（遵循 OpenTelemetry 环境变量规范）
+        var enabled = Environment.GetEnvironmentVariable("OTEL_SDK_DISABLED") != "true";
+        var endpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
+            ?? "http://localhost:4318";
+        var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
+            ?? "SalmonEgg";
+
+        // 根据平台选择默认采样配置
+        var samplingSettings = GetPlatformSamplingDefaults();
+
+        return new TelemetrySettings
+        {
+            Enabled = enabled,
+            OtlpEndpoint = endpoint,
+            Protocol = OtlpProtocol.HttpProtobuf, // 默认 HTTP（兼容性最好）
+            ServiceName = serviceName,
+            ServiceVersion = typeof(App).Assembly.GetName().Version?.ToString(),
+            ResourceAttributes = new Dictionary<string, string>
+            {
+                // 使用当前稳定规范名称（deployment.environment 已弃用）
+                [SemanticConventions.Resource.DeploymentEnvironmentName] =
+                    Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT") ?? "production",
+                [SemanticConventions.Resource.ServiceInstanceId] = Guid.NewGuid().ToString()
+            },
+            Sampling = samplingSettings
+        };
+    }
+
+    private static SamplingSettings GetPlatformSamplingDefaults()
+    {
+#if __WASM__
+        return SamplingSettings.CreateWasmDefaults();
+#elif __ANDROID__ || __IOS__
+        return SamplingSettings.CreateMobileDefaults();
+#else
+        return SamplingSettings.CreateDesktopDefaults();
+#endif
     }
 
     private static LoggingHostCapabilities GetLoggingHostCapabilities()

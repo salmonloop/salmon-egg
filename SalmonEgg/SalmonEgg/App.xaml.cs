@@ -94,6 +94,10 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         services.AddSalmonEgg();
         ServiceProvider = services.BuildServiceProvider();
 
+        // TelemetryManager 延迟初始化：必须在容器构建完成后调用，
+        // 使其能正确解析 ITelemetryExporterFactory 等依赖。
+        ServiceProvider.GetService<SalmonEgg.Infrastructure.Observability.ITelemetryManager>()?.Initialize();
+
         // Resolve DI dependencies before InitializeComponent() so x:Bind has stable inputs.
         _maintenanceService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
         _windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();
