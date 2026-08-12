@@ -297,10 +297,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
             _startupLogger?.LogWarning(ex, "Failed to schedule cache cleanup during launch.");
         }
 
-        // Applies the Uno.Resizetizer-generated window icon to the native window (Desktop/Windows).
-#if HAS_UNO
-        MainWindow.SetWindowIcon();
-#endif
+        // Shell identity (taskbar/Alt+Tab title + native window icon) must be in place before the
+        // first activation so the shell never observes the framework defaults.
+        WindowShellIdentity.Apply(MainWindow);
         MainWindow.Activate();
         BootLog("OnLaunched: window activated");
     }

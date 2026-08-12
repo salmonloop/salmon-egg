@@ -316,6 +316,75 @@ public class UiConventionsTests
     }
 
     [Fact]
+    public void WinUiTarget_ShouldPackageWindowsIconAssetsAsContent()
+    {
+        var repoRoot = FindRepoRoot();
+        var projectFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "SalmonEgg.csproj");
+        var document = ReadXml(projectFile);
+
+        // The WinUI 3 target sits in a default-item gap: Uno's Assets glob is disabled when
+        // IsWinAppSdk is true, and WinAppSDK's own Assets glob never activates because Uno leaves
+        // EnableDefaultAssets unset. Without explicit Content items the logos referenced by
+        // Package.appxmanifest are missing from the MSIX and Windows falls back to the generic
+        // placeholder icon in the taskbar, Start, and Alt+Tab.
+        var winUiContent = document
+            .Descendants("ItemGroup")
+            .Where(group => (group.Attribute("Condition")?.Value ?? string.Empty)
+                .Contains("'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'", StringComparison.Ordinal))
+            .SelectMany(group => group.Elements("Content"))
+            .ToList();
+
+        var pngGlob = winUiContent
+            .SingleOrDefault(element => string.Equals(
+                element.Attribute("Include")?.Value?.Trim(),
+                @"Assets\Icons\Windows\**\*.png",
+                StringComparison.Ordinal));
+        var ico = winUiContent
+            .SingleOrDefault(element => string.Equals(
+                element.Attribute("Include")?.Value?.Trim(),
+                @"Assets\Icons\Windows\icon.ico",
+                StringComparison.Ordinal));
+
+        Assert.NotNull(pngGlob);
+        Assert.NotNull(ico);
+        Assert.Equal("PreserveNewest", pngGlob!.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", pngGlob.Attribute("CopyToPublishDirectory")?.Value);
+        Assert.Equal("PreserveNewest", ico!.Attribute("CopyToOutputDirectory")?.Value);
+        Assert.Equal("PreserveNewest", ico.Attribute("CopyToPublishDirectory")?.Value);
+    }
+
+    [Fact]
+    public void WindowShellIdentity_DisplayNameShouldMatchPackageManifest()
+    {
+        var repoRoot = FindRepoRoot();
+        var manifestFile = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg", "Package.appxmanifest");
+        var manifestDisplayName = ReadXml(manifestFile)
+            .Descendants()
+            .Single(element => string.Equals(element.Name.LocalName, "Properties", StringComparison.Ordinal))
+            .Elements()
+            .Single(element => string.Equals(element.Name.LocalName, "DisplayName", StringComparison.Ordinal))
+            .Value
+            .Trim();
+
+        var identityFile = Path.Combine(
+            repoRoot, "SalmonEgg", "SalmonEgg", "Presentation", "Services", "WindowShellIdentity.cs");
+        var root = ReadCSharpSyntaxTree(identityFile);
+
+        // The WINDOWS branch only compiles on Windows CI; at least keep it syntactically valid
+        // from the cross-platform suite (ReadCSharpSyntaxTree parses with WINDOWS defined).
+        Assert.Empty(root.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+
+        var displayNameConst = root
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Single(declarator => string.Equals(declarator.Identifier.Text, "DisplayName", StringComparison.Ordinal));
+        var literal = Assert.IsType<LiteralExpressionSyntax>(displayNameConst.Initializer!.Value);
+
+        // The running window's taskbar label and the packaged app's Start entry must agree.
+        Assert.Equal(manifestDisplayName, literal.Token.ValueText);
+    }
+
+    [Fact]
     public void PackageManifest_ShouldDeclareInternetClientCapability()
     {
         var repoRoot = FindRepoRoot();

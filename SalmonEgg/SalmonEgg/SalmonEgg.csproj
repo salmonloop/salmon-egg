@@ -136,6 +136,28 @@
     <PackageReference Include="Uno.WinUI.Lottie" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.26100.0'">
+    <!--
+      The WinUI 3 / MSIX target sits in a gap between two default-item owners: Uno's asset glob is
+      disabled when IsWinAppSdk is true (Uno.DefaultItems.targets), and WinAppSDK's own
+      `Assets/**/*.*` glob never activates because Uno leaves EnableDefaultAssets unset
+      (Uno.Common.WinAppSdk.targets). Without these items the shell logos declared in
+      Package.appxmanifest are absent from the package, so Windows falls back to the generic
+      placeholder icon in the taskbar, Start, and Alt+Tab. Declare them explicitly rather than
+      forcing EnableDefaultAssets, which would also re-glob assets already owned above.
+    -->
+    <Content Include="Assets\Icons\Windows\**\*.png"
+             Exclude="@(Content)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <!-- Multi-size ICO backing the native window icon via AppWindow.SetIcon. The tray icon loads
+         this at runtime via LoadImage, but the packaged copy here serves the shell registration. -->
+    <Content Include="Assets\Icons\Windows\icon.ico"
+             Exclude="@(Content)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Explicitly list PRI resources with language to avoid inference warnings -->
     <PRIResource Include="Strings\en\Resources.resw">
