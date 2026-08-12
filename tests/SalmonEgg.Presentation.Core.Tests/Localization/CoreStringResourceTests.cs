@@ -42,6 +42,8 @@ public sealed class CoreStringResourceTests
     [InlineData("About_AcknowledgementLicenseFallback")]
     [InlineData("About_AcknowledgementSourceFallback")]
     [InlineData("About_DiscordOpenFailed")]
+    [InlineData("About_GitHubOpenFailed")]
+    [InlineData("About_KofiOpenFailed")]
     [InlineData("SettingsSection_General")]
     [InlineData("SettingsSection_Appearance")]
     [InlineData("SettingsSection_AgentAcp")]

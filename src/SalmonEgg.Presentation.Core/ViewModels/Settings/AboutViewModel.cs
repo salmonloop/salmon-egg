@@ -17,6 +17,8 @@ namespace SalmonEgg.Presentation.ViewModels.Settings;
 public sealed partial class AboutViewModel : ObservableObject
 {
     private static readonly Uri DiscordCommunityUri = new("https://discord.gg/wAfJFrYPnf");
+    private static readonly Uri GitHubRepositoryUri = new("https://github.com/salmonloop/salmon-egg");
+    private static readonly Uri KofiSupportUri = new("https://ko-fi.com/shangxin");
 
     private readonly IPlatformShellService _shell;
     private readonly IAiContentReportLauncher _aiContentReportLauncher;
@@ -87,13 +89,16 @@ public sealed partial class AboutViewModel : ObservableObject
             .ToArray();
 
     [RelayCommand]
-    private async Task JoinDiscordCommunityAsync()
-    {
-        if (!await _shell.OpenUriAsync(DiscordCommunityUri).ConfigureAwait(true))
-        {
-            await _ui.ShowInfoAsync(_localizer["About_DiscordOpenFailed"]).ConfigureAwait(true);
-        }
-    }
+    private Task JoinDiscordCommunityAsync()
+        => OpenExternalUriAsync(DiscordCommunityUri, "About_DiscordOpenFailed");
+
+    [RelayCommand]
+    private Task OpenGitHubRepositoryAsync()
+        => OpenExternalUriAsync(GitHubRepositoryUri, "About_GitHubOpenFailed");
+
+    [RelayCommand]
+    private Task OpenKofiSupportAsync()
+        => OpenExternalUriAsync(KofiSupportUri, "About_KofiOpenFailed");
 
     [RelayCommand]
     private Task OpenAppDataFolderAsync()
@@ -188,4 +193,12 @@ public sealed partial class AboutViewModel : ObservableObject
 
     private Task NotifyReportOpenFailedAsync()
         => _ui.ShowInfoAsync(_localizer["AiContentReport_OpenFailed"]);
+
+    private async Task OpenExternalUriAsync(Uri uri, string failureResourceKey)
+    {
+        if (!await _shell.OpenUriAsync(uri).ConfigureAwait(true))
+        {
+            await _ui.ShowInfoAsync(_localizer[failureResourceKey]).ConfigureAwait(true);
+        }
+    }
 }

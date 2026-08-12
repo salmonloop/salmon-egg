@@ -258,6 +258,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["About_VersionInfoCopied"] = "Version info copied to clipboard.",
         ["About_ClipboardUnsupported"] = "Clipboard copy is not supported on this platform.",
         ["About_DiscordOpenFailed"] = "Could not open the Discord invite. Check your default browser, then try again.",
+        ["About_GitHubOpenFailed"] = "Could not open the GitHub page. Check your default browser, then try again.",
+        ["About_KofiOpenFailed"] = "Could not open the Ko-fi page. Check your default browser, then try again.",
         ["About_ReportAiContentSubject"] = "Report inappropriate AI content shown in Salmon Egg",
         ["About_ReportAiContentBodyPrompt"] = "Please describe the inappropriate AI-generated content shown in Salmon Egg.",
         ["About_AcknowledgementVersionFallback"] = "Not listed",

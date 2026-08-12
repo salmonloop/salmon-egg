@@ -317,6 +317,13 @@ public sealed class XamlComplianceSettingsTests
             "About_DiscordTitle.Text",
             "About_DiscordDescription.Text",
             "About_JoinDiscord.Content",
+            "About_GitHubTitle.Text",
+            "About_GitHubDescription.Text",
+            "About_OpenGitHub.Content",
+            "About_SupportProjectTitle.Text",
+            "About_KofiTitle.Text",
+            "About_KofiDescription.Text",
+            "About_OpenKofi.Content",
             "About_SupportTitle.Text",
             "About_SupportActionsTitle.Text",
             "About_OpenAppData.Content",
@@ -682,6 +689,11 @@ public sealed class XamlComplianceSettingsTests
         Assert.Contains("x:Uid=\"About_DiscordDescription\"", xaml, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"About.Community.JoinDiscord\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Command=\"{x:Bind ViewModel.JoinDiscordCommunityCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"About.Community.OpenGitHub\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.OpenGitHubRepositoryCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Uid=\"About_SupportProjectTitle\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"About.SupportProject.OpenKofi\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{x:Bind ViewModel.OpenKofiSupportCommand}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

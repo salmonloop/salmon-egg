@@ -125,6 +125,65 @@
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 
                         <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                      RowSpacing="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Uid="About_DiscordTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="About_DiscordDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <Button x:Name="AboutJoinDiscordButton"
+                                            Grid.Row="1"
+                                            x:Uid="About_JoinDiscord"
+                                            AutomationProperties.AutomationId="About.Community.JoinDiscord"
+                                            Command="{x:Bind ViewModel.JoinDiscordCommunityCommand}"
+                                            HorizontalAlignment="Left"/>
+                                </Grid>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <Grid Style="{StaticResource SettingsRowGridStyle}"
+                                      RowSpacing="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Uid="About_GitHubTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="About_GitHubDescription"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <Button x:Name="AboutOpenGitHubButton"
+                                            Grid.Row="1"
+                                            x:Uid="About_OpenGitHub"
+                                            AutomationProperties.AutomationId="About.Community.OpenGitHub"
+                                            Command="{x:Bind ViewModel.OpenGitHubRepositoryCommand}"
+                                            HorizontalAlignment="Left"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
+                        <TextBlock x:Uid="About_SupportProjectTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
                             <Grid Style="{StaticResource SettingsRowGridStyle}"
                                   RowSpacing="12">
                                 <Grid.RowDefinitions>
@@ -133,18 +192,18 @@
                                 </Grid.RowDefinitions>
 
                                 <StackPanel Spacing="4">
-                                    <TextBlock x:Uid="About_DiscordTitle"
+                                    <TextBlock x:Uid="About_KofiTitle"
                                                Style="{StaticResource SettingsRowTitleTextStyle}"/>
-                                    <TextBlock x:Uid="About_DiscordDescription"
+                                    <TextBlock x:Uid="About_KofiDescription"
                                                Style="{StaticResource SettingsRowDescriptionTextStyle}"
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
 
-                                <Button x:Name="AboutJoinDiscordButton"
+                                <Button x:Name="AboutOpenKofiButton"
                                         Grid.Row="1"
-                                        x:Uid="About_JoinDiscord"
-                                        AutomationProperties.AutomationId="About.Community.JoinDiscord"
-                                        Command="{x:Bind ViewModel.JoinDiscordCommunityCommand}"
+                                        x:Uid="About_OpenKofi"
+                                        AutomationProperties.AutomationId="About.SupportProject.OpenKofi"
+                                        Command="{x:Bind ViewModel.OpenKofiSupportCommand}"
                                         HorizontalAlignment="Left"/>
                             </Grid>
                         </Border>

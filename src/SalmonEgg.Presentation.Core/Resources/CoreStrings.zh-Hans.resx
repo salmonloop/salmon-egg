@@ -441,6 +441,12 @@
   <data name="About_DiscordOpenFailed" xml:space="preserve">
     <value>无法打开 Discord 邀请链接，请检查默认浏览器后重试。</value>
   </data>
+  <data name="About_GitHubOpenFailed" xml:space="preserve">
+    <value>无法打开 GitHub 页面，请检查默认浏览器后重试。</value>
+  </data>
+  <data name="About_KofiOpenFailed" xml:space="preserve">
+    <value>无法打开 Ko-fi 页面，请检查默认浏览器后重试。</value>
+  </data>
   <data name="Platform_LocalFileExportUnsupported" xml:space="preserve">
     <value>当前平台暂不支持导出本地文件。</value>
   </data>

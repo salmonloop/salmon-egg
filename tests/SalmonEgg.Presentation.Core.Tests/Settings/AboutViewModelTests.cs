@@ -53,6 +53,84 @@ public sealed class AboutViewModelTests
     }
 
     [Fact]
+    public async Task OpenGitHubRepositoryCommand_OpensCanonicalRepositoryUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.OpenGitHubRepositoryCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://github.com/salmonloop/salmon-egg", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task OpenKofiSupportCommand_OpensCanonicalSupportUri()
+    {
+        Uri? openedUri = null;
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>()))
+            .Returns<Uri>(uri =>
+            {
+                openedUri = uri;
+                return Task.FromResult(true);
+            });
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            shell: shell.Object);
+
+        await viewModel.OpenKofiSupportCommand.ExecuteAsync(null);
+
+        Assert.Equal("https://ko-fi.com/shangxin", openedUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task OpenGitHubRepositoryCommand_WhenPageCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.OpenGitHubRepositoryCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_GitHubOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
+    public async Task OpenKofiSupportCommand_WhenPageCannotOpen_ShowsSpecificFailure()
+    {
+        var localizer = new TestCoreStringLocalizer();
+        var shell = new Mock<IPlatformShellService>();
+        shell.Setup(service => service.OpenUriAsync(It.IsAny<Uri>())).ReturnsAsync(false);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var viewModel = CreateViewModel(
+            Mock.Of<IOpenSourceAcknowledgementsProvider>(),
+            localizer: localizer,
+            shell: shell.Object,
+            ui: ui.Object);
+
+        await viewModel.OpenKofiSupportCommand.ExecuteAsync(null);
+
+        ui.Verify(service => service.ShowInfoAsync(localizer["About_KofiOpenFailed"]), Times.Once);
+    }
+
+    [Fact]
     public async Task ReportInappropriateAiContentCommand_WhenSupportEmailConfigured_OpensMailtoUri()
     {
         var openedUris = new List<Uri>();

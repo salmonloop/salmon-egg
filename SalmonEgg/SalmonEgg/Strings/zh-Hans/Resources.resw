@@ -510,6 +510,27 @@
   <data name="About_JoinDiscord.Content" xml:space="preserve">
     <value>加入 Discord 社群</value>
   </data>
+  <data name="About_GitHubTitle.Text" xml:space="preserve">
+    <value>SalmonEgg GitHub</value>
+  </data>
+  <data name="About_GitHubDescription.Text" xml:space="preserve">
+    <value>查看源码、提交问题，或者为 SalmonEgg 点一个 Star。</value>
+  </data>
+  <data name="About_OpenGitHub.Content" xml:space="preserve">
+    <value>在 GitHub 上给个 Star</value>
+  </data>
+  <data name="About_SupportProjectTitle.Text" xml:space="preserve">
+    <value>支持项目</value>
+  </data>
+  <data name="About_KofiTitle.Text" xml:space="preserve">
+    <value>在 Ko-fi 上支持开发</value>
+  </data>
+  <data name="About_KofiDescription.Text" xml:space="preserve">
+    <value>如果 SalmonEgg 对你有帮助，可以支持项目继续开发。</value>
+  </data>
+  <data name="About_OpenKofi.Content" xml:space="preserve">
+    <value>疯狂星期四，V 我 50</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>支持</value>
   </data>

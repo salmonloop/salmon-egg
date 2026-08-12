@@ -585,6 +585,27 @@
   <data name="About_JoinDiscord.Content" xml:space="preserve">
     <value>Join the Discord community</value>
   </data>
+  <data name="About_GitHubTitle.Text" xml:space="preserve">
+    <value>SalmonEgg on GitHub</value>
+  </data>
+  <data name="About_GitHubDescription.Text" xml:space="preserve">
+    <value>Explore the source, report issues, or give SalmonEgg a star.</value>
+  </data>
+  <data name="About_OpenGitHub.Content" xml:space="preserve">
+    <value>Star SalmonEgg on GitHub</value>
+  </data>
+  <data name="About_SupportProjectTitle.Text" xml:space="preserve">
+    <value>Support the project</value>
+  </data>
+  <data name="About_KofiTitle.Text" xml:space="preserve">
+    <value>Support development on Ko-fi</value>
+  </data>
+  <data name="About_KofiDescription.Text" xml:space="preserve">
+    <value>If SalmonEgg helps you, you can support its continued development.</value>
+  </data>
+  <data name="About_OpenKofi.Content" xml:space="preserve">
+    <value>Buy me a coffee</value>
+  </data>
   <data name="About_SupportTitle.Text" xml:space="preserve">
     <value>Support</value>
   </data>
