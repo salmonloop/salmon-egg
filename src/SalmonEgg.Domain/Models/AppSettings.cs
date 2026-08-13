@@ -62,4 +62,30 @@ public sealed class AppSettings
     public int? AcpMaxPinnedProfiles { get; set; }
 
     public string AcpHydrationCompletionMode { get; set; } = "StrictReplay";
+
+    // Telemetry & Error Reporting
+    /// <summary>
+    /// 用户是否同意分享匿名错误报告与性能数据。
+    /// 默认 true（与 VS Code / Firefox / Chrome 一致的 opt-out 模式）；
+    /// 用户可在「设置 → 数据与存储」随时关闭，关闭后整个 SDK 变为 no-op。
+    /// </summary>
+    public bool TelemetrySharingEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 高级用户可自定义的 OpenTelemetry Collector 端点（覆盖默认值）。
+    /// 格式：https://your-collector.example.com:4318
+    /// </summary>
+    public string? TelemetryCustomEndpoint { get; set; }
+
+    /// <summary>
+    /// 自定义端点的认证头，按 OTLP 规范的 <c>OTEL_EXPORTER_OTLP_HEADERS</c> 格式书写：
+    /// 逗号分隔的 <c>key=value</c> 列表，例如 <c>api-key=YOUR_INGEST_KEY</c>。
+    /// </summary>
+    /// <remarks>
+    /// 不是 <c>Bearer xxx</c>：该值直接赋给 <c>OtlpExporterOptions.Headers</c>，SDK 按
+    /// <c>key=value</c> 解析。写成 <c>Bearer xxx</c> 解析不出任何 header，导出会静默 401，
+    /// 且客户端侧看不出原因，所以此处的格式说明必须与 UI 提示保持一致。
+    /// 需要 Authorization 语义时写成 <c>Authorization=Bearer YOUR_TOKEN</c>。
+    /// </remarks>
+    public string? TelemetryAuthHeader { get; set; }
 }

@@ -359,6 +359,48 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal("System", loaded.Theme);
     }
 
+    [Fact]
+    public async Task SaveThenLoad_RoundTripsTelemetrySettings()
+    {
+        // 用非默认值：若 YAML 映射漏了这几个字段，断言"等于默认值"会假绿。
+        var service = CreateService();
+
+        await service.SaveAsync(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "https://collector.example.com:4318",
+            TelemetryAuthHeader = "api-key=abc123"
+        });
+
+        var loaded = await service.LoadAsync();
+
+        Assert.False(loaded.TelemetrySharingEnabled);
+        Assert.Equal("https://collector.example.com:4318", loaded.TelemetryCustomEndpoint);
+        Assert.Equal("api-key=abc123", loaded.TelemetryAuthHeader);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenTelemetryEndpointIsBlank_NormalizesToNullWithoutDroppingOtherFields()
+    {
+        // 空串必须还原为 null：TelemetrySettings.Build 用 ?? 链判断"用户是否自定义了端点"，
+        // 空串会被当成已自定义，从而覆盖默认端点并把数据导向空地址。
+        //
+        // 同时断言一个非空字段：只断言"为 null"无法区分「已归一化」与「压根没映射」——
+        // 反向验证时删掉整段 YAML 映射，纯 null 断言依然会绿（假阳性）。
+        var service = CreateService();
+
+        await service.SaveAsync(new AppSettings
+        {
+            TelemetryCustomEndpoint = "   ",
+            TelemetryAuthHeader = "api-key=abc123"
+        });
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Null(loaded.TelemetryCustomEndpoint);
+        Assert.Equal("api-key=abc123", loaded.TelemetryAuthHeader);
+    }
+
     private AppSettingsService CreateService()
         => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance);
 }

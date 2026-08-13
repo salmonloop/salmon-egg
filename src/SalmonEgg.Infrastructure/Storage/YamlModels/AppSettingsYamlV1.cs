@@ -31,6 +31,13 @@ internal sealed class AppSettingsYamlV1
 
     public int CacheRetentionDays { get; set; } = 7;
 
+    // Telemetry & Error Reporting
+    public bool TelemetrySharingEnabled { get; set; } = true;
+
+    public string? TelemetryCustomEndpoint { get; set; }
+
+    public string? TelemetryAuthHeader { get; set; }
+
     public CloudConfigSyncYamlV1 CloudConfigSync { get; set; } = new();
 
     // Shortcuts

@@ -56,6 +56,9 @@ public sealed class AppSettingsService : IAppSettingsService
                 Backdrop = string.IsNullOrWhiteSpace(model.Backdrop) ? "System" : model.Backdrop,
                 SaveLocalHistory = model.SaveLocalHistory,
                 CacheRetentionDays = model.CacheRetentionDays > 0 ? model.CacheRetentionDays : 7,
+                TelemetrySharingEnabled = model.TelemetrySharingEnabled,
+                TelemetryCustomEndpoint = NormalizeOptional(model.TelemetryCustomEndpoint),
+                TelemetryAuthHeader = NormalizeOptional(model.TelemetryAuthHeader),
                 CloudConfigSync = FromYaml(model.CloudConfigSync),
                 KeyboardShortcutsEnabled = model.KeyboardShortcutsEnabled,
                 KeyBindings = model.KeyBindings ?? new(),
@@ -118,6 +121,9 @@ public sealed class AppSettingsService : IAppSettingsService
             Backdrop = settings.Backdrop ?? "System",
             SaveLocalHistory = settings.SaveLocalHistory,
             CacheRetentionDays = settings.CacheRetentionDays > 0 ? settings.CacheRetentionDays : 7,
+            TelemetrySharingEnabled = settings.TelemetrySharingEnabled,
+            TelemetryCustomEndpoint = NormalizeOptional(settings.TelemetryCustomEndpoint),
+            TelemetryAuthHeader = NormalizeOptional(settings.TelemetryAuthHeader),
             CloudConfigSync = ToYaml(settings.CloudConfigSync),
             KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled,
             KeyBindings = settings.KeyBindings ?? new(),
@@ -165,6 +171,17 @@ public sealed class AppSettingsService : IAppSettingsService
             _logger.LogWarning(ex, "Existing app settings file {Path} is corrupted; will overwrite with new data", appYamlPath);
         }
     }
+
+    /// <summary>
+    /// 把空白输入归一化为 null。
+    /// </summary>
+    /// <remarks>
+    /// 必要性：<c>TelemetrySettings.Build</c> 用 <c>??</c> 链决定"用户是否自定义了端点"，
+    /// 而空字符串不是 null，会被当作"已自定义"从而覆盖默认端点并导出到空地址。
+    /// 用户清空输入框后必须落成 null，才能正确回退到环境变量或默认值。
+    /// </remarks>
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static List<AgentRemoteDirectory> CloneAgentRemoteDirectories(IEnumerable<AgentRemoteDirectory>? directories)
     {
