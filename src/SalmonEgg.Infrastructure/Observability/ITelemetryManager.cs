@@ -13,9 +13,18 @@ namespace SalmonEgg.Infrastructure.Observability;
 public interface ITelemetryManager
 {
     /// <summary>
-    /// 初始化 OpenTelemetry（应用启动时调用）。重复调用是幂等的。
+    /// 按给定配置装配遥测管线，使端点 / 凭证 / 开关变更立即生效，无需重启。
+    /// 启动时的首次装配也走这里。
     /// </summary>
-    void Initialize();
+    /// <remarks>
+    /// 刻意没有单独的 <c>Initialize</c>：那会让"装配 provider"有两个入口，两者都能建 provider
+    /// 却各自维护一半状态。启动即"用加载到的配置装配一次"，与运行时变更是同一操作。
+    ///
+    /// 实现必须先 flush 旧 provider 再拆除：直接 Dispose 会丢掉缓冲区中尚未导出的 span，
+    /// 而切换端点时丢失的可能正是刚记录的错误 span。
+    /// </remarks>
+    /// <param name="newSettings">合并后的新配置；<c>Enabled=false</c> 表示拆除后不再重建。</param>
+    void Reconfigure(TelemetrySettings newSettings);
 
     /// <summary>
     /// 关闭 OpenTelemetry（应用退出时调用），在 timeout 内尽量导出残留数据。

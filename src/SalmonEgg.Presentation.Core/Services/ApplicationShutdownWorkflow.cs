@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Core.Services.Chat;
 
 namespace SalmonEgg.Presentation.Core.Services;
@@ -9,15 +10,18 @@ namespace SalmonEgg.Presentation.Core.Services;
 public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
 {
     private readonly IChatRuntimePersistence _chatRuntimePersistence;
+    private readonly ITelemetryRuntime _telemetryRuntime;
     private readonly ILogger<ApplicationShutdownWorkflow> _logger;
     private readonly object _shutdownSync = new();
     private Task? _shutdownTask;
 
     public ApplicationShutdownWorkflow(
         IChatRuntimePersistence chatRuntimePersistence,
+        ITelemetryRuntime telemetryRuntime,
         ILogger<ApplicationShutdownWorkflow> logger)
     {
         _chatRuntimePersistence = chatRuntimePersistence ?? throw new ArgumentNullException(nameof(chatRuntimePersistence));
+        _telemetryRuntime = telemetryRuntime ?? throw new ArgumentNullException(nameof(telemetryRuntime));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -48,5 +52,10 @@ public sealed class ApplicationShutdownWorkflow : IApplicationShutdownWorkflow
             // block the window from closing.
             _logger.LogError(ex, "Application shutdown flush failed");
         }
+
+        // Telemetry is flushed last and unconditionally: user state durability comes first, and a
+        // failure above is exactly the kind of event whose spans must still reach the backend.
+        // Hosts must not reach into the telemetry manager themselves — teardown has one owner.
+        await _telemetryRuntime.ShutdownAsync(cancellationToken).ConfigureAwait(false);
     }
 }

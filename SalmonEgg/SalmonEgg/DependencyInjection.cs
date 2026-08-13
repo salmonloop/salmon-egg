@@ -97,14 +97,6 @@ public static class DependencyInjection
 
     private static void ConfigureTelemetry(IServiceCollection services)
     {
-        // 读取 Telemetry 配置（从环境变量或配置文件）
-        var telemetrySettings = LoadTelemetrySettings();
-
-        if (!telemetrySettings.Enabled)
-        {
-            return;
-        }
-
         // 注册平台特定的 Telemetry 导出器工厂
 #if __SKIA__
         services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
@@ -116,44 +108,32 @@ public static class DependencyInjection
         services.AddSingleton<ITelemetryExporterFactory, MobileTelemetryExporterFactory>();
 #endif
 
-        // 注册 TelemetrySettings 和 TelemetryManager
-        services.AddSingleton(telemetrySettings);
-        services.AddSingleton<ITelemetryManager, TelemetryManager>();
+        // 支撑 Logs 维度的动态 logger provider：DI 里是稳定实例，内部的 OTel logger factory
+        // 由 TelemetryManager 在每次 apply 时替换。单独 build 一个 LoggerProvider 不行——
+        // 它收不到 Microsoft.Extensions.Logging 的写入，会造成"有 provider 但日志不上报"。
+        services.AddSingleton<DynamicTelemetryLoggerProvider>();
 
-        // TelemetryManager 的 Initialize() 必须在容器构建完成后调用，
-        // 由 App 启动流程负责（App.xaml.cs 构造函数 BuildServiceProvider 之后）。
-        // 禁止在 DI 注册阶段调用 services.BuildServiceProvider() ——
-        // 那会构建第二个临时容器，违反单例原则且生命周期管理混乱。
-    }
+        // 必须同时作为 ILoggerProvider 注册，否则上面那个实例不在日志管线里，OTLP Logs 维度
+        // 永远收不到任何业务日志。顺序有硬要求：ConfigureLogging 里的 ClearProviders() 会
+        // RemoveAll<ILoggerProvider>()，因此本注册必须发生在 ConfigureLogging 之后。
+        services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<DynamicTelemetryLoggerProvider>());
 
-    private static TelemetrySettings LoadTelemetrySettings()
-    {
-        // 从环境变量读取配置（遵循 OpenTelemetry 环境变量规范）
-        var enabled = Environment.GetEnvironmentVariable("OTEL_SDK_DISABLED") != "true";
-        var endpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-            ?? "http://localhost:4318";
-        var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
-            ?? "SalmonEgg";
+        // 以"禁用"为初始配置注册单例：此处禁止读 AppSettings（那是异步 IO，在 DI 工厂或 App
+        // 构造函数里同步阻塞会违反启动副作用所有权约束）。真实配置由 application startup
+        // workflow 异步加载后经 ITelemetryRuntime.ApplyAsync 落地，运行时变更走同一入口。
+        services.AddSingleton<ITelemetryManager>(sp => new TelemetryManager(
+            TelemetrySettings.CreateInactiveBootstrap(),
+            sp.GetRequiredService<ITelemetryExporterFactory>(),
+            sp.GetRequiredService<DynamicTelemetryLoggerProvider>()));
 
-        // 根据平台选择默认采样配置
-        var samplingSettings = GetPlatformSamplingDefaults();
+        services.AddSingleton<ITelemetryRuntime>(sp => new TelemetryRuntime(
+            sp.GetRequiredService<ITelemetryManager>(),
+            GetPlatformSamplingDefaults,
+            sp.GetRequiredService<ILogger<TelemetryRuntime>>(),
+            typeof(App).Assembly.GetName().Version?.ToString()));
 
-        return new TelemetrySettings
-        {
-            Enabled = enabled,
-            OtlpEndpoint = endpoint,
-            Protocol = OtlpProtocol.HttpProtobuf, // 默认 HTTP（兼容性最好）
-            ServiceName = serviceName,
-            ServiceVersion = typeof(App).Assembly.GetName().Version?.ToString(),
-            ResourceAttributes = new Dictionary<string, string>
-            {
-                // 使用当前稳定规范名称（deployment.environment 已弃用）
-                [SemanticConventions.Resource.DeploymentEnvironmentName] =
-                    Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT") ?? "production",
-                [SemanticConventions.Resource.ServiceInstanceId] = Guid.NewGuid().ToString()
-            },
-            Sampling = samplingSettings
-        };
+        // 订阅持久化边界，使任何写入方（设置页保存、云配置恢复）落盘后都立即重建管线。
+        services.AddSingleton<TelemetrySettingsProjection>();
     }
 
     private static SamplingSettings GetPlatformSamplingDefaults()
@@ -662,12 +642,22 @@ public static class DependencyInjection
                 sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<ShellStartupNavigationService>>()));
         services.AddSingleton<IApplicationStartupWorkflow>(sp =>
-            new ApplicationStartupWorkflow(
+        {
+            // 强制解析：投影只在构造时订阅持久化事件，若无人解析它，"保存后立即生效"就不成立。
+            // 挂在启动 workflow 上是因为该 workflow 必然在启动路径被解析，且遥测首次激活也在
+            // 这里，订阅与激活同时就位。
+            _ = sp.GetRequiredService<TelemetrySettingsProjection>();
+            return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
-                sp.GetRequiredService<IChatRuntimeInitialization>()));
+                sp.GetRequiredService<IChatRuntimeInitialization>(),
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
+                sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
+        });
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
                 sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>()));
 
         // Global search

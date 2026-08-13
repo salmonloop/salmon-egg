@@ -15,20 +15,27 @@ namespace SalmonEgg.Infrastructure.Observability;
 /// </summary>
 public sealed class TelemetryManager : ITelemetryManager, IDisposable
 {
-    private readonly TelemetrySettings _settings;
     private readonly ITelemetryExporterFactory _exporterFactory;
+    private readonly DynamicTelemetryLoggerProvider? _dynamicLoggerProvider;
     private readonly object _initLock = new();
+    private TelemetrySettings _settings;
     private TracerProvider? _tracerProvider;
     private MeterProvider? _meterProvider;
     private bool _initialized;
     private bool _disposed;
 
+    /// <param name="settings">
+    /// 初始配置。容器构建阶段应传 <see cref="TelemetrySettings.CreateInactiveBootstrap"/>：
+    /// 构造函数不装配任何 provider，真实配置由启动流程加载后经 <see cref="Reconfigure"/> 落地。
+    /// </param>
     public TelemetryManager(
         TelemetrySettings settings,
-        ITelemetryExporterFactory exporterFactory)
+        ITelemetryExporterFactory exporterFactory,
+        DynamicTelemetryLoggerProvider? dynamicLoggerProvider = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _exporterFactory = exporterFactory ?? throw new ArgumentNullException(nameof(exporterFactory));
+        _dynamicLoggerProvider = dynamicLoggerProvider;
     }
 
     public TracerProvider? TracerProvider => _tracerProvider;
@@ -37,59 +44,122 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
 
     public bool IsEnabled => _settings.Enabled && _initialized;
 
-    public void Initialize()
+    /// <summary>
+    /// 按 <see cref="_settings"/> 装配 provider。调用方必须已持有 <see cref="_initLock"/>。
+    /// </summary>
+    private void BuildProvidersUnderLock()
     {
+        try
+        {
+            var resourceBuilder = BuildResource();
+
+            var tracerBuilder = Sdk.CreateTracerProviderBuilder()
+                .SetResourceBuilder(resourceBuilder)
+                .SetSampler(new DifferentialSampler(_settings.Sampling));
+
+            foreach (var sourceName in TelemetrySourceNames.ActivitySources)
+            {
+                tracerBuilder.AddSource(sourceName);
+            }
+
+            // 顺序有硬要求：提升 processor 必须早于导出 processor 加入 pipeline。
+            // SDK 按注册顺序串联 processor，若导出器先注册，它在提升发生前就已
+            // 依据 Recorded 位决定跳过该 span，提升将完全无效。
+            tracerBuilder.AddProcessor(new ErrorAndLatencyPromotionProcessor(_settings.Sampling));
+
+            _exporterFactory.ConfigureTracerProvider(tracerBuilder, _settings);
+            _tracerProvider = tracerBuilder.Build();
+
+            var meterBuilder = Sdk.CreateMeterProviderBuilder()
+                .SetResourceBuilder(resourceBuilder);
+
+            foreach (var meterName in TelemetrySourceNames.Meters)
+            {
+                meterBuilder.AddMeter(meterName);
+            }
+
+            _exporterFactory.ConfigureMeterProvider(meterBuilder, _settings);
+            _meterProvider = meterBuilder.Build();
+
+            _dynamicLoggerProvider?.Reconfigure(_settings, resourceBuilder);
+
+            _initialized = true;
+        }
+        catch (Exception ex)
+        {
+            // 可观测性是旁路能力：初始化失败不得阻断应用启动。
+            // 失败后 IsEnabled 保持 false，两个 provider 保持 null。
+            Debug.WriteLine($"[SalmonEgg] OpenTelemetry initialization failed: {ex}");
+            _tracerProvider?.Dispose();
+            _meterProvider?.Dispose();
+            _tracerProvider = null;
+            _meterProvider = null;
+            _initialized = false;
+        }
+    }
+
+    /// <summary>
+    /// 先 flush 再拆除当前 provider。调用方必须已持有 <see cref="_initLock"/>。
+    /// </summary>
+    private void TearDownProvidersUnderLock(int flushTimeoutMilliseconds)
+    {
+        try
+        {
+            // Shutdown 内部会 flush 并按 timeout 等待导出完成；直接 Dispose 会丢缓冲数据。
+            _tracerProvider?.Shutdown(flushTimeoutMilliseconds);
+            _meterProvider?.Shutdown(flushTimeoutMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            // 导出端不可达时 Shutdown 可能抛错；不得因此阻断后续重建。
+            Debug.WriteLine($"[SalmonEgg] OpenTelemetry flush before reconfigure failed: {ex}");
+        }
+
+        _tracerProvider?.Dispose();
+        _meterProvider?.Dispose();
+        _tracerProvider = null;
+        _meterProvider = null;
+        _initialized = false;
+    }
+
+    /// <summary>
+    /// 用新配置重建遥测管线，使端点/凭证/开关变更立即生效。
+    ///
+    /// 顺序有硬要求：先 <c>Shutdown</c> 旧 provider（其内部会 flush 并等待导出完成），
+    /// 再 Dispose、再用新配置重建。若直接 Dispose 而不 Shutdown，旧 provider 缓冲区里
+    /// 尚未导出的 span 会被丢弃——切换端点时丢失的恰恰可能是刚记录的错误 span。
+    ///
+    /// 静态 ActivitySource / Meter 不受影响：它们与进程同生命周期，重建只换 provider，
+    /// 因此重建期间产生的埋点不会崩溃（只是在无 provider 的窗口内不被记录）。
+    /// </summary>
+    public void Reconfigure(TelemetrySettings newSettings)
+    {
+        if (newSettings == null)
+        {
+            throw new ArgumentNullException(nameof(newSettings));
+        }
+
         lock (_initLock)
         {
-            if (_initialized || !_settings.Enabled)
+            if (_disposed)
             {
                 return;
             }
 
-            try
+            // 先让旧 provider 把缓冲区导完，再拆除。
+            TearDownProvidersUnderLock(flushTimeoutMilliseconds: 5000);
+
+            _settings = newSettings;
+            _initialized = false;
+
+            // 用户关掉了开关：拆完即止，不再重建。
+            if (!newSettings.Enabled)
             {
-                var resourceBuilder = BuildResource();
-
-                var tracerBuilder = Sdk.CreateTracerProviderBuilder()
-                    .SetResourceBuilder(resourceBuilder)
-                    .SetSampler(new DifferentialSampler(_settings.Sampling));
-
-                foreach (var sourceName in TelemetrySourceNames.ActivitySources)
-                {
-                    tracerBuilder.AddSource(sourceName);
-                }
-
-                // 顺序有硬要求：提升 processor 必须早于导出 processor 加入 pipeline。
-                // SDK 按注册顺序串联 processor，若导出器先注册，它在提升发生前就已
-                // 依据 Recorded 位决定跳过该 span，提升将完全无效。
-                tracerBuilder.AddProcessor(new ErrorAndLatencyPromotionProcessor(_settings.Sampling));
-
-                _exporterFactory.ConfigureTracerProvider(tracerBuilder, _settings);
-                _tracerProvider = tracerBuilder.Build();
-
-                var meterBuilder = Sdk.CreateMeterProviderBuilder()
-                    .SetResourceBuilder(resourceBuilder);
-
-                foreach (var meterName in TelemetrySourceNames.Meters)
-                {
-                    meterBuilder.AddMeter(meterName);
-                }
-
-                _exporterFactory.ConfigureMeterProvider(meterBuilder, _settings);
-                _meterProvider = meterBuilder.Build();
-
-                _initialized = true;
+                _dynamicLoggerProvider?.Reconfigure(newSettings, BuildResource());
+                return;
             }
-            catch (Exception ex)
-            {
-                // 可观测性是旁路能力：初始化失败不得阻断应用启动。
-                // 失败后 IsEnabled 保持 false，两个 provider 保持 null。
-                Debug.WriteLine($"[SalmonEgg] OpenTelemetry initialization failed: {ex}");
-                _tracerProvider?.Dispose();
-                _meterProvider?.Dispose();
-                _tracerProvider = null;
-                _meterProvider = null;
-            }
+
+            BuildProvidersUnderLock();
         }
     }
 
