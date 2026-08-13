@@ -62,6 +62,18 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private int _cacheRetentionDays = 7;
 
+    // Telemetry：默认开启（opt-out 模式，与 VS Code / Firefox 一致）。
+    // 修改在设置保存成功后立即重建遥测管线；ViewModel 只表达用户意图，
+    // provider 生命周期由 Infrastructure 的重配置服务拥有。
+    [ObservableProperty]
+    private bool _telemetrySharingEnabled = true;
+
+    [ObservableProperty]
+    private string? _telemetryCustomEndpoint;
+
+    [ObservableProperty]
+    private string? _telemetryAuthHeader;
+
     [ObservableProperty]
     private CloudConfigSyncSettings _cloudConfigSync = new();
 
@@ -256,6 +268,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                TelemetrySharingEnabled = settings.TelemetrySharingEnabled;
+                TelemetryCustomEndpoint = settings.TelemetryCustomEndpoint;
+                TelemetryAuthHeader = settings.TelemetryAuthHeader;
                 CloudConfigSync = CloneCloudConfigSyncSettings(settings.CloudConfigSync);
                 KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
@@ -493,6 +508,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnTelemetrySharingEnabledChanged(bool value) => ScheduleSave();
+    partial void OnTelemetryCustomEndpointChanged(string? value) => ScheduleSave();
+    partial void OnTelemetryAuthHeaderChanged(string? value) => ScheduleSave();
     partial void OnCloudConfigSyncChanged(CloudConfigSyncSettings value) => ScheduleSave();
     partial void OnKeyboardShortcutsEnabledChanged(bool value)
     {
@@ -677,6 +695,9 @@ public partial class AppPreferencesViewModel : ObservableObject
             LastSelectedServerId = null;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
+            TelemetrySharingEnabled = true;
+            TelemetryCustomEndpoint = null;
+            TelemetryAuthHeader = null;
             CloudConfigSync = new CloudConfigSyncSettings();
             KeyboardShortcutsEnabled = true;
             AcpEnableConnectionEviction = false;
@@ -756,6 +777,13 @@ public partial class AppPreferencesViewModel : ObservableObject
             LastSelectedServerId = LastSelectedServerId,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
+            TelemetrySharingEnabled = TelemetrySharingEnabled,
+            // 空白输入归一化为 null，使 TelemetrySettings.Build 的 ?? 回退链正确生效
+            // （空字符串会被当成"用户已自定义"而覆盖默认端点）。
+            // 反向验证记录：移除这三行会使 ScheduleSave_PersistsTelemetryToggle 与
+            // ScheduleSave_TrimsTelemetryEndpointWhitespace 失败。
+            TelemetryCustomEndpoint = NormalizeOptional(TelemetryCustomEndpoint),
+            TelemetryAuthHeader = NormalizeOptional(TelemetryAuthHeader),
             CloudConfigSync = CloneCloudConfigSyncSettings(CloudConfigSync),
             KeyboardShortcutsEnabled = KeyboardShortcutsEnabled,
             AcpEnableConnectionEviction = AcpEnableConnectionEviction,
@@ -791,6 +819,16 @@ public partial class AppPreferencesViewModel : ObservableObject
     {
         CloudConfigSync = CloneCloudConfigSyncSettings(settings);
     }
+
+    /// <summary>
+    /// 把空白输入归一化为 null。
+    ///
+    /// 必要性：<c>TelemetrySettings.Build</c> 用 <c>??</c> 链决定"用户是否自定义了端点"，
+    /// 而空字符串不是 null，会被当作"已自定义"从而覆盖默认端点并导致导出到空地址。
+    /// 用户清空输入框后必须落成 null，才能正确回退到环境变量或默认值。
+    /// </summary>
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task ApplyLaunchOnStartupAsync(bool enabled)
     {

@@ -393,6 +393,102 @@ public class AppPreferencesViewModelTests
             });
     }
 
+    [Fact]
+    public async Task LoadAsync_RestoresTelemetrySettings()
+    {
+        // 用非默认值，确保断言的是"真的读到了持久化值"而非恰好等于默认值。
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "http://collector.internal:4317",
+            TelemetryAuthHeader = "Bearer test-token"
+        });
+        var vm = CreateViewModel(settingsService);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(vm.TelemetrySharingEnabled);
+        Assert.Equal("http://collector.internal:4317", vm.TelemetryCustomEndpoint);
+        Assert.Equal("Bearer test-token", vm.TelemetryAuthHeader);
+    }
+
+    [Fact]
+    public async Task TelemetrySharingEnabled_DefaultsToOptOut()
+    {
+        // 产品决策：默认开启（opt-out），与 VS Code / Firefox 一致。
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(vm.TelemetrySharingEnabled);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_PersistsTelemetryToggle()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetrySharingEnabled = false;
+
+        // 若 BuildSettings 或 On*Changed 漏接，用户的关闭意图会静默丢失。
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved?.TelemetrySharingEnabled == false);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_NormalizesBlankTelemetryEndpointToNull()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetryCustomEndpoint = "http://old.endpoint:4317"
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        // 用户清空输入框：必须落成 null，否则空串会被 TelemetrySettings.Build 的
+        // ?? 链当作"已自定义"，从而覆盖默认端点并导出到空地址。
+        vm.TelemetryCustomEndpoint = "   ";
+
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved is not null
+            && settingsService.LastSaved.TelemetryCustomEndpoint is null);
+    }
+
+    [Fact]
+    public async Task ScheduleSave_TrimsTelemetryEndpointWhitespace()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetryCustomEndpoint = "  http://collector:4317  ";
+
+        await WaitForConditionAsync(() =>
+            settingsService.LastSaved?.TelemetryCustomEndpoint == "http://collector:4317");
+    }
+
+    [Fact]
+    public async Task ResetToDefaults_RestoresTelemetryDefaults()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "http://custom:4317",
+            TelemetryAuthHeader = "Bearer secret"
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.ResetToDefaults();
+
+        Assert.True(vm.TelemetrySharingEnabled);
+        Assert.Null(vm.TelemetryCustomEndpoint);
+        Assert.Null(vm.TelemetryAuthHeader);
+    }
+
     private static AppPreferencesViewModel CreateViewModel(FakeAppSettingsService settingsService)
     {
         var startupService = new Mock<IAppStartupService>();

@@ -1410,6 +1410,39 @@
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>配置云同步</value>
   </data>
+  <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
+    <value>分享匿名错误报告与性能数据</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
+    <value>发送崩溃报告、性能指标与使用情况，帮助我们定位并修复问题。不会收集聊天内容与文件内容；但会包含设备名称、应用版本、操作系统等技术信息。</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvanced.Header" xml:space="preserve">
+    <value>高级：自定义上报端点</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
+    <value>仅供开发者使用。将覆盖默认的 OpenTelemetry 收集器；填入凭证前请确认你信任该端点。</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
+    <value>OTLP 端点</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
+    <value>https://collector.example.com:4318　（留空则使用默认端点）</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
+    <value>OTLP 请求头</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.PlaceholderText" xml:space="preserve">
+    <value>api-key=YOUR_KEY　（逗号分隔的 key=value，可选）</value>
+  </data>
+  <data name="DataStorage_TelemetryApplyNotice.Text" xml:space="preserve">
+    <value>变更在保存后立即生效，无需重启应用。</value>
+  </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
     <value>云同步服务</value>
   </data>
