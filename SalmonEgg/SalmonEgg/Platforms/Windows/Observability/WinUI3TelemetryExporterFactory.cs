@@ -24,14 +24,7 @@ public sealed class WinUI3TelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        // WinUI3 与 Desktop 相同，优先 gRPC
-        builder.AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(settings.OtlpEndpoint);
-            options.Protocol = settings.Protocol == OtlpProtocol.Grpc && IsGrpcSupported
-                ? OtlpExportProtocol.Grpc
-                : OtlpExportProtocol.HttpProtobuf;
-        });
+        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
     }
 
     public void ConfigureMeterProvider(MeterProviderBuilder builder, TelemetrySettings settings)
@@ -42,29 +35,37 @@ public sealed class WinUI3TelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        builder.AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(settings.OtlpEndpoint);
-            options.Protocol = settings.Protocol == OtlpProtocol.Grpc && IsGrpcSupported
-                ? OtlpExportProtocol.Grpc
-                : OtlpExportProtocol.HttpProtobuf;
-        });
+        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
     }
 
-    public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions loggerOptions, TelemetrySettings settings)
+    public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions options, TelemetrySettings settings)
     {
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))
         {
-            loggerOptions.AddConsoleExporter();
+            options.AddConsoleExporter();
             return;
         }
 
-        loggerOptions.AddOtlpExporter(exporterOptions =>
+        options.AddOtlpExporter(exporterOptions => ApplyOtlpOptions(exporterOptions, settings));
+    }
+
+    /// <summary>
+    /// 三个信号维度共用同一份 endpoint / protocol / headers。
+    /// </summary>
+    /// <remarks>
+    /// 抽出来是为了让"漏配 headers"不可能只发生在某一个维度：认证头一旦只加在其中一路，
+    /// 另外两路会被后端以 401 静默拒绝，而应用侧看起来"遥测已开启"。
+    /// </remarks>
+    private void ApplyOtlpOptions(OtlpExporterOptions options, TelemetrySettings settings)
+    {
+        options.Endpoint = new Uri(settings.OtlpEndpoint!);
+        options.Protocol = settings.Protocol == OtlpProtocol.Grpc && IsGrpcSupported
+            ? OtlpExportProtocol.Grpc
+            : OtlpExportProtocol.HttpProtobuf;
+
+        if (!string.IsNullOrWhiteSpace(settings.OtlpHeaders))
         {
-            exporterOptions.Endpoint = new Uri(settings.OtlpEndpoint);
-            exporterOptions.Protocol = settings.Protocol == OtlpProtocol.Grpc && IsGrpcSupported
-                ? OtlpExportProtocol.Grpc
-                : OtlpExportProtocol.HttpProtobuf;
-        });
+            options.Headers = settings.OtlpHeaders;
+        }
     }
 }

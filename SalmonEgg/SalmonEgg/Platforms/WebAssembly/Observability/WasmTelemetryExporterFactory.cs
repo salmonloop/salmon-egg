@@ -30,12 +30,7 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        // WASM 只能用 HTTP/Protobuf
-        builder.AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(settings.OtlpEndpoint);
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
-        });
+        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
     }
 
     public void ConfigureMeterProvider(MeterProviderBuilder builder, TelemetrySettings settings)
@@ -47,26 +42,36 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        builder.AddOtlpExporter(options =>
-        {
-            options.Endpoint = new Uri(settings.OtlpEndpoint);
-            options.Protocol = OtlpExportProtocol.HttpProtobuf;
-        });
+        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
     }
 
-    public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions loggerOptions, TelemetrySettings settings)
+    public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions options, TelemetrySettings settings)
     {
-        loggerOptions.AddConsoleExporter();
+        options.AddConsoleExporter();
 
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))
         {
             return;
         }
 
-        loggerOptions.AddOtlpExporter(exporterOptions =>
+        options.AddOtlpExporter(exporterOptions => ApplyOtlpOptions(exporterOptions, settings));
+    }
+
+    /// <summary>
+    /// 三个信号维度共用同一份 endpoint / headers；WASM 强制 HTTP/Protobuf（浏览器无 gRPC）。
+    /// </summary>
+    /// <remarks>
+    /// 抽出来是为了让"漏配 headers"不可能只发生在某一个维度：认证头一旦只加在其中一路，
+    /// 另外两路会被后端以 401 静默拒绝，而应用侧看起来"遥测已开启"。
+    /// </remarks>
+    private static void ApplyOtlpOptions(OtlpExporterOptions options, TelemetrySettings settings)
+    {
+        options.Endpoint = new Uri(settings.OtlpEndpoint!);
+        options.Protocol = OtlpExportProtocol.HttpProtobuf;
+
+        if (!string.IsNullOrWhiteSpace(settings.OtlpHeaders))
         {
-            exporterOptions.Endpoint = new Uri(settings.OtlpEndpoint);
-            exporterOptions.Protocol = OtlpExportProtocol.HttpProtobuf;
-        });
+            options.Headers = settings.OtlpHeaders;
+        }
     }
 }
