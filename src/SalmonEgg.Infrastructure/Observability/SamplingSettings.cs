@@ -59,6 +59,32 @@ public sealed class SamplingSettings
     public double CriticalOperationRate { get; init; } = 0.5;
 
     /// <summary>
+    /// 判断两份采样配置是否等价（供 <see cref="TelemetrySettings.IsEquivalentTo"/> 判断
+    /// 是否需要重建 provider；采样器在 build 时固化，改了必须重建）。
+    /// </summary>
+    public bool IsEquivalentTo(SamplingSettings? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        return NormalRate.Equals(other.NormalRate)
+            && ErrorRate.Equals(other.ErrorRate)
+            && SlowOperationThresholdMs == other.SlowOperationThresholdMs
+            && SlowOperationRate.Equals(other.SlowOperationRate)
+            && VerySlowOperationThresholdMs == other.VerySlowOperationThresholdMs
+            && VerySlowOperationRate.Equals(other.VerySlowOperationRate)
+            && CriticalOperationRate.Equals(other.CriticalOperationRate)
+            && CriticalOperations.AsSpan().SequenceEqual(other.CriticalOperations);
+    }
+
+    /// <summary>
     /// 创建 Desktop/WinUI 的默认采样配置
     /// </summary>
     public static SamplingSettings CreateDesktopDefaults() => new()
