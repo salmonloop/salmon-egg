@@ -443,6 +443,8 @@ public class AppPreferencesViewModelTests
 
         public AppSettings? LastSaved { get; private set; }
 
+        public event EventHandler<AppSettingsSavedEventArgs>? Saved;
+
         public Task<AppSettings> LoadAsync()
         {
             var result = _settings;
@@ -453,6 +455,7 @@ public class AppPreferencesViewModelTests
         public Task SaveAsync(AppSettings settings)
         {
             LastSaved = settings;
+            Saved?.Invoke(this, new AppSettingsSavedEventArgs(settings));
             return Task.CompletedTask;
         }
     }

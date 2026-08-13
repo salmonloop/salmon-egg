@@ -189,11 +189,14 @@ public sealed class ConfigProjectionReloadCoordinatorTests
     {
         public AppSettings Settings { get; set; } = settings;
 
+        public event EventHandler<AppSettingsSavedEventArgs>? Saved;
+
         public Task<AppSettings> LoadAsync() => Task.FromResult(Settings);
 
         public Task SaveAsync(AppSettings settings)
         {
             Settings = settings;
+            Saved?.Invoke(this, new AppSettingsSavedEventArgs(settings));
             return Task.CompletedTask;
         }
     }

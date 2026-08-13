@@ -85,6 +85,8 @@ public sealed class AppSettingsService : IAppSettingsService
         }
     }
 
+    public event EventHandler<AppSettingsSavedEventArgs>? Saved;
+
     public async Task SaveAsync(AppSettings settings)
     {
         if (settings is null) throw new ArgumentNullException(nameof(settings));
@@ -97,10 +99,28 @@ public sealed class AppSettingsService : IAppSettingsService
             await EnsureWritableSchemaAsync(_appYamlPath).ConfigureAwait(false);
 
             await _fileStore.WriteAllTextAsync(_appYamlPath, Serialize(settings)).ConfigureAwait(false);
+
+            // 在互斥区内触发：订阅方看到的顺序即落盘顺序。移到 finally 之后就会出现
+            // 「后写的先通知」——运行态可能停在被覆盖的旧配置上。
+            // 写失败时不触发（异常直接抛出），保证「通知 ⇒ 磁盘已是该快照」。
+            RaiseSaved(settings);
         }
         finally
         {
             _writeGate.Release();
+        }
+    }
+
+    private void RaiseSaved(AppSettings settings)
+    {
+        try
+        {
+            Saved?.Invoke(this, new AppSettingsSavedEventArgs(settings));
+        }
+        catch (Exception ex)
+        {
+            // 订阅方（运行态投影）出错不得让"设置已保存成功"变成失败：磁盘已经写好了。
+            _logger.LogError(ex, "An app settings saved subscriber threw; the settings were still persisted");
         }
     }
 
@@ -172,14 +192,6 @@ public sealed class AppSettingsService : IAppSettingsService
         }
     }
 
-    /// <summary>
-    /// 把空白输入归一化为 null。
-    /// </summary>
-    /// <remarks>
-    /// 必要性：<c>TelemetrySettings.Build</c> 用 <c>??</c> 链决定"用户是否自定义了端点"，
-    /// 而空字符串不是 null，会被当作"已自定义"从而覆盖默认端点并导出到空地址。
-    /// 用户清空输入框后必须落成 null，才能正确回退到环境变量或默认值。
-    /// </remarks>
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
