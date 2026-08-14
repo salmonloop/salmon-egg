@@ -401,7 +401,7 @@ public class AppPreferencesViewModelTests
         {
             TelemetrySharingEnabled = false,
             TelemetryCustomEndpoint = "http://collector.internal:4317",
-            TelemetryAuthHeader = "Bearer test-token"
+            TelemetryAuthHeader = "api-key=test-token"
         });
         var vm = CreateViewModel(settingsService);
 
@@ -409,7 +409,7 @@ public class AppPreferencesViewModelTests
 
         Assert.False(vm.TelemetrySharingEnabled);
         Assert.Equal("http://collector.internal:4317", vm.TelemetryCustomEndpoint);
-        Assert.Equal("Bearer test-token", vm.TelemetryAuthHeader);
+        Assert.Equal("api-key=test-token", vm.TelemetryAuthHeader);
     }
 
     [Fact]
@@ -477,7 +477,7 @@ public class AppPreferencesViewModelTests
         {
             TelemetrySharingEnabled = false,
             TelemetryCustomEndpoint = "http://custom:4317",
-            TelemetryAuthHeader = "Bearer secret"
+            TelemetryAuthHeader = "api-key=secret"
         });
         var vm = CreateViewModel(settingsService);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);

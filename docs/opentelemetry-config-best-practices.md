@@ -101,7 +101,7 @@ statistics on types of files, number of files per project, etc.
 这些配置应硬编码在 `TelemetryDefaults.cs` 中，普通用户无法修改：
 
 ```csharp
-// 默认 OTLP 端点（HTTP/Protobuf；SDK 自行附加 /v1/{traces,metrics,logs}）
+// 默认 OTLP 基础端点（HTTP/Protobuf；应用按信号解析为 /v1/{traces,metrics,logs}）
 DefaultOtlpEndpoint = "https://otlp.shangxin.me"
 
 // 平台差异化采样率

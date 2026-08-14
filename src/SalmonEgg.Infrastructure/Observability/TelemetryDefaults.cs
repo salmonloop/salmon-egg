@@ -9,7 +9,7 @@ namespace SalmonEgg.Infrastructure.Observability;
 internal static class TelemetryDefaults
 {
     /// <summary>
-    /// 默认的 OTLP 接收端点（HTTP/Protobuf，SDK 会自行附加 /v1/{traces,metrics,logs}）。
+    /// 默认的 OTLP 基础端点（HTTP/Protobuf，应用会按信号附加 /v1/{traces,metrics,logs}）。
     /// </summary>
     /// <remarks>
     /// 客户端刻意不内置任何凭证：把 ingest key 打进客户端等于公开它。因此该默认端点要真正

@@ -35,7 +35,7 @@ public sealed class TelemetrySettings
 
     /// <summary>
     /// OTLP exporter 的认证头（可选）。
-    /// 格式：Bearer your-api-key
+    /// 格式：逗号分隔的 <c>key=value</c>，例如 <c>api-key=your-key</c>。
     /// </summary>
     public string? OtlpHeaders { get; init; }
 

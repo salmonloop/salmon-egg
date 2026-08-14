@@ -43,15 +43,15 @@ using SalmonEgg.Presentation.ViewModels.Start;
 using Serilog;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Infrastructure.Observability;
-#if WINDOWS
-using SalmonEgg.Platforms.Windows;
-using SalmonEgg.Platforms.Windows.Observability;
-#elif __WASM__
+#if __WASM__
 using SalmonEgg.Platforms.WebAssembly;
 using SalmonEgg.Platforms.WebAssembly.Observability;
+#elif WINDOWS
+using SalmonEgg.Platforms.Windows;
+using SalmonEgg.Platforms.Windows.Observability;
 #elif __ANDROID__ || __IOS__
 using SalmonEgg.Platforms.Mobile.Observability;
-#elif __SKIA__
+#else
 using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
@@ -98,14 +98,14 @@ public static class DependencyInjection
     private static void ConfigureTelemetry(IServiceCollection services)
     {
         // 注册平台特定的 Telemetry 导出器工厂
-#if __SKIA__
-        services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
-#elif __WASM__
+#if __WASM__
         services.AddSingleton<ITelemetryExporterFactory, WasmTelemetryExporterFactory>();
 #elif WINDOWS
         services.AddSingleton<ITelemetryExporterFactory, WinUI3TelemetryExporterFactory>();
 #elif __ANDROID__ || __IOS__
         services.AddSingleton<ITelemetryExporterFactory, MobileTelemetryExporterFactory>();
+#else
+        services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
 #endif
 
         // 支撑 Logs 维度的动态 logger provider：DI 里是稳定实例，内部的 OTel logger factory

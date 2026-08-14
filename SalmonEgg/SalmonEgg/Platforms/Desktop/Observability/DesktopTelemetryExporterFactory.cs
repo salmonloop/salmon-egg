@@ -1,5 +1,3 @@
-using System;
-using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -24,7 +22,11 @@ public sealed class DesktopTelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
+        builder.AddOtlpExporter(options => OtlpExporterOptionsConfigurator.Apply(
+            options,
+            settings,
+            OtlpSignal.Traces,
+            IsGrpcSupported));
     }
 
     public void ConfigureMeterProvider(MeterProviderBuilder builder, TelemetrySettings settings)
@@ -35,7 +37,11 @@ public sealed class DesktopTelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        builder.AddOtlpExporter(options => ApplyOtlpOptions(options, settings));
+        builder.AddOtlpExporter(options => OtlpExporterOptionsConfigurator.Apply(
+            options,
+            settings,
+            OtlpSignal.Metrics,
+            IsGrpcSupported));
     }
 
     public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions options, TelemetrySettings settings)
@@ -46,27 +52,10 @@ public sealed class DesktopTelemetryExporterFactory : ITelemetryExporterFactory
             return;
         }
 
-        options.AddOtlpExporter(exporterOptions => ApplyOtlpOptions(exporterOptions, settings));
-    }
-
-    /// <summary>
-    /// 三个信号维度共用同一份 endpoint / protocol / headers。
-    /// </summary>
-    /// <remarks>
-    /// 抽出来是为了让"漏配 headers"不可能只发生在某一个维度：认证头一旦只加在其中一路，
-    /// 另外两路会被后端以 401 静默拒绝，而应用侧看起来"遥测已开启"。
-    /// </remarks>
-    private void ApplyOtlpOptions(OtlpExporterOptions options, TelemetrySettings settings)
-    {
-        options.Endpoint = new Uri(settings.OtlpEndpoint!);
-        options.Protocol = settings.Protocol == OtlpProtocol.Grpc && IsGrpcSupported
-            ? OtlpExportProtocol.Grpc
-            : OtlpExportProtocol.HttpProtobuf;
-
-        // 空字符串会被 SDK 当成"有一个空 header 列表"解析，故仅在真的有值时赋值。
-        if (!string.IsNullOrWhiteSpace(settings.OtlpHeaders))
-        {
-            options.Headers = settings.OtlpHeaders;
-        }
+        options.AddOtlpExporter(exporterOptions => OtlpExporterOptionsConfigurator.Apply(
+            exporterOptions,
+            settings,
+            OtlpSignal.Logs,
+            IsGrpcSupported));
     }
 }
