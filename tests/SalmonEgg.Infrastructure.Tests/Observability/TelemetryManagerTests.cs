@@ -33,6 +33,9 @@ public class TelemetryManagerTests
             Enabled = true,
             ServiceName = "Test",
             OtlpEndpoint = "http://localhost:4318",
+            Traces = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
+            Metrics = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
+            Logs = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
             Sampling = SamplingSettings.CreateDesktopDefaults()
         };
         var factory = new TestTelemetryExporterFactory();
@@ -69,6 +72,9 @@ public class TelemetryManagerTests
             Enabled = true,
             ServiceName = "Test",
             OtlpEndpoint = "http://localhost:4318",
+            Traces = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
+            Metrics = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
+            Logs = new OtlpSignalSettings { Endpoint = "http://localhost:4318" },
             Sampling = SamplingSettings.CreateDesktopDefaults()
         };
         var factory = new TestTelemetryExporterFactory();

@@ -16,7 +16,7 @@ public static class ApplicationMeters
     private static readonly Meter ChatServiceMeter = new(ChatServiceMeterName, "1.0.0");
 
     /// <summary>
-    /// 成功创建 ChatService 的次数。维度：transport type、profile id。
+    /// 成功创建 ChatService 的次数。维度：transport type。
     /// </summary>
     public static readonly Counter<long> ChatServiceCreated = ChatServiceMeter.CreateCounter<long>(
         "salmonegg.chat_service.created",

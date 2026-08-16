@@ -139,10 +139,7 @@ public class SemanticConventionComplianceTests
         var applicationKeys = new[]
         {
             ApplicationSemanticConventions.Chat.TransportType,
-            ApplicationSemanticConventions.Chat.Command,
-            ApplicationSemanticConventions.Chat.Url,
             ApplicationSemanticConventions.Chat.ServiceType,
-            ApplicationSemanticConventions.Chat.ProfileId,
         };
 
         Assert.All(applicationKeys, key => Assert.StartsWith("salmonegg.", key));

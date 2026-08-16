@@ -21,21 +21,24 @@ public static class OtlpExporterOptionsConfigurator
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(settings);
 
-        var protocol = settings.Protocol == OtlpProtocol.Grpc && grpcSupported
+        var signalSettings = settings.GetSignalSettings(signal);
+        var protocol = signalSettings.Protocol == OtlpProtocol.Grpc && grpcSupported
             ? OtlpExportProtocol.Grpc
             : OtlpExportProtocol.HttpProtobuf;
 
         options.Protocol = protocol;
-        options.Endpoint = OtlpEndpointResolver.Resolve(
-            settings.OtlpEndpoint!,
+        var effectiveSignalSettings = OtlpSignalSettings.Create(
+            signalSettings.Endpoint,
+            signalSettings.Headers,
             protocol == OtlpExportProtocol.Grpc ? OtlpProtocol.Grpc : OtlpProtocol.HttpProtobuf,
-            signal);
+            signalSettings.IsSignalSpecificEndpoint);
+        options.Endpoint = OtlpEndpointResolver.Resolve(effectiveSignalSettings, signal);
 
         // An empty value is not equivalent to no headers: the SDK attempts to parse it as a
         // configured header list. Assign only a real OTLP key=value list.
-        if (!string.IsNullOrWhiteSpace(settings.OtlpHeaders))
+        if (!string.IsNullOrWhiteSpace(signalSettings.Headers))
         {
-            options.Headers = settings.OtlpHeaders;
+            options.Headers = signalSettings.Headers;
         }
     }
 }

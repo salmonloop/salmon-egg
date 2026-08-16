@@ -1,3 +1,5 @@
+using System;
+
 namespace SalmonEgg.Application.Observability;
 
 /// <summary>
@@ -21,9 +23,12 @@ public static class ApplicationSemanticConventions
     public static class Chat
     {
         public const string TransportType = "salmonegg.chat.transport_type";
-        public const string Command = "salmonegg.chat.command";
-        public const string Url = "salmonegg.chat.url";
         public const string ServiceType = "salmonegg.chat.service_type";
+        [Obsolete("Sensitive chat configuration must not be exported.")]
+        public const string Command = "salmonegg.chat.command";
+        [Obsolete("Sensitive chat configuration must not be exported.")]
+        public const string Url = "salmonegg.chat.url";
+        [Obsolete("Profile identity must not be exported.")]
         public const string ProfileId = "salmonegg.chat.profile_id";
     }
 }

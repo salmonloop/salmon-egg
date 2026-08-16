@@ -78,14 +78,8 @@ public sealed class AppSettings
     public string? TelemetryCustomEndpoint { get; set; }
 
     /// <summary>
-    /// 自定义端点的认证头，按 OTLP 规范的 <c>OTEL_EXPORTER_OTLP_HEADERS</c> 格式书写：
-    /// 逗号分隔的 <c>key=value</c> 列表，例如 <c>api-key=YOUR_INGEST_KEY</c>。
+    /// Custom OTLP authentication header. This value is held by the secure-storage boundary and
+    /// must not be serialized into app.yaml or configuration sync payloads.
     /// </summary>
-    /// <remarks>
-    /// 不是 <c>Bearer xxx</c>：该值直接赋给 <c>OtlpExporterOptions.Headers</c>，SDK 按
-    /// <c>key=value</c> 解析。写成 <c>Bearer xxx</c> 解析不出任何 header，导出会静默 401，
-    /// 且客户端侧看不出原因，所以此处的格式说明必须与 UI 提示保持一致。
-    /// 需要 Authorization 语义时写成 <c>Authorization=Bearer YOUR_TOKEN</c>。
-    /// </remarks>
     public string? TelemetryAuthHeader { get; set; }
 }

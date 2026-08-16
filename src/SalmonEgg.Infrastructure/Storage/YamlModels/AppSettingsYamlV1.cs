@@ -36,6 +36,8 @@ internal sealed class AppSettingsYamlV1
 
     public string? TelemetryCustomEndpoint { get; set; }
 
+    // Legacy plaintext migration source. New writes must leave this null because OTLP headers are
+    // credentials and belong to ISecureStorage.
     public string? TelemetryAuthHeader { get; set; }
 
     public CloudConfigSyncYamlV1 CloudConfigSync { get; set; } = new();

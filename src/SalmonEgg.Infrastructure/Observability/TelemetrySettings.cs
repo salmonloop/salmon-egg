@@ -4,131 +4,98 @@ using System.Collections.Generic;
 namespace SalmonEgg.Infrastructure.Observability;
 
 /// <summary>
-/// OpenTelemetry 运行时配置，合并自多个来源（按优先级）：
-/// 1. 用户自定义配置（<see cref="Domain.Models.AppSettings.TelemetryCustomEndpoint"/>）
-/// 2. 环境变量（OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_SDK_DISABLED）
-/// 3. 默认值（<see cref="TelemetryDefaults"/>）
-///
-/// 用户的 <see cref="Domain.Models.AppSettings.TelemetrySharingEnabled"/> = false 时，
-/// 整个 SDK 禁用（等价于 OTEL_SDK_DISABLED=true）。
+/// Immutable, effective OpenTelemetry configuration. OTLP transport settings are resolved per
+/// signal so the OpenTelemetry generic and signal-specific environment variables retain their
+/// documented precedence and endpoint semantics.
 /// </summary>
 public sealed class TelemetrySettings
 {
     private static readonly string ProcessInstanceId = Guid.NewGuid().ToString("D");
 
-    /// <summary>
-    /// 是否启用 OpenTelemetry SDK。
-    /// false 时，所有 tracing/metrics 操作变为 no-op。
-    /// </summary>
     public bool Enabled { get; init; }
 
-    /// <summary>
-    /// OTLP exporter 的端点 URL。
-    /// 例如：http://localhost:4318 或 https://otel.salmonegg.io:4317
-    /// </summary>
     public string? OtlpEndpoint { get; init; }
 
-    /// <summary>
-    /// OTLP 协议类型（gRPC 或 HTTP/Protobuf）。
-    /// </summary>
     public OtlpProtocol Protocol { get; init; } = OtlpProtocol.HttpProtobuf;
 
-    /// <summary>
-    /// OTLP exporter 的认证头（可选）。
-    /// 格式：逗号分隔的 <c>key=value</c>，例如 <c>api-key=your-key</c>。
-    /// </summary>
     public string? OtlpHeaders { get; init; }
 
-    /// <summary>
-    /// 服务名称（OpenTelemetry 资源属性 service.name）。
-    /// </summary>
+    public OtlpSignalSettings Traces { get; init; } = OtlpSignalSettings.Inactive;
+
+    public OtlpSignalSettings Metrics { get; init; } = OtlpSignalSettings.Inactive;
+
+    public OtlpSignalSettings Logs { get; init; } = OtlpSignalSettings.Inactive;
+
     public string ServiceName { get; init; } = TelemetryDefaults.ServiceName;
 
-    /// <summary>
-    /// 服务版本（OpenTelemetry 资源属性 service.version）。
-    /// </summary>
     public string? ServiceVersion { get; init; }
 
-    /// <summary>
-    /// 自定义 Resource Attributes。
-    /// </summary>
     public Dictionary<string, string> ResourceAttributes { get; init; } = new();
 
-    /// <summary>
-    /// 差异化采样配置。
-    /// </summary>
     public SamplingSettings Sampling { get; init; } = new();
 
-    /// <summary>
-    /// 判断两份配置是否会产出同一条导出管线。
-    /// </summary>
-    /// <remarks>
-    /// 用途：app.yaml 有多个写入方且任何设置变更都会落盘，若不比较就重建，改主题、改快捷键
-    /// 都会连带拆掉 OTLP 管线并触发一次 flush 等待（最坏 5s），而遥测配置根本没变。
-    ///
-    /// 刻意做全字段比较而非只比 endpoint/headers：新增字段时若忘记扩充此处，"配置变了却不
-    /// 生效"是静默失败，比多一次重建危险得多。因此宁可让新字段默认参与比较。
-    /// </remarks>
+    public OtlpSignalSettings GetSignalSettings(OtlpSignal signal)
+    {
+        var configured = signal switch
+        {
+            OtlpSignal.Traces => Traces,
+            OtlpSignal.Metrics => Metrics,
+            OtlpSignal.Logs => Logs,
+            _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, null)
+        };
+
+        // Preserve compatibility for callers constructing the legacy flat settings object. The
+        // resolver path uses per-signal settings produced by Build, so this fallback is test/host
+        // adapter behavior only.
+        return configured.IsConfigured || (OtlpEndpoint is null && OtlpHeaders is null)
+            ? configured
+            : OtlpSignalSettings.Create(OtlpEndpoint, OtlpHeaders, Protocol, false);
+    }
+
     public bool IsEquivalentTo(TelemetrySettings? other)
     {
-        if (other is null)
-        {
-            return false;
-        }
-
-        if (ReferenceEquals(this, other))
-        {
-            return true;
-        }
-
-        // 已禁用 ⇒ 无管线可言，其余字段无关；否则改端点再关开关会被判为"不同"而白重建一次。
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
         if (!Enabled || !other.Enabled)
         {
             return Enabled == other.Enabled;
         }
 
-        return string.Equals(OtlpEndpoint, other.OtlpEndpoint, StringComparison.Ordinal)
-            && Protocol == other.Protocol
-            && string.Equals(OtlpHeaders, other.OtlpHeaders, StringComparison.Ordinal)
+        var leftSignalsConfigured = Traces.IsConfigured || Metrics.IsConfigured || Logs.IsConfigured;
+        var rightSignalsConfigured = other.Traces.IsConfigured || other.Metrics.IsConfigured || other.Logs.IsConfigured;
+        if (!leftSignalsConfigured && !rightSignalsConfigured)
+        {
+            return string.Equals(OtlpEndpoint, other.OtlpEndpoint, StringComparison.Ordinal)
+                && Protocol == other.Protocol
+                && string.Equals(OtlpHeaders, other.OtlpHeaders, StringComparison.Ordinal)
+                && string.Equals(ServiceName, other.ServiceName, StringComparison.Ordinal)
+                && string.Equals(ServiceVersion, other.ServiceVersion, StringComparison.Ordinal)
+                && Sampling.IsEquivalentTo(other.Sampling)
+                && AttributesEqual(ResourceAttributes, other.ResourceAttributes);
+        }
+
+        return Traces.IsEquivalentTo(other.Traces)
+            && Metrics.IsEquivalentTo(other.Metrics)
+            && Logs.IsEquivalentTo(other.Logs)
             && string.Equals(ServiceName, other.ServiceName, StringComparison.Ordinal)
             && string.Equals(ServiceVersion, other.ServiceVersion, StringComparison.Ordinal)
             && Sampling.IsEquivalentTo(other.Sampling)
             && AttributesEqual(ResourceAttributes, other.ResourceAttributes);
     }
 
-    private static bool AttributesEqual(
-        Dictionary<string, string> left,
-        Dictionary<string, string> right)
+    private static bool AttributesEqual(Dictionary<string, string> left, Dictionary<string, string> right)
     {
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
+        if (left.Count != right.Count) return false;
         foreach (var pair in left)
         {
-            if (!right.TryGetValue(pair.Key, out var value)
-                || !string.Equals(pair.Value, value, StringComparison.Ordinal))
+            if (!right.TryGetValue(pair.Key, out var value) || !string.Equals(pair.Value, value, StringComparison.Ordinal))
             {
                 return false;
             }
         }
-
         return true;
     }
 
-    /// <summary>
-    /// 容器构建阶段使用的"未激活"配置。
-    /// </summary>
-    /// <remarks>
-    /// 存在意义：DI 工厂里不能读用户设置（异步 IO 同步阻塞会违反启动副作用所有权约束），
-    /// 但 <see cref="TelemetryManager"/> 需要一个非 null 的初始配置才能成为真正的单例。
-    /// 以"禁用"起步意味着容器构建期间不建任何 provider、不发任何网络请求；真实配置由启动
-    /// workflow 异步加载后 apply。
-    ///
-    /// 不用 <c>Build(null, …)</c> 代替：那会读环境变量并可能判定为启用，于是在真实用户设置
-    /// （可能是"已关闭遥测"）加载之前就开始导出——用户的关闭意图会被短暂违反。
-    /// </remarks>
     public static TelemetrySettings CreateInactiveBootstrap() => new()
     {
         Enabled = false,
@@ -136,69 +103,125 @@ public sealed class TelemetrySettings
     };
 
     /// <summary>
-    /// 从用户设置 + 环境变量 + 默认值构建最终配置。
+    /// Resolves user intent and OTLP environment variables. A user supplied endpoint is a product
+    /// override for all signals; otherwise OTLP's per-signal variables override generic values.
+    /// An endpoint is required: the application intentionally has no default external collector.
     /// </summary>
-    /// <param name="userSettings">用户在设置界面配置的选项（可为 null，表示未加载）</param>
-    /// <param name="platformSamplingDefaults">平台自适应的采样默认值</param>
-    /// <param name="serviceVersion">应用版本号</param>
     public static TelemetrySettings Build(
         Domain.Models.AppSettings? userSettings,
         SamplingSettings platformSamplingDefaults,
         string? serviceVersion = null)
     {
-        // 配置优先级：用户显式禁用 > 环境变量禁用 > 默认启用
-        var envDisabled = Environment.GetEnvironmentVariable("OTEL_SDK_DISABLED");
+        ArgumentNullException.ThrowIfNull(platformSamplingDefaults);
+
         var userDisabled = userSettings?.TelemetrySharingEnabled == false;
-        var enabled = !userDisabled && envDisabled != "true";
+        var sdkDisabled = IsTrue(Environment.GetEnvironmentVariable("OTEL_SDK_DISABLED"));
+        var userEndpoint = NormalizeOptional(userSettings?.TelemetryCustomEndpoint);
+        var userHeaders = NormalizeOptional(userSettings?.TelemetryAuthHeader);
 
-        // 端点优先级：用户自定义 > 环境变量 > 默认值
-        var endpoint = userSettings?.TelemetryCustomEndpoint
-            ?? Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-            ?? TelemetryDefaults.DefaultOtlpEndpoint;
+        var genericEndpoint = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
+        var genericHeaders = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS"));
+        var genericProtocol = ParseProtocol(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL"));
 
-        // 认证头优先级：用户自定义 > 环境变量
-        var headers = userSettings?.TelemetryAuthHeader
-            ?? Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS");
-
-        var serviceName = Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
-            ?? TelemetryDefaults.ServiceName;
-
-        var environment = Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT")
-            ?? TelemetryDefaults.DefaultEnvironment;
+        var traces = ResolveSignal(OtlpSignal.Traces, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
+        var metrics = ResolveSignal(OtlpSignal.Metrics, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
+        var logs = ResolveSignal(OtlpSignal.Logs, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
+        var enabled = !userDisabled && !sdkDisabled && traces.IsConfigured && metrics.IsConfigured && logs.IsConfigured;
 
         return new TelemetrySettings
         {
             Enabled = enabled,
-            OtlpEndpoint = endpoint,
-            Protocol = OtlpProtocol.HttpProtobuf, // 默认 HTTP/Protobuf（兼容性最好）
-            OtlpHeaders = headers,
-            ServiceName = serviceName,
+            OtlpEndpoint = traces.Endpoint,
+            Protocol = traces.Protocol,
+            OtlpHeaders = traces.Headers,
+            Traces = traces,
+            Metrics = metrics,
+            Logs = logs,
+            ServiceName = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")) ?? TelemetryDefaults.ServiceName,
             ServiceVersion = serviceVersion,
             ResourceAttributes = new Dictionary<string, string>
             {
-                // 使用当前稳定规范名称（deployment.environment 已弃用）
-                [SemanticConventions.Resource.DeploymentEnvironmentName] = environment,
-                // service.instance.id identifies this process lifetime. Reconfiguration must not
-                // create a new identity merely because the endpoint or consent changed.
+                [SemanticConventions.Resource.DeploymentEnvironmentName] =
+                    NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT")) ?? TelemetryDefaults.DefaultEnvironment,
                 [SemanticConventions.Resource.ServiceInstanceId] = ProcessInstanceId
             },
-            Sampling = platformSamplingDefaults,
+            Sampling = platformSamplingDefaults
         };
     }
+
+    private static OtlpSignalSettings ResolveSignal(
+        OtlpSignal signal,
+        string? userEndpoint,
+        string? userHeaders,
+        string? genericEndpoint,
+        string? genericHeaders,
+        OtlpProtocol genericProtocol)
+    {
+        if (userEndpoint is not null)
+        {
+            return OtlpSignalSettings.Create(userEndpoint, userHeaders, OtlpProtocol.HttpProtobuf, isSignalSpecificEndpoint: false);
+        }
+
+        var suffix = signal switch
+        {
+            OtlpSignal.Traces => "TRACES",
+            OtlpSignal.Metrics => "METRICS",
+            OtlpSignal.Logs => "LOGS",
+            _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, null)
+        };
+        var endpoint = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_ENDPOINT"));
+        var headers = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_HEADERS")) ?? genericHeaders;
+        var protocol = ParseProtocol(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_PROTOCOL"), genericProtocol);
+        return OtlpSignalSettings.Create(endpoint ?? genericEndpoint, headers, protocol, endpoint is not null);
+    }
+
+    private static OtlpProtocol ParseProtocol(string? value, OtlpProtocol fallback = OtlpProtocol.HttpProtobuf)
+        => value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => fallback,
+            "grpc" => OtlpProtocol.Grpc,
+            "http/protobuf" => OtlpProtocol.HttpProtobuf,
+            _ => fallback
+        };
+
+    private static bool IsTrue(string? value) => string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
+    private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
-/// <summary>
-/// OTLP 协议类型。
-/// </summary>
+public sealed class OtlpSignalSettings
+{
+    public static OtlpSignalSettings Inactive { get; } = new();
+
+    public string? Endpoint { get; init; }
+
+    public string? Headers { get; init; }
+
+    public OtlpProtocol Protocol { get; init; } = OtlpProtocol.HttpProtobuf;
+
+    /// <summary>True when OTLP's signal-specific endpoint variable supplied the final endpoint.</summary>
+    public bool IsSignalSpecificEndpoint { get; init; }
+
+    public bool IsConfigured => Endpoint is not null;
+
+    internal static OtlpSignalSettings Create(string? endpoint, string? headers, OtlpProtocol protocol, bool isSignalSpecificEndpoint)
+        => new()
+        {
+            Endpoint = endpoint,
+            Headers = headers,
+            Protocol = protocol,
+            IsSignalSpecificEndpoint = isSignalSpecificEndpoint
+        };
+
+    internal bool IsEquivalentTo(OtlpSignalSettings other)
+        => string.Equals(Endpoint, other.Endpoint, StringComparison.Ordinal)
+            && string.Equals(Headers, other.Headers, StringComparison.Ordinal)
+            && Protocol == other.Protocol
+            && IsSignalSpecificEndpoint == other.IsSignalSpecificEndpoint;
+}
+
 public enum OtlpProtocol
 {
-    /// <summary>
-    /// gRPC 协议（性能最好，但 WASM 不支持）。
-    /// </summary>
     Grpc,
-
-    /// <summary>
-    /// HTTP/Protobuf 协议（兼容性最好）。
-    /// </summary>
     HttpProtobuf
 }

@@ -67,14 +67,6 @@ public class ChatServiceFactory
             ActivityKind.Internal);
 
         activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, transportType.ToString());
-        if (!string.IsNullOrEmpty(command))
-        {
-            activity?.SetTag(ApplicationSemanticConventions.Chat.Command, command);
-        }
-        if (!string.IsNullOrEmpty(url))
-        {
-            activity?.SetTag(ApplicationSemanticConventions.Chat.Url, url);
-        }
 
         try
         {
@@ -125,13 +117,12 @@ public class ChatServiceFactory
             "CreateChatServiceFromConfiguration",
             ActivityKind.Internal);
 
-        activity?.SetTag(ApplicationSemanticConventions.Chat.ProfileId, configuration.Id);
         activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString());
 
         try
         {
-            _logger?.Information("Creating ChatService instance from configuration. ProfileId={ProfileId}, TransportType={TransportType}",
-                configuration.Id, configuration.Transport);
+            _logger?.Information("Creating ChatService instance from configuration. TransportType={TransportType}",
+                configuration.Transport);
 
             var transport = _transportFactory.CreateTransport(configuration);
             var acpClient = _acpClientFactory.CreateClient(transport);
@@ -141,8 +132,7 @@ public class ChatServiceFactory
 
             // 记录 Metrics
             ApplicationMeters.ChatServiceCreated.Add(1,
-                new KeyValuePair<string, object?>(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString()),
-                new KeyValuePair<string, object?>(ApplicationSemanticConventions.Chat.ProfileId, configuration.Id));
+                new KeyValuePair<string, object?>(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString()));
 
             return chatService;
         }
@@ -154,7 +144,7 @@ public class ChatServiceFactory
             ApplicationMeters.ChatServiceErrors.Add(1,
                 new KeyValuePair<string, object?>(OtelErrorAttributes.Type, ex.GetType().FullName));
 
-            _logger?.Error(ex, "Failed to create chat service from configuration {ProfileId}", configuration.Id);
+            _logger?.Error(ex, "Failed to create chat service from configuration for {TransportType}", configuration.Transport);
             throw;
         }
     }

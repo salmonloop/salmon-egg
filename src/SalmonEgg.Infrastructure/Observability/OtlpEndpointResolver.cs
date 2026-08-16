@@ -3,13 +3,9 @@ using System;
 namespace SalmonEgg.Infrastructure.Observability;
 
 /// <summary>
-/// Resolves the final OTLP endpoint for a signal.
+/// Resolves a final OTLP exporter endpoint. OTLP/HTTP signal-specific endpoints are final and are
+/// therefore used verbatim; only generic HTTP/protobuf base endpoints receive a signal path.
 /// </summary>
-/// <remarks>
-/// The OpenTelemetry .NET exporter appends <c>/v1/{signal}</c> only when its endpoint was not
-/// explicitly configured. SalmonEgg always configures the endpoint after merging user settings,
-/// environment variables, and defaults, so HTTP/Protobuf paths must be resolved here.
-/// </remarks>
 public static class OtlpEndpointResolver
 {
     private const string TracesPath = "/v1/traces";
@@ -17,14 +13,25 @@ public static class OtlpEndpointResolver
     private const string LogsPath = "/v1/logs";
 
     public static Uri Resolve(string endpoint, OtlpProtocol protocol, OtlpSignal signal)
+        => Resolve(OtlpSignalSettings.Create(endpoint, null, protocol, false), signal);
+
+    public static Uri Resolve(OtlpSignalSettings settings, OtlpSignal signal)
     {
-        if (string.IsNullOrWhiteSpace(endpoint))
+        if (string.IsNullOrWhiteSpace(settings.Endpoint))
         {
-            throw new ArgumentException("An OTLP endpoint is required.", nameof(endpoint));
+            throw new ArgumentException("An OTLP endpoint is required.", nameof(settings));
         }
 
-        var uri = new Uri(endpoint, UriKind.Absolute);
-        if (protocol == OtlpProtocol.Grpc)
+        if (!Uri.TryCreate(settings.Endpoint, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new ArgumentException("The OTLP endpoint must be an absolute HTTP(S) URI without user info, query, or fragment.", nameof(settings));
+        }
+
+        if (settings.Protocol == OtlpProtocol.Grpc || settings.IsSignalSpecificEndpoint)
         {
             return uri;
         }
@@ -38,7 +45,6 @@ public static class OtlpEndpointResolver
     private static string TrimKnownSignalPath(string path)
     {
         var normalizedPath = path.TrimEnd('/');
-
         foreach (var signalPath in new[] { TracesPath, MetricsPath, LogsPath })
         {
             if (normalizedPath.EndsWith(signalPath, StringComparison.OrdinalIgnoreCase))

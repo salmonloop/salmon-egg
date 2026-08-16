@@ -9,19 +9,10 @@ namespace SalmonEgg.Infrastructure.Observability;
 internal static class TelemetryDefaults
 {
     /// <summary>
-    /// 默认的 OTLP 基础端点（HTTP/Protobuf，应用会按信号附加 /v1/{traces,metrics,logs}）。
+    /// No collector is configured by default. Telemetry only starts after the user or deployment
+    /// supplies a validated OTLP endpoint.
     /// </summary>
-    /// <remarks>
-    /// 客户端刻意不内置任何凭证：把 ingest key 打进客户端等于公开它。因此该默认端点要真正
-    /// 可用，必须由服务端代理注入凭证；否则后端会以 401 拒绝每一次导出。
-    ///
-    /// 2026-08-13 实测：该域名经 Cloudflare 反代回源到 New Relic（GET / 返回 200 且带
-    /// nr-rate-limited 响应头），但 POST /v1/traces 被 Cloudflare 以 403 HTML 页拦下，
-    /// 未到达 New Relic。判断此类端点是否可用时不能只看 DNS/TLS 是否通——要看 POST 的响应
-    /// 是不是 protobuf 形状（对照组：otlp.nr-data.net 无凭证时返回 401 +
-    /// content-type: application/x-protobuf）。
-    /// </remarks>
-    public const string DefaultOtlpEndpoint = "https://otlp.shangxin.me";
+    public const string? DefaultOtlpEndpoint = null;
 
     /// <summary>
     /// 服务名称，用于 OpenTelemetry 资源属性（service.name）。

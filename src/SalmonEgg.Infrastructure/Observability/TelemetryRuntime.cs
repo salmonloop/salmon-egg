@@ -78,9 +78,9 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
                 _appliedSettings = target;
 
                 _logger.LogInformation(
-                    "Telemetry pipeline applied. enabled={Enabled} endpoint={Endpoint} hasHeaders={HasHeaders}",
+                    "Telemetry pipeline applied. enabled={Enabled} endpointHost={EndpointHost} hasHeaders={HasHeaders}",
                     target.Enabled,
-                    target.OtlpEndpoint,
+                    GetEndpointHost(target.OtlpEndpoint),
                     !string.IsNullOrWhiteSpace(target.OtlpHeaders));
             }
             finally
@@ -97,6 +97,16 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
             // 遥测是旁路能力：重建失败只应停用遥测，不得让设置保存或应用启动失败。
             _logger.LogError(ex, "Failed to apply telemetry configuration; telemetry may be inactive");
         }
+    }
+
+    private static string? GetEndpointHost(string? endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return uri.IsDefaultPort ? uri.Host : $"{uri.Host}:{uri.Port}";
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken = default)

@@ -16,25 +16,11 @@ internal static class TelemetrySourceNames
 {
     public static readonly string[] ActivitySources =
     [
-        // Application 层
-        ApplicationActivitySources.ChatServiceName,
-
-        // Infrastructure 层
-        SalmonEggActivitySources.SessionManagerName,
-        SalmonEggActivitySources.AcpClientName,
-        SalmonEggActivitySources.TransportName,
-        SalmonEggActivitySources.StorageName,
+        ApplicationActivitySources.ChatServiceName
     ];
 
     public static readonly string[] Meters =
     [
-        // Application 层
-        ApplicationMeters.ChatServiceMeterName,
-
-        // Infrastructure 层
-        SalmonEggMeters.SessionManagerMeterName,
-        SalmonEggMeters.AcpClientMeterName,
-        SalmonEggMeters.TransportMeterName,
-        SalmonEggMeters.StorageMeterName,
+        ApplicationMeters.ChatServiceMeterName
     ];
 }

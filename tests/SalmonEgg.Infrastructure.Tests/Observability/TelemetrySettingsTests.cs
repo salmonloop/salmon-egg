@@ -15,11 +15,23 @@ namespace SalmonEgg.Infrastructure.Tests.Observability;
 /// </remarks>
 public sealed class TelemetrySettingsTests : IDisposable
 {
+    // 必须覆盖 Build 读到的**每一个**变量，含各信号专用项：漏掉哪一个，开发机上预设的
+    // 那一项就会静默参与解析，让本类的优先级断言不可复现。
     private static readonly string[] OwnedVariables =
     {
         "OTEL_SDK_DISABLED",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+        "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_METRICS_HEADERS",
+        "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
         "OTEL_SERVICE_NAME",
         "OTEL_ENVIRONMENT"
     };
@@ -55,21 +67,100 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
-    public void Build_WhenOnlyEnvironmentSetsEndpoint_OverridesDefault()
+    public void Build_WhenOnlyEnvironmentSetsEndpoint_AppliesItToEverySignal()
     {
+        // 泛用环境变量必须同时供给三个信号：若只落到 traces，metrics/logs 会因未配置而
+        // 让 Enabled 判定为 false——部署方设了合法端点却整条管线不启用。
         Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://from-env.example.com:4318");
 
         var settings = Build(new AppSettings());
 
         Assert.Equal("https://from-env.example.com:4318", settings.OtlpEndpoint);
+        Assert.Equal("https://from-env.example.com:4318", settings.Traces.Endpoint);
+        Assert.Equal("https://from-env.example.com:4318", settings.Metrics.Endpoint);
+        Assert.Equal("https://from-env.example.com:4318", settings.Logs.Endpoint);
+        Assert.True(settings.Enabled);
     }
 
     [Fact]
-    public void Build_WhenNothingOverridesEndpoint_UsesDefault()
+    public void Build_SignalSpecificEnvironmentOverridesGenericEndpointAndHeaders()
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://generic.example.com:4318");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", "x-generic=value");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "https://traces.example.com:4318/v1/traces");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "x-traces=value");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "http/protobuf");
+
+        var settings = Build(new AppSettings());
+
+        Assert.Equal("https://traces.example.com:4318/v1/traces", settings.Traces.Endpoint);
+        Assert.Equal("x-traces=value", settings.Traces.Headers);
+        Assert.True(settings.Traces.IsSignalSpecificEndpoint);
+        Assert.Equal("https://generic.example.com:4318", settings.Metrics.Endpoint);
+        Assert.Equal("x-generic=value", settings.Metrics.Headers);
+        Assert.True(settings.Enabled);
+    }
+
+    [Fact]
+    public void Build_SignalSpecificProtocolOverridesGenericProtocol()
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://collector.example.com:4318");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "http/protobuf");
+
+        var settings = Build(new AppSettings());
+
+        Assert.Equal(OtlpProtocol.Grpc, settings.Traces.Protocol);
+        Assert.Equal(OtlpProtocol.HttpProtobuf, settings.Logs.Protocol);
+    }
+
+    [Fact]
+    public void Build_WhenNothingOverridesEndpoint_UsesNoDefaultCollector()
     {
         var settings = Build(new AppSettings());
 
-        Assert.Equal("https://otlp.shangxin.me", settings.OtlpEndpoint);
+        Assert.Null(settings.OtlpEndpoint);
+        Assert.False(settings.Enabled);
+    }
+
+    [Theory]
+    [InlineData("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")]
+    [InlineData("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")]
+    [InlineData("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")]
+    public void Build_WhenAnySingleSignalLacksAnEndpoint_StaysDisabled(string missingVariable)
+    {
+        // 必须留一个信号缺端点、另两个配好：只配单一信号的写法无法区分"三个都参与判定"与
+        // "只判定了 traces"——后者在那种夹具下同样为 false，会把漏判的实现放绿。
+        var allVariables = new[]
+        {
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+        };
+        foreach (var variable in allVariables)
+        {
+            if (!string.Equals(variable, missingVariable, StringComparison.Ordinal))
+            {
+                Environment.SetEnvironmentVariable(variable, "https://configured.example.com:4318");
+            }
+        }
+
+        var settings = Build(new AppSettings());
+
+        Assert.False(settings.Enabled);
+    }
+
+    [Fact]
+    public void Build_WhenUserSetsEndpoint_OverridesSignalSpecificEnvironment()
+    {
+        // 用户在设置界面填的端点是产品级意图，必须压过部署环境的分信号变量；否则用户明明改了
+        // 端点，traces 仍然发往环境变量指定的旧地址。
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "https://from-env.example.com:4318/v1/traces");
+
+        var settings = Build(new AppSettings { TelemetryCustomEndpoint = "https://from-user.example.com:4318" });
+
+        Assert.Equal("https://from-user.example.com:4318", settings.Traces.Endpoint);
+        Assert.False(settings.Traces.IsSignalSpecificEndpoint);
     }
 
     [Fact]
@@ -91,11 +182,11 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
-    public void Build_WhenUserOptedIn_EnablesSdkByDefault()
+    public void Build_WhenUserOptedIn_RequiresACollectorEndpoint()
     {
         var settings = Build(new AppSettings());
 
-        Assert.True(settings.Enabled);
+        Assert.False(settings.Enabled);
     }
 
     [Fact]
@@ -190,7 +281,7 @@ public sealed class TelemetrySettingsTests : IDisposable
     [Fact]
     public void IsEquivalentTo_WhenEnabledStateDiffers_IsFalse()
     {
-        var enabled = Build(new AppSettings { TelemetrySharingEnabled = true });
+        var enabled = Build(new AppSettings { TelemetrySharingEnabled = true, TelemetryCustomEndpoint = "https://a.example.com:4318" });
         var disabled = Build(new AppSettings { TelemetrySharingEnabled = false });
 
         Assert.False(enabled.IsEquivalentTo(disabled));
@@ -200,8 +291,8 @@ public sealed class TelemetrySettingsTests : IDisposable
     public void IsEquivalentTo_WhenSamplingDiffers_IsFalse()
     {
         // 采样器在 build 时固化，改了必须重建才会生效。
-        var left = TelemetrySettings.Build(new AppSettings(), SamplingSettings.CreateDesktopDefaults());
-        var right = TelemetrySettings.Build(new AppSettings(), SamplingSettings.CreateMobileDefaults());
+        var left = TelemetrySettings.Build(new AppSettings { TelemetryCustomEndpoint = "https://a.example.com:4318" }, SamplingSettings.CreateDesktopDefaults());
+        var right = TelemetrySettings.Build(new AppSettings { TelemetryCustomEndpoint = "https://a.example.com:4318" }, SamplingSettings.CreateMobileDefaults());
 
         Assert.False(left.IsEquivalentTo(right));
     }
@@ -209,8 +300,8 @@ public sealed class TelemetrySettingsTests : IDisposable
     [Fact]
     public void IsEquivalentTo_WhenServiceVersionDiffers_IsFalse()
     {
-        var left = TelemetrySettings.Build(new AppSettings(), SamplingSettings.CreateDesktopDefaults(), "1.0.0");
-        var right = TelemetrySettings.Build(new AppSettings(), SamplingSettings.CreateDesktopDefaults(), "2.0.0");
+        var left = TelemetrySettings.Build(new AppSettings { TelemetryCustomEndpoint = "https://a.example.com:4318" }, SamplingSettings.CreateDesktopDefaults(), "1.0.0");
+        var right = TelemetrySettings.Build(new AppSettings { TelemetryCustomEndpoint = "https://a.example.com:4318" }, SamplingSettings.CreateDesktopDefaults(), "2.0.0");
 
         Assert.False(left.IsEquivalentTo(right));
     }
@@ -219,7 +310,7 @@ public sealed class TelemetrySettingsTests : IDisposable
     public void IsEquivalentTo_WhenOtherIsNull_IsFalse()
     {
         // 首次 apply 时 _appliedSettings 为 null，必须判为"不同"才会真的装配管线。
-        var settings = Build(new AppSettings());
+        var settings = Build(new AppSettings { TelemetryCustomEndpoint = "https://a.example.com:4318" });
 
         Assert.False(settings.IsEquivalentTo(null));
     }

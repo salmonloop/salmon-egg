@@ -92,7 +92,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
         var loaded = await service.LoadAsync();
 
-        Assert.Contains("schema_version: 2", yaml, StringComparison.Ordinal);
+        Assert.Contains("schema_version: 3", yaml, StringComparison.Ordinal);
         Assert.True(loaded.CloudConfigSync.Enabled);
         Assert.Equal("onedrive", loaded.CloudConfigSync.ProviderId);
         Assert.True(loaded.CloudConfigSync.IncludeSecrets);
@@ -363,7 +363,8 @@ public sealed class AppSettingsServiceTests : IDisposable
     public async Task SaveThenLoad_RoundTripsTelemetrySettings()
     {
         // 用非默认值：若 YAML 映射漏了这几个字段，断言"等于默认值"会假绿。
-        var service = CreateService();
+        var secureStorage = new VolatileSecureStorage();
+        var service = CreateService(secureStorage);
 
         await service.SaveAsync(new AppSettings
         {
@@ -377,6 +378,9 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.False(loaded.TelemetrySharingEnabled);
         Assert.Equal("https://collector.example.com:4318", loaded.TelemetryCustomEndpoint);
         Assert.Equal("api-key=abc123", loaded.TelemetryAuthHeader);
+
+        var storedHeader = await secureStorage.LoadAsync("SalmonEgg.TelemetryAuthHeader");
+        Assert.Equal("api-key=abc123", storedHeader);
     }
 
     [Fact]
@@ -448,6 +452,6 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal(0, raised);
     }
 
-    private AppSettingsService CreateService()
-        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance);
+    private AppSettingsService CreateService(ISecureStorage? secureStorage = null)
+        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance, secureStorage);
 }

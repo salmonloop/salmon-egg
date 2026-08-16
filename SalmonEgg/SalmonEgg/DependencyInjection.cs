@@ -304,7 +304,11 @@ public static class DependencyInjection
                     : fallback;
         });
 #endif
-        services.AddSingleton<IAppSettingsService, AppSettingsService>();
+        services.AddSingleton<IAppSettingsService>(sp => new AppSettingsService(
+            sp.GetRequiredService<IAppFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<AppSettingsService>>(),
+            sp.GetRequiredService<ISecureStorage>()));
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
