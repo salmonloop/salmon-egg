@@ -51,6 +51,15 @@ public sealed class DynamicTelemetryLoggerProvider : ILoggerProvider
     /// </summary>
     public void Reconfigure(TelemetrySettings settings, ResourceBuilder resourceBuilder)
     {
+        var replacement = BuildReplacement(settings, resourceBuilder);
+        if (!TryCommitReplacement(replacement))
+        {
+            DisposeSafely(replacement);
+        }
+    }
+
+    internal ILoggerFactory? BuildReplacement(TelemetrySettings settings, ResourceBuilder resourceBuilder)
+    {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(resourceBuilder);
 
@@ -72,13 +81,17 @@ public sealed class DynamicTelemetryLoggerProvider : ILoggerProvider
             });
         }
 
+        return replacement;
+    }
+
+    internal bool TryCommitReplacement(ILoggerFactory? replacement)
+    {
         ILoggerFactory? previous;
         lock (_sync)
         {
             if (_disposed)
             {
-                replacement?.Dispose();
-                return;
+                return false;
             }
 
             previous = _innerFactory;
@@ -89,7 +102,8 @@ public sealed class DynamicTelemetryLoggerProvider : ILoggerProvider
         }
 
         // 在锁外 Dispose：它会 flush 并等待旧批次导出完成，持锁会把写日志的线程一并卡住。
-        previous?.Dispose();
+        DisposeSafely(previous);
+        return true;
     }
 
     private (ILogger? Logger, int Generation) ResolveInnerLogger(string categoryName)
@@ -118,7 +132,20 @@ public sealed class DynamicTelemetryLoggerProvider : ILoggerProvider
             _generation++;
         }
 
-        previous?.Dispose();
+        DisposeSafely(previous);
+    }
+
+    private static void DisposeSafely(IDisposable? disposable)
+    {
+        try
+        {
+            disposable?.Dispose();
+        }
+        catch
+        {
+            // The replacement is already authoritative. Cleanup failure in the retired logger
+            // factory must not roll the runtime back to a pipeline that no longer owns writes.
+        }
     }
 
     /// <summary>

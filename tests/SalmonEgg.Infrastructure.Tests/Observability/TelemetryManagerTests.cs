@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Application.Observability;
 using SalmonEgg.Infrastructure.Observability;
 using Xunit;
 
@@ -166,12 +167,88 @@ public class TelemetryManagerTests
         Assert.Single(factory.LoggerEndpoints);
     }
 
-    private static TelemetrySettings CreateEnabledSettings(string endpoint) => new()
+    [Fact]
+    public void Reconfigure_WhenReplacementBuildFails_KeepsCurrentPipelineAndAllowsRetry()
+    {
+        var factory = new TestTelemetryExporterFactory();
+        var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
+        manager.Reconfigure(CreateEnabledSettings("http://first.example.com:4318"));
+        var originalTracer = manager.TracerProvider;
+        var originalMeter = manager.MeterProvider;
+        factory.ThrowOnMeterConfiguration = true;
+        var replacement = CreateEnabledSettings("http://second.example.com:4318");
+
+        Assert.Throws<InvalidOperationException>(() => manager.Reconfigure(replacement));
+
+        Assert.True(manager.IsEnabled);
+        Assert.Same(originalTracer, manager.TracerProvider);
+        Assert.Same(originalMeter, manager.MeterProvider);
+
+        factory.ThrowOnMeterConfiguration = false;
+        manager.Reconfigure(replacement);
+
+        Assert.True(manager.IsEnabled);
+        Assert.NotSame(originalTracer, manager.TracerProvider);
+        Assert.NotSame(originalMeter, manager.MeterProvider);
+    }
+
+    [Fact]
+    public void Reconfigure_WhenLoggerReplacementBuildFails_KeepsCurrentPipelineAndAllowsRetry()
+    {
+        var factory = new TestTelemetryExporterFactory();
+        using var loggerProvider = new DynamicTelemetryLoggerProvider(factory);
+        using var manager = new TelemetryManager(
+            TelemetrySettings.CreateInactiveBootstrap(),
+            factory,
+            loggerProvider);
+        manager.Reconfigure(CreateEnabledSettings("http://first.example.com:4318"));
+        var originalTracer = manager.TracerProvider;
+        var originalMeter = manager.MeterProvider;
+        factory.ThrowOnLoggerConfiguration = true;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            manager.Reconfigure(CreateEnabledSettings("http://second.example.com:4318")));
+
+        Assert.True(manager.IsEnabled);
+        Assert.Same(originalTracer, manager.TracerProvider);
+        Assert.Same(originalMeter, manager.MeterProvider);
+        Assert.Equal(new[] { "http://first.example.com:4318" }, factory.LoggerEndpoints);
+
+        factory.ThrowOnLoggerConfiguration = false;
+        manager.Reconfigure(CreateEnabledSettings("http://second.example.com:4318"));
+
+        Assert.True(manager.IsEnabled);
+        Assert.Equal(
+            new[] { "http://first.example.com:4318", "http://second.example.com:4318" },
+            factory.LoggerEndpoints);
+    }
+
+    [Fact]
+    public void Reconfigure_UsesConfiguredNormalSamplingRate()
+    {
+        var factory = new TestTelemetryExporterFactory();
+        using var manager = new TelemetryManager(TelemetrySettings.CreateInactiveBootstrap(), factory);
+        manager.Reconfigure(CreateEnabledSettings("http://localhost:4318", normalRate: 0));
+
+        using (var dropped = ApplicationActivitySources.ChatService.StartActivity("sampling-drop"))
+        {
+            Assert.NotNull(dropped);
+            Assert.False(dropped!.Recorded);
+        }
+
+        manager.Reconfigure(CreateEnabledSettings("http://localhost:4318", normalRate: 1));
+
+        using var sampled = ApplicationActivitySources.ChatService.StartActivity("sampling-record");
+        Assert.NotNull(sampled);
+        Assert.True(sampled!.Recorded);
+    }
+
+    private static TelemetrySettings CreateEnabledSettings(string endpoint, double normalRate = 0.1) => new()
     {
         Enabled = true,
         ServiceName = "Test",
         OtlpEndpoint = endpoint,
-        Sampling = SamplingSettings.CreateDesktopDefaults()
+        Sampling = new SamplingSettings { NormalRate = normalRate }
     };
 
     private sealed class TestTelemetryExporterFactory : ITelemetryExporterFactory
@@ -180,6 +257,10 @@ public class TelemetryManagerTests
         public bool IsFileSupported => true;
         public bool TracerProviderConfigured { get; private set; }
         public bool MeterProviderConfigured { get; private set; }
+
+        public bool ThrowOnMeterConfiguration { get; set; }
+
+        public bool ThrowOnLoggerConfiguration { get; set; }
 
         public void ConfigureTracerProvider(
             OpenTelemetry.Trace.TracerProviderBuilder builder,
@@ -192,6 +273,11 @@ public class TelemetryManagerTests
             OpenTelemetry.Metrics.MeterProviderBuilder builder,
             TelemetrySettings settings)
         {
+            if (ThrowOnMeterConfiguration)
+            {
+                throw new InvalidOperationException("meter exporter configuration failed");
+            }
+
             MeterProviderConfigured = true;
         }
 
@@ -202,6 +288,11 @@ public class TelemetryManagerTests
             OpenTelemetry.Logs.OpenTelemetryLoggerOptions options,
             TelemetrySettings settings)
         {
+            if (ThrowOnLoggerConfiguration)
+            {
+                throw new InvalidOperationException("logger exporter configuration failed");
+            }
+
             LoggerEndpoints.Add(settings.OtlpEndpoint);
         }
     }

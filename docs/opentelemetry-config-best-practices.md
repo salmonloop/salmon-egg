@@ -7,9 +7,9 @@
 **推荐文案（参考 VS Code / Firefox / Chrome）：**
 
 ```
-✅ 帮助改进 SalmonEgg（推荐）
+帮助改进 SalmonEgg
 
-允许发送匿名使用数据和崩溃报告给开发者。
+允许向已配置的 OTLP 收集器发送错误、性能与使用情况数据。
 这些数据帮助我们发现并修复问题、改进性能和用户体验。
 
 我们收集的内容：
@@ -21,18 +21,16 @@
 • 您的聊天消息内容
 • 文件内容
 
-⚠️ 实现现状（与上面的理想文案有差距，勿直接照抄进 UI）：
-当前 span 会带上 `host.name`（机器名，常含人名）、`process.pid`，
-以及 stdio 传输的 `chat.command`（本地 agent 命令行，通常含用户名与路径）、
-`chat.url`（远端 URL，query 里可能带 token）。
-因此设置页文案只承诺"不收集聊天内容与文件内容"，并明确告知会包含设备名等技术信息。
-若要兑现"不含路径/个人信息"，需要先对这些属性做脱敏，那是独立于本次配置生效链路的改动。
+实现现状：应用不内置默认 collector。只有设置页填写了端点，或部署环境提供有效的
+`OTEL_EXPORTER_OTLP_ENDPOINT` / 分信号端点时，管线才会激活。资源属性包含
+`host.name`、`process.pid`、应用版本和运行时/操作系统信息；异常 stack trace 也可能
+包含本地源码路径。因此 UI 不得把数据描述为“匿名”，只承诺不主动收集聊天内容和文件内容。
 
 详细了解：隐私政策
 ```
 
 **关键原则：**
-- **默认状态**：当前实现为默认开启（opt-out，与 VS Code / Firefox 一致），
+- **默认状态**：偏好开关当前为默认开启（opt-out），但没有有效 OTLP 端点时运行态仍保持禁用。
   用户可在「设置 → 数据与存储」随时关闭。若目标市场需要 GDPR 式的显式同意，
   应改为默认关闭并加入首次启动询问——这是产品决策，不要仅凭本文档默认值推断
 - **透明**：明确列出收集什么、不收集什么
@@ -50,7 +48,7 @@
 OTLP 请求头（可选）：
 [密码框] api-key=YOUR_KEY
 
-⚠️ 警告：自定义端点会绕过官方收集器，请确保您信任该服务提供商。
+没有配置端点时遥测不会启动。请确保您信任接收数据的服务提供商。
 ```
 
 **实现建议：**
@@ -96,63 +94,47 @@ features and plugins used, hardware and software configuration, and
 statistics on types of files, number of files per project, etc.
 ```
 
-## 默认配置（配置文件，不暴露给用户）
+## 应用默认值（不暴露给用户）
 
-这些配置应硬编码在 `TelemetryDefaults.cs` 中，普通用户无法修改：
+应用只提供资源标识和平台采样率，不提供默认外部 collector：
 
 ```csharp
-// 默认 OTLP 基础端点（HTTP/Protobuf；应用按信号解析为 /v1/{traces,metrics,logs}）
-DefaultOtlpEndpoint = "https://otlp.shangxin.me"
+ServiceName = "SalmonEgg"
+DefaultEnvironment = "production"
 
-// 平台差异化采样率
-DesktopBaseSamplingRate = 0.10  // 10%（开发调试友好）
-MobileBaseSamplingRate = 0.01   // 1%（省电省流量）
-WasmBaseSamplingRate = 0.05     // 5%（防控制台洪泛）
-
-// 错误/慢请求提升采样率
-DesktopSlowSpanSamplingRate = 1.0   // 100%（完整捕获）
-MobileSlowSpanSamplingRate = 0.10   // 10%（平衡性能）
-WasmSlowSpanSamplingRate = 0.20     // 20%
-
-// 慢请求阈值
-SlowSpanThresholdMs = 1000  // 超过 1 秒视为慢请求
+Desktop NormalRate = 0.10
+WASM NormalRate = 0.05
+Mobile NormalRate = 0.02
 ```
 
 ## 配置优先级
 
 ```
-用户自定义端点 > 环境变量 > 默认值
+用户自定义端点 > 分信号环境变量 > 通用环境变量 > 不启用
   ↓
 AppSettings.TelemetryCustomEndpoint (Settings UI)
   ↓
-OTEL_EXPORTER_OTLP_ENDPOINT (env var)
+OTEL_EXPORTER_OTLP_{TRACES|METRICS|LOGS}_ENDPOINT
   ↓
-TelemetryDefaults.DefaultOtlpEndpoint (hardcoded)
+OTEL_EXPORTER_OTLP_ENDPOINT (env var)
 ```
 
 ## 采样率说明
 
-### 基础采样率（Base Sampling）
-- **用途**：正常流量的随机抽样，控制数据量
-- **建议值**：Desktop 10% / Mobile 1% / WASM 5%
-- **原因**：Desktop 调试需求高；Mobile 省资源；WASM 避免控制台卡顿
+客户端使用 SDK 原生的 `ParentBasedSampler(TraceIdRatioBasedSampler)` 做确定性 head sampling：
 
-### 慢请求采样率（Slow Span Sampling）
-- **用途**：超过阈值的慢操作提升采样率
-- **建议值**：Desktop 100% / Mobile 10% / WASM 20%
-- **原因**：性能问题必须完整捕获（Desktop）；Mobile 仍需节制
-
-### 异常采样率（Error Sampling）
-- **固定值**：100%（所有平台）
-- **实现**：通过 `ErrorSpanProcessor` 在 span 结束时检测异常并强制导出
-- **原因**：错误是最高优先级信号，绝不能丢失
+- Desktop 10% / WASM 5% / Mobile 2%；
+- 子 span 继承父级 sampled flag，同一 trace 不会出现相互矛盾的采样决策；
+- 客户端不在 `SpanProcessor.OnEnd` 修改 sampled flag。OTel 规范规定 `OnEnd` 收到的已结束
+  span 是只读对象，此时修改属于非法实现；
+- 若部署要求“错误 100%”或按最终延迟采样，应在 collector/backend 配置 tail sampling。
 
 ## 隐私合规建议
 
 1. **首次启动提示**：在欢迎向导中询问，而非预设启用
 2. **随时退出**：设置界面一键关闭，立即生效
 3. **数据透明**：提供"查看最近上报数据"功能（开发模式）
-4. **保留期限**：明确说明数据保留 30 天后自动删除
+4. **保留期限**：由实际 collector/backend 策略决定并在隐私政策中明确
 5. **地区适配**：EU 用户默认禁用（GDPR）
 
 ## UI 布局建议
@@ -179,7 +161,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_SDK_DISABLED=false
 
 # 生产环境（通过 CI/CD 注入）
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.shangxin.me
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
 export OTEL_EXPORTER_OTLP_HEADERS=api-key=YOUR_INGEST_KEY
 export OTEL_ENVIRONMENT=production
 export OTEL_SERVICE_NAME=SalmonEgg
@@ -192,7 +174,6 @@ export OTEL_SERVICE_NAME=SalmonEgg
 - API 密钥或认证令牌
 - 用户文件路径或文件内容
 
-  ⚠️ 上面第 3 条尚未在代码中兑现，见本文档开头「实现现状」。
 - IP 地址或设备标识符（除非必要的 session 追踪）
 
 ✅ **允许收集的数据**：

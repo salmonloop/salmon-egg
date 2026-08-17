@@ -778,8 +778,8 @@ public partial class AppPreferencesViewModel : ObservableObject
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
             TelemetrySharingEnabled = TelemetrySharingEnabled,
-            // 空白输入归一化为 null，使 TelemetrySettings.Build 的 ?? 回退链正确生效
-            // （空字符串会被当成"用户已自定义"而覆盖默认端点）。
+            // 空白输入归一化为 null，使 TelemetrySettings.Build 正确回退到部署环境变量；
+            // 应用自身不配置默认 collector。
             // 反向验证记录：移除这三行会使 ScheduleSave_PersistsTelemetryToggle 与
             // ScheduleSave_TrimsTelemetryEndpointWhitespace 失败。
             TelemetryCustomEndpoint = NormalizeOptional(TelemetryCustomEndpoint),
@@ -823,9 +823,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     /// <summary>
     /// 把空白输入归一化为 null。
     ///
-    /// 必要性：<c>TelemetrySettings.Build</c> 用 <c>??</c> 链决定"用户是否自定义了端点"，
-    /// 而空字符串不是 null，会被当作"已自定义"从而覆盖默认端点并导致导出到空地址。
-    /// 用户清空输入框后必须落成 null，才能正确回退到环境变量或默认值。
+    /// 必要性：<c>TelemetrySettings.Build</c> 用空值判定用户是否自定义了端点；
+    /// 空字符串必须视作未配置，才能回退到部署环境变量。
+    /// 用户清空输入框后必须落成 null，才能正确回退到部署环境变量。
     /// </summary>
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

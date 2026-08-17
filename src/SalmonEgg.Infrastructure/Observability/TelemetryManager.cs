@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -55,26 +55,27 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
     }
 
     /// <summary>
-    /// 按 <see cref="_settings"/> 装配 provider。调用方必须已持有 <see cref="_initLock"/>。
+    /// 按目标配置装配 provider。调用方必须已持有 <see cref="_initLock"/>。
     /// </summary>
-    private bool BuildProvidersUnderLock()
+    private void BuildProvidersUnderLock(TelemetrySettings targetSettings)
     {
         TracerProvider? candidateTracer = null;
         MeterProvider? candidateMeter = null;
+        ILoggerFactory? candidateLoggerFactory = null;
         try
         {
-            var resourceBuilder = BuildResource();
+            var resourceBuilder = BuildResource(targetSettings);
             var tracerBuilder = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(resourceBuilder)
-                .SetSampler(new DifferentialSampler(_settings.Sampling));
+                .SetSampler(new ParentBasedSampler(
+                    new TraceIdRatioBasedSampler(targetSettings.Sampling.NormalRate)));
 
             foreach (var sourceName in TelemetrySourceNames.ActivitySources)
             {
                 tracerBuilder.AddSource(sourceName);
             }
 
-            tracerBuilder.AddProcessor(new ErrorAndLatencyPromotionProcessor(_settings.Sampling));
-            _exporterFactory.ConfigureTracerProvider(tracerBuilder, _settings);
+            _exporterFactory.ConfigureTracerProvider(tracerBuilder, targetSettings);
             candidateTracer = tracerBuilder.Build();
 
             var meterBuilder = Sdk.CreateMeterProviderBuilder()
@@ -84,35 +85,41 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
                 meterBuilder.AddMeter(meterName);
             }
 
-            _exporterFactory.ConfigureMeterProvider(meterBuilder, _settings);
+            _exporterFactory.ConfigureMeterProvider(meterBuilder, targetSettings);
             candidateMeter = meterBuilder.Build();
 
             // Construct the logging replacement before retiring the current pipeline. Dynamic
             // provider construction is separate from the swap, so a failure cannot leave a
             // partially updated multi-signal pipeline.
-            _dynamicLoggerProvider?.Reconfigure(_settings, resourceBuilder);
+            candidateLoggerFactory = _dynamicLoggerProvider?.BuildReplacement(targetSettings, resourceBuilder);
+
+            if (_dynamicLoggerProvider is not null
+                && !_dynamicLoggerProvider.TryCommitReplacement(candidateLoggerFactory))
+            {
+                throw new ObjectDisposedException(nameof(DynamicTelemetryLoggerProvider));
+            }
 
             var previousTracer = _tracerProvider;
             var previousMeter = _meterProvider;
             _tracerProvider = candidateTracer;
             _meterProvider = candidateMeter;
+            _settings = targetSettings;
             candidateTracer = null;
             candidateMeter = null;
             _initialized = true;
+            candidateLoggerFactory = null;
 
-            previousTracer?.Shutdown(5000);
-            previousMeter?.Shutdown(5000);
-            previousTracer?.Dispose();
-            previousMeter?.Dispose();
-            return true;
+            // 新管线已经成为 authoritative runtime。旧 provider 的 flush/dispose 失败只能
+            // 影响旧批次，不能把已经完成的切换反向标成失败或拆掉新管线。
+            ShutdownAndDispose(previousTracer, 5000);
+            ShutdownAndDispose(previousMeter, 5000);
         }
-        catch (Exception ex)
+        catch
         {
-            Debug.WriteLine($"[SalmonEgg] OpenTelemetry initialization failed: {ex.GetType().Name}");
-            candidateTracer?.Dispose();
-            candidateMeter?.Dispose();
-            _initialized = _tracerProvider is not null && _meterProvider is not null;
-            return false;
+            DisposeSafely(candidateTracer);
+            DisposeSafely(candidateMeter);
+            DisposeSafely(candidateLoggerFactory);
+            throw;
         }
     }
 
@@ -121,34 +128,23 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
     /// </summary>
     private void TearDownProvidersUnderLock(int flushTimeoutMilliseconds)
     {
-        try
-        {
-            // Shutdown 内部会 flush 并按 timeout 等待导出完成；直接 Dispose 会丢缓冲数据。
-            _tracerProvider?.Shutdown(flushTimeoutMilliseconds);
-            _meterProvider?.Shutdown(flushTimeoutMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            // 导出端不可达时 Shutdown 可能抛错；不得因此阻断后续重建。
-            Debug.WriteLine($"[SalmonEgg] OpenTelemetry flush before reconfigure failed: {ex}");
-        }
-
-        _tracerProvider?.Dispose();
-        _meterProvider?.Dispose();
+        var previousTracer = _tracerProvider;
+        var previousMeter = _meterProvider;
         _tracerProvider = null;
         _meterProvider = null;
         _initialized = false;
+
+        ShutdownAndDispose(previousTracer, flushTimeoutMilliseconds);
+        ShutdownAndDispose(previousMeter, flushTimeoutMilliseconds);
     }
 
     /// <summary>
     /// 用新配置重建遥测管线，使端点/凭证/开关变更立即生效。
     ///
-    /// 顺序有硬要求：先 <c>Shutdown</c> 旧 provider（其内部会 flush 并等待导出完成），
-    /// 再 Dispose、再用新配置重建。若直接 Dispose 而不 Shutdown，旧 provider 缓冲区里
-    /// 尚未导出的 span 会被丢弃——切换端点时丢失的恰恰可能是刚记录的错误 span。
+    /// 顺序有硬要求：先完整构造候选管线，成功后原子替换，再 <c>Shutdown</c> / Dispose
+    /// 旧 provider。这样候选构造失败时旧管线仍可用，成功切换时也不会出现无 provider 窗口。
     ///
-    /// 静态 ActivitySource / Meter 不受影响：它们与进程同生命周期，重建只换 provider，
-    /// 因此重建期间产生的埋点不会崩溃（只是在无 provider 的窗口内不被记录）。
+    /// 静态 ActivitySource / Meter 不受影响：它们与进程同生命周期，重建只换 provider。
     /// </summary>
     public void Reconfigure(TelemetrySettings newSettings)
     {
@@ -169,18 +165,15 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
                 return;
             }
 
-            _settings = newSettings;
             if (!newSettings.Enabled)
             {
                 TearDownProvidersUnderLock(flushTimeoutMilliseconds: 5000);
-                _dynamicLoggerProvider?.Reconfigure(newSettings, BuildResource());
+                _dynamicLoggerProvider?.Reconfigure(newSettings, BuildResource(newSettings));
+                _settings = newSettings;
                 return;
             }
 
-            if (!BuildProvidersUnderLock())
-            {
-                _initialized = false;
-            }
+            BuildProvidersUnderLock(newSettings);
         }
     }
 
@@ -194,12 +187,14 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
             }
 
             _shutdown = true;
-            var tracerOk = _tracerProvider?.Shutdown(timeoutMilliseconds) ?? true;
-            var meterOk = _meterProvider?.Shutdown(timeoutMilliseconds) ?? true;
+            var tracerOk = ShutdownAndDispose(_tracerProvider, timeoutMilliseconds);
+            var meterOk = ShutdownAndDispose(_meterProvider, timeoutMilliseconds);
+            _tracerProvider = null;
+            _meterProvider = null;
             _initialized = false;
             _dynamicLoggerProvider?.Reconfigure(
                 new TelemetrySettings { Enabled = false, ServiceName = _settings.ServiceName },
-                BuildResource());
+                BuildResource(_settings));
             return tracerOk && meterOk;
         }
     }
@@ -213,8 +208,8 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
                 return true;
             }
 
-            var tracerOk = _tracerProvider?.ForceFlush(timeoutMilliseconds) ?? true;
-            var meterOk = _meterProvider?.ForceFlush(timeoutMilliseconds) ?? true;
+            var tracerOk = ForceFlushSafely(_tracerProvider, timeoutMilliseconds);
+            var meterOk = ForceFlushSafely(_meterProvider, timeoutMilliseconds);
             return tracerOk && meterOk;
         }
     }
@@ -230,10 +225,8 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
 
             _shutdown = true;
             _disposed = true;
-            _tracerProvider?.Shutdown(5000);
-            _meterProvider?.Shutdown(5000);
-            _tracerProvider?.Dispose();
-            _meterProvider?.Dispose();
+            ShutdownAndDispose(_tracerProvider, 5000);
+            ShutdownAndDispose(_meterProvider, 5000);
             _tracerProvider = null;
             _meterProvider = null;
             _initialized = false;
@@ -241,12 +234,83 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
         }
     }
 
-    private ResourceBuilder BuildResource()
+    private static bool ShutdownAndDispose(TracerProvider? provider, int timeoutMilliseconds)
+        => ShutdownAndDispose(provider, timeoutMilliseconds, static (candidate, timeout) => candidate.Shutdown(timeout));
+
+    private static bool ShutdownAndDispose(MeterProvider? provider, int timeoutMilliseconds)
+        => ShutdownAndDispose(provider, timeoutMilliseconds, static (candidate, timeout) => candidate.Shutdown(timeout));
+
+    private static bool ShutdownAndDispose<TProvider>(
+        TProvider? provider,
+        int timeoutMilliseconds,
+        Func<TProvider, int, bool> shutdown)
+        where TProvider : BaseProvider
+    {
+        if (provider is null)
+        {
+            return true;
+        }
+
+        var shutdownSucceeded = false;
+        try
+        {
+            shutdownSucceeded = shutdown(provider, timeoutMilliseconds);
+        }
+        catch
+        {
+            // Exporter teardown is best effort. The provider is still disposed below so one failed
+            // signal cannot retain resources or prevent the remaining signals from shutting down.
+        }
+
+        DisposeSafely(provider);
+        return shutdownSucceeded;
+    }
+
+    private static bool ForceFlushSafely(TracerProvider? provider, int timeoutMilliseconds)
+        => ForceFlushSafely(provider, timeoutMilliseconds, static (candidate, timeout) => candidate.ForceFlush(timeout));
+
+    private static bool ForceFlushSafely(MeterProvider? provider, int timeoutMilliseconds)
+        => ForceFlushSafely(provider, timeoutMilliseconds, static (candidate, timeout) => candidate.ForceFlush(timeout));
+
+    private static bool ForceFlushSafely<TProvider>(
+        TProvider? provider,
+        int timeoutMilliseconds,
+        Func<TProvider, int, bool> forceFlush)
+        where TProvider : BaseProvider
+    {
+        if (provider is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            return forceFlush(provider, timeoutMilliseconds);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void DisposeSafely(IDisposable? disposable)
+    {
+        try
+        {
+            disposable?.Dispose();
+        }
+        catch
+        {
+            // Cleanup must not replace the authoritative reconfiguration result with an exception.
+        }
+    }
+
+    private ResourceBuilder BuildResource(TelemetrySettings settings)
     {
         var builder = ResourceBuilder.CreateDefault()
             .AddService(
-                serviceName: _settings.ServiceName,
-                serviceVersion: _settings.ServiceVersion ?? GetAssemblyVersion());
+                serviceName: settings.ServiceName,
+                serviceVersion: settings.ServiceVersion ?? GetAssemblyVersion());
 
         // 运行时 / 主机维度，键名取自 OTel Semantic Conventions。
         builder.AddAttributes(new Dictionary<string, object>
@@ -259,7 +323,7 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
         });
 
         // 调用方提供的自定义属性放在最后，允许覆盖上面的默认值。
-        foreach (var attribute in _settings.ResourceAttributes)
+        foreach (var attribute in settings.ResourceAttributes)
         {
             builder.AddAttributes(new[]
             {

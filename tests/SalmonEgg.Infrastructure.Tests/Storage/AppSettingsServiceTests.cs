@@ -386,8 +386,8 @@ public sealed class AppSettingsServiceTests : IDisposable
     [Fact]
     public async Task LoadAsync_WhenTelemetryEndpointIsBlank_NormalizesToNullWithoutDroppingOtherFields()
     {
-        // 空串必须还原为 null：TelemetrySettings.Build 用 ?? 链判断"用户是否自定义了端点"，
-        // 空串会被当成已自定义，从而覆盖默认端点并把数据导向空地址。
+        // 空串必须还原为 null：否则会阻断 TelemetrySettings.Build 回退到部署环境变量，
+        // 并把无效的空地址保留为用户自定义端点。
         //
         // 同时断言一个非空字段：只断言"为 null"无法区分「已归一化」与「压根没映射」——
         // 反向验证时删掉整段 YAML 映射，纯 null 断言依然会绿（假阳性）。

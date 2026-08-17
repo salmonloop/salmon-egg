@@ -1516,7 +1516,7 @@
     <value>Configuration cloud sync</value>
   </data>
   <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
-    <value>Share anonymized error reports and performance data</value>
+    <value>Share error reports and performance data</value>
   </data>
   <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
     <value>Helps improve SalmonEgg by sending crash reports, performance metrics, and usage patterns. Chat content and file contents are never collected. Reports do include technical context such as your device name, app version, and operating system.</value>
@@ -1531,13 +1531,13 @@
     <value>Advanced: Custom telemetry endpoint</value>
   </data>
   <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
-    <value>For developers only. Overrides the default OpenTelemetry collector. Make sure you trust the endpoint before entering credentials.</value>
+    <value>For developers only. Telemetry stays inactive unless this endpoint or an OTLP deployment environment variable is configured. Make sure you trust the endpoint before entering credentials.</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
     <value>OTLP endpoint</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
-    <value>https://collector.example.com:4318  (leave blank to use default)</value>
+    <value>https://collector.example.com:4318  (leave blank to use the deployment environment)</value>
   </data>
   <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
     <value>OTLP headers</value>

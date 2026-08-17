@@ -448,8 +448,8 @@ public class AppPreferencesViewModelTests
         var vm = CreateViewModel(settingsService);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
-        // 用户清空输入框：必须落成 null，否则空串会被 TelemetrySettings.Build 的
-        // ?? 链当作"已自定义"，从而覆盖默认端点并导出到空地址。
+        // 用户清空输入框：必须落成 null，否则空串会被当作无效自定义端点，
+        // 阻断 TelemetrySettings.Build 回退到部署环境变量。
         vm.TelemetryCustomEndpoint = "   ";
 
         await WaitForConditionAsync(() =>

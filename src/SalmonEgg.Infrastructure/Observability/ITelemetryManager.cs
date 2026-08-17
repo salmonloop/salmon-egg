@@ -24,6 +24,9 @@ public interface ITelemetryManager
     /// 而切换端点时丢失的可能正是刚记录的错误 span。
     /// </remarks>
     /// <param name="newSettings">合并后的新配置；<c>Enabled=false</c> 表示拆除后不再重建。</param>
+    /// <exception cref="System.Exception">
+    /// 候选管线无法构造时抛出；实现必须保留当前有效管线，调用方可在后续 apply 重试。
+    /// </exception>
     void Reconfigure(TelemetrySettings newSettings);
 
     /// <summary>

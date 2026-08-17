@@ -1411,7 +1411,7 @@
     <value>配置云同步</value>
   </data>
   <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
-    <value>分享匿名错误报告与性能数据</value>
+    <value>分享错误报告与性能数据</value>
   </data>
   <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
     <value>发送崩溃报告、性能指标与使用情况，帮助我们定位并修复问题。不会收集聊天内容与文件内容；但会包含设备名称、应用版本、操作系统等技术信息。</value>
@@ -1426,13 +1426,13 @@
     <value>高级：自定义上报端点</value>
   </data>
   <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
-    <value>仅供开发者使用。将覆盖默认的 OpenTelemetry 收集器；填入凭证前请确认你信任该端点。</value>
+    <value>仅供开发者使用。只有配置此端点或部署环境中的 OTLP 环境变量后，遥测才会启用；填入凭证前请确认你信任该端点。</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
     <value>OTLP 端点</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
-    <value>https://collector.example.com:4318　（留空则使用默认端点）</value>
+    <value>https://collector.example.com:4318　（留空则使用部署环境配置）</value>
   </data>
   <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
     <value>OTLP 请求头</value>

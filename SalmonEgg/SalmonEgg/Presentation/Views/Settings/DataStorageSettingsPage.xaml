@@ -120,9 +120,10 @@
                                         <TextBox x:Uid="DataStorage_TelemetryCustomEndpoint"
                                                  AutomationProperties.AutomationId="DataStorage.TelemetryCustomEndpoint"
                                                  Text="{x:Bind ViewModel.Preferences.TelemetryCustomEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                        <TextBox x:Uid="DataStorage_TelemetryAuthHeader"
-                                                 AutomationProperties.AutomationId="DataStorage.TelemetryAuthHeader"
-                                                 Text="{x:Bind ViewModel.Preferences.TelemetryAuthHeader, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <PasswordBox x:Name="TelemetryAuthHeaderBox"
+                                                     x:Uid="DataStorage_TelemetryAuthHeader"
+                                                     AutomationProperties.AutomationId="DataStorage.TelemetryAuthHeader"
+                                                     PasswordChanged="OnTelemetryAuthHeaderChanged"/>
                                         <TextBlock x:Uid="DataStorage_TelemetryApplyNotice"
                                                    TextWrapping="Wrap"
                                                    Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
