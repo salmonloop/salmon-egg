@@ -257,13 +257,17 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadConfigurationAsync_WhenConfigurationFileCannotBeRead_ReturnsNull()
+    public async Task LoadConfigurationAsync_WhenConfigurationFileCannotBeRead_ThrowsPersistenceException()
     {
+        // I/O 故障(文件被占用、磁盘错误、无权限)不得降级为 null——那会让 CLI 把暂态故障
+        // 误报为 "Server not found",且 remove 会在故障消除后真的删掉它刚声称不存在的服务器。
+        // 必须抛 ConfigurationPersistenceException,让 CLI 映射为可重试的 Failure(1)。
         var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
 
-        var loaded = await manager.LoadConfigurationAsync("unreadable");
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.LoadConfigurationAsync("unreadable"));
 
-        Assert.Null(loaded);
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationReadFailed, ex.Reason);
     }
 
     [Fact]

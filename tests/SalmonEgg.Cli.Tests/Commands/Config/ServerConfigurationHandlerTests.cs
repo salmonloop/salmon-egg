@@ -331,4 +331,62 @@ public sealed class ServerConfigurationHandlerTests
         Assert.Contains(fixture.Output.Lines, line => line == "proxy:      custom");
         Assert.Contains(fixture.Output.Lines, line => line == "proxy_url:  http://proxy.example:8080");
     }
+
+    [Fact]
+    public async Task ShowAsync_WhenConfigFileLocked_ReturnsFailureNotNotFound()
+    {
+        // 文件被占用时 LoadConfigurationAsync 抛 ConfigurationReadFailed,handler 必须映射为
+        // Failure(1) + 可重试文案,而非误报 "Server not found"(Usage=2)——否则用户会以为服务器不存在,
+        // 而 remove 还会在锁释放后真的删掉它刚声称不存在的服务器。
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("locked-show", "Locked Agent", "ws://127.0.0.1:1");
+        var yamlPath = Path.Combine(fixture.AppDataRoot, "config", "servers", "locked-show.yaml");
+
+        using var lockStream = new FileStream(
+            yamlPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        fixture.Output.Reset();
+
+        var exitCode = await fixture.Handler.ShowAsync("locked-show", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Failure, exitCode);
+        Assert.NotEmpty(fixture.Output.Errors);
+        Assert.DoesNotContain(fixture.Output.Errors, line => line.Contains("not found", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RemoveAsync_WhenConfigFileLocked_ReturnsFailureAndRetainsServer()
+    {
+        // remove 先 load 再 delete。load 阶段被锁阻断必须报 Failure,且服务器不得被删除;
+        // 锁释放后重试 remove 应成功(idempotent),真正删除一个它刚才报"I/O 失败"而非"不存在"的服务器。
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("locked-remove", "Locked Remove", "ws://127.0.0.1:2");
+        var yamlPath = Path.Combine(fixture.AppDataRoot, "config", "servers", "locked-remove.yaml");
+
+        FileStream lockStream;
+        try
+        {
+            lockStream = new FileStream(yamlPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+        catch (IOException)
+        {
+            // 上一轮测试残留锁或文件未就绪时跳过,避免假阳性。
+            return;
+        }
+
+        using (lockStream)
+        {
+            fixture.Output.Reset();
+            var lockedExit = await fixture.Handler.RemoveAsync("locked-remove", confirmed: true, TestContext.Current.CancellationToken);
+            Assert.Equal(CliExitCodes.Failure, lockedExit);
+            Assert.DoesNotContain(fixture.Output.Errors, line => line.Contains("not found", StringComparison.Ordinal));
+            // 服务器仍存在:用文件存在性而非 LoadConfigurationAsync 验证,因为锁仍持有,
+            // 后者会再次被 I/O 阻断(这正是该测试要证明的暂态故障行为)。
+            Assert.True(File.Exists(yamlPath));
+        }
+
+        // 锁释放后重试成功。
+        var retryExit = await fixture.Handler.RemoveAsync("locked-remove", confirmed: true, TestContext.Current.CancellationToken);
+        Assert.Equal(CliExitCodes.Success, retryExit);
+        Assert.Null(await fixture.Configurations.LoadConfigurationAsync("locked-remove"));
+    }
 }

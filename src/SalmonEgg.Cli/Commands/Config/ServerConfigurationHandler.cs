@@ -74,11 +74,22 @@ public sealed class ServerConfigurationHandler
     /// </summary>
     public async Task<int> ShowAsync(string id, CancellationToken cancellationToken = default)
     {
-        var config = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
-        if (config is null)
+        ServerConfiguration config;
+        try
         {
-            await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-            return CliExitCodes.Usage;
+            var loaded = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
+            if (loaded is null)
+            {
+                await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
+                return CliExitCodes.Usage;
+            }
+
+            config = loaded;
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            return CliExitCodes.Failure;
         }
 
         foreach (var line in FormatShowLines(config))
@@ -184,11 +195,22 @@ public sealed class ServerConfigurationHandler
         ServerConfigurationPatch patch,
         CancellationToken cancellationToken = default)
     {
-        var config = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
-        if (config is null)
+        ServerConfiguration config;
+        try
         {
-            await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-            return CliExitCodes.Usage;
+            var loaded = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
+            if (loaded is null)
+            {
+                await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
+                return CliExitCodes.Usage;
+            }
+
+            config = loaded;
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            return CliExitCodes.Failure;
         }
 
         // Merge: only override fields that were explicitly provided.
@@ -245,15 +267,18 @@ public sealed class ServerConfigurationHandler
             return CliExitCodes.Usage;
         }
 
-        var existing = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
-        if (existing is null)
-        {
-            await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-            return CliExitCodes.Usage;
-        }
-
         try
         {
+            // Load first both to confirm existence and to surface a transient I/O failure
+            // (locked file, permission) as a retryable Remove-failed error rather than a
+            // misleading "not found" that would contradict a later successful delete.
+            var loaded = await _configurations.LoadConfigurationAsync(id).ConfigureAwait(false);
+            if (loaded is null)
+            {
+                await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
+                return CliExitCodes.Usage;
+            }
+
             await _configurations.DeleteConfigurationAsync(id).ConfigureAwait(false);
         }
         catch (ConfigurationPersistenceException ex)

@@ -143,11 +143,19 @@ public sealed class ConfigurationManager : IConfigurationService
         }
         catch (YamlException)
         {
+            // 文件存在但 YAML 已损坏——视作未配置,允许后续用合法数据覆写。
             return null;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            // 文件被占用、磁盘错误或无权限是暂态/权限故障,不是"配置不存在"。
+            // 降级为 null 会让调用方(尤其是 CLI show/update/remove 与 set-credential)误报
+            // "Server not found",且 remove 会在故障消除后真的删掉它刚才声称不存在的服务器。
+            // 这里抛 ConfigurationPersistenceException,让 CLI 映射为可重试的 Failure(1)。
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "Configuration file could not be read; retry once the file is available.",
+                ex);
         }
 
         if (yamlModel.SchemaVersion <= 0)
@@ -228,9 +236,11 @@ public sealed class ConfigurationManager : IConfigurationService
                     var config = FromYaml(yamlModel);
                     result.Add(config);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // Ignore malformed or unreadable individual files.
+                    // 列表枚举保持宽容:单个损坏或暂态不可读的文件不应让整列表失败。
+                    // 但需记日志,避免静默跳过被占用文件让用户误以为服务器不存在。
+                    _logger.LogWarning(ex, "Skipping unreadable configuration file {Path} during list", path);
                 }
             }
         }

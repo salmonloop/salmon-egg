@@ -24,6 +24,7 @@ public enum ConfigurationPersistenceFailureReason
     SecureStorageUnavailable,
     SecretPersistenceFailed,
     ConfigurationWriteFailed,
+    ConfigurationReadFailed,
     SecureStorageCleanupFailed,
     ConfigurationDeleteFailed
 }

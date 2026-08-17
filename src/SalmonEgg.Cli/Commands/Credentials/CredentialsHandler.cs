@@ -42,18 +42,20 @@ public sealed class CredentialsHandler
             return CliExitCodes.Usage;
         }
 
-        var config = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
-        if (config is null)
-        {
-            return CliExitCodes.Usage;
-        }
-
-        config.Authentication = token is not null
-            ? new AuthenticationConfig { Token = token }
-            : new AuthenticationConfig { ApiKey = apiKey };
-
+        ServerConfiguration config;
         try
         {
+            var loaded = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
+            if (loaded is null)
+            {
+                return CliExitCodes.Usage;
+            }
+
+            config = loaded;
+            config.Authentication = token is not null
+                ? new AuthenticationConfig { Token = token }
+                : new AuthenticationConfig { ApiKey = apiKey };
+
             await _configurationService.SaveConfigurationAsync(config).ConfigureAwait(false);
         }
         catch (ConfigurationPersistenceException ex)
@@ -71,16 +73,16 @@ public sealed class CredentialsHandler
 
     public async Task<int> ClearAsync(string serverId, CancellationToken cancellationToken)
     {
-        var config = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
-        if (config is null)
-        {
-            return CliExitCodes.Usage;
-        }
-
-        config.Authentication = null;
         try
         {
-            await _configurationService.SaveConfigurationAsync(config).ConfigureAwait(false);
+            var loaded = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
+            if (loaded is null)
+            {
+                return CliExitCodes.Usage;
+            }
+
+            loaded.Authentication = null;
+            await _configurationService.SaveConfigurationAsync(loaded).ConfigureAwait(false);
         }
         catch (ConfigurationPersistenceException ex)
         {
@@ -94,15 +96,23 @@ public sealed class CredentialsHandler
 
     public async Task<int> HasAsync(string serverId, CancellationToken cancellationToken)
     {
-        if (await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false) is null)
+        try
         {
-            return CliExitCodes.Usage;
-        }
+            if (await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false) is null)
+            {
+                return CliExitCodes.Usage;
+            }
 
-        var status = await _credentialService.GetStatusAsync(serverId).ConfigureAwait(false);
-        await _output.WriteAsync($"token: {(status.HasToken ? "present" : "absent")}").ConfigureAwait(false);
-        await _output.WriteAsync($"api_key: {(status.HasApiKey ? "present" : "absent")}").ConfigureAwait(false);
-        return CliExitCodes.Success;
+            var status = await _credentialService.GetStatusAsync(serverId).ConfigureAwait(false);
+            await _output.WriteAsync($"token: {(status.HasToken ? "present" : "absent")}").ConfigureAwait(false);
+            await _output.WriteAsync($"api_key: {(status.HasApiKey ? "present" : "absent")}").ConfigureAwait(false);
+            return CliExitCodes.Success;
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            return CliExitCodes.Failure;
+        }
     }
 
     private async Task<ServerConfiguration?> LoadConfigurationAsync(
