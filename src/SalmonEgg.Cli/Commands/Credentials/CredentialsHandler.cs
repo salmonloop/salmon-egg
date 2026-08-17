@@ -1,0 +1,128 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using SalmonEgg.Cli.Output;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
+
+namespace SalmonEgg.Cli.Commands.Credentials;
+
+public sealed class CredentialsHandler
+{
+    private readonly ICliOutput _output;
+    private readonly IConfigurationService _configurationService;
+    private readonly IServerCredentialService _credentialService;
+
+    public CredentialsHandler(
+        ICliOutput output,
+        IConfigurationService configurationService,
+        IServerCredentialService credentialService)
+    {
+        _output = output ?? throw new ArgumentNullException(nameof(output));
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _credentialService = credentialService ?? throw new ArgumentNullException(nameof(credentialService));
+    }
+
+    public async Task<int> SetAsync(
+        string serverId,
+        string? token,
+        string? apiKey,
+        CancellationToken cancellationToken)
+    {
+        if ((token is null) == (apiKey is null))
+        {
+            await _output.WriteErrorAsync("Specify exactly one of --token or --api-key.").ConfigureAwait(false);
+            return CliExitCodes.Usage;
+        }
+
+        var credential = token ?? apiKey;
+        if (string.IsNullOrWhiteSpace(credential))
+        {
+            await _output.WriteErrorAsync("Credential value cannot be empty.").ConfigureAwait(false);
+            return CliExitCodes.Usage;
+        }
+
+        var config = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
+        if (config is null)
+        {
+            return CliExitCodes.Usage;
+        }
+
+        config.Authentication = token is not null
+            ? new AuthenticationConfig { Token = token }
+            : new AuthenticationConfig { ApiKey = apiKey };
+
+        try
+        {
+            await _configurationService.SaveConfigurationAsync(config).ConfigureAwait(false);
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync($"Credential save failed: {ex.UserMessage}").ConfigureAwait(false);
+            return CliExitCodes.Failure;
+        }
+
+        await _output.WriteAsync(
+            token is not null
+                ? $"Token saved for server '{serverId}'."
+                : $"API key saved for server '{serverId}'.").ConfigureAwait(false);
+        return CliExitCodes.Success;
+    }
+
+    public async Task<int> ClearAsync(string serverId, CancellationToken cancellationToken)
+    {
+        var config = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
+        if (config is null)
+        {
+            return CliExitCodes.Usage;
+        }
+
+        config.Authentication = null;
+        try
+        {
+            await _configurationService.SaveConfigurationAsync(config).ConfigureAwait(false);
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync($"Credential clear failed: {ex.UserMessage}").ConfigureAwait(false);
+            return CliExitCodes.Failure;
+        }
+
+        await _output.WriteAsync($"Credentials cleared for server '{serverId}'.").ConfigureAwait(false);
+        return CliExitCodes.Success;
+    }
+
+    public async Task<int> HasAsync(string serverId, CancellationToken cancellationToken)
+    {
+        if (await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return CliExitCodes.Usage;
+        }
+
+        var status = await _credentialService.GetStatusAsync(serverId).ConfigureAwait(false);
+        await _output.WriteAsync($"token: {(status.HasToken ? "present" : "absent")}").ConfigureAwait(false);
+        await _output.WriteAsync($"api_key: {(status.HasApiKey ? "present" : "absent")}").ConfigureAwait(false);
+        return CliExitCodes.Success;
+    }
+
+    private async Task<ServerConfiguration?> LoadConfigurationAsync(
+        string serverId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(serverId))
+        {
+            await _output.WriteErrorAsync("Server ID cannot be empty.").ConfigureAwait(false);
+            return null;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var config = await _configurationService.LoadConfigurationAsync(serverId).ConfigureAwait(false);
+        if (config is not null)
+        {
+            return config;
+        }
+
+        await _output.WriteErrorAsync($"Server '{serverId}' not found.").ConfigureAwait(false);
+        return null;
+    }
+}

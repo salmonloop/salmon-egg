@@ -42,24 +42,87 @@ public sealed class ConfigurationManager : IConfigurationService
         if (string.IsNullOrWhiteSpace(config.Id)) throw new ArgumentException("Configuration ID cannot be empty", nameof(config));
 
         var serverPath = GetServerYamlPath(config.Id);
-        await EnsureWritableSchemaAsync(serverPath).ConfigureAwait(false);
+        try
+        {
+            await EnsureWritableSchemaAsync(serverPath).ConfigureAwait(false);
+        }
+        catch (ConfigurationPersistenceException)
+        {
+            throw;
+        }
+        catch (InvalidOperationException)
+        {
+            // schema_version 过新等显式拒绝由 EnsureWritableSchemaAsync 原样抛出，保持既有语义。
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 预检读现有 YAML 时的 I/O 失败（文件被占用、磁盘错误、无权限）必须与其他持久化失败
+            // 同样包装为 ConfigurationPersistenceException，否则会逃逸为裸 BCL 异常，CLI 顶层无法
+            // 给出可区分的失败原因。此时尚未捕获快照，无需回滚。
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationWriteFailed,
+                "Configuration file could not be read for schema validation; configuration was not saved.",
+                ex);
+        }
 
         var mode = GetAuthenticationMode(config.Authentication);
+        SecretSnapshot snapshot;
+        try
+        {
+            snapshot = await CaptureSecretsAsync(config.Id).ConfigureAwait(false);
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
+                "Secure storage is unavailable; configuration was not saved.",
+                ex);
+        }
+        catch (Exception ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecretPersistenceFailed,
+                "Credentials could not be saved; configuration was not changed.",
+                ex);
+        }
+
         try
         {
             await PersistSecretsAsync(config.Id, mode, config.Authentication).ConfigureAwait(false);
         }
         catch (SecureStorageUnavailableException ex)
         {
+            await TryRestoreSecretsAsync(config.Id, snapshot).ConfigureAwait(false);
             throw new ConfigurationPersistenceException(
                 ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
-                ex.Message,
+                "Secure storage is unavailable; configuration was not saved and credential changes were rolled back when possible.",
+                ex);
+        }
+        catch (Exception ex)
+        {
+            await TryRestoreSecretsAsync(config.Id, snapshot).ConfigureAwait(false);
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecretPersistenceFailed,
+                "Credentials could not be saved; credential changes were rolled back when possible.",
                 ex);
         }
 
-        var yamlModel = ToYaml(config, mode);
-        var yaml = YamlSerialization.CreateSerializer().Serialize(yamlModel);
-        await _fileStore.WriteAllTextAsync(serverPath, yaml).ConfigureAwait(false);
+        try
+        {
+            var yamlModel = ToYaml(config, mode);
+            var yaml = YamlSerialization.CreateSerializer().Serialize(yamlModel);
+            await _fileStore.WriteAllTextAsync(serverPath, yaml).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await TryRestoreSecretsAsync(config.Id, snapshot).ConfigureAwait(false);
+
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationWriteFailed,
+                "Configuration file could not be saved; credential changes were rolled back when possible.",
+                ex);
+        }
     }
 
     public async Task<ServerConfiguration?> LoadConfigurationAsync(string id)
@@ -189,15 +252,41 @@ public sealed class ConfigurationManager : IConfigurationService
         var path = GetServerYamlPath(id);
         try
         {
+            // Secure storage and the file system do not share a transaction. Clear credentials first
+            // so a secure-storage failure leaves the YAML available for a retry rather than orphaning
+            // secrets behind an already-deleted configuration.
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageCleanupFailed,
+                "Credentials could not be cleared; the server configuration was retained.",
+                ex);
+        }
+        catch (Exception ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageCleanupFailed,
+                "Credentials could not be cleared; the server configuration was retained.",
+                ex);
+        }
+
+        try
+        {
             await _fileStore.DeleteAsync(path).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to delete configuration '{id}'", ex);
+            // This is intentionally security-first rather than fully atomic: secure storage and the
+            // file system cannot share a transaction. The YAML remains as retryable, non-sensitive
+            // metadata after credentials have been cleared; a later delete is idempotent.
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationDeleteFailed,
+                "Credentials were cleared, but the server configuration file could not be deleted.",
+                ex);
         }
-
-        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
-        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
     }
 
     private static ServerConfigurationYaml ToYaml(ServerConfiguration config, string mode)
@@ -264,6 +353,49 @@ public sealed class ConfigurationManager : IConfigurationService
             var apiKey = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetApiKeyKey(config.Id)).ConfigureAwait(false);
             config.Authentication = new AuthenticationConfig { ApiKey = apiKey };
             return;
+        }
+    }
+
+    private sealed record SecretSnapshot(string? Token, string? ApiKey);
+
+    private async Task<SecretSnapshot> CaptureSecretsAsync(string id)
+        => new(
+            await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false),
+            await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false));
+
+    private async Task RestoreSecretsAsync(string id, SecretSnapshot snapshot)
+    {
+        if (string.IsNullOrEmpty(snapshot.Token))
+        {
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetTokenKey(id)).ConfigureAwait(false);
+        }
+        else
+        {
+            await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetTokenKey(id), snapshot.Token).ConfigureAwait(false);
+        }
+
+        if (string.IsNullOrEmpty(snapshot.ApiKey))
+        {
+            await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetApiKeyKey(id)).ConfigureAwait(false);
+        }
+        else
+        {
+            await _secureStorage.SaveAsync(ConfigurationSecretKeys.GetApiKeyKey(id), snapshot.ApiKey).ConfigureAwait(false);
+        }
+    }
+
+    private async Task TryRestoreSecretsAsync(string id, SecretSnapshot snapshot)
+    {
+        try
+        {
+            await RestoreSecretsAsync(id, snapshot).ConfigureAwait(false);
+        }
+        catch (Exception rollbackException)
+        {
+            _logger.LogError(
+                rollbackException,
+                "Failed to roll back credentials after configuration persistence failure for server {ServerId}",
+                id);
         }
     }
 

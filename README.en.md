@@ -71,6 +71,44 @@ dotnet test --solution SalmonEgg.sln
 build.bat msix
 ```
 
+### CLI configuration management
+
+The repository includes a cross-platform desktop CLI for server configuration and credential management.
+
+```bash
+# Show the command tree
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --help
+
+# Show CLI assembly version
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --version
+
+# Explore server configuration commands
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server --help
+
+# Add a server with non-sensitive proxy settings and a credential.
+# Credential values are persisted through the shared configuration service and never enter YAML.
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
+  --name "Example Agent" --url "https://agent.example" --transport streamable_http \
+  --token "$AGENT_TOKEN" --proxy-mode custom --proxy-url "http://proxy.example:8080"
+
+# Existing server commands use show/remove (remove requires --yes).
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server show <server-id>
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server remove <server-id> --yes
+
+# Register exactly one credential kind for an existing server
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --token <value>
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --api-key <value>
+
+# Check presence without printing credential values, then clear both keys
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- has-credential <server-id>
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- clear-credential <server-id>
+
+# Show credential command guidance
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- credentials --help
+```
+
+The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection and plaintext fallback behavior. Credential values are stored through `ISecureStorage`, never written to server YAML, and never returned by `has-credential`. Invalid command lines return exit code `2`; unexpected host failures return `1`; successful commands return `0`.
+
 ## Documentation
 
 - [Build Guide](BUILD_GUIDE.md)
