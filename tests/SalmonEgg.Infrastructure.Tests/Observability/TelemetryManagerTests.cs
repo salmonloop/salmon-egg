@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using SalmonEgg.Acp.Observability;
 using SalmonEgg.Application.Observability;
 using SalmonEgg.Infrastructure.Observability;
 using Xunit;
@@ -241,6 +243,11 @@ public class TelemetryManagerTests
         using var sampled = ApplicationActivitySources.ChatService.StartActivity("sampling-record");
         Assert.NotNull(sampled);
         Assert.True(sampled!.Recorded);
+
+        using var acpSource = new ActivitySource(AcpActivitySources.ClientName);
+        using var acpSampled = acpSource.StartActivity("acp-sampling-record");
+        Assert.NotNull(acpSampled);
+        Assert.True(acpSampled!.Recorded);
     }
 
     private static TelemetrySettings CreateEnabledSettings(string endpoint, double normalRate = 0.1) => new()

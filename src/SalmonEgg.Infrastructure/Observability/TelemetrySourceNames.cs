@@ -1,3 +1,4 @@
+using SalmonEgg.Acp.Observability;
 using SalmonEgg.Application.Observability;
 
 namespace SalmonEgg.Infrastructure.Observability;
@@ -16,7 +17,8 @@ internal static class TelemetrySourceNames
 {
     public static readonly string[] ActivitySources =
     [
-        ApplicationActivitySources.ChatServiceName
+        ApplicationActivitySources.ChatServiceName,
+        AcpActivitySources.ClientName
     ];
 
     public static readonly string[] Meters =

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.JsonRpc;
 using SalmonEgg.Acp.Mcp;
+using SalmonEgg.Acp.Observability;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Acp.Serialization;
@@ -923,6 +924,7 @@ namespace SalmonEgg.Acp.Client
 
         private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
         {
+            using var activity = AcpActivitySources.StartClientRequest(request.Method);
             var requestIdStr = request.Id?.ToString() ?? string.Empty;
             var tcs = new TaskCompletionSource<JsonRpcResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingRequests[requestIdStr] = tcs;
@@ -940,20 +942,38 @@ namespace SalmonEgg.Acp.Client
                 using var cancellationRegistration = cancellationToken.Register(
                     static state => ((TaskCompletionSource<JsonRpcResponse>)state!).TrySetCanceled(),
                     tcs);
-                return await tcs.Task.ConfigureAwait(false);
+                var response = await tcs.Task.ConfigureAwait(false);
+                if (response.IsError)
+                {
+                    AcpActivitySources.MarkProtocolError(activity, response.Error!.Code);
+                }
+                else if (!response.IsSuccess)
+                {
+                    AcpActivitySources.MarkInvalidResponse(activity);
+                }
+                else
+                {
+                    AcpActivitySources.MarkSuccess(activity);
+                }
+
+                return response;
             }
-            catch (TaskCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                AcpActivitySources.MarkCancelled(activity);
                 throw new OperationCanceledException(cancellationToken);
             }
             catch (TaskCanceledException ex)
             {
-                throw new OperationCanceledException(
+                var exception = new OperationCanceledException(
                     "ACP request was canceled because the transport disconnected.",
                     ex);
+                AcpActivitySources.RecordException(activity, exception);
+                throw exception;
             }
             catch (Exception ex)
             {
+                AcpActivitySources.RecordException(activity, ex);
                 _logger.Log(
                     AcpClientLogLevel.Error,
                     "REQ_ERROR",

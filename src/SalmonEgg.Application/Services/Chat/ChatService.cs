@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Acp.Content;
 using SalmonEgg.Acp.Plan;
 using SalmonEgg.Acp.Protocol;
+using SalmonEgg.Application.Observability;
 using SalmonEgg.Domain.Models.Session;
 using SalmonEgg.Acp.Tool;
 using SalmonEgg.Domain.Services;
@@ -516,13 +518,19 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params)
         {
+            using var activity = ApplicationActivitySources.ChatService.StartActivity(
+                "chat.initialize",
+                ActivityKind.Internal);
             try
             {
                 var response = await _acpClient.InitializeAsync(@params);
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;
             }
             catch (Exception ex)
             {
+                activity?.SetErrorStatus(ex);
+                activity?.RecordException(ex);
                 var entry = new ErrorLogEntry(
                     "InitializeAsync failed",
                     ex.Message,
@@ -537,6 +545,9 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params)
         {
+            using var activity = ApplicationActivitySources.ChatService.StartActivity(
+                "chat.session.create",
+                ActivityKind.Internal);
             try
             {
                 var response = await _acpClient.CreateSessionAsync(@params);
@@ -558,10 +569,13 @@ namespace SalmonEgg.Application.Services.Chat
                     }
                 }
 
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;
             }
             catch (Exception ex)
             {
+                activity?.SetErrorStatus(ex);
+                activity?.RecordException(ex);
                 var entry = new ErrorLogEntry(
                     "CreateSessionAsync failed",
                     ex.Message,
@@ -579,6 +593,9 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken)
         {
+            using var activity = ApplicationActivitySources.ChatService.StartActivity(
+                "chat.session.load",
+                ActivityKind.Internal);
             SessionSnapshot targetSnapshot;
             string? previousSessionId;
             Plan? previousPlan;
@@ -621,6 +638,7 @@ namespace SalmonEgg.Application.Services.Chat
                 {
                     // Ignore session tracking failures
                 }
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;
             }
             catch (OperationCanceledException)
@@ -630,6 +648,8 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (Exception ex)
             {
+                activity?.SetErrorStatus(ex);
+                activity?.RecordException(ex);
                 RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
 
                 var entry = new ErrorLogEntry(
@@ -673,6 +693,9 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken)
         {
+            using var activity = ApplicationActivitySources.ChatService.StartActivity(
+                "chat.session.resume",
+                ActivityKind.Internal);
             SessionSnapshot targetSnapshot;
             string? previousSessionId;
             Plan? previousPlan;
@@ -700,6 +723,7 @@ namespace SalmonEgg.Application.Services.Chat
                 {
                     ApplySessionResponseModeState(@params.SessionId, response.Modes, response.ConfigOptions);
                 }
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;
             }
             catch (OperationCanceledException)
@@ -709,6 +733,8 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (Exception ex)
             {
+                activity?.SetErrorStatus(ex);
+                activity?.RecordException(ex);
                 RollBackAfterFailedRecovery(@params.SessionId, targetSnapshot, previousSessionId, previousPlan, previousMode);
 
                 var entry = new ErrorLogEntry(
@@ -780,13 +806,23 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
         {
+            using var activity = ApplicationActivitySources.ChatService.StartActivity(
+                "chat.session.prompt",
+                ActivityKind.Internal);
             try
             {
                 var response = await _acpClient.SendPromptAsync(@params, cancellationToken).ConfigureAwait(false);
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 return response;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
+                activity?.SetErrorStatus(ex);
+                activity?.RecordException(ex);
                 var entry = new ErrorLogEntry(
                     "SendPromptAsync failed",
                     ex.Message,
