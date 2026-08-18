@@ -15,4 +15,11 @@ internal static class TelemetryDefaults
     /// </summary>
     public const string DefaultEnvironment = "production";
 
+    /// <summary>
+    /// 兜底 OTLP 网关。网关在边缘向上游注入鉴权，客户端不内置上游凭证；用户自定义端点、
+    /// 分信号与通用 OTEL_EXPORTER_OTLP_*_ENDPOINT 仍可逐级覆盖。HTTP/Protobuf 域名末尾不带
+    /// /v1/{signal}，由 OTLP exporter 按 signal 自动追加。
+    /// </summary>
+    public const string DefaultOtlpEndpoint = "https://otlp.shangxin.me";
+
 }

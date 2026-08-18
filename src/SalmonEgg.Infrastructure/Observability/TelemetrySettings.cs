@@ -105,7 +105,8 @@ public sealed class TelemetrySettings
     /// <summary>
     /// Resolves user intent and OTLP environment variables. A user supplied endpoint is a product
     /// override for all signals; otherwise OTLP's per-signal variables override generic values.
-    /// An endpoint is required: the application intentionally has no default external collector.
+    /// When no endpoint is configured the built-in gateway (<see cref="TelemetryDefaults.DefaultOtlpEndpoint"/>)
+    /// is used so telemetry can flow without per-deployment setup; the gateway injects upstream auth.
     /// </summary>
     public static TelemetrySettings Build(
         Domain.Models.AppSettings? userSettings,
@@ -123,9 +124,18 @@ public sealed class TelemetrySettings
         var genericHeaders = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS"));
         var genericProtocol = ParseProtocol(Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL"));
 
-        var traces = ResolveSignal(OtlpSignal.Traces, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
-        var metrics = ResolveSignal(OtlpSignal.Metrics, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
-        var logs = ResolveSignal(OtlpSignal.Logs, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol);
+        // The built-in gateway applies only when no endpoint was supplied for any signal: neither
+        // a user override, a generic env var, nor a single signal-specific env var. This keeps the
+        // default from silently mixing with per-signal deployment endpoints.
+        var useFallbackGateway = userEndpoint is null
+            && genericEndpoint is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") is null
+            && Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT") is null;
+
+        var traces = ResolveSignal(OtlpSignal.Traces, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
+        var metrics = ResolveSignal(OtlpSignal.Metrics, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
+        var logs = ResolveSignal(OtlpSignal.Logs, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
         var enabled = !userDisabled && !sdkDisabled && traces.IsConfigured && metrics.IsConfigured && logs.IsConfigured;
 
         return new TelemetrySettings
@@ -155,7 +165,8 @@ public sealed class TelemetrySettings
         string? userHeaders,
         string? genericEndpoint,
         string? genericHeaders,
-        OtlpProtocol genericProtocol)
+        OtlpProtocol genericProtocol,
+        bool useFallbackGateway)
     {
         if (userEndpoint is not null)
         {
@@ -170,9 +181,16 @@ public sealed class TelemetrySettings
             _ => throw new ArgumentOutOfRangeException(nameof(signal), signal, null)
         };
         var endpoint = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_ENDPOINT"));
-        var headers = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_HEADERS")) ?? genericHeaders;
+        var signalHeaders = NormalizeOptional(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_HEADERS"));
+        // A signal-specific deployment header is the most explicit value. The secure user header
+        // must still apply when deployment supplies only the endpoint, before generic env headers.
+        var headers = signalHeaders ?? userHeaders ?? genericHeaders;
         var protocol = ParseProtocol(Environment.GetEnvironmentVariable($"OTEL_EXPORTER_OTLP_{suffix}_PROTOCOL"), genericProtocol);
-        return OtlpSignalSettings.Create(endpoint ?? genericEndpoint, headers, protocol, endpoint is not null);
+        // The built-in gateway is an all-or-nothing fallback: only when deployment supplied no
+        // endpoint for any signal. Mixing per-signal env endpoints with the default gateway would
+        // split one pipeline across two destinations silently.
+        var fallbackEndpoint = useFallbackGateway ? TelemetryDefaults.DefaultOtlpEndpoint : null;
+        return OtlpSignalSettings.Create(endpoint ?? genericEndpoint ?? fallbackEndpoint, headers, protocol, endpoint is not null);
     }
 
     private static OtlpProtocol ParseProtocol(string? value, OtlpProtocol fallback = OtlpProtocol.HttpProtobuf)

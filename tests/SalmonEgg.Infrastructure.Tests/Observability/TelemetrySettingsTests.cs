@@ -83,6 +83,42 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
+    public void Build_WhenEnvironmentEndpointUsesUserAuthHeaderForEverySignal()
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://collector.example.com:4318");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_HEADERS", "x-generic=stale");
+
+        var settings = Build(new AppSettings
+        {
+            TelemetryAuthHeader = "x-honeycomb-team=user-key"
+        });
+
+        Assert.Equal("x-honeycomb-team=user-key", settings.OtlpHeaders);
+        Assert.Equal("x-honeycomb-team=user-key", settings.Traces.Headers);
+        Assert.Equal("x-honeycomb-team=user-key", settings.Metrics.Headers);
+        Assert.Equal("x-honeycomb-team=user-key", settings.Logs.Headers);
+        Assert.True(settings.Enabled);
+    }
+
+    [Fact]
+    public void Build_WhenSignalSpecificEndpointsUseUserAuthHeaderForEverySignal()
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "https://collector.example.com:4318/v1/traces");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "https://collector.example.com:4318/v1/metrics");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "https://collector.example.com:4318/v1/logs");
+
+        var settings = Build(new AppSettings
+        {
+            TelemetryAuthHeader = "x-honeycomb-team=user-key"
+        });
+
+        Assert.Equal("x-honeycomb-team=user-key", settings.Traces.Headers);
+        Assert.Equal("x-honeycomb-team=user-key", settings.Metrics.Headers);
+        Assert.Equal("x-honeycomb-team=user-key", settings.Logs.Headers);
+        Assert.True(settings.Enabled);
+    }
+
+    [Fact]
     public void Build_SignalSpecificEnvironmentOverridesGenericEndpointAndHeaders()
     {
         Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://generic.example.com:4318");
@@ -102,6 +138,22 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
+    public void Build_SignalSpecificEnvironmentHeaderOverridesUserHeader()
+    {
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://generic.example.com:4318");
+        Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "x-traces=value");
+
+        var settings = Build(new AppSettings
+        {
+            TelemetryAuthHeader = "x-user=value"
+        });
+
+        Assert.Equal("x-traces=value", settings.Traces.Headers);
+        Assert.Equal("x-user=value", settings.Metrics.Headers);
+        Assert.Equal("x-user=value", settings.Logs.Headers);
+    }
+
+    [Fact]
     public void Build_SignalSpecificProtocolOverridesGenericProtocol()
     {
         Environment.SetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT", "https://collector.example.com:4318");
@@ -115,12 +167,13 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
-    public void Build_WhenNothingOverridesEndpoint_UsesNoDefaultCollector()
+    public void Build_WhenNothingOverridesEndpoint_UsesBuiltInGateway()
     {
         var settings = Build(new AppSettings());
 
-        Assert.Null(settings.OtlpEndpoint);
-        Assert.False(settings.Enabled);
+        Assert.Equal(TelemetryDefaults.DefaultOtlpEndpoint, settings.OtlpEndpoint);
+        Assert.Equal(TelemetryDefaults.DefaultOtlpEndpoint, settings.Traces.Endpoint);
+        Assert.True(settings.Enabled);
     }
 
     [Theory]
@@ -129,8 +182,9 @@ public sealed class TelemetrySettingsTests : IDisposable
     [InlineData("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")]
     public void Build_WhenAnySingleSignalLacksAnEndpoint_StaysDisabled(string missingVariable)
     {
-        // 必须留一个信号缺端点、另两个配好：只配单一信号的写法无法区分"三个都参与判定"与
-        // "只判定了 traces"——后者在那种夹具下同样为 false，会把漏判的实现放绿。
+        // 部署一旦为任一信号指定了端点，兜底网关即整体不参与：缺端点的信号不会回落到默认
+        // 网关，避免一条管线被拆成两个目的地。必须留一个信号缺端点、另两个配好，才能区分
+        // "三个都参与判定"与"只判定了 traces"——后者在那种夹具下同样为 false，会把漏判放绿。
         var allVariables = new[]
         {
             "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
@@ -182,11 +236,11 @@ public sealed class TelemetrySettingsTests : IDisposable
     }
 
     [Fact]
-    public void Build_WhenUserOptedIn_RequiresACollectorEndpoint()
+    public void Build_WhenUserOptedIn_ActivatesBuiltInGatewayByDefault()
     {
         var settings = Build(new AppSettings());
 
-        Assert.False(settings.Enabled);
+        Assert.True(settings.Enabled);
     }
 
     [Fact]

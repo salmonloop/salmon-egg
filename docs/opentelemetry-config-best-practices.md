@@ -21,16 +21,18 @@
 • 您的聊天消息内容
 • 文件内容
 
-实现现状：应用不内置默认 collector。只有设置页填写了端点，或部署环境提供有效的
-`OTEL_EXPORTER_OTLP_ENDPOINT` / 分信号端点时，管线才会激活。资源属性包含
-`host.name`、`process.pid`、应用版本和运行时/操作系统信息；异常 stack trace 也可能
-包含本地源码路径。因此 UI 不得把数据描述为“匿名”，只承诺不主动收集聊天内容和文件内容。
+实现现状：应用内置兜底 collector `https://otlp.shangxin.me`，网关在边缘向上游注入鉴权，
+客户端不内置上游凭证。用户未填写端点且部署环境未提供 `OTEL_EXPORTER_OTLP_ENDPOINT` /
+分信号端点时，管线以兜底网关激活；一旦为任一信号显式指定端点，兜底即整体退出，避免
+混合目的地。资源属性包含 `host.name`、`process.pid`、应用版本和运行时/操作系统信息；
+异常 stack trace 也可能包含本地源码路径。因此 UI 不得把数据描述为“匿名”，只承诺不主动
+收集聊天内容和文件内容。
 
 详细了解：隐私政策
 ```
 
 **关键原则：**
-- **默认状态**：偏好开关当前为默认开启（opt-out），但没有有效 OTLP 端点时运行态仍保持禁用。
+- **默认状态**：偏好开关默认开启（opt-out），未配置端点时以兜底网关 `otlp.shangxin.me` 激活。
   用户可在「设置 → 数据与存储」随时关闭。若目标市场需要 GDPR 式的显式同意，
   应改为默认关闭并加入首次启动询问——这是产品决策，不要仅凭本文档默认值推断
 - **透明**：明确列出收集什么、不收集什么
@@ -48,14 +50,15 @@
 OTLP 请求头（可选）：
 [密码框] api-key=YOUR_KEY
 
-没有配置端点时遥测不会启动。请确保您信任接收数据的服务提供商。
+没有配置端点时遥测会发往应用兜底网关 `otlp.shangxin.me`（由网关注入上游鉴权）。
+填写自定义端点会覆盖兜底网关。请确保您信任接收数据的服务提供商。
 ```
 
 **实现建议：**
 - 放在可折叠的 Expander 内
 - 普通用户无需看到这部分
 - 请求头格式遵循 OTLP 规范的 `OTEL_EXPORTER_OTLP_HEADERS`：逗号分隔的 `key=value`。
-  **不是** `Bearer xxx`——那样解析不出任何 header，导出会静默 401。
+  **不是** `Bearer xxx` 或 `X-Honeycomb-Team: KEY`。这类值会在 exporter 构建时因格式无效而停用整条遥测管线。
   需要 Authorization 语义时写 `Authorization=Bearer YOUR_TOKEN`。
 - 端口：HTTP/Protobuf 用 4318，gRPC 用 4317。默认协议是 HTTP/Protobuf。
 - 变更在保存成功后立即重建管线生效，无需重启（见 `ITelemetryRuntime`）
@@ -96,11 +99,12 @@ statistics on types of files, number of files per project, etc.
 
 ## 应用默认值（不暴露给用户）
 
-应用只提供资源标识和平台采样率，不提供默认外部 collector：
+应用提供资源标识、平台采样率，以及兜底 OTLP 网关：
 
 ```csharp
 ServiceName = "SalmonEgg"
 DefaultEnvironment = "production"
+DefaultOtlpEndpoint = "https://otlp.shangxin.me"
 
 Desktop NormalRate = 0.10
 WASM NormalRate = 0.05
@@ -110,14 +114,20 @@ Mobile NormalRate = 0.02
 ## 配置优先级
 
 ```
-用户自定义端点 > 分信号环境变量 > 通用环境变量 > 不启用
+用户自定义端点 > 分信号环境变量 > 通用环境变量 > 兜底网关
   ↓
 AppSettings.TelemetryCustomEndpoint (Settings UI)
   ↓
 OTEL_EXPORTER_OTLP_{TRACES|METRICS|LOGS}_ENDPOINT
   ↓
 OTEL_EXPORTER_OTLP_ENDPOINT (env var)
+  ↓
+TelemetryDefaults.DefaultOtlpEndpoint (built-in gateway)
 ```
+
+**兜底网关规则**：仅当用户和环境均未提供任何端点时，兜底网关对三个信号统一生效。
+一旦为任一信号显式指定端点，兜底即整体退出——缺端点的信号保持未配置，管线可能因
+该信号未配置而禁用，但不会静默把部分信号发往默认网关、部分发往部署端点。
 
 ## 采样率说明
 
