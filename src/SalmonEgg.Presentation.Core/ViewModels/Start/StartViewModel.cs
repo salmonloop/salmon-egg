@@ -456,7 +456,7 @@ public sealed partial class StartViewModel : ObservableObject
     private void SelectStartAgentDisplay(ComposerSelectorItemViewModel? item)
     {
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Start agent selector command requested. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
             item?.Kind,
             item?.Identity,
@@ -471,7 +471,7 @@ public sealed partial class StartViewModel : ObservableObject
         if (!CanCommitSelectorItem(item, ComposerSelectorKind.Agent, StartAgentSelectorItems))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Start agent selector command rejected by current projection. ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} CurrentAgentItemCount={CurrentAgentItemCount}",
                 item?.Kind,
                 item?.Identity,
@@ -488,7 +488,7 @@ public sealed partial class StartViewModel : ObservableObject
         if (agent is null)
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Start agent selector command rejected because profile was not found. ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} AcpProfileCount={AcpProfileCount}",
                 item?.Identity,
                 item?.SemanticValue,
@@ -500,7 +500,7 @@ public sealed partial class StartViewModel : ObservableObject
         if (IsCurrentExplicitStartAgentSelection(item!.SemanticValue))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Start agent selector command skipped because profile is already the explicit selection. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
                 item.SemanticValue,
                 Chat.SelectedAcpProfile?.Id,
@@ -511,7 +511,7 @@ public sealed partial class StartViewModel : ObservableObject
         }
 
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Start agent selector profile selection applying. ProfileId={ProfileId} PreviousProfileId={PreviousProfileId} PreviousProfileIntentId={PreviousProfileIntentId} ConnectionInstanceId={ConnectionInstanceId}",
             agent.Id,
             Chat.SelectedAcpProfile?.Id,
@@ -521,7 +521,7 @@ public sealed partial class StartViewModel : ObservableObject
         Chat.SelectProfileForUserIntent(agent);
         RefreshStartProjectOptions();
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Start agent selector profile selection applied. ProfileId={ProfileId} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ProjectOptionCount={ProjectOptionCount}",
             agent.Id,
             Chat.SelectedAcpProfile?.Id,

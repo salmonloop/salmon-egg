@@ -217,7 +217,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         var previousLanguage = "System";
         var nextLanguage = "System";
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "App settings load started. ReloadShellOnLanguageChange={ReloadShellOnLanguageChange} IsInitialized={IsInitialized} IsLoaded={IsLoaded} CurrentLanguage={CurrentLanguage} AppliedLanguage={AppliedLanguage}",
             reloadShellOnLanguageChange,
             _isInitialized,
@@ -232,7 +232,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             var settings = await _appSettingsService.LoadAsync();
             var launchOnStartup = settings.LaunchOnStartup;
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "App settings file loaded. SettingsLanguage={SettingsLanguage} SettingsTheme={SettingsTheme} LastSelectedServerId={LastSelectedServerId} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount}",
                 settings.Language,
                 settings.Theme,
@@ -326,7 +326,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
             }).ConfigureAwait(false);
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "App settings UI projection completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount} NavigationRemoteDirectoryIdCount={NavigationRemoteDirectoryIdCount} KeyBindingCount={KeyBindingCount}",
                 previousLanguage,
                 nextLanguage,
@@ -338,7 +338,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 
             cancellationToken.ThrowIfCancellationRequested();
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Applying language override from app settings. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ReloadShellOnLanguageChange={ReloadShellOnLanguageChange}",
                 previousLanguage,
                 nextLanguage,
@@ -346,7 +346,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 #endif
             await _languageService.ApplyLanguageOverrideAsync(nextLanguage).ConfigureAwait(false);
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Language override from app settings completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                 previousLanguage,
                 nextLanguage);
@@ -355,7 +355,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 !string.Equals(previousLanguage, nextLanguage, StringComparison.Ordinal))
             {
 #if DEBUG
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Reloading shell after app settings language change. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                     previousLanguage,
                     nextLanguage);
@@ -372,7 +372,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load app settings");
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Surfacing app settings load failure. MarkLoaded={MarkLoaded} PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                 markLoaded,
                 previousLanguage,
@@ -398,7 +398,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 
                 _suppressSave = false;
 #if DEBUG
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "App settings load finalized. MarkLoaded={MarkLoaded} IsLoaded={IsLoaded} SuppressSave={SuppressSave}",
                     markLoaded,
                     IsLoaded,

@@ -35,7 +35,7 @@ public sealed class UnoAppLanguageService : IAppLanguageService
     {
         var normalizedTag = AppLanguageCatalog.NormalizeTag(languageTag);
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Language override enqueue requested. RequestedLanguageTag={RequestedLanguageTag} NormalizedLanguageTag={NormalizedLanguageTag} CurrentLanguageTag={CurrentLanguageTag}",
             languageTag,
             normalizedTag,
@@ -49,7 +49,7 @@ public sealed class UnoAppLanguageService : IAppLanguageService
         var platformTag = AppLanguageCatalog.ToPlatformOverrideTag(normalizedTag);
 #if DEBUG
         var previousLanguageTag = _currentLanguageTag;
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Applying platform language override. NormalizedLanguageTag={NormalizedLanguageTag} PlatformLanguageTag={PlatformLanguageTag} PreviousLanguageTag={PreviousLanguageTag} IsSystemLanguage={IsSystemLanguage}",
             normalizedTag,
             platformTag,
@@ -62,7 +62,7 @@ public sealed class UnoAppLanguageService : IAppLanguageService
         Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = platformTag;
 #endif
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Platform language override accepted. NormalizedLanguageTag={NormalizedLanguageTag} PlatformLanguageTag={PlatformLanguageTag}",
             normalizedTag,
             platformTag);
@@ -72,7 +72,7 @@ public sealed class UnoAppLanguageService : IAppLanguageService
         if (string.Equals(_currentLanguageTag, normalizedTag, StringComparison.Ordinal))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Language override completed without LanguageChanged event. CurrentLanguageTag={CurrentLanguageTag}",
                 _currentLanguageTag);
 #endif
@@ -81,7 +81,7 @@ public sealed class UnoAppLanguageService : IAppLanguageService
 
         _currentLanguageTag = normalizedTag;
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Language override completed; raising LanguageChanged. PreviousLanguageTag={PreviousLanguageTag} CurrentLanguageTag={CurrentLanguageTag}",
             previousLanguageTag,
             _currentLanguageTag);
