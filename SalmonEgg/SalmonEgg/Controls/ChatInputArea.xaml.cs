@@ -995,7 +995,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             && !ReferenceEquals(_openSelectorHost, comboBox))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Composer selector selection ignored because the selector is not the open host. Selector={Selector} AutomationId={AutomationId} OpenSelector={OpenSelector} AddedItemCount={AddedItemCount} RemovedItemCount={RemovedItemCount} SelectedIndex={SelectedIndex}",
                 ResolveSelectorHostName(comboBox),
                 ResolveSelectorAutomationId(comboBox),

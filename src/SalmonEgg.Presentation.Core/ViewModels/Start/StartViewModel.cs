@@ -750,7 +750,7 @@ public sealed partial class StartViewModel : ObservableObject
             policy.DisableRealItems,
             policy.SelectorEnabled && IsInputEnabled));
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Start agent selector projection resolved. Sequence={Sequence} AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsConnecting={IsConnecting} IsInitializing={IsInitializing} IsConnected={IsConnected} HasConnectionError={HasConnectionError} HasAgentSlot={HasAgentSlot} PolicyRealItemCount={PolicyRealItemCount} DisplayItemCount={DisplayItemCount} SelectedKind={SelectedKind} SelectedIdentity={SelectedIdentity} SelectedSemanticValue={SelectedSemanticValue} SelectedIsPlaceholder={SelectedIsPlaceholder} IsEnabled={IsEnabled} IsSubmitBlocked={IsSubmitBlocked} PlaceholderKind={PlaceholderKind}",
             ++_startAgentProjectionDebugSequence,
             Chat.AcpProfileList.Count,
@@ -893,7 +893,7 @@ public sealed partial class StartViewModel : ObservableObject
     private void RefreshAllSelectorProjections()
     {
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Refreshing start selector projections. AcpProfileCount={AcpProfileCount} SelectedProfileId={SelectedProfileId} SelectedProfileIntentId={SelectedProfileIntentId} ConnectionInstanceId={ConnectionInstanceId} IsStarting={IsStarting} IsInputEnabled={IsInputEnabled} ModeOptionCount={ModeOptionCount} ModelOptionCount={ModelOptionCount} ProjectOptionCount={ProjectOptionCount}",
             Chat.AcpProfileList.Count,
             Chat.SelectedAcpProfile?.Id,
