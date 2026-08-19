@@ -490,6 +490,12 @@ async function verifyMcpSettings(page, suffix = "") {
 }
 
 async function focusNumericControl(page, controlOptions, label) {
+  // The cache retention row can straddle the fold once the page grows, and clicking a control whose
+  // center is off screen leaves focus behind. Scroll it fully into view before clicking.
+  if (!await scrollToVisibleControl(page, controlOptions)) {
+    throw new Error(`Could not scroll numeric control into view for ${label}. Options=${JSON.stringify(controlOptions)}`);
+  }
+
   await clickVisibleControl(page, controlOptions);
   await page.waitForFunction(options => {
     const labels = options.labels ?? [];
