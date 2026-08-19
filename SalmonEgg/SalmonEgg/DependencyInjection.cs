@@ -216,9 +216,12 @@ public static class DependencyInjection
 
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IConfigChangeSignal, ConfigChangeSignal>();
-        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(
+        services.AddSingleton<IConfigurationFileStore>(sp => new FileSystemAppFileStore(
             sp.GetRequiredService<IFileSystemPersistence>(),
             sp.GetRequiredService<IConfigChangeSignal>()));
+        services.AddSingleton<IAppFileStore>(sp => sp.GetRequiredService<IConfigurationFileStore>());
+        services.AddSingleton<IConfigurationFileTransactionStore>(sp =>
+            sp.GetRequiredService<IConfigurationFileStore>());
         services.AddSingleton<PlainTextFileSecureStorage>();
 #if __ANDROID__
         services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();
@@ -228,7 +231,13 @@ public static class DependencyInjection
         services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());
 #endif
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
-        services.AddSingleton<IConfigurationService, ConfigurationManager>();
+        services.AddSingleton<ConfigurationManager>(sp => new ConfigurationManager(
+            sp.GetRequiredService<ISecureStorage>(),
+            sp.GetRequiredService<IConfigurationFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<ConfigurationManager>>()));
+        services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IConfigurationRecoveryService>(sp => sp.GetRequiredService<ConfigurationManager>());
         services.AddSingleton<IServerCredentialService, ServerCredentialService>();
         services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
         services.AddSingleton<ConfigurationSecretSnapshotService>();
@@ -571,7 +580,8 @@ public static class DependencyInjection
         services.AddSingleton<IApplicationStartupWorkflow>(sp =>
             new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
-                sp.GetRequiredService<IChatRuntimeInitialization>()));
+                sp.GetRequiredService<IChatRuntimeInitialization>(),
+                sp.GetRequiredService<IConfigurationRecoveryService>()));
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),

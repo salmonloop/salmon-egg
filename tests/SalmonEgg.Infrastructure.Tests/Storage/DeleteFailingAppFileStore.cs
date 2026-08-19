@@ -7,9 +7,10 @@ using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Infrastructure.Tests.Storage;
 
-internal sealed class DeleteFailingAppFileStore : IAppFileStore
+internal sealed class DeleteFailingAppFileStore : IConfigurationFileStore
 {
     private readonly FileSystemAppFileStore _inner = new();
+    private int _deleteFailuresRemaining = 1;
 
     public Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default)
         => _inner.ExistsAsync(path, cancellationToken);
@@ -21,11 +22,30 @@ internal sealed class DeleteFailingAppFileStore : IAppFileStore
         => _inner.WriteAllTextAsync(path, content, cancellationToken);
 
     public Task DeleteAsync(string path, CancellationToken cancellationToken = default)
-        => throw new IOException("delete failed");
+        => _inner.DeleteAsync(path, cancellationToken);
 
     public IAsyncEnumerable<string> EnumerateFilesAsync(
         string directory,
         string searchPattern,
         CancellationToken cancellationToken = default)
         => _inner.EnumerateFilesAsync(directory, searchPattern, cancellationToken);
+
+    public Task<IConfigurationFileTransaction> BeginWriteAsync(
+        string path,
+        string content,
+        CancellationToken cancellationToken = default)
+        => _inner.BeginWriteAsync(path, content, cancellationToken);
+
+    public Task<IConfigurationFileTransaction> BeginDeleteAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.Exchange(ref _deleteFailuresRemaining, 0) == 1)
+        {
+            return Task.FromResult<IConfigurationFileTransaction>(
+                new ThrowingConfigurationFileTransaction(new IOException("delete failed")));
+        }
+
+        return _inner.BeginDeleteAsync(path, cancellationToken);
+    }
 }

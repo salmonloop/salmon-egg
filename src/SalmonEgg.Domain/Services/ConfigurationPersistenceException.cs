@@ -25,6 +25,10 @@ public enum ConfigurationPersistenceFailureReason
     SecretPersistenceFailed,
     ConfigurationWriteFailed,
     ConfigurationReadFailed,
+    ConfigurationRollbackFailed,
     SecureStorageCleanupFailed,
-    ConfigurationDeleteFailed
+    ConfigurationDeleteFailed,
+    ConfigurationConflict,
+    ConfigurationLockUnavailable,
+    ConfigurationRecoveryRequired
 }

@@ -57,9 +57,17 @@ public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
 
             return transaction;
         }
-        catch
+        catch (Exception operationException)
         {
-            await transaction.RestoreAsync().ConfigureAwait(false);
+            try
+            {
+                await transaction.RestoreAsync().ConfigureAwait(false);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(operationException, rollbackException);
+            }
+
             throw;
         }
     }

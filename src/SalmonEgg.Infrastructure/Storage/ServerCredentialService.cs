@@ -24,12 +24,29 @@ public sealed class ServerCredentialService : IServerCredentialService
     {
         ValidateServerId(serverId);
 
-        var token = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetTokenKey(serverId)).ConfigureAwait(false);
-        var apiKey = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetApiKeyKey(serverId)).ConfigureAwait(false);
+        try
+        {
+            var token = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetTokenKey(serverId)).ConfigureAwait(false);
+            var apiKey = await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetApiKeyKey(serverId)).ConfigureAwait(false);
 
-        return new ServerCredentialStatus(
-            HasToken: !string.IsNullOrEmpty(token),
-            HasApiKey: !string.IsNullOrEmpty(apiKey));
+            return new ServerCredentialStatus(
+                HasToken: !string.IsNullOrEmpty(token),
+                HasApiKey: !string.IsNullOrEmpty(apiKey));
+        }
+        catch (SecureStorageUnavailableException ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
+                "Secure storage is unavailable; credential status could not be read.",
+                ex);
+        }
+        catch (Exception ex)
+        {
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecretPersistenceFailed,
+                "Credential status could not be read.",
+                ex);
+        }
     }
 
     private static void ValidateServerId(string serverId)

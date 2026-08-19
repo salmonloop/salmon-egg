@@ -16,7 +16,7 @@ public sealed class CloudConfigSyncCoordinatorTests : IDisposable
 {
     private readonly string _testDirectory;
     private readonly AppDataService _appData;
-    private readonly IAppFileStore _fileStore;
+    private readonly IConfigurationFileStore _fileStore;
     private readonly ConfigChangeSignal _configChangeSignal;
     private readonly AppSettingsService _appSettings;
     private readonly PlainTextFileSecureStorage _secureStorage;

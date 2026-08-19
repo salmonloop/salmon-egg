@@ -37,15 +37,24 @@ public static class DesktopConfigurationServiceCollectionExtensions
 
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IConfigChangeSignal, ConfigChangeSignal>();
-        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(
+        services.AddSingleton<IConfigurationFileStore>(sp => new FileSystemAppFileStore(
             sp.GetRequiredService<IFileSystemPersistence>(),
             sp.GetRequiredService<IConfigChangeSignal>()));
+        services.AddSingleton<IAppFileStore>(sp => sp.GetRequiredService<IConfigurationFileStore>());
+        services.AddSingleton<IConfigurationFileTransactionStore>(sp =>
+            sp.GetRequiredService<IConfigurationFileStore>());
 
         services.AddSingleton<PlainTextFileSecureStorage>();
         services.AddSingleton<ISecureStorage>(CreateSecureStorage);
 
         services.AddSingleton<IAppSettingsService, AppSettingsService>();
-        services.AddSingleton<IConfigurationService, ConfigurationManager>();
+        services.AddSingleton<ConfigurationManager>(sp => new ConfigurationManager(
+            sp.GetRequiredService<ISecureStorage>(),
+            sp.GetRequiredService<IConfigurationFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<ConfigurationManager>>()));
+        services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IConfigurationRecoveryService>(sp => sp.GetRequiredService<ConfigurationManager>());
         services.AddSingleton<IServerCredentialService, ServerCredentialService>();
         services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
 

@@ -200,6 +200,22 @@ public sealed class ConfigSyncPackageService
 
         foreach (var path in Directory.EnumerateFiles(_appData.ConfigRootPath, "*", SearchOption.AllDirectories))
         {
+            var relativePath = Path.GetRelativePath(_appData.ConfigRootPath, path);
+            var topLevelDirectory = relativePath
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            if (string.Equals(topLevelDirectory, "recovery", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // In-flight configuration-file recovery material belongs to this device's interrupted
+            // operation, not to portable configuration content.
+            if (ConfigurationFileTransactionArtifacts.IsArtifact(path))
+            {
+                continue;
+            }
+
             yield return path;
         }
     }

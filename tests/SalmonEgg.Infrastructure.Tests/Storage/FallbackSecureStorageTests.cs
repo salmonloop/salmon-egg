@@ -75,19 +75,52 @@ public sealed class FallbackSecureStorageTests
     }
 
     [Fact]
-    public async Task LoadAsync_WhenPlatformStoreHasNoValue_FallsThroughWithoutWarning()
+    public async Task LoadAsync_WhenLegacyFallbackValueExists_TreatsItAsAuthoritativeAndWarns()
     {
-        // An absent secret is not a downgrade, so it must not be reported as one.
         var primary = new RecordingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
         var fallback = new RecordingSecureStorage();
-        await fallback.SaveAsync("token", "older-value");
+        await fallback.SaveAsync("token", "outage-value");
         var logger = new RecordingLogger();
         var sut = new FallbackSecureStorage(primary, fallback, logger);
 
         var loaded = await sut.LoadAsync("token");
 
-        Assert.Equal("older-value", loaded);
-        Assert.Empty(logger.Levels);
+        Assert.Equal("outage-value", loaded);
+        Assert.Contains(LogLevel.Warning, logger.Levels);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenPlatformStoreRecovers_DoesNotResurrectItsStaleValue()
+    {
+        var primary = new AvailabilityChangingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
+        primary.IsAvailable = false;
+        var fallback = new RecordingSecureStorage();
+        var sut = new FallbackSecureStorage(primary, fallback, new RecordingLogger());
+
+        await sut.SaveAsync("token", "outage-value");
+        primary.IsAvailable = true;
+
+        Assert.Equal("outage-value", await sut.LoadAsync("token"));
+        Assert.Equal("stale-platform-value", Assert.Contains("token", primary.Values));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenPlatformStoreRecovers_DoesNotResurrectItsStaleValue()
+    {
+        var primary = new AvailabilityChangingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
+        primary.IsAvailable = false;
+        var fallback = new RecordingSecureStorage();
+        await fallback.SaveAsync("token", "outage-value");
+        var sut = new FallbackSecureStorage(primary, fallback, new RecordingLogger());
+
+        await sut.DeleteAsync("token");
+        primary.IsAvailable = true;
+
+        Assert.Null(await sut.LoadAsync("token"));
+        Assert.Equal("stale-platform-value", Assert.Contains("token", primary.Values));
     }
 
     [Fact]
@@ -102,7 +135,7 @@ public sealed class FallbackSecureStorageTests
 
         await sut.DeleteAsync("token");
 
-        Assert.Empty(fallback.Values);
+        Assert.DoesNotContain("token", fallback.Values);
         Assert.Contains(LogLevel.Warning, logger.Levels);
     }
 
@@ -151,6 +184,41 @@ public sealed class FallbackSecureStorageTests
 
         public Task DeleteAsync(string key)
             => throw new SecureStorageUnavailableException("platform store unavailable");
+    }
+
+    private sealed class AvailabilityChangingSecureStorage : ISecureStorage
+    {
+        public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
+
+        public bool IsAvailable { get; set; } = true;
+
+        public Task SaveAsync(string key, string value)
+        {
+            EnsureAvailable();
+            Values[key] = value;
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> LoadAsync(string key)
+        {
+            EnsureAvailable();
+            return Task.FromResult(Values.TryGetValue(key, out var value) ? value : null);
+        }
+
+        public Task DeleteAsync(string key)
+        {
+            EnsureAvailable();
+            Values.Remove(key);
+            return Task.CompletedTask;
+        }
+
+        private void EnsureAvailable()
+        {
+            if (!IsAvailable)
+            {
+                throw new SecureStorageUnavailableException("platform store unavailable");
+            }
+        }
     }
 
     private sealed class RecordingLogger : ILogger<FallbackSecureStorage>

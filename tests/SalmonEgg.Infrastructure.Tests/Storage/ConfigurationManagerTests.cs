@@ -62,6 +62,67 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.Equal(config.Id, loaded!.Id);
         Assert.Equal(config.Name, loaded.Name);
         Assert.Equal(config.ServerUrl, loaded.ServerUrl);
+        Assert.False(string.IsNullOrWhiteSpace(config.PersistenceRevision));
+        Assert.Equal(config.PersistenceRevision, loaded.PersistenceRevision);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithStaleRevision_RejectsWithoutChangingYamlOrSecrets()
+    {
+        var config = CreateTestConfiguration("revision-conflict");
+        config.Authentication = new AuthenticationConfig { Token = "initial-token" };
+        await _configManager.SaveConfigurationAsync(config);
+
+        var first = await _configManager.LoadConfigurationAsync(config.Id);
+        var stale = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(first);
+        Assert.NotNull(stale);
+
+        first!.Name = "First writer";
+        first.Authentication = new AuthenticationConfig { Token = "first-token" };
+        await _configManager.SaveConfigurationAsync(first);
+
+        stale!.Name = "Stale writer";
+        stale.Authentication = new AuthenticationConfig { Token = "stale-token" };
+        var exception = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => _configManager.SaveConfigurationAsync(stale));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationConflict, exception.Reason);
+        var reloaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal("First writer", reloaded!.Name);
+        Assert.Equal("first-token", reloaded.Authentication?.Token);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_AcrossManagerInstances_SerializesAndRejectsStaleWriter()
+    {
+        var config = CreateTestConfiguration("cross-manager-conflict");
+        await _configManager.SaveConfigurationAsync(config);
+        var secondManager = new ConfigurationManager(
+            _secureStorage,
+            new FileSystemAppFileStore(),
+            new AppDataService(),
+            NullLogger<ConfigurationManager>.Instance);
+        var first = await _configManager.LoadConfigurationAsync(config.Id);
+        var second = await secondManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+
+        first!.Name = "First manager";
+        second!.Name = "Second manager";
+        var firstSave = _configManager.SaveConfigurationAsync(first);
+        var secondSave = secondManager.SaveConfigurationAsync(second);
+        var results = await Task.WhenAll(
+            CapturePersistenceResultAsync(firstSave),
+            CapturePersistenceResultAsync(secondSave));
+
+        Assert.Single(results, result => result is null);
+        var conflict = Assert.Single(results, result => result is not null);
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationConflict, conflict!.Reason);
+        var reloaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(reloaded);
+        Assert.Contains(reloaded!.Name, new[] { "First manager", "Second manager" });
     }
 
     [Fact]
@@ -176,6 +237,25 @@ public sealed class ConfigurationManagerTests : IDisposable
         config.Authentication = new AuthenticationConfig { Token = "secret-token" };
         var manager = new ConfigurationManager(
             new FailingSecureStorage(),
+            new FileSystemAppFileStore(),
+            new AppDataService(),
+            NullLogger<ConfigurationManager>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.SaveConfigurationAsync(config));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.SecureStorageUnavailable, ex.Reason);
+        Assert.Contains("Secure storage is unavailable", ex.UserMessage, StringComparison.Ordinal);
+        Assert.False(File.Exists(GetServerYamlPath(config.Id)));
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenSecretSnapshotCannotBeRead_ThrowsConfigurationPersistenceException()
+    {
+        var config = CreateTestConfiguration("secret-snapshot-unavailable-001");
+        config.Authentication = new AuthenticationConfig { Token = "secret-token" };
+        var manager = new ConfigurationManager(
+            new LoadFailingSecureStorage(),
             new FileSystemAppFileStore(),
             new AppDataService(),
             NullLogger<ConfigurationManager>.Instance);
@@ -316,13 +396,14 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task ListConfigurationsAsync_WhenConfigurationDirectoryCannotBeEnumerated_ReturnsEmptyList()
+    public async Task ListConfigurationsAsync_WhenConfigurationDirectoryCannotBeEnumerated_ThrowsReadFailure()
     {
         var manager = new ConfigurationManager(_secureStorage, new FailingAppFileStore(), new AppDataService(), NullLogger<ConfigurationManager>.Instance);
 
-        var configs = await manager.ListConfigurationsAsync();
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.ListConfigurationsAsync());
 
-        Assert.Empty(configs);
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationReadFailed, ex.Reason);
     }
 
     [Fact]
@@ -463,6 +544,55 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveConfigurationAsync_WhenYamlFlushFailsAfterReplacement_RestoresPreviousYamlAndSecrets()
+    {
+        var config = CreateTestConfiguration("flush-after-replace");
+        config.Authentication = new AuthenticationConfig { ApiKey = "old-api-key" };
+        await _configManager.SaveConfigurationAsync(config);
+
+        config.Authentication = new AuthenticationConfig { Token = "new-token" };
+        var persistence = new ThrowOnFirstFlushPersistence();
+        var manager = new ConfigurationManager(
+            _secureStorage,
+            new FileSystemAppFileStore(persistence),
+            new AppDataService(),
+            NullLogger<ConfigurationManager>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.SaveConfigurationAsync(config));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationWriteFailed, ex.Reason);
+        Assert.Equal("old-api-key", await _secureStorage.LoadAsync("salmonegg/config/flush-after-replace/apiKey"));
+        Assert.Null(await _secureStorage.LoadAsync("salmonegg/config/flush-after-replace/token"));
+        var reloaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal("old-api-key", reloaded!.Authentication?.ApiKey);
+        Assert.Null(reloaded.Authentication?.Token);
+        Assert.Equal(2, persistence.FlushCount);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenFirstYamlFlushFails_RemovesCandidateAndDoesNotSaveSecrets()
+    {
+        var config = CreateTestConfiguration("flush-first-save");
+        config.Authentication = new AuthenticationConfig { Token = "new-token" };
+        var persistence = new ThrowOnFirstFlushPersistence();
+        var manager = new ConfigurationManager(
+            _secureStorage,
+            new FileSystemAppFileStore(persistence),
+            new AppDataService(),
+            NullLogger<ConfigurationManager>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => manager.SaveConfigurationAsync(config));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationWriteFailed, ex.Reason);
+        Assert.False(File.Exists(GetServerYamlPath(config.Id)));
+        Assert.Null(await _secureStorage.LoadAsync("salmonegg/config/flush-first-save/token"));
+        Assert.Equal(2, persistence.FlushCount);
+    }
+
+    [Fact]
     public async Task SaveConfigurationAsync_WhenSecondSecretMutationFails_RestoresPreviousSecretsAndYaml()
     {
         var config = CreateTestConfiguration("secret-mutation-rollback");
@@ -512,7 +642,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         Assert.Equal(ConfigurationPersistenceFailureReason.SecureStorageCleanupFailed, ex.Reason);
         Assert.True(File.Exists(GetServerYamlPath(config.Id)));
-        Assert.Null(await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/token"));
+        Assert.Equal("delete-token", await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/token"));
         Assert.Equal("legacy-api-key", await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/apiKey"));
 
         await manager.DeleteConfigurationAsync(config.Id);
@@ -521,7 +651,7 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteConfigurationAsync_WhenYamlDeleteFails_RetainsYamlAfterClearingCredentials()
+    public async Task DeleteConfigurationAsync_WhenYamlDeleteFails_RestoresYamlAndCredentials()
     {
         var config = CreateTestConfiguration("delete-file-failure");
         config.Authentication = new AuthenticationConfig { Token = "delete-token" };
@@ -537,7 +667,7 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         Assert.Equal(ConfigurationPersistenceFailureReason.ConfigurationDeleteFailed, ex.Reason);
         Assert.True(File.Exists(GetServerYamlPath(config.Id)));
-        Assert.Null(await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/token"));
+        Assert.Equal("delete-token", await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/token"));
         Assert.Null(await _secureStorage.LoadAsync($"salmonegg/config/{config.Id}/apiKey"));
 
         await _configManager.DeleteConfigurationAsync(config.Id);
@@ -601,6 +731,38 @@ public sealed class ConfigurationManagerTests : IDisposable
             ConnectionTimeout = 10
         };
 
+    private static async Task<ConfigurationPersistenceException?> CapturePersistenceResultAsync(Task saveTask)
+    {
+        try
+        {
+            await saveTask;
+            return null;
+        }
+        catch (ConfigurationPersistenceException exception)
+        {
+            return exception;
+        }
+    }
+
+    private sealed class ThrowOnFirstFlushPersistence : IFileSystemPersistence
+    {
+        public int FlushCount { get; private set; }
+
+        public Task LoadAsync(System.Threading.CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task FlushAsync(System.Threading.CancellationToken cancellationToken = default)
+        {
+            FlushCount++;
+            if (FlushCount == 1)
+            {
+                throw new IOException("flush failed after candidate mutation");
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class FailingSecureStorage : ISecureStorage
     {
         public Task SaveAsync(string key, string value)
@@ -608,6 +770,18 @@ public sealed class ConfigurationManagerTests : IDisposable
 
         public Task<string?> LoadAsync(string key)
             => Task.FromResult<string?>(null);
+
+        public Task DeleteAsync(string key)
+            => Task.CompletedTask;
+    }
+
+    private sealed class LoadFailingSecureStorage : ISecureStorage
+    {
+        public Task SaveAsync(string key, string value)
+            => throw new SecureStorageUnavailableException("Secure storage load is unavailable.");
+
+        public Task<string?> LoadAsync(string key)
+            => throw new SecureStorageUnavailableException("Secure storage load is unavailable.");
 
         public Task DeleteAsync(string key)
             => Task.CompletedTask;
