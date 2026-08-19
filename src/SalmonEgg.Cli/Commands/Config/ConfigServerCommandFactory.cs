@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.CommandLine;
 using SalmonEgg.Domain.Models;
 
@@ -16,7 +17,9 @@ namespace SalmonEgg.Cli.Commands.Config;
 /// </remarks>
 public static class ConfigServerCommandFactory
 {
-    public static Command CreateServerCommand(ServerConfigurationHandler handler)
+    public static Command CreateServerCommand(
+        ServerConfigurationHandler handler,
+        IReadOnlyList<string>? rawArgs = null)
     {
         if (handler is null) throw new ArgumentNullException(nameof(handler));
 
@@ -24,8 +27,8 @@ public static class ConfigServerCommandFactory
 
         server.Subcommands.Add(CreateListCommand(handler));
         server.Subcommands.Add(CreateShowCommand(handler));
-        server.Subcommands.Add(CreateAddCommand(handler));
-        server.Subcommands.Add(CreateUpdateCommand(handler));
+        server.Subcommands.Add(CreateAddCommand(handler, rawArgs));
+        server.Subcommands.Add(CreateUpdateCommand(handler, rawArgs));
         server.Subcommands.Add(CreateRemoveCommand(handler));
 
         return server;
@@ -53,7 +56,7 @@ public static class ConfigServerCommandFactory
 
     // ── add ───────────────────────────────────────────────────────────────────
 
-    private static Command CreateAddCommand(ServerConfigurationHandler handler)
+    private static Command CreateAddCommand(ServerConfigurationHandler handler, IReadOnlyList<string>? rawArgs)
     {
         var nameOpt = new Option<string>("--name") { Description = "Display name.", Required = true };
         var urlOpt = new Option<string?>("--url") { Description = "WebSocket or HTTP endpoint URL." };
@@ -73,14 +76,16 @@ public static class ConfigServerCommandFactory
         cmd.Options.Add(timeoutOpt);
         AddOptions(cmd, authenticationOptions, proxyOptions);
 
-        cmd.SetAction((parseResult, ct) => handler.AddAsync(
+        cmd.SetAction((parseResult, ct) => handler.AddFromStdinAsync(
             parseResult.GetRequiredValue(nameOpt),
             parseResult.GetValue(urlOpt),
             ParseTransport(parseResult.GetValue(transportOpt)!),
             parseResult.GetValue(stdioCommandOpt),
-            parseResult.GetValue(stdioArgsOpt),
+            ParseStdioArguments(parseResult, stdioArgsOpt, rawArgs),
             parseResult.GetValue(timeoutOpt),
             CreatePatch(parseResult, authenticationOptions, proxyOptions),
+            parseResult.GetValue(authenticationOptions.Token),
+            parseResult.GetValue(authenticationOptions.ApiKey),
             ct));
         return cmd;
     }
@@ -109,8 +114,8 @@ public static class ConfigServerCommandFactory
         var proxyUrlResult = parseResult.GetResult(proxyOptions.Url);
 
         return new ServerConfigurationPatch(
-            Token: parseResult.GetValue(authenticationOptions.Token),
-            ApiKey: parseResult.GetValue(authenticationOptions.ApiKey),
+            Token: null,
+            ApiKey: null,
             AuthenticationSpecified: tokenResult is not null || apiKeyResult is not null || authModeResult is not null,
             AuthenticationMode: parseResult.GetValue(authenticationOptions.Mode),
             ProxySpecified: proxyModeResult is not null,
@@ -120,8 +125,8 @@ public static class ConfigServerCommandFactory
     }
 
     private static AuthenticationOptions CreateAuthenticationOptions() => new(
-        new Option<string?>("--token") { Description = "Bearer token. Stored outside YAML." },
-        new Option<string?>("--api-key") { Description = "API key. Stored outside YAML." },
+        new Option<bool>("--token-stdin") { Description = "Read the bearer token from stdin (one line)." },
+        new Option<bool>("--api-key-stdin") { Description = "Read the API key from stdin (one line)." },
         new Option<string?>("--auth") { Description = "Authentication mode: none, bearer_token, api_key." });
 
     private static ProxyOptions CreateProxyOptions() => new(
@@ -129,8 +134,8 @@ public static class ConfigServerCommandFactory
         new Option<string?>("--proxy-url") { Description = "Custom proxy URL (requires --proxy-mode custom)." });
 
     private sealed record AuthenticationOptions(
-        Option<string?> Token,
-        Option<string?> ApiKey,
+        Option<bool> Token,
+        Option<bool> ApiKey,
         Option<string?> Mode);
 
     private sealed record ProxyOptions(
@@ -139,14 +144,14 @@ public static class ConfigServerCommandFactory
 
     // ── update ────────────────────────────────────────────────────────────────
 
-    private static Command CreateUpdateCommand(ServerConfigurationHandler handler)
+    private static Command CreateUpdateCommand(ServerConfigurationHandler handler, IReadOnlyList<string>? rawArgs)
     {
         var idArg = new Argument<string>("id") { Description = "Server configuration ID to update." };
         var nameOpt = new Option<string?>("--name") { Description = "New display name." };
         var urlOpt = new Option<string?>("--url") { Description = "New WebSocket or HTTP endpoint URL." };
         var transportOpt = CreateOptionalTransportOption();
         var stdioCommandOpt = new Option<string?>("--stdio-command") { Description = "New command for stdio transport." };
-        var stdioArgsOpt = CreateStdioArgsOption("New arguments for the stdio command. Pass with no values to clear.");
+        var stdioArgsOpt = CreateStdioArgsOption("New arguments for the stdio command. Use an empty string to clear.");
         var timeoutOpt = CreateTimeoutOption();
         var authenticationOptions = CreateAuthenticationOptions();
         var proxyOptions = CreateProxyOptions();
@@ -161,16 +166,18 @@ public static class ConfigServerCommandFactory
         cmd.Options.Add(timeoutOpt);
         AddOptions(cmd, authenticationOptions, proxyOptions);
 
-        cmd.SetAction((parseResult, ct) => handler.UpdateAsync(
+        cmd.SetAction((parseResult, ct) => handler.UpdateFromStdinAsync(
             parseResult.GetRequiredValue(idArg),
             parseResult.GetValue(nameOpt),
             parseResult.GetValue(urlOpt),
             ParseOptionalTransport(parseResult.GetValue(transportOpt)),
             parseResult.GetValue(stdioCommandOpt),
-            // "Was the option supplied?" is a parser fact, not something the value can express.
-            parseResult.GetResult(stdioArgsOpt) is null ? null : parseResult.GetValue(stdioArgsOpt),
+            // Omitted arguments preserve the stored value; an explicitly empty string clears it.
+            parseResult.GetResult(stdioArgsOpt) is null ? null : ParseStdioArguments(parseResult, stdioArgsOpt, rawArgs),
             parseResult.GetValue(timeoutOpt),
             CreatePatch(parseResult, authenticationOptions, proxyOptions),
+            parseResult.GetValue(authenticationOptions.Token),
+            parseResult.GetValue(authenticationOptions.ApiKey),
             ct));
         return cmd;
     }
@@ -198,18 +205,34 @@ public static class ConfigServerCommandFactory
     /// <summary>
     /// Creates the stdio arguments option.
     /// </summary>
-    /// <remarks>
-    /// Agent arguments are themselves dash-prefixed (for example <c>--serve</c>, <c>-T</c>), so the
-    /// option must accept several values after a single token; without that the parser treats each
-    /// agent flag as an unknown option of this CLI.
-    /// </remarks>
-    private static Option<List<string>?> CreateStdioArgsOption(string description) =>
-        new Option<List<string>?>("--stdio-args")
+    private static Option<string?> CreateStdioArgsOption(string description) =>
+        new("--stdio-args")
         {
-            Description = description,
-            Arity = ArgumentArity.ZeroOrMore,
-            AllowMultipleArgumentsPerToken = true
+            Description = description + " Provide one quoted command-line string, for example --stdio-args=\"--serve -T --mode plan\".",
+            Arity = ArgumentArity.ZeroOrOne
         };
+
+    private static List<string> ParseStdioArguments(
+        ParseResult parseResult,
+        Option<string?> option,
+        IReadOnlyList<string>? rawArgs)
+    {
+        if (parseResult.GetResult(option) is null)
+        {
+            return new List<string>();
+        }
+
+        var value = parseResult.GetValue(option);
+        var hasAttachedEmptyValue = rawArgs?.Any(
+            argument => argument.StartsWith("--stdio-args=", StringComparison.Ordinal)) == true;
+        if (value is null && !hasAttachedEmptyValue)
+        {
+            throw new StdioCommandLineParseException(
+                "a value is required; use --stdio-args= to provide an explicit empty value");
+        }
+
+        return StdioCommandLine.ParseArgumentsText(value).ToList();
+    }
 
     private static Option<string?> CreateTransportOption()
     {

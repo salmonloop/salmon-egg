@@ -1,6 +1,7 @@
 using System;
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.Collections.Generic;
 using SalmonEgg.Cli.Commands.Config;
 using SalmonEgg.Cli.Commands.Credentials;
 using SalmonEgg.Cli.Hosting;
@@ -36,14 +37,14 @@ public sealed class CliCommandFactory
     /// <summary>
     /// Creates the root command and the structural command groups.
     /// </summary>
-    public RootCommand CreateRootCommand()
+    public RootCommand CreateRootCommand(IReadOnlyList<string>? rawArgs = null)
     {
         var root = new RootCommand(RootDescription);
         root.Children.OfType<VersionOption>().Single().Action = new PrintVersionAction(_versionProvider);
         root.SetAction(_ => CliExitCodes.Success);
 
         var config = CreateStructuralCommand("config", ConfigDescription);
-        config.Subcommands.Add(ConfigServerCommandFactory.CreateServerCommand(_serverConfigurationHandler));
+        config.Subcommands.Add(ConfigServerCommandFactory.CreateServerCommand(_serverConfigurationHandler, rawArgs));
         var credentials = CredentialsCommandFactory.CreateCredentialsNamespaceCommand();
 
         root.Subcommands.Add(config);

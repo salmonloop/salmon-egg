@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentValidation;
+using SalmonEgg.Cli.Hosting;
 using SalmonEgg.Cli.Output;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
@@ -33,15 +34,26 @@ public sealed class ServerConfigurationHandler
     private readonly IConfigurationService _configurations;
     private readonly IValidator<ServerConfiguration> _validator;
     private readonly ICliOutput _output;
+    private readonly ICliInput _input;
 
     public ServerConfigurationHandler(
         IConfigurationService configurations,
         IValidator<ServerConfiguration> validator,
         ICliOutput output)
+        : this(configurations, validator, output, new TextCliInput(Console.In))
+    {
+    }
+
+    public ServerConfigurationHandler(
+        IConfigurationService configurations,
+        IValidator<ServerConfiguration> validator,
+        ICliOutput output,
+        ICliInput input)
     {
         _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _output = output ?? throw new ArgumentNullException(nameof(output));
+        _input = input ?? throw new ArgumentNullException(nameof(input));
     }
 
     // ── list ──────────────────────────────────────────────────────────────────
@@ -51,7 +63,16 @@ public sealed class ServerConfigurationHandler
     /// </summary>
     public async Task<int> ListAsync(CancellationToken cancellationToken = default)
     {
-        var configs = (await _configurations.ListConfigurationsAsync().ConfigureAwait(false)).ToList();
+        List<ServerConfiguration> configs;
+        try
+        {
+            configs = (await _configurations.ListConfigurationsAsync().ConfigureAwait(false)).ToList();
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            await _output.WriteErrorAsync($"List failed: {ex.UserMessage}").ConfigureAwait(false);
+            return CliExitCodes.Failure;
+        }
 
         if (configs.Count == 0)
         {
@@ -81,14 +102,14 @@ public sealed class ServerConfigurationHandler
             if (loaded is null)
             {
                 await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
             config = loaded;
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Show failed: {ex.UserMessage}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -114,6 +135,39 @@ public sealed class ServerConfigurationHandler
         int? timeout,
         CancellationToken cancellationToken = default)
         => AddAsync(name, url, transport, stdioCommand, stdioArgs, timeout, EmptyPatch, cancellationToken);
+
+    public async Task<int> AddFromStdinAsync(
+        string name,
+        string? url,
+        TransportType transport,
+        string? stdioCommand,
+        List<string>? stdioArgs,
+        int? timeout,
+        ServerConfigurationPatch patch,
+        bool tokenFromStdin,
+        bool apiKeyFromStdin,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedPatch = await ResolveCredentialInputAsync(
+            patch,
+            tokenFromStdin,
+            apiKeyFromStdin,
+            cancellationToken).ConfigureAwait(false);
+        if (resolvedPatch is null)
+        {
+            return CliExitCodes.Usage;
+        }
+
+        return await AddAsync(
+            name,
+            url,
+            transport,
+            stdioCommand,
+            stdioArgs,
+            timeout,
+            resolvedPatch,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<int> AddAsync(
         string name,
@@ -184,6 +238,41 @@ public sealed class ServerConfigurationHandler
         CancellationToken cancellationToken = default)
         => UpdateAsync(id, name, url, transport, stdioCommand, stdioArgs, timeout, EmptyPatch, cancellationToken);
 
+    public async Task<int> UpdateFromStdinAsync(
+        string id,
+        string? name,
+        string? url,
+        TransportType? transport,
+        string? stdioCommand,
+        List<string>? stdioArgs,
+        int? timeout,
+        ServerConfigurationPatch patch,
+        bool tokenFromStdin,
+        bool apiKeyFromStdin,
+        CancellationToken cancellationToken = default)
+    {
+        var resolvedPatch = await ResolveCredentialInputAsync(
+            patch,
+            tokenFromStdin,
+            apiKeyFromStdin,
+            cancellationToken).ConfigureAwait(false);
+        if (resolvedPatch is null)
+        {
+            return CliExitCodes.Usage;
+        }
+
+        return await UpdateAsync(
+            id,
+            name,
+            url,
+            transport,
+            stdioCommand,
+            stdioArgs,
+            timeout,
+            resolvedPatch,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<int> UpdateAsync(
         string id,
         string? name,
@@ -202,14 +291,14 @@ public sealed class ServerConfigurationHandler
             if (loaded is null)
             {
                 await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
             config = loaded;
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Update failed: {ex.UserMessage}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -276,10 +365,10 @@ public sealed class ServerConfigurationHandler
             if (loaded is null)
             {
                 await _output.WriteErrorAsync($"Server '{id}' not found.").ConfigureAwait(false);
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
-            await _configurations.DeleteConfigurationAsync(id).ConfigureAwait(false);
+            await _configurations.DeleteConfigurationAsync(id, loaded.PersistenceRevision).ConfigureAwait(false);
         }
         catch (ConfigurationPersistenceException ex)
         {
@@ -303,14 +392,14 @@ public sealed class ServerConfigurationHandler
         var hasApiKey = patch.ApiKey is not null;
         if (hasToken && hasApiKey)
         {
-            error = "Specify at most one of --token or --api-key.";
+            error = "Specify at most one of --token-stdin or --api-key-stdin.";
             return false;
         }
 
         if (hasToken && string.IsNullOrWhiteSpace(patch.Token)
             || hasApiKey && string.IsNullOrWhiteSpace(patch.ApiKey))
         {
-            error = "Credential value cannot be empty.";
+            error = "Credential input cannot be empty.";
             return false;
         }
 
@@ -327,7 +416,7 @@ public sealed class ServerConfigurationHandler
             {
                 if (hasToken || hasApiKey)
                 {
-                    error = "--auth none cannot be combined with --token or --api-key.";
+                    error = "--auth none cannot be combined with --token-stdin or --api-key-stdin.";
                     return false;
                 }
 
@@ -337,14 +426,14 @@ public sealed class ServerConfigurationHandler
             {
                 if (hasApiKey)
                 {
-                    error = "--auth bearer_token requires --token, not --api-key.";
+                    error = "--auth bearer_token requires --token-stdin, not --api-key-stdin.";
                     return false;
                 }
 
                 var token = patch.Token ?? (!isAdd ? config.Authentication?.Token : null);
                 if (string.IsNullOrWhiteSpace(token))
                 {
-                    error = "Bearer-token authentication requires --token on a new configuration.";
+                    error = "Bearer-token authentication requires --token-stdin on a new configuration.";
                     return false;
                 }
 
@@ -354,14 +443,14 @@ public sealed class ServerConfigurationHandler
             {
                 if (hasToken)
                 {
-                    error = "--auth api_key requires --api-key, not --token.";
+                    error = "--auth api_key requires --api-key-stdin, not --token-stdin.";
                     return false;
                 }
 
                 var apiKey = patch.ApiKey ?? (!isAdd ? config.Authentication?.ApiKey : null);
                 if (string.IsNullOrWhiteSpace(apiKey))
                 {
-                    error = "API-key authentication requires --api-key on a new configuration.";
+                    error = "API-key authentication requires --api-key-stdin on a new configuration.";
                     return false;
                 }
 
@@ -381,23 +470,70 @@ public sealed class ServerConfigurationHandler
                 : new AuthenticationConfig { ApiKey = patch.ApiKey };
         }
 
-        if (patch.ProxyUrlSpecified && (!patch.ProxySpecified || patch.ProxyMode != ProxyMode.Custom))
+        var existingProxy = config.Proxy;
+        var effectiveProxyMode = patch.ProxySpecified
+            ? patch.ProxyMode ?? ProxyConfig.DefaultMode
+            : existingProxy?.Mode ?? ProxyConfig.DefaultMode;
+
+        if (patch.ProxyUrlSpecified && effectiveProxyMode != ProxyMode.Custom)
         {
-            error = "--proxy-url requires --proxy-mode custom.";
+            error = "--proxy-url requires the effective proxy mode to be custom.";
             return false;
         }
 
-        if (patch.ProxySpecified)
+        if (patch.ProxySpecified || patch.ProxyUrlSpecified)
         {
-            var mode = patch.ProxyMode ?? ProxyConfig.DefaultMode;
+            var proxyUrl = effectiveProxyMode == ProxyMode.Custom
+                ? patch.ProxyUrlSpecified ? patch.ProxyUrl : existingProxy?.ProxyUrl
+                : null;
+
+            if (effectiveProxyMode == ProxyMode.Custom && string.IsNullOrWhiteSpace(proxyUrl))
+            {
+                error = "Custom proxy mode requires --proxy-url.";
+                return false;
+            }
+
             config.Proxy = new ProxyConfig
             {
-                Mode = mode,
-                ProxyUrl = mode == ProxyMode.Custom ? patch.ProxyUrl : null
+                Mode = effectiveProxyMode,
+                ProxyUrl = proxyUrl
             };
         }
 
         return true;
+    }
+
+    private async Task<ServerConfigurationPatch?> ResolveCredentialInputAsync(
+        ServerConfigurationPatch patch,
+        bool tokenFromStdin,
+        bool apiKeyFromStdin,
+        CancellationToken cancellationToken)
+    {
+        if (tokenFromStdin && apiKeyFromStdin)
+        {
+            await _output.WriteErrorAsync(
+                "Specify at most one of --token-stdin or --api-key-stdin.").ConfigureAwait(false);
+            return null;
+        }
+
+        if (!tokenFromStdin && !apiKeyFromStdin)
+        {
+            return patch;
+        }
+
+        var value = await _input.ReadSecretLineAsync(cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            await _output.WriteErrorAsync("Credential value cannot be empty.").ConfigureAwait(false);
+            return null;
+        }
+
+        return patch with
+        {
+            Token = tokenFromStdin ? value : null,
+            ApiKey = apiKeyFromStdin ? value : null,
+            AuthenticationSpecified = true
+        };
     }
 
 

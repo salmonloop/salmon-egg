@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Cli.Output;
+using SalmonEgg.Cli.Hosting;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 
@@ -12,15 +13,52 @@ public sealed class CredentialsHandler
     private readonly ICliOutput _output;
     private readonly IConfigurationService _configurationService;
     private readonly IServerCredentialService _credentialService;
+    private readonly ICliInput _input;
+
+    public CredentialsHandler(
+        ICliOutput output,
+        IConfigurationService configurationService,
+        IServerCredentialService credentialService,
+        ICliInput input)
+    {
+        _output = output ?? throw new ArgumentNullException(nameof(output));
+        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
+        _credentialService = credentialService ?? throw new ArgumentNullException(nameof(credentialService));
+        _input = input ?? throw new ArgumentNullException(nameof(input));
+    }
 
     public CredentialsHandler(
         ICliOutput output,
         IConfigurationService configurationService,
         IServerCredentialService credentialService)
+        : this(output, configurationService, credentialService, new TextCliInput(Console.In))
     {
-        _output = output ?? throw new ArgumentNullException(nameof(output));
-        _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
-        _credentialService = credentialService ?? throw new ArgumentNullException(nameof(credentialService));
+    }
+
+    public async Task<int> SetFromStdinAsync(
+        string serverId,
+        bool tokenFromStdin,
+        bool apiKeyFromStdin,
+        CancellationToken cancellationToken)
+    {
+        if (tokenFromStdin == apiKeyFromStdin)
+        {
+            await _output.WriteErrorAsync("Specify exactly one of --token-stdin or --api-key-stdin.").ConfigureAwait(false);
+            return CliExitCodes.Usage;
+        }
+
+        var value = await _input.ReadSecretLineAsync(cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            await _output.WriteErrorAsync("Credential value cannot be empty.").ConfigureAwait(false);
+            return CliExitCodes.Usage;
+        }
+
+        return await SetAsync(
+            serverId,
+            tokenFromStdin ? value : null,
+            apiKeyFromStdin ? value : null,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> SetAsync(
@@ -31,7 +69,7 @@ public sealed class CredentialsHandler
     {
         if ((token is null) == (apiKey is null))
         {
-            await _output.WriteErrorAsync("Specify exactly one of --token or --api-key.").ConfigureAwait(false);
+            await _output.WriteErrorAsync("Specify exactly one credential input.").ConfigureAwait(false);
             return CliExitCodes.Usage;
         }
 
@@ -48,7 +86,7 @@ public sealed class CredentialsHandler
             var loaded = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
             if (loaded is null)
             {
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
             config = loaded;
@@ -78,7 +116,7 @@ public sealed class CredentialsHandler
             var loaded = await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false);
             if (loaded is null)
             {
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
             loaded.Authentication = null;
@@ -100,7 +138,7 @@ public sealed class CredentialsHandler
         {
             if (await LoadConfigurationAsync(serverId, cancellationToken).ConfigureAwait(false) is null)
             {
-                return CliExitCodes.Usage;
+                return CliExitCodes.Failure;
             }
 
             var status = await _credentialService.GetStatusAsync(serverId).ConfigureAwait(false);
@@ -110,7 +148,7 @@ public sealed class CredentialsHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync(ex.UserMessage).ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Credential status failed: {ex.UserMessage}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
     }

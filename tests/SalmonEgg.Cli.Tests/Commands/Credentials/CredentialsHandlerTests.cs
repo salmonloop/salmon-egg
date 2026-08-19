@@ -2,7 +2,9 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Cli.Commands.Credentials;
+using SalmonEgg.Cli.Hosting;
 using SalmonEgg.Cli.Tests.Commands.Config;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 
 namespace SalmonEgg.Cli.Tests.Commands.Credentials;
@@ -75,9 +77,31 @@ public sealed class CredentialsHandlerTests
 
         Assert.Equal(CliExitCodes.Usage, exitCode);
         Assert.Empty(fixture.SecureStorage.Keys);
-        Assert.Equal("Specify exactly one of --token or --api-key.", Assert.Single(fixture.Output.Errors));
+        Assert.Equal("Specify exactly one credential input.", Assert.Single(fixture.Output.Errors));
         Assert.DoesNotContain(token, fixture.Output.Errors[0], StringComparison.Ordinal);
         Assert.DoesNotContain(apiKey, fixture.Output.Errors[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SetFromStdinAsync_WithEndOfInput_ReportsEmptyCredentialWithoutWriting()
+    {
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("server-eof", "EOF server", "ws://eof.example");
+        var handler = new CredentialsHandler(
+            fixture.Output,
+            fixture.Configurations,
+            new ServerCredentialService(fixture.SecureStorage),
+            new TextCliInput(new StringReader(string.Empty)));
+
+        var exitCode = await handler.SetFromStdinAsync(
+            "server-eof",
+            tokenFromStdin: true,
+            apiKeyFromStdin: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Empty(fixture.SecureStorage.Keys);
+        Assert.Equal("Credential value cannot be empty.", Assert.Single(fixture.Output.Errors));
     }
 
     [Fact]
@@ -108,11 +132,38 @@ public sealed class CredentialsHandlerTests
 
         var exitCode = await handler.HasAsync("missing", TestContext.Current.CancellationToken);
 
-        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Equal(CliExitCodes.Failure, exitCode);
         Assert.Empty(fixture.SecureStorage.Keys);
         Assert.Equal("Server 'missing' not found.", Assert.Single(fixture.Output.Errors));
     }
 
+    [Fact]
+    public async Task HasAsync_WhenSecureStorageUnavailable_ReturnsFailureWithoutRawExceptionType()
+    {
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("server-status-failure", "Status server", "ws://status.example");
+        var handler = new CredentialsHandler(
+            fixture.Output,
+            fixture.Configurations,
+            new UnavailableCredentialService());
+
+        var exitCode = await handler.HasAsync("server-status-failure", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Failure, exitCode);
+        var error = Assert.Single(fixture.Output.Errors);
+        Assert.Contains("Credential status failed:", error, StringComparison.Ordinal);
+        Assert.Contains("Secure storage is unavailable", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", error, StringComparison.Ordinal);
+    }
+
     private static CredentialsHandler CreateHandler(HandlerFixture fixture) =>
         new(fixture.Output, fixture.Configurations, new ServerCredentialService(fixture.SecureStorage));
+
+    private sealed class UnavailableCredentialService : IServerCredentialService
+    {
+        public Task<ServerCredentialStatus> GetStatusAsync(string serverId)
+            => throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SecureStorageUnavailable,
+                "Secure storage is unavailable; credential status could not be read.");
+    }
 }

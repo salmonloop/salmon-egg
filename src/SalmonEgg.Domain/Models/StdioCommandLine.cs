@@ -16,6 +16,7 @@ public static class StdioCommandLine
         var results = new List<string>();
         var current = new StringBuilder();
         char? activeQuote = null;
+        var tokenStarted = false;
 
         for (var index = 0; index < argumentsText.Length; index++)
         {
@@ -26,6 +27,7 @@ public static class StdioCommandLine
                 if (next is '"' or '\\')
                 {
                     current.Append(next);
+                    tokenStarted = true;
                     index++;
                     continue;
                 }
@@ -36,32 +38,41 @@ public static class StdioCommandLine
                 if (activeQuote == character)
                 {
                     activeQuote = null;
+                    tokenStarted = true;
                     continue;
                 }
 
                 if (activeQuote == null)
                 {
                     activeQuote = character;
+                    tokenStarted = true;
                     continue;
                 }
             }
 
             if (char.IsWhiteSpace(character) && activeQuote == null)
             {
-                if (current.Length == 0)
+                if (!tokenStarted)
                 {
                     continue;
                 }
 
                 results.Add(current.ToString());
                 current.Clear();
+                tokenStarted = false;
                 continue;
             }
 
             current.Append(character);
+            tokenStarted = true;
         }
 
-        if (current.Length > 0)
+        if (activeQuote is not null)
+        {
+            throw new StdioCommandLineParseException($"unterminated {activeQuote} quote");
+        }
+
+        if (tokenStarted)
         {
             results.Add(current.ToString());
         }
@@ -138,5 +149,13 @@ public static class StdioCommandLine
         }
 
         return "\"" + argument.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    }
+}
+
+public sealed class StdioCommandLineParseException : FormatException
+{
+    public StdioCommandLineParseException(string message)
+        : base(message)
+    {
     }
 }

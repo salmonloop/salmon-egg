@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using SalmonEgg.Application.Validators;
 using SalmonEgg.Cli.Commands.Config;
@@ -93,6 +94,104 @@ public sealed class ServerConfigurationHandlerTests
     }
 
     [Fact]
+    public async Task UpdateAsync_WithCustomProxyModeAndNoUrl_PreservesExistingCustomUrl()
+    {
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("proxy-preserve", "Proxy Agent", "ws://127.0.0.1:1");
+        var config = await fixture.Configurations.LoadConfigurationAsync("proxy-preserve");
+        Assert.NotNull(config);
+        config!.Proxy = new ProxyConfig { Mode = ProxyMode.Custom, ProxyUrl = "http://existing-proxy.example:8080" };
+        await fixture.Configurations.SaveConfigurationAsync(config);
+        fixture.Output.Reset();
+
+        var patch = new ServerConfigurationPatch(null, null, false, null, true, ProxyMode.Custom, false, null);
+        var exitCode = await fixture.Handler.UpdateAsync(
+            "proxy-preserve", null, null, null, null, null, null, patch,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Success, exitCode);
+        var updated = await fixture.Configurations.LoadConfigurationAsync("proxy-preserve");
+        Assert.NotNull(updated);
+        Assert.Equal(ProxyMode.Custom, updated!.Proxy?.Mode);
+        Assert.Equal("http://existing-proxy.example:8080", updated.Proxy?.ProxyUrl);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WithProxyUrlOnly_UsesExistingCustomProxyMode()
+    {
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("proxy-url-only", "Proxy Agent", "ws://127.0.0.1:1");
+        var config = await fixture.Configurations.LoadConfigurationAsync("proxy-url-only");
+        Assert.NotNull(config);
+        config!.Proxy = new ProxyConfig { Mode = ProxyMode.Custom, ProxyUrl = "http://old-proxy.example:8080" };
+        await fixture.Configurations.SaveConfigurationAsync(config);
+        fixture.Output.Reset();
+
+        var patch = new ServerConfigurationPatch(null, null, false, null, false, null, true, "http://new-proxy.example:8080");
+        var exitCode = await fixture.Handler.UpdateAsync(
+            "proxy-url-only", null, null, null, null, null, null, patch,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Success, exitCode);
+        var updated = await fixture.Configurations.LoadConfigurationAsync("proxy-url-only");
+        Assert.NotNull(updated);
+        Assert.Equal(ProxyMode.Custom, updated!.Proxy?.Mode);
+        Assert.Equal("http://new-proxy.example:8080", updated.Proxy?.ProxyUrl);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_WithNonCustomProxyMode_ClearsExistingCustomUrl()
+    {
+        using var fixture = new HandlerFixture();
+        await fixture.SeedAsync("proxy-system", "Proxy Agent", "ws://127.0.0.1:1");
+        var config = await fixture.Configurations.LoadConfigurationAsync("proxy-system");
+        Assert.NotNull(config);
+        config!.Proxy = new ProxyConfig { Mode = ProxyMode.Custom, ProxyUrl = "http://custom-proxy.example:8080" };
+        await fixture.Configurations.SaveConfigurationAsync(config);
+        fixture.Output.Reset();
+
+        var patch = new ServerConfigurationPatch(null, null, false, null, true, ProxyMode.System, false, null);
+        var exitCode = await fixture.Handler.UpdateAsync(
+            "proxy-system", null, null, null, null, null, null, patch,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Success, exitCode);
+        var updated = await fixture.Configurations.LoadConfigurationAsync("proxy-system");
+        Assert.NotNull(updated);
+        Assert.Equal(ProxyMode.System, updated!.Proxy?.Mode);
+        Assert.Null(updated.Proxy?.ProxyUrl);
+    }
+
+    [Fact]
+    public async Task AddAsync_WithCustomProxyWithoutUrl_ReturnsUsage()
+    {
+        using var fixture = new HandlerFixture();
+        var patch = new ServerConfigurationPatch(null, null, false, null, true, ProxyMode.Custom, false, null);
+
+        var exitCode = await fixture.Handler.AddAsync(
+            "Proxy Agent", "ws://127.0.0.1:1", TransportType.WebSocket, null, null, null, patch,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Equal("Custom proxy mode requires --proxy-url.", Assert.Single(fixture.Output.Errors));
+    }
+
+    [Fact]
+    public async Task ListAsync_WhenConfigurationLoadFails_ReturnsFailureWithContextualDiagnostic()
+    {
+        var output = new RecordingCliOutput();
+        var handler = new ServerConfigurationHandler(
+            new ThrowingConfigurationService(),
+            new ServerConfigurationValidator(),
+            output);
+
+        var exitCode = await handler.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Failure, exitCode);
+        Assert.Equal("List failed: Configuration data is temporarily unavailable.", Assert.Single(output.Errors));
+    }
+
+    [Fact]
     public async Task ListAsync_WithNoConfigurations_ReportsEmptyStateOnStdout()
     {
         using var fixture = new HandlerFixture();
@@ -120,13 +219,13 @@ public sealed class ServerConfigurationHandlerTests
     }
 
     [Fact]
-    public async Task ShowAsync_WhenMissing_ReportsUsageOnStderr()
+    public async Task ShowAsync_WhenMissing_ReportsFailureOnStderr()
     {
         using var fixture = new HandlerFixture();
 
         var exitCode = await fixture.Handler.ShowAsync("absent", TestContext.Current.CancellationToken);
 
-        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Equal(CliExitCodes.Failure, exitCode);
         Assert.Empty(fixture.Output.Lines);
         Assert.Contains("not found", Assert.Single(fixture.Output.Errors), StringComparison.Ordinal);
     }
@@ -245,7 +344,7 @@ public sealed class ServerConfigurationHandlerTests
     }
 
     [Fact]
-    public async Task UpdateAsync_WhenMissing_ReturnsUsage()
+    public async Task UpdateAsync_WhenMissing_ReturnsFailure()
     {
         using var fixture = new HandlerFixture();
 
@@ -259,7 +358,7 @@ public sealed class ServerConfigurationHandlerTests
             timeout: null,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Equal(CliExitCodes.Failure, exitCode);
         Assert.Contains("not found", Assert.Single(fixture.Output.Errors), StringComparison.Ordinal);
     }
 
@@ -290,13 +389,13 @@ public sealed class ServerConfigurationHandlerTests
     }
 
     [Fact]
-    public async Task RemoveAsync_WhenMissing_ReturnsUsage()
+    public async Task RemoveAsync_WhenMissing_ReturnsFailure()
     {
         using var fixture = new HandlerFixture();
 
         var exitCode = await fixture.Handler.RemoveAsync("absent", confirmed: true, TestContext.Current.CancellationToken);
 
-        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Equal(CliExitCodes.Failure, exitCode);
         Assert.Contains("not found", Assert.Single(fixture.Output.Errors), StringComparison.Ordinal);
     }
 
@@ -388,5 +487,21 @@ public sealed class ServerConfigurationHandlerTests
         var retryExit = await fixture.Handler.RemoveAsync("locked-remove", confirmed: true, TestContext.Current.CancellationToken);
         Assert.Equal(CliExitCodes.Success, retryExit);
         Assert.Null(await fixture.Configurations.LoadConfigurationAsync("locked-remove"));
+    }
+
+    private sealed class ThrowingConfigurationService : IConfigurationService
+    {
+        private static ConfigurationPersistenceException CreateException() =>
+            new(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "Configuration data is temporarily unavailable.");
+
+        public Task SaveConfigurationAsync(ServerConfiguration config) => throw CreateException();
+
+        public Task<ServerConfiguration?> LoadConfigurationAsync(string id) => throw CreateException();
+
+        public Task<IEnumerable<ServerConfiguration>> ListConfigurationsAsync() => throw CreateException();
+
+        public Task DeleteConfigurationAsync(string id, string? expectedRevision = null) => throw CreateException();
     }
 }

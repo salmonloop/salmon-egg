@@ -15,7 +15,7 @@ internal static class CredentialsCommandFactory
             output.WriteLine(CredentialsDescription);
             output.WriteLine();
             output.WriteLine("Usage:");
-            output.WriteLine("  salmon-egg set-credential <server-id> --token <value>");
+            output.WriteLine("  salmon-egg set-credential <server-id> --token-stdin");
             output.WriteLine("  salmon-egg clear-credential <server-id>");
             output.WriteLine("  salmon-egg has-credential <server-id>");
             output.WriteLine();
@@ -30,13 +30,13 @@ internal static class CredentialsCommandFactory
         if (handler is null) throw new ArgumentNullException(nameof(handler));
 
         var serverIdArg = new Argument<string>("server-id") { Description = "The server identifier" };
-        var tokenOpt = new Option<string?>("--token") { Description = "Bearer token to store." };
-        var apiKeyOpt = new Option<string?>("--api-key") { Description = "API key to store." };
+        var tokenOpt = new Option<bool>("--token-stdin") { Description = "Read the bearer token from stdin (one line)." };
+        var apiKeyOpt = new Option<bool>("--api-key-stdin") { Description = "Read the API key from stdin (one line)." };
         var cmd = new Command("set-credential") { Description = "Store a token or API key for a configured server." };
         cmd.Arguments.Add(serverIdArg);
         cmd.Options.Add(tokenOpt);
         cmd.Options.Add(apiKeyOpt);
-        cmd.SetAction((parseResult, ct) => handler.SetAsync(
+        cmd.SetAction((parseResult, ct) => handler.SetFromStdinAsync(
             parseResult.GetRequiredValue(serverIdArg),
             parseResult.GetValue(tokenOpt),
             parseResult.GetValue(apiKeyOpt),

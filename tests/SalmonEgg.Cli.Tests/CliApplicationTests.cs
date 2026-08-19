@@ -88,15 +88,142 @@ public sealed class CliApplicationTests
         await using var stderr = new StringWriter();
 
         var exitCode = await CliApplication.RunAsync(
-            ["set-credential", "server-id", "--token", "token-value", "--api-key", "api-key-value"],
+            ["set-credential", "server-id", "--token-stdin", "--api-key-stdin"],
             stdout,
             stderr,
+            new StringReader("credential-value\n"),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(CliExitCodes.Usage, exitCode);
-        Assert.Contains("Specify exactly one of --token or --api-key.", stderr.ToString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("token-value", stdout.ToString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("api-key-value", stdout.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Specify exactly one of --token-stdin or --api-key-stdin.", stderr.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("credential-value", stdout.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigServerAdd_ParsesQuotedDashPrefixedStdioArguments()
+    {
+        var appDataRoot = Path.Combine(
+            Path.GetTempPath(),
+            "SalmonEggCliTests",
+            Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", appDataRoot, EnvironmentVariableTarget.Process);
+        try
+        {
+            await using var stdout = new StringWriter();
+            await using var stderr = new StringWriter();
+
+            var exitCode = await CliApplication.RunAsync(
+                [
+                    "config", "server", "add",
+                    "--name", "Stdio Agent",
+                    "--transport", "stdio",
+                    "--stdio-command", "agent",
+                    "--stdio-args=--serve -T --mode plan"
+                ],
+                stdout,
+                stderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, exitCode);
+            var id = stdout.ToString().Split(':', 2)[1].Trim();
+            Assert.Empty(stderr.ToString());
+
+            await using var showStdout = new StringWriter();
+            await using var showStderr = new StringWriter();
+            var showExitCode = await CliApplication.RunAsync(
+                ["config", "server", "show", id],
+                showStdout,
+                showStderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, showExitCode);
+            Assert.Contains("args:       --serve -T --mode plan", showStdout.ToString(), StringComparison.Ordinal);
+            Assert.Empty(showStderr.ToString());
+
+            await using var updateStdout = new StringWriter();
+            await using var updateStderr = new StringWriter();
+            var updateExitCode = await CliApplication.RunAsync(
+                ["config", "server", "update", id, "--stdio-args="],
+                updateStdout,
+                updateStderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, updateExitCode);
+            Assert.Empty(updateStderr.ToString());
+
+            await using var clearedShowStdout = new StringWriter();
+            await using var clearedShowStderr = new StringWriter();
+            var clearedShowExitCode = await CliApplication.RunAsync(
+                ["config", "server", "show", id],
+                clearedShowStdout,
+                clearedShowStderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, clearedShowExitCode);
+            Assert.DoesNotContain("args:", clearedShowStdout.ToString(), StringComparison.Ordinal);
+            Assert.Empty(clearedShowStderr.ToString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", null, EnvironmentVariableTarget.Process);
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigServerAdd_AcceptsDetachedStdioArgumentsValue()
+    {
+        // The documented form is attached (--stdio-args="..."), but a detached value is the shape
+        // users type by habit. Both must reach the child process as the same argv.
+        var appDataRoot = Path.Combine(
+            Path.GetTempPath(),
+            "SalmonEggCliTests",
+            Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", appDataRoot, EnvironmentVariableTarget.Process);
+        try
+        {
+            await using var stdout = new StringWriter();
+            await using var stderr = new StringWriter();
+
+            var exitCode = await CliApplication.RunAsync(
+                [
+                    "config", "server", "add",
+                    "--name", "Detached Stdio Agent",
+                    "--transport", "stdio",
+                    "--stdio-command", "agent",
+                    "--stdio-args", "--serve -T --mode plan"
+                ],
+                stdout,
+                stderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, exitCode);
+            Assert.Empty(stderr.ToString());
+            var id = stdout.ToString().Split(':', 2)[1].Trim();
+
+            await using var showStdout = new StringWriter();
+            await using var showStderr = new StringWriter();
+            var showExitCode = await CliApplication.RunAsync(
+                ["config", "server", "show", id],
+                showStdout,
+                showStderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, showExitCode);
+            Assert.Contains("args:       --serve -T --mode plan", showStdout.ToString(), StringComparison.Ordinal);
+            Assert.Empty(showStderr.ToString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", null, EnvironmentVariableTarget.Process);
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -135,6 +262,139 @@ public sealed class CliApplicationTests
                 Directory.Delete(appDataRoot, recursive: true);
             }
         }
+    }
+
+    [Theory]
+    [InlineData("--stdio-args")]
+    [InlineData("--stdio-args=--serve \"unterminated")]
+    public async Task RunAsync_ConfigServerAdd_WithInvalidStdioArguments_ReturnsUsageWithoutWriting(string stdioOption)
+    {
+        var appDataRoot = Path.Combine(Path.GetTempPath(), "SalmonEggCliTests", Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", appDataRoot, EnvironmentVariableTarget.Process);
+        try
+        {
+            await using var stdout = new StringWriter();
+            await using var stderr = new StringWriter();
+
+            var exitCode = await CliApplication.RunAsync(
+                [
+                    "config", "server", "add",
+                    "--name", "Invalid Args",
+                    "--transport", "stdio",
+                    "--stdio-command", "agent",
+                    stdioOption
+                ],
+                stdout,
+                stderr,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Usage, exitCode);
+            Assert.Contains("Invalid --stdio-args:", stderr.ToString(), StringComparison.Ordinal);
+            Assert.False(Directory.Exists(Path.Combine(appDataRoot, "config", "servers")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", null, EnvironmentVariableTarget.Process);
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigServerAdd_WithTokenStdin_DoesNotExposeCredential()
+    {
+        var appDataRoot = Path.Combine(Path.GetTempPath(), "SalmonEggCliTests", Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", appDataRoot, EnvironmentVariableTarget.Process);
+        const string secret = "stdin-secret-value";
+        try
+        {
+            await using var stdout = new StringWriter();
+            await using var stderr = new StringWriter();
+            using var stdin = new StringReader(secret + Environment.NewLine);
+
+            var exitCode = await CliApplication.RunAsync(
+                [
+                    "config", "server", "add",
+                    "--name", "Secret Agent",
+                    "--url", "https://agent.example",
+                    "--token-stdin"
+                ],
+                stdout,
+                stderr,
+                stdin,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Success, exitCode);
+            Assert.DoesNotContain(secret, stdout.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain(secret, stderr.ToString(), StringComparison.Ordinal);
+            var yaml = Assert.Single(Directory.EnumerateFiles(Path.Combine(appDataRoot, "config", "servers"), "*.yaml"));
+            Assert.DoesNotContain(secret, await File.ReadAllTextAsync(yaml, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", null, EnvironmentVariableTarget.Process);
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigServerAdd_WithTokenStdinAtEndOfInput_ReturnsUsageWithoutWriting()
+    {
+        var appDataRoot = Path.Combine(Path.GetTempPath(), "SalmonEggCliTests", Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", appDataRoot, EnvironmentVariableTarget.Process);
+        try
+        {
+            await using var stdout = new StringWriter();
+            await using var stderr = new StringWriter();
+            using var stdin = new StringReader(string.Empty);
+
+            var exitCode = await CliApplication.RunAsync(
+                [
+                    "config", "server", "add",
+                    "--name", "Missing Secret Agent",
+                    "--url", "https://agent.example",
+                    "--token-stdin"
+                ],
+                stdout,
+                stderr,
+                stdin,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(CliExitCodes.Usage, exitCode);
+            Assert.Contains("Credential value cannot be empty.", stderr.ToString(), StringComparison.Ordinal);
+            Assert.False(Directory.Exists(Path.Combine(appDataRoot, "config", "servers")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SALMONEGG_APPDATA_ROOT", null, EnvironmentVariableTarget.Process);
+            if (Directory.Exists(appDataRoot))
+            {
+                Directory.Delete(appDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_WithLegacyCredentialOption_RejectsWithoutEchoingValue()
+    {
+        await using var stdout = new StringWriter();
+        await using var stderr = new StringWriter();
+        const string secret = "legacy-secret-value";
+
+        var exitCode = await CliApplication.RunAsync(
+            ["set-credential", "server-id", "--token", secret],
+            stdout,
+            stderr,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Usage, exitCode);
+        Assert.Contains("--token-stdin", stderr.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, stderr.ToString(), StringComparison.Ordinal);
     }
 
     [Theory]
