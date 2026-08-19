@@ -243,6 +243,76 @@ public sealed class ConfigurationEditorViewModelTests
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WhenProfileIsMissing_LoadsBlankEditor()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(x => x.LoadConfigurationAsync("missing-profile"))
+            .ReturnsAsync((ServerConfiguration?)null);
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("missing-profile");
+
+        Assert.False(viewModel.HasError);
+        Assert.False(viewModel.HasProfileLoadError);
+        Assert.False(viewModel.IsEditing);
+        Assert.True(viewModel.CanSaveConfiguration);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WhenReadFails_PreservesRetryableNonSaveableErrorState()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .Setup(x => x.LoadConfigurationAsync("profile-1"))
+            .ThrowsAsync(new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "The configuration file could not be read."));
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("profile-1");
+
+        Assert.True(viewModel.HasError);
+        Assert.Contains("Failed to load configuration", viewModel.ErrorMessage, StringComparison.Ordinal);
+        Assert.True(viewModel.HasProfileLoadError);
+        Assert.True(viewModel.CanRetryProfileLoad);
+        Assert.False(viewModel.CanSaveConfiguration);
+
+        await viewModel.SaveConfigurationAsync();
+
+        configurationService.Verify(x => x.SaveConfigurationAsync(It.IsAny<ServerConfiguration>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RetryProfileLoadAsync_WhenRetrySucceeds_ClearsLoadErrorAndRestoresEditing()
+    {
+        var configurationService = new Mock<IConfigurationService>();
+        configurationService
+            .SetupSequence(x => x.LoadConfigurationAsync("profile-1"))
+            .ThrowsAsync(new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.ConfigurationReadFailed,
+                "The configuration file could not be read."))
+            .ReturnsAsync(new ServerConfiguration
+            {
+                Id = "profile-1",
+                Name = "Recovered agent",
+                Transport = TransportType.WebSocket,
+                ServerUrl = "ws://example.com/acp/ws"
+            });
+        var viewModel = CreateViewModel(configurationService);
+
+        await viewModel.LoadConfigurationAsync("profile-1");
+        await viewModel.RetryProfileLoadCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.HasError);
+        Assert.False(viewModel.HasProfileLoadError);
+        Assert.False(viewModel.CanRetryProfileLoad);
+        Assert.True(viewModel.CanSaveConfiguration);
+        Assert.True(viewModel.IsEditing);
+        Assert.Equal("Recovered agent", viewModel.Name);
+    }
+
+    [Fact]
     public async Task SaveConfigurationAsync_WhenSecureStorageUnavailable_ShouldExposeActionableError()
     {
         var validator = new ServerConfigurationValidator();
@@ -273,6 +343,14 @@ public sealed class ConfigurationEditorViewModelTests
         Assert.Contains("Linux Secret Service is unavailable", viewModel.ErrorMessage, StringComparison.Ordinal);
         Assert.Contains("libsecret-tools", viewModel.ErrorMessage, StringComparison.Ordinal);
     }
+
+    private static ConfigurationEditorViewModel CreateViewModel(Mock<IConfigurationService> configurationService)
+        => new(
+            new ServerConfigurationValidator(),
+            configurationService.Object,
+            CreateTransportSupportPolicy(supportsStdioTransport: true),
+            new TestCoreStringLocalizer(),
+            Mock.Of<ILogger<ConfigurationEditorViewModel>>());
 
     private static Mock<IPlatformCapabilityService> CreateCapabilities(bool supportsStdioTransport)
     {

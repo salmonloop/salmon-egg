@@ -479,6 +479,12 @@ Create the corresponding Markdown file in:
   <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
     <value>Failed to save configuration: {0}</value>
   </data>
+  <data name="AgentProfileEditor_LoadFailedFormat" xml:space="preserve">
+    <value>Failed to load configuration: {0}</value>
+  </data>
+  <data name="AgentProfileEditor_RetryLoad" xml:space="preserve">
+    <value>Retry</value>
+  </data>
   <data name="AgentProfileEditor_ProxyModeSystem" xml:space="preserve">
     <value>Use system proxy</value>
   </data>

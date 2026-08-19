@@ -172,6 +172,8 @@ internal sealed class TestCoreStringLocalizer : IStringLocalizer<CoreStrings>
         ["Diagnostics_CopyLogSnippetFailed"] = "Failed to copy the recent log snippet. Please try again later.",
         ["AgentProfileEditor_ValidationFailedFormat"] = "Validation failed: {0}",
         ["AgentProfileEditor_SaveFailedFormat"] = "Failed to save configuration: {0}",
+        ["AgentProfileEditor_LoadFailedFormat"] = "Failed to load configuration: {0}",
+        ["AgentProfileEditor_RetryLoad"] = "Retry",
         ["AgentProfileEditor_ProxyModeSystem"] = "Use system proxy",
         ["AgentProfileEditor_ProxyModeNone"] = "No proxy",
         ["AgentProfileEditor_ProxyModeCustom"] = "Custom proxy",

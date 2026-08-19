@@ -481,6 +481,12 @@
   <data name="AgentProfileEditor_SaveFailedFormat" xml:space="preserve">
     <value>保存配置失败：{0}</value>
   </data>
+  <data name="AgentProfileEditor_LoadFailedFormat" xml:space="preserve">
+    <value>无法读取配置：{0}</value>
+  </data>
+  <data name="AgentProfileEditor_RetryLoad" xml:space="preserve">
+    <value>重试</value>
+  </data>
   <data name="AgentProfileEditor_ProxyModeSystem" xml:space="preserve">
     <value>使用系统代理</value>
   </data>
