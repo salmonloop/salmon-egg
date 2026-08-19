@@ -85,19 +85,29 @@ dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --version
 # Explore server configuration commands
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server --help
 
-# Add a server with non-sensitive proxy settings and a credential.
-# Credential values are persisted through the shared configuration service and never enter YAML.
-dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
+# Add a server with non-sensitive proxy settings and a credential read from stdin.
+# Credential values never enter argv, shell history, or YAML.
+printf '%s\n' "$AGENT_TOKEN" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
   --name "Example Agent" --url "https://agent.example" --transport streamable_http \
-  --token "$AGENT_TOKEN" --proxy-mode custom --proxy-url "http://proxy.example:8080"
+  --token-stdin --proxy-mode custom --proxy-url "http://proxy.example:8080"
+
+# Add a stdio server. --stdio-args takes one quoted command-line string;
+# attached form preserves dash-prefixed agent arguments and inner quoting.
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server add \
+  --name "Local Stdio Agent" --transport stdio --stdio-command "agent" \
+  --stdio-args="--serve -T --mode plan"
+
+# Update it with a new argument string; use --stdio-args="" to clear arguments.
+dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server update <server-id> \
+  --stdio-args="--serve --mode strict"
 
 # Existing server commands use show/remove (remove requires --yes).
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server show <server-id>
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- config server remove <server-id> --yes
 
-# Register exactly one credential kind for an existing server
-dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --token <value>
-dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --api-key <value>
+# Register exactly one credential kind for an existing server. Each command reads one stdin line.
+printf '%s\n' "$AGENT_TOKEN" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --token-stdin
+printf '%s\n' "$AGENT_API_KEY" | dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- set-credential <server-id> --api-key-stdin
 
 # Check presence without printing credential values, then clear both keys
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- has-credential <server-id>
@@ -107,7 +117,7 @@ dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- clear-credential 
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- credentials --help
 ```
 
-The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection and plaintext fallback behavior. Credential values are stored through `ISecureStorage`, never written to server YAML, and never returned by `has-credential`. Invalid command lines return exit code `2`; unexpected host failures return `1`; successful commands return `0`.
+The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection and plaintext fallback behavior. When the platform store is unavailable, the CLI writes a warning to stderr before returning so the plaintext downgrade is never silent. Credential values are read from stdin and stored through `ISecureStorage`; they never enter process arguments, server YAML, or `has-credential` output. Invalid command lines return exit code `2`; state and persistence failures return `1`; successful commands return `0`.
 
 ## Documentation
 
