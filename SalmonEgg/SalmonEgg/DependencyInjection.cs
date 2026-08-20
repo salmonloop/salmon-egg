@@ -49,8 +49,12 @@ using SalmonEgg.Platforms.WebAssembly.Observability;
 #elif WINDOWS
 using SalmonEgg.Platforms.Windows;
 using SalmonEgg.Platforms.Windows.Observability;
-#elif __ANDROID__ || __IOS__
+#elif __ANDROID__
+using SalmonEgg.Platforms.Android;
 using SalmonEgg.Platforms.Mobile.Observability;
+#elif __IOS__
+using SalmonEgg.Platforms.Mobile.Observability;
+using SalmonEgg.Platforms.iOS;
 #else
 using SalmonEgg.Platforms.Desktop.Observability;
 #endif
@@ -199,6 +203,15 @@ public static class DependencyInjection
             }
             return new WinUiDispatcher(queue!, logger);
         });
+#if WINDOWS
+        services.AddSingleton<ISystemNotificationService, WindowsSystemNotificationService>();
+#elif __ANDROID__
+        services.AddSingleton<ISystemNotificationService, AndroidSystemNotificationService>();
+#elif __IOS__
+        services.AddSingleton<ISystemNotificationService, IosSystemNotificationService>();
+#else
+        services.AddSingleton<ISystemNotificationService, UnsupportedSystemNotificationService>();
+#endif
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
         services.AddSingleton<WindowsGamepadInputService>();
@@ -651,6 +664,7 @@ public static class DependencyInjection
             // 挂在启动 workflow 上是因为该 workflow 必然在启动路径被解析，且遥测首次激活也在
             // 这里，订阅与激活同时就位。
             _ = sp.GetRequiredService<TelemetrySettingsProjection>();
+            _ = sp.GetRequiredService<ChatCompletionNotificationCoordinator>();
             return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>(),
@@ -658,6 +672,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<ITelemetryRuntime>(),
                 sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
         });
+        services.AddSingleton<ChatCompletionNotificationCoordinator>();
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),
@@ -720,6 +735,8 @@ public static class DependencyInjection
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();
+        services.AddSingleton<IApplicationNotificationSettings>(sp =>
+            sp.GetRequiredService<AppPreferencesViewModel>());
         services.AddSingleton<WindowBackdropService>();
 
         // General settings
@@ -865,6 +882,7 @@ public static class DependencyInjection
         services.AddSingleton<ShellLayoutViewModel>();
         services.AddSingleton<AppActivationSignalSource>();
         services.AddSingleton<IApplicationActivationSignalSource>(sp => sp.GetRequiredService<AppActivationSignalSource>());
+        services.AddSingleton<IApplicationVisibilityState>(sp => sp.GetRequiredService<AppActivationSignalSource>());
         services.AddSingleton<WindowMetricsProvider>();
     }
 

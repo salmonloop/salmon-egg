@@ -3468,7 +3468,8 @@ public sealed class MainNavigationViewModelSelectionTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         preferences.Projects.Add(new ProjectDefinition
         {

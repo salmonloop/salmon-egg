@@ -87,6 +87,21 @@
   <data name="General_StartupTitle.Text" xml:space="preserve">
     <value>启动与窗口</value>
   </data>
+  <data name="General_NotificationsTitle.Text" xml:space="preserve">
+    <value>通知</value>
+  </data>
+  <data name="General_SystemNotificationsTitle.Text" xml:space="preserve">
+    <value>任务完成时显示系统通知</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OnContent" xml:space="preserve">
+    <value>开启</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OffContent" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="General_SystemNotificationsUnsupported.Text" xml:space="preserve">
+    <value>当前平台不支持系统通知</value>
+  </data>
   <data name="General_AutoStartTitle.Text" xml:space="preserve">
     <value>开机自动启动</value>
   </data>

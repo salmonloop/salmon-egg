@@ -138,7 +138,8 @@ public sealed class MainNavigationViewModelPaneTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static INavigationProjectPreferences CreateProjectPreferences(AppPreferencesViewModel preferences)

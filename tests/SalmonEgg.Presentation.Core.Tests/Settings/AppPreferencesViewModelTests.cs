@@ -31,7 +31,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         appSettingsService.Verify(service => service.LoadAsync(), Times.Never);
     }
@@ -75,7 +76,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         uiRuntime.Invocations.Clear();
@@ -124,7 +126,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -156,7 +159,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -182,7 +186,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.Language = "en-US";
@@ -207,7 +212,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.SelectedLanguageOption = vm.LanguageOptions.Single(option => option.Tag == "en-US");
@@ -231,7 +237,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.SelectedThemeOption = vm.ThemeOptions.Single(option => option.Value == "Dark");
@@ -257,7 +264,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
         vm.Theme = "Light";
@@ -299,7 +307,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         languageService.Invocations.Clear();
@@ -439,6 +448,39 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
+    public async Task SystemNotifications_WhenPermissionGranted_PersistsEnabledPreference()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var notifications = new RecordingSystemNotificationService(SystemNotificationPermissionResult.Granted);
+        var vm = CreateViewModel(settingsService, notifications);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.SystemNotificationsEnabled = true;
+
+        await WaitForConditionAsync(() => settingsService.LastSaved?.SystemNotificationsEnabled == true);
+
+        Assert.Equal(1, notifications.PermissionRequestCount);
+    }
+
+    [Fact]
+    public async Task SystemNotifications_WhenPermissionDenied_RevertsToggle()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings());
+        var notifications = new RecordingSystemNotificationService(SystemNotificationPermissionResult.Denied);
+        var ui = new Mock<IUiInteractionService>();
+        ui.Setup(service => service.ShowInfoAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+        var vm = CreateViewModel(settingsService, notifications, ui.Object);
+
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+        vm.SystemNotificationsEnabled = true;
+
+        await WaitForConditionAsync(() => !vm.SystemNotificationsEnabled);
+
+        Assert.Equal(1, notifications.PermissionRequestCount);
+        ui.Verify(service => service.ShowInfoAsync("System notification permission was not granted."), Times.Once);
+    }
+
+    [Fact]
     public async Task ScheduleSave_NormalizesBlankTelemetryEndpointToNull()
     {
         var settingsService = new FakeAppSettingsService(new AppSettings
@@ -489,7 +531,10 @@ public class AppPreferencesViewModelTests
         Assert.Null(vm.TelemetryAuthHeader);
     }
 
-    private static AppPreferencesViewModel CreateViewModel(FakeAppSettingsService settingsService)
+    private static AppPreferencesViewModel CreateViewModel(
+        FakeAppSettingsService settingsService,
+        ISystemNotificationService? notifications = null,
+        IUiInteractionService? ui = null)
     {
         var startupService = new Mock<IAppStartupService>();
         startupService.SetupGet(s => s.IsSupported).Returns(false);
@@ -503,10 +548,11 @@ public class AppPreferencesViewModelTests
             languageService.Object,
             capabilities.Object,
             uiRuntime.Object,
-            Mock.Of<IUiInteractionService>(),
+            ui ?? Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            notifications ?? TestSystemNotificationService.Instance);
     }
 
     private static async Task WaitForConditionAsync(Func<bool> predicate, int timeoutMilliseconds = 5000, int pollDelayMilliseconds = 20)
@@ -556,6 +602,26 @@ public class AppPreferencesViewModelTests
         }
     }
 
+    private sealed class RecordingSystemNotificationService(SystemNotificationPermissionResult permissionResult)
+        : ISystemNotificationService
+    {
+        public bool IsSupported => true;
+
+        public int PermissionRequestCount { get; private set; }
+
+        public Task<SystemNotificationPermissionResult> RequestPermissionAsync(
+            CancellationToken cancellationToken = default)
+        {
+            PermissionRequestCount++;
+            return Task.FromResult(permissionResult);
+        }
+
+        public Task<SystemNotificationResult> ShowAsync(
+            SystemNotificationRequest request,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(SystemNotificationResult.Shown);
+    }
+
     [Fact]
     public void RemovedStoragePreferenceProperties_AreNotExposed()
     {
@@ -596,7 +662,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -639,7 +706,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -670,7 +738,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -708,7 +777,8 @@ public class AppPreferencesViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 
@@ -751,7 +821,8 @@ public class AppPreferencesViewModelTests
             ui.Object,
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         Assert.False(vm.LaunchOnStartup);
@@ -803,7 +874,8 @@ public class AppPreferencesViewModelTests
             ui.Object,
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         vm.LaunchOnStartup = true;
@@ -853,7 +925,8 @@ public class AppPreferencesViewModelTests
             ui.Object,
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         Assert.Equal("en-US", vm.Language);
@@ -898,7 +971,8 @@ public class AppPreferencesViewModelTests
             ui.Object,
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
         ui.Invocations.Clear();
@@ -940,7 +1014,8 @@ public class AppPreferencesViewModelTests
             ui.Object,
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await vm.InitializeAsync(TestContext.Current.CancellationToken);
 

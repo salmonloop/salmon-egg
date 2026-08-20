@@ -1371,7 +1371,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         await preferences.InitializeAsync();
         return preferences;
@@ -1406,7 +1407,8 @@ public sealed class AcpConnectionSettingsViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             logger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static Task<AcpConnectionSettingsViewModel> CreateViewModelAsync(AppPreferencesViewModel preferences)

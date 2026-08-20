@@ -189,6 +189,7 @@ public sealed class CoreStringResourceTests
     [InlineData("AcpProfiles_DisconnectFailed")]
     [InlineData("AcpProfiles_ReconnectFailed")]
     [InlineData("General_LaunchOnStartupFailed")]
+    [InlineData("General_SystemNotificationsPermissionDenied")]
     [InlineData("General_LanguageApplyFailed")]
     [InlineData("General_AppSettingsSaveFailed")]
     [InlineData("General_AppSettingsLoadFailed")]

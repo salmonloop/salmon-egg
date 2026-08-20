@@ -446,7 +446,8 @@ public sealed class ChatLaunchWorkflowTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private sealed class FakeChatLaunchWorkflowChatFacade : IChatLaunchWorkflowChatFacade

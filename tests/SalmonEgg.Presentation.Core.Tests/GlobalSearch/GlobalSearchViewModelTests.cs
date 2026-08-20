@@ -538,7 +538,8 @@ public sealed class GlobalSearchViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
 
         preferences.Projects.Add(new ProjectDefinition
         {

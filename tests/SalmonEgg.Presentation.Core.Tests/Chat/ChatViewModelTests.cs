@@ -157,7 +157,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4615,7 +4616,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4719,7 +4721,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4831,7 +4834,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
