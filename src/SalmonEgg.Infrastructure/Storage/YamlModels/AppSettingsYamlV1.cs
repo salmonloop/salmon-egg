@@ -21,6 +21,8 @@ internal sealed class AppSettingsYamlV1
 
     public bool MinimizeToTray { get; set; } = true;
 
+    public bool SystemNotificationsEnabled { get; set; }
+
     public string Language { get; set; } = "System";
 
     // Appearance
