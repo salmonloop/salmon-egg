@@ -1174,4 +1174,16 @@ Create the corresponding Markdown file in:
   <data name="McpSettings_DefaultServerName" xml:space="preserve">
     <value>new-mcp-server</value>
   </data>
+  <data name="SystemNotification_TurnCompletedTitle" xml:space="preserve">
+    <value>Task completed</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
+    <value>The agent finished responding.</value>
+  </data>
+  <data name="SystemNotification_ChannelName" xml:space="preserve">
+    <value>Agent task completions</value>
+  </data>
+  <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
+    <value>System notification permission was not granted.</value>
+  </data>
 </root>
