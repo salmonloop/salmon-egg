@@ -57,6 +57,24 @@ public class ShellLayoutPolicyTests
     }
 
     [Fact]
+    public void Policy_HidesRightPanelToggle_WhenContentIsUnavailable()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = false,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var snapshot = ShellLayoutPolicy.Compute(state);
+
+        Assert.False(snapshot.CanToggleTaskOverviewPanel);
+        Assert.False(snapshot.RightPanelVisible);
+        Assert.Equal(RightPanelMode.None, snapshot.RightPanelMode);
+    }
+
+    [Fact]
     public void Policy_ChangesTitleBarInteractiveRegionToken_WhenSearchOrAuxVisibilityChanges()
     {
         var defaultSnapshot = ShellLayoutPolicy.Compute(ShellLayoutState.Default with
@@ -109,6 +127,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.None,
             RightPanelPreferredWidth = 400,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
@@ -127,6 +146,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             NavOpenPaneLength = ShellLayoutPolicy.MinimumNavPaneWidth - 1,
             RightPanelPreferredWidth = ShellLayoutPolicy.MaximumRightPanelWidth + 1
         };
@@ -272,6 +292,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
@@ -293,6 +314,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
@@ -313,6 +335,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
@@ -334,6 +357,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
@@ -355,6 +379,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
@@ -376,6 +401,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
@@ -415,6 +441,7 @@ public class ShellLayoutPolicyTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
@@ -439,6 +466,7 @@ public class ShellLayoutReducerBehaviorTests
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Bottom,
@@ -453,6 +481,25 @@ public class ShellLayoutReducerBehaviorTests
         Assert.Equal(AuxiliaryPanelArea.None, reduced.State.LastAuxiliaryPanelArea);
         Assert.False(reduced.Snapshot.RightPanelVisible);
         Assert.False(reduced.Snapshot.BottomPanelVisible);
+    }
+
+    [Fact]
+    public void ContentContextChanged_PreservesRightPanelContentFactForChatReturn()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var leftChat = ShellLayoutReducer.Reduce(state, new ContentContextChanged(false, Version: 1));
+        var returnedToChat = ShellLayoutReducer.Reduce(leftChat.State, new ContentContextChanged(true, Version: 2));
+
+        Assert.True(returnedToChat.State.HasRightPanelContent);
+        Assert.Equal(RightPanelMode.None, returnedToChat.State.DesiredRightPanelMode);
+        Assert.True(returnedToChat.Snapshot.CanToggleTaskOverviewPanel);
     }
 
     [Fact]
@@ -518,11 +565,70 @@ public class ShellLayoutReducerBehaviorTests
     }
 
     [Fact]
+    public void RightPanelContentAvailabilityFalse_ClosesExistingTaskOverview()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true,
+            DesiredRightPanelMode = RightPanelMode.TaskOverview,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var reduced = ShellLayoutReducer.Reduce(
+            state,
+            new RightPanelContentAvailabilityChanged(false, Version: 1));
+
+        Assert.False(reduced.State.HasRightPanelContent);
+        Assert.Equal(RightPanelMode.None, reduced.State.DesiredRightPanelMode);
+        Assert.False(reduced.Snapshot.RightPanelVisible);
+        Assert.False(reduced.Snapshot.CanToggleTaskOverviewPanel);
+    }
+
+    [Fact]
+    public void RightPanelContentAvailabilityTrue_AllowsTaskOverviewToggle()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = false,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var reduced = ShellLayoutReducer.Reduce(
+            state,
+            new RightPanelContentAvailabilityChanged(true, Version: 1));
+
+        Assert.True(reduced.State.HasRightPanelContent);
+        Assert.True(reduced.Snapshot.CanToggleTaskOverviewPanel);
+    }
+
+    [Fact]
+    public void RightPanelContentAvailability_IgnoresStaleAsyncCompletion()
+    {
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true,
+            RightPanelContentAvailabilityVersion = 2,
+            WindowMetrics = new WindowMetrics(1280, 900, 1280, 900)
+        };
+
+        var reduced = ShellLayoutReducer.Reduce(
+            state,
+            new RightPanelContentAvailabilityChanged(false, Version: 1));
+
+        Assert.Same(state, reduced.State);
+        Assert.True(reduced.Snapshot.CanToggleTaskOverviewPanel);
+    }
+
+    [Fact]
     public void ToggleBottomPanelSetsDesiredModeAndKeepsBottomWhenDualUnavailable()
     {
         var state = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             LastAuxiliaryPanelArea = AuxiliaryPanelArea.Right,
             WindowMetrics = new WindowMetrics(1000, 680, 1000, 680)

@@ -1347,12 +1347,6 @@
   <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
     <value>改动</value>
   </data>
-  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
-    <value>暂无任务状态</value>
-  </data>
-  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
-    <value>Agent 更新计划或文件改动后会显示在这里。</value>
-  </data>
   <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
     <value>{0} 个进行中 · {1} 个待处理 · {2} 个已完成 · {3} 个文件改动</value>
   </data>

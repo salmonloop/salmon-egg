@@ -228,7 +228,11 @@ public class ShellLayoutReducerTests
     [InlineData(ShellLayoutPolicy.MaximumRightPanelWidth + 1, ShellLayoutPolicy.MaximumRightPanelWidth)]
     public void Reduce_RightPanelResizeRequested_StoresCanonicalWidth(double requestedWidth, double expectedWidth)
     {
-        var state = ShellLayoutState.Default with { IsChatContext = true };
+        var state = ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true
+        };
 
         var reduced = ShellLayoutReducer.Reduce(state, new RightPanelResizeRequested(requestedWidth));
 

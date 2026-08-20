@@ -168,8 +168,10 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
     private readonly ConversationHydrationContext _hydrationContext;
     private readonly IVoiceInputService _voiceInputService;
     private readonly IApplicationActivationSignalSource _applicationActivationSignalSource;
+    private readonly IShellLayoutMetricsSink? _shellLayoutMetricsSink;
     private readonly IShellNavigationRuntimeState? _shellNavigationRuntimeState;
     private readonly ConversationActivationOutcomePublisher _conversationActivationOutcomePublisher;
+    private long _taskOverviewContentAvailabilityVersion;
     private readonly object _autoConnectSync = new();
     private bool _disposed;
     private bool _autoConnectAttempted;
@@ -1361,7 +1363,8 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         IStringLocalizer<CoreStrings>? localizer = null,
         IAppLanguageService? languageService = null,
         IUiInteractionService? uiInteractionService = null,
-        IAiContentReportLauncher? aiContentReportLauncher = null)
+        IAiContentReportLauncher? aiContentReportLauncher = null,
+        IShellLayoutMetricsSink? shellLayoutMetricsSink = null)
         : base(logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
@@ -1370,6 +1373,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         _languageService = languageService;
         _uiInteractionService = uiInteractionService;
         _aiContentReportLauncher = aiContentReportLauncher;
+        _shellLayoutMetricsSink = shellLayoutMetricsSink;
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _acpProfiles = acpProfiles ?? throw new ArgumentNullException(nameof(acpProfiles));
@@ -1498,6 +1502,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
             _shellNavigationRuntimeState.PropertyChanged += OnShellNavigationRuntimeStatePropertyChanged;
         }
         _planEntriesProjectionCoordinator.Observe(PlanEntries, RaisePlanEntryDerivedPropertyNotifications);
+        _ = PublishTaskOverviewContentAvailabilityAsync();
 
         IsConversationListLoading = _conversationWorkspace.IsConversationListLoading;
         ConversationListVersion = _conversationWorkspace.ConversationListVersion;
@@ -1935,6 +1940,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(TaskOverviewVisibleChanges));
         OnPropertyChanged(nameof(TaskOverviewHiddenChangeCount));
         OnPropertyChanged(nameof(ShouldShowTaskOverviewMoreChanges));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
     }
 
     private void OnCurrentSessionIdChanged(string? value)
@@ -2370,6 +2376,7 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(OverlayStatusText));
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
         NotifyComposerProjectionChanged();
     }
 
@@ -3687,6 +3694,26 @@ public partial class ChatViewModel : ViewModelBase, IDisposable, IAcpChatCoordin
         OnPropertyChanged(nameof(ShouldShowTaskOverviewVisiblePlanList));
         OnPropertyChanged(nameof(TaskOverviewHiddenPlanCount));
         OnPropertyChanged(nameof(ShouldShowTaskOverviewMorePlanItems));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
+    }
+
+    private async Task PublishTaskOverviewContentAvailabilityAsync()
+    {
+        if (_shellLayoutMetricsSink is null)
+        {
+            return;
+        }
+
+        var version = Interlocked.Increment(ref _taskOverviewContentAvailabilityVersion);
+        var hasAvailableContent = TaskOverviewState.HasContent && ShouldShowActiveConversationRoot;
+        try
+        {
+            await _shellLayoutMetricsSink.ReportRightPanelContentAvailability(hasAvailableContent, version);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Task overview content availability projection failed.");
+        }
     }
 
     private void RefreshTaskOverviewChanges(

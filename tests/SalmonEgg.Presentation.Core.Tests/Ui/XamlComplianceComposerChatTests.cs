@@ -632,7 +632,7 @@ public sealed class XamlComplianceComposerChatTests
 
         Assert.DoesNotContain("Opacity=\"0.55\"", mainPageXaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{x:Bind SecondaryText}\"", mainPageXaml, StringComparison.Ordinal);
-        Assert.Contains("x:Uid=\"TaskOverviewEmptySubtitle\"", mainPageXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Uid=\"TaskOverviewEmptySubtitle\"", mainPageXaml, StringComparison.Ordinal);
         Assert.Contains("Foreground=\"{ThemeResource TextFillColorSecondaryBrush}\"", mainPageXaml, StringComparison.Ordinal);
 
         var chatInputXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Controls\ChatInputArea.xaml");

@@ -692,11 +692,6 @@ public class UiConventionsTests
                 failures.Add($"{file}: missing TaskOverviewPanelTitle.Text");
             }
 
-            if (!keys.Contains("TaskOverviewEmptyTitle.Text"))
-            {
-                failures.Add($"{file}: missing TaskOverviewEmptyTitle.Text");
-            }
-
             if (!keys.Contains("TaskOverviewSummaryFormat.Text"))
             {
                 failures.Add($"{file}: missing TaskOverviewSummaryFormat.Text");

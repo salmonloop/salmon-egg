@@ -1347,12 +1347,6 @@
   <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
     <value>Changes</value>
   </data>
-  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
-    <value>No task status yet</value>
-  </data>
-  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
-    <value>Agent plan updates and file changes will appear here.</value>
-  </data>
   <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
     <value>{0} in progress · {1} pending · {2} completed · {3} files changed</value>
   </data>

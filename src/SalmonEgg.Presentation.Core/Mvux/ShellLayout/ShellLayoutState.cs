@@ -15,7 +15,9 @@ public sealed record ShellLayoutState(
     bool? UserNavOpenIntent,
     bool IsMinimalPaneOpen,
     long ContentContextVersion = 0,
-    bool SupportsLocalTerminal = true)
+    bool SupportsLocalTerminal = true,
+    bool HasRightPanelContent = false,
+    long RightPanelContentAvailabilityVersion = 0)
 {
     public const double DefaultTitleBarHeight = 48;
 
