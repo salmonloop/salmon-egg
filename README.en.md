@@ -75,6 +75,43 @@ build.bat msix
 
 The repository includes a cross-platform desktop CLI for server configuration and credential management.
 
+#### Supported platforms and installation
+
+Released as a self-contained single-file executable, so no .NET runtime is required. Installing the GUI does **not** put `salmon-egg` on PATH; the CLI packages own that.
+
+| Platform | Install | PATH |
+|---|---|---|
+| Linux x64 | `sudo dpkg -i salmon-egg-cli_<version>_amd64.deb` | dpkg installs `/usr/bin/salmon-egg` and removes it on purge |
+| Windows x64 | run `salmon-egg-cli-<version>-win-x64.msi` (per-user) | the MSI adds its install folder to your user PATH and removes it on uninstall |
+| macOS Apple Silicon | `brew install --formula ./salmon-egg-cli.rb` | Homebrew links the binary into its `bin`, already on PATH |
+
+Plain archives (`.tar.gz` / `.zip`) are also published for anyone who prefers to place the binary on PATH themselves. Other runtime identifiers — `win-arm64`, `linux-arm64`, `osx-x64` — are not officially supported: they can be cross-compiled, but nothing verifies them on a real machine.
+
+After installing, the command is available directly:
+
+```bash
+salmon-egg --help
+salmon-egg config server list
+```
+
+#### Credential storage
+
+Credential writes are fail-closed. If the platform secret store is unavailable, the write fails instead of silently downgrading to a plaintext file. Pass `--allow-insecure-storage` to accept the downgrade; the CLI still reports it on stderr. Non-credential configuration commands are unaffected either way.
+
+This matters on Linux (Secret Service) and macOS (Keychain), where the store can be missing or locked. On Windows the flag is inert: DPAPI needs no keyring daemon and is always available.
+
+```bash
+# Refuses rather than writing the token unprotected
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg set-credential <server-id> --token-stdin
+
+# Explicitly accepts plaintext storage
+printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credential <server-id> --token-stdin
+```
+
+#### Running from source
+
+The examples below use `dotnet run` so they work in a checkout without installing anything. Replace the `dotnet run --project ... --` prefix with `salmon-egg` when using an installed build.
+
 ```bash
 # Show the command tree
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- --help
@@ -117,7 +154,9 @@ dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- clear-credential 
 dotnet run --project src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -- credentials --help
 ```
 
-The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection and plaintext fallback behavior. When the platform store is unavailable, the CLI writes a warning to stderr before returning so the plaintext downgrade is never silent. Credential values are read from stdin and stored through `ISecureStorage`; they never enter process arguments, server YAML, or `has-credential` output. Invalid command lines return exit code `2`; state and persistence failures return `1`; successful commands return `0`.
+The CLI targets `net10.0` and intentionally does not reference the Uno/WinUI application project. It reuses the desktop configuration composition root, including the existing platform secure-storage selection, but chooses a fail-closed downgrade policy where the GUI chooses a permissive one — a scripted invocation cannot react to a warning stream in time, so it must not persist credentials unprotected without being asked. Credential values are read from stdin and stored through `ISecureStorage`; they never enter process arguments, server YAML, or `has-credential` output. Invalid command lines return exit code `2`; state and persistence failures return `1`; successful commands return `0`.
+
+Release packaging, the supported runtime identifiers, and the install/PATH gates are documented in [docs/release-guide.md](docs/release-guide.md).
 
 ## Documentation
 
