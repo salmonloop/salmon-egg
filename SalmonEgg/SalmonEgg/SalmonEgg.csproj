@@ -248,10 +248,8 @@
     <ApplicationTitle>SalmonEgg</ApplicationTitle>
     <!-- App Identifier -->
     <ApplicationId>com.companyname.salmonegg</ApplicationId>
-    <!-- Keep package, assembly, and display versions derived from one source of truth. -->
-    <SalmonEggDisplayVersion>1.0.5</SalmonEggDisplayVersion>
-    <SalmonEggPackageVersion>$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
-    <!-- Versions -->
+    <!-- Versions. SalmonEggDisplayVersion / SalmonEggPackageVersion come from the repository root
+         Directory.Build.props so the GUI packages and the CLI release assets cannot drift apart. -->
     <Version>$(SalmonEggPackageVersion)</Version>
     <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
     <FileVersion>$(SalmonEggPackageVersion)</FileVersion>
