@@ -315,16 +315,31 @@ scripts/gates/run-cli-release-artifact-smoke.sh artifacts/cli-publish/linux-x64/
 
 # 安装 / PATH / 卸载门禁（需要 root 或免密 sudo）
 scripts/gates/run-cli-linux-package-smoke.sh artifacts/cli/salmon-egg-cli-1.0.5_amd64.deb
+
+# Windows MSI PATH 注册规则的正反例门禁（纯字符串逻辑，任意平台可跑，无需 WiX）
+pwsh -NoProfile -File scripts/gates/run-cli-msi-path-contract-gate.ps1
 ```
 
-两个门禁都必须使用**本次构建产出**的产物；`dotnet run` 不是有效验证口径。
+前两个门禁必须使用**本次构建产出**的产物；`dotnet run` 不是有效验证口径。第三个门禁验证的是规则本身而非产物，因此不受此限制。
 
 ### PATH 与凭据约定
 
 - GUI 安装包不修改 PATH。全局 `salmon-egg` 命令只来自 CLI 安装包。
 - 不允许用脚本编辑 `.bashrc`、`.zshrc` 或用户 PATH 字符串：安装、升级、卸载必须由同一个包管理器拥有。
 - CLI 凭据写入默认 fail-closed。平台安全存储不可用时写入失败而非降级为明文；需要明文降级必须显式传 `--allow-insecure-storage`。非凭据配置操作不受影响。该策略在 Linux（Secret Service）与 macOS（Keychain）上生效；Windows DPAPI 不依赖 keyring 守护进程、始终可用，因此该 flag 在 Windows 上无实际作用。
-- Windows MSI 的 PATH 注册由 `build-cli-msi.ps1` 直接读取 MSI 的 `Environment` 表验证（断言 target 为 PATH、非 permanent、引用 `INSTALLFOLDER`），可在 CI 中执行。但真实安装 / 卸载需要交互式 Windows 会话，不在 CI 覆盖范围：发布 Windows 安装包前仍需手工确认安装后新开终端 `where salmon-egg` 命中安装目录、卸载后命令消失且用户 PATH 无残留重复项。
+- Windows MSI 的 PATH 注册由 `build-cli-msi.ps1` 直接读取本次构建产出的 MSI 的 `Environment` 表验证：表中必须恰好一行，且该行必须满足下表全部断言。
+
+  | 断言 | 违规后果 |
+  |---|---|
+  | 变量为 `PATH` | 命令不会变得可发现 |
+  | 前缀含 `=`、不含 `!` | 安装时不写入，或安装时就把变量删掉 |
+  | 前缀含 `-` | 卸载后安装目录永久留在 PATH 上 |
+  | 前缀不含 `*` | 写的是机器环境而非当前用户 |
+  | 值以 `[~]` + 分隔符开头 | 缺 `[~]` 会整体覆盖 PATH（MSI 文档明确警告可能导致机器无法启动）；`[~]` 出现在结尾则是前置插入，会遮蔽用户原有工具 |
+  | 值引用 `[INSTALLFOLDER]` | 加进 PATH 的不是本包的安装目录 |
+
+  规则本身在 `scripts/release/CliMsiPathContract.ps1`，与读取 MSI 的 COM 代码分离，因此 `scripts/gates/run-cli-msi-path-contract-gate.ps1` 能在任意平台（含 Linux）直接用正反例跑这条规则；该门禁在 `ci-core.yml` 的每次 push / PR 上执行，不必等到打 tag 才发现规则被削弱。
+- 上述断言只覆盖包内表结构。真实安装 / 卸载需要交互式 Windows 会话，不在 CI 覆盖范围：发布 Windows 安装包前仍需手工确认安装后新开终端 `where salmon-egg` 命中安装目录、卸载后命令消失、且用户原有 PATH 条目完好无残留重复项。
 
 ---
 

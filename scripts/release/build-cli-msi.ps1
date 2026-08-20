@@ -107,10 +107,15 @@ if (-not (Test-Path -LiteralPath $msiPath)) {
     throw "MSI was not produced: $msiPath"
 }
 
-# Verify the PATH registration made it into the built package rather than trusting the authoring above.
-# A full install/uninstall gate would need an interactive Windows session; reading the MSI's own tables is
-# what can be asserted in CI, and it catches the failure that actually matters: an MSI that installs the
-# executable but silently registers no PATH entry, leaving `salmon-egg` undiscoverable.
+# Verify the PATH registration landed in the built package rather than trusting the authoring above. A
+# real install/uninstall check needs an interactive Windows session and stays a manual release step (see
+# docs/release-guide.md); what can be asserted here is the package's own Environment table.
+#
+# The rule itself lives in CliMsiPathContract.ps1, which documents the MSI encoding it enforces, so that
+# scripts/gates/run-cli-msi-path-contract-gate.ps1 can exercise the rule — and each of its failure
+# cases — without WiX or a Windows session.
+. (Join-Path $PSScriptRoot 'CliMsiPathContract.ps1')
+
 $installer = New-Object -ComObject WindowsInstaller.Installer
 $database = $installer.GetType().InvokeMember(
     'OpenDatabase', 'InvokeMethod', $null, $installer, @($msiPath, 0))
@@ -119,27 +124,34 @@ try {
         'OpenView', 'InvokeMethod', $null, $database,
         @('SELECT `Name`, `Value` FROM `Environment`'))
     $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
-    $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
-    if ($null -eq $record) {
-        throw "The built MSI has no Environment table row: the CLI would not be registered on PATH."
+
+    # Every row is read rather than just the first: a second row introduced later — a machine PATH entry,
+    # say — would ship unchecked if the read stopped after one.
+    $rows = @()
+    while ($true) {
+        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+        if ($null -eq $record) {
+            break
+        }
+
+        $rows += [pscustomobject]@{
+            Name  = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(1))
+            Value = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(2))
+        }
     }
 
-    $name = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(1))
-    $value = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(2))
-
-    # WiX encodes Action/Part as prefixes and suffixes on Name and Value: a trailing "*" on Name marks a
-    # non-permanent entry (removed on uninstall) and a leading "[~];" on Value marks an append.
-    if ($name -notlike 'PATH*') {
-        throw "The MSI Environment row targets '$name', expected PATH."
-    }
-    if ($name -notlike '*`*') {
-        throw "The MSI PATH entry is marked permanent; uninstall would leave it behind. Name='$name'"
-    }
-    if ($value -notlike '*[[]INSTALLFOLDER]*') {
-        throw "The MSI PATH entry does not reference INSTALLFOLDER. Value='$value'"
+    if ($rows.Count -eq 0) {
+        throw 'The built MSI has no Environment table row: the CLI would not be registered on PATH.'
     }
 
-    Write-Host "[cli-msi] verified PATH registration: Name='$name' Value='$value'"
+    if ($rows.Count -ne 1) {
+        $described = ($rows | ForEach-Object { "Name='$($_.Name)' Value='$($_.Value)'" }) -join '; '
+        throw ("The built MSI has $($rows.Count) Environment table rows, but this package registers " +
+               "exactly one PATH entry. Rows: $described")
+    }
+
+    Assert-CliMsiPathContract -Name $rows[0].Name -Value $rows[0].Value
+    Write-Host "[cli-msi] verified PATH registration: Name='$($rows[0].Name)' Value='$($rows[0].Value)'"
 }
 finally {
     [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
