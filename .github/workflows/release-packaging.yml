@@ -81,8 +81,10 @@ jobs:
           $installerDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\installer"
           New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
 
-          [xml]$projectXml = Get-Content (Join-Path $env:GITHUB_WORKSPACE "SalmonEgg\SalmonEgg\SalmonEgg.csproj")
-          $displayVersion = $projectXml.Project.PropertyGroup.SalmonEggDisplayVersion | Select-Object -First 1
+          # Evaluate the shared release identity instead of scraping project XML: the version lives in
+          # the repository-root Directory.Build.props, and only MSBuild evaluation sees imports and
+          # conditions the way the build itself does.
+          $displayVersion = (dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -getProperty:SalmonEggDisplayVersion -nologo).Trim()
           if ($displayVersion -notmatch '^\d+\.\d+\.\d+$') {
             throw "SalmonEggDisplayVersion must be a three-part numeric version, got: $displayVersion"
           }
@@ -349,9 +351,85 @@ jobs:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
 
+  package-cli:
+    # One job per officially supported CLI runtime identifier. Each publishes on its own native runner,
+    # smokes the executable it just produced, and only then packages it — a cross-compiled artifact that
+    # nothing has executed is not something this repository is willing to release.
+    name: Package CLI (${{ matrix.rid }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runs-on: ubuntu-latest
+            deb-architecture: amd64
+          - rid: win-x64
+            runs-on: windows-latest
+          - rid: osx-arm64
+            runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build CLI artifact
+        id: build-cli
+        shell: bash
+        run: scripts/release/build-cli-artifacts.sh --rid ${{ matrix.rid }} --configuration ${{ env.CONFIGURATION }}
+
+      - name: Smoke the published CLI executable
+        shell: bash
+        run: scripts/gates/run-cli-release-artifact-smoke.sh "${{ steps.build-cli.outputs.executable-path }}"
+
+      - name: Build Debian package
+        if: matrix.deb-architecture != ''
+        id: build-deb
+        shell: bash
+        run: >-
+          scripts/release/build-cli-deb.sh
+          --executable "${{ steps.build-cli.outputs.executable-path }}"
+          --version "${{ steps.build-cli.outputs.display-version }}"
+          --architecture ${{ matrix.deb-architecture }}
+
+      - name: Smoke the Debian package install and PATH registration
+        if: matrix.deb-architecture != ''
+        shell: bash
+        run: scripts/gates/run-cli-linux-package-smoke.sh "${{ steps.build-deb.outputs.deb-path }}"
+
+      - name: Install WiX Toolset
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: choco install wixtoolset -y --no-progress
+
+      - name: Build Windows MSI
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: >-
+          ./scripts/release/build-cli-msi.ps1
+          -Executable "${{ steps.build-cli.outputs.executable-path }}"
+          -Version "${{ steps.build-cli.outputs.display-version }}"
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: cli-${{ matrix.rid }}
+          path: |
+            artifacts/cli/*.tar.gz
+            artifacts/cli/*.zip
+            artifacts/cli/*.deb
+            artifacts/cli/*.msi
+            artifacts/cli/*.sha256
+          if-no-files-found: error
+
   publish-release-assets:
     name: Publish Release Assets
-    needs: [package-wasm, package-desktop, package-windows-msix, package-macos]
+    needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
@@ -360,6 +438,11 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
     steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
         uses: actions/download-artifact@v5
@@ -394,6 +477,18 @@ jobs:
         with:
           name: desktop-macos-dmg
           path: macos-dmg
+
+      - name: Checkout for release tooling
+        uses: actions/checkout@v5
+        with:
+          path: repo
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: cli-artifacts
 
       - name: Ensure GitHub release exists
         shell: bash
@@ -455,6 +550,58 @@ jobs:
           if [ -d "wasm-build" ]; then
             zip -r "release-assets/SalmonEgg-wasm.zip" "wasm-build"
           fi
+
+      - name: Prepare CLI release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          # Every supported runtime identifier must be present. A release that silently ships two of the
+          # three advertised platforms is worse than a failed release: the support matrix in the docs would
+          # be wrong for whoever downloads it.
+          supported_rids="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
+            -getProperty:SalmonEggCliSupportedRuntimeIdentifiers -nologo | tr -d '\r' | tail -n 1)"
+          display_version="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
+            -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
+
+          missing=""
+          IFS=';' read -ra rids <<< "$supported_rids"
+          for rid in "${rids[@]}"; do
+            [ -n "$rid" ] || continue
+            case "$rid" in
+              win-*) archive="salmon-egg-cli-$display_version-$rid.zip" ;;
+              *) archive="salmon-egg-cli-$display_version-$rid.tar.gz" ;;
+            esac
+            if [ ! -f "cli-artifacts/$archive" ]; then
+              missing="$missing $archive"
+              continue
+            fi
+            if [ ! -f "cli-artifacts/$archive.sha256" ]; then
+              missing="$missing $archive.sha256"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "Missing CLI release assets for the supported matrix ($supported_rids):$missing" >&2
+            exit 1
+          fi
+
+          cp cli-artifacts/*.tar.gz cli-artifacts/*.zip cli-artifacts/*.sha256 release-assets/
+
+          # Installer packages are copied only when present. An unmatched glob would otherwise pass the
+          # literal pattern to cp and fail the whole job under `set -e`.
+          find cli-artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.msi' \) \
+            -exec cp {} release-assets/ \;
+
+          # The formula's checksums are read from the sidecars produced by this run, so it can only ever
+          # describe archives that were actually built and uploaded.
+          repo/scripts/release/build-cli-homebrew-formula.sh \
+            --version "$display_version" \
+            --release-tag "${RELEASE_TAG}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --artifact-dir cli-artifacts \
+            --output release-assets/salmon-egg-cli.rb
 
       - name: Upload release assets
         shell: bash
