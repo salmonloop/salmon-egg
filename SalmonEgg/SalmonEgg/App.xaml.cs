@@ -94,6 +94,9 @@ public partial class App : global::Microsoft.UI.Xaml.Application
         services.AddSalmonEgg();
         ServiceProvider = services.BuildServiceProvider();
 
+        // 遥测不在此处初始化：那需要读取用户设置（异步 IO），在构造函数里同步阻塞会违反
+        // 启动副作用所有权约束。真实配置由 IApplicationStartupWorkflow 异步加载后落地。
+
         // Resolve DI dependencies before InitializeComponent() so x:Bind has stable inputs.
         _maintenanceService = ServiceProvider.GetService<SalmonEgg.Domain.Services.IAppMaintenanceService>();
         _windowBackdropService = ServiceProvider.GetService<Presentation.Services.WindowBackdropService>();
@@ -314,6 +317,8 @@ public partial class App : global::Microsoft.UI.Xaml.Application
     /// </remarks>
     internal static Task ShutdownRuntimeAsync()
     {
+        // 遥测 flush 也由该 workflow 负责：teardown 只有一个 owner，宿主不直接触碰
+        // TelemetryManager，否则关闭路径会出现两处各自 flush 的第二套 owner。
         var shutdown = ServiceProvider?.GetService<IApplicationShutdownWorkflow>();
         return shutdown is null
             ? Task.CompletedTask

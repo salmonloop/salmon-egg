@@ -1287,10 +1287,18 @@ function findVisibleControlPoint(input) {
     ? control
     : control.querySelector("input,textarea") ?? control;
   const rect = inputElement.getBoundingClientRect();
-  return {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2
-  };
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+
+  // findVisibleControl admits a control whose top edge is on screen even when its center is not,
+  // so a row straddling the fold yields a point below the viewport. Clicking it silently lands on
+  // nothing: focus never moves and the caller times out waiting for it. Report no point instead,
+  // so scrollToVisibleControl keeps scrolling rather than accepting an unclickable target.
+  if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) {
+    return null;
+  }
+
+  return { x, y };
 }
 
 function isFocusedControlInPage(input) {

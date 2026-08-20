@@ -71,13 +71,16 @@ public sealed class CliApplicationTests
     [Fact]
     public async Task RunAsync_WithVersion_WritesCliAssemblyVersion()
     {
+        // 期望值取自仓库根的共享版本，而不是写死字面量：CLI 与 GUI 共用同一个版本真相源，
+        // 写死会让每次发布抬版本都变成一次红灯。
+        var expectedVersionPrefix = RepositoryLayout.ReadSharedDisplayVersion() + ".";
         await using var stdout = new StringWriter();
         await using var stderr = new StringWriter();
 
         var exitCode = await CliApplication.RunAsync(["--version"], stdout, stderr, TestContext.Current.CancellationToken);
 
         Assert.Equal(CliExitCodes.Success, exitCode);
-        Assert.Contains("1.0.5.0", stdout.ToString(), StringComparison.Ordinal);
+        Assert.StartsWith(expectedVersionPrefix, stdout.ToString(), StringComparison.Ordinal);
         Assert.Empty(stderr.ToString());
     }
 

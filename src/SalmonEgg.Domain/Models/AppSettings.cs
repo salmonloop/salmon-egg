@@ -62,4 +62,24 @@ public sealed class AppSettings
     public int? AcpMaxPinnedProfiles { get; set; }
 
     public string AcpHydrationCompletionMode { get; set; } = "StrictReplay";
+
+    // Telemetry & Error Reporting
+    /// <summary>
+    /// 用户是否同意向已配置的 collector 分享错误报告与性能数据。
+    /// 默认 true（opt-out 模式）；没有有效 OTLP 端点时运行态保持禁用。
+    /// 用户可在「设置 → 数据与存储」随时关闭，关闭后整个 SDK 变为 no-op。
+    /// </summary>
+    public bool TelemetrySharingEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 高级用户可自定义的 OpenTelemetry Collector 端点（覆盖部署环境变量）。
+    /// 格式：https://your-collector.example.com:4318
+    /// </summary>
+    public string? TelemetryCustomEndpoint { get; set; }
+
+    /// <summary>
+    /// Custom OTLP authentication header. This value is held by the secure-storage boundary and
+    /// must not be serialized into app.yaml or configuration sync payloads.
+    /// </summary>
+    public string? TelemetryAuthHeader { get; set; }
 }

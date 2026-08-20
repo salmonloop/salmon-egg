@@ -811,7 +811,7 @@ public sealed partial class MainNavigationViewModel : ObservableObject, IDisposa
             {
                 var currentCatalogItem = _conversationCatalogPresenter.Snapshot
                     .FirstOrDefault(item => string.Equals(item.ConversationId, debugSelectedSessionId, StringComparison.Ordinal));
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Navigation rebuild evaluating selected session. SessionId={SessionId} CatalogCwd={CatalogCwd} BoundProfileId={BoundProfileId} RemoteSessionId={RemoteSessionId} SnapshotCount={SnapshotCount}",
                     debugSelectedSessionId,
                     currentCatalogItem?.Cwd,

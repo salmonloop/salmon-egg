@@ -6,6 +6,8 @@ public sealed record TaskOverviewPanelState(
     int ActivePlanCount,
     int PendingPlanCount,
     int CompletedPlanCount,
-    bool ShouldShowEmpty,
     bool ShouldShowPlanList,
-    bool ShouldShowChangesList);
+    bool ShouldShowChangesList)
+{
+    public bool HasContent => ShouldShowPlanList || ShouldShowChangesList;
+}

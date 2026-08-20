@@ -42,13 +42,20 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 using SalmonEgg.Presentation.ViewModels.Start;
 using Serilog;
 using Uno.Extensions.Reactive;
+using SalmonEgg.Infrastructure.Observability;
 #if !__WASM__ && !__ANDROID__ && !__IOS__
 using SalmonEgg.Infrastructure.Desktop.DependencyInjection;
 #endif
-#if WINDOWS
-using SalmonEgg.Platforms.Windows;
-#elif __WASM__
+#if __WASM__
 using SalmonEgg.Platforms.WebAssembly;
+using SalmonEgg.Platforms.WebAssembly.Observability;
+#elif WINDOWS
+using SalmonEgg.Platforms.Windows;
+using SalmonEgg.Platforms.Windows.Observability;
+#elif __ANDROID__ || __IOS__
+using SalmonEgg.Platforms.Mobile.Observability;
+#else
+using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
 namespace SalmonEgg;
@@ -69,6 +76,7 @@ public static class DependencyInjection
     {
         services.AddLocalization();
         ConfigureLogging(services);
+        ConfigureTelemetry(services);
         RegisterDomainServices(services);
         RegisterInfrastructureServices(services);
         services.AddSingleton<IStringLocalizer<CoreStrings>, UnoCoreStringLocalizer>();
@@ -88,6 +96,58 @@ public static class DependencyInjection
             builder.AddSerilog(logger, dispose: true);
         });
         services.AddSingleton(logger);
+    }
+
+    private static void ConfigureTelemetry(IServiceCollection services)
+    {
+        // 注册平台特定的 Telemetry 导出器工厂
+#if __WASM__
+        services.AddSingleton<ITelemetryExporterFactory, WasmTelemetryExporterFactory>();
+#elif WINDOWS
+        services.AddSingleton<ITelemetryExporterFactory, WinUI3TelemetryExporterFactory>();
+#elif __ANDROID__ || __IOS__
+        services.AddSingleton<ITelemetryExporterFactory, MobileTelemetryExporterFactory>();
+#else
+        services.AddSingleton<ITelemetryExporterFactory, DesktopTelemetryExporterFactory>();
+#endif
+
+        // 支撑 Logs 维度的动态 logger provider：DI 里是稳定实例，内部的 OTel logger factory
+        // 由 TelemetryManager 在每次 apply 时替换。单独 build 一个 LoggerProvider 不行——
+        // 它收不到 Microsoft.Extensions.Logging 的写入，会造成"有 provider 但日志不上报"。
+        services.AddSingleton<DynamicTelemetryLoggerProvider>();
+
+        // 必须同时作为 ILoggerProvider 注册，否则上面那个实例不在日志管线里，OTLP Logs 维度
+        // 永远收不到任何业务日志。顺序有硬要求：ConfigureLogging 里的 ClearProviders() 会
+        // RemoveAll<ILoggerProvider>()，因此本注册必须发生在 ConfigureLogging 之后。
+        services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<DynamicTelemetryLoggerProvider>());
+
+        // 以"禁用"为初始配置注册单例：此处禁止读 AppSettings（那是异步 IO，在 DI 工厂或 App
+        // 构造函数里同步阻塞会违反启动副作用所有权约束）。真实配置由 application startup
+        // workflow 异步加载后经 ITelemetryRuntime.ApplyAsync 落地，运行时变更走同一入口。
+        services.AddSingleton<ITelemetryManager>(sp => new TelemetryManager(
+            TelemetrySettings.CreateInactiveBootstrap(),
+            sp.GetRequiredService<ITelemetryExporterFactory>(),
+            sp.GetRequiredService<DynamicTelemetryLoggerProvider>()));
+
+        services.AddSingleton<ITelemetryRuntime>(sp => new TelemetryRuntime(
+            sp.GetRequiredService<ITelemetryManager>(),
+            GetPlatformSamplingDefaults,
+            sp.GetRequiredService<ILogger<TelemetryRuntime>>(),
+            typeof(App).Assembly.GetName().Version?.ToString()));
+
+        // 订阅持久化边界，使任何写入方（设置页保存、云配置恢复）落盘后都立即重建管线。
+        services.AddSingleton<TelemetrySettingsProjection>();
+    }
+
+    private static SamplingSettings GetPlatformSamplingDefaults()
+    {
+#if __WASM__
+        return SamplingSettings.CreateWasmDefaults();
+#elif __ANDROID__ || __IOS__
+        return SamplingSettings.CreateMobileDefaults();
+#else
+        return SamplingSettings.CreateDesktopDefaults();
+#endif
     }
 
     private static LoggingHostCapabilities GetLoggingHostCapabilities()
@@ -243,6 +303,8 @@ public static class DependencyInjection
         services.AddSingleton<ConfigurationSecretSnapshotService>();
         services.AddSingleton<ConfigSyncPackageService>();
 #else
+        // Desktop hosts (GUI and CLI) share one composition root, which already owns
+        // IAppSettingsService together with the secure storage backend it depends on.
         services.AddSalmonEggDesktopConfiguration();
 #endif
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
@@ -578,13 +640,23 @@ public static class DependencyInjection
                 sp.GetRequiredService<ISettingsSectionSelectionStore>(),
                 sp.GetRequiredService<ILogger<ShellStartupNavigationService>>()));
         services.AddSingleton<IApplicationStartupWorkflow>(sp =>
-            new ApplicationStartupWorkflow(
+        {
+            // 强制解析：投影只在构造时订阅持久化事件，若无人解析它，"保存后立即生效"就不成立。
+            // 挂在启动 workflow 上是因为该 workflow 必然在启动路径被解析，且遥测首次激活也在
+            // 这里，订阅与激活同时就位。
+            _ = sp.GetRequiredService<TelemetrySettingsProjection>();
+            return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>(),
-                sp.GetRequiredService<IConfigurationRecoveryService>()));
+                sp.GetRequiredService<IConfigurationRecoveryService>(),
+                sp.GetRequiredService<IAppSettingsService>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
+                sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
+        });
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),
+                sp.GetRequiredService<ITelemetryRuntime>(),
                 sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>()));
 
         // Global search

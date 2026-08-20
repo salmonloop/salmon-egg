@@ -13,7 +13,7 @@ public sealed class CliArchitectureTests
     [Fact]
     public void CliProject_DoesNotReferenceUnoOrPresentationProjects()
     {
-        var root = FindRepositoryRoot();
+        var root = RepositoryLayout.FindRoot();
         var projectPath = Path.Combine(root, "src", "SalmonEgg.Cli", "SalmonEgg.Cli.csproj");
         var project = File.ReadAllText(projectPath);
 
@@ -24,7 +24,7 @@ public sealed class CliArchitectureTests
     [Fact]
     public void CredentialHandler_DoesNotBypassTheCredentialServiceBoundary()
     {
-        var root = FindRepositoryRoot();
+        var root = RepositoryLayout.FindRoot();
         var handlerPath = Path.Combine(
             root,
             "src",
@@ -50,21 +50,5 @@ public sealed class CliArchitectureTests
         Assert.IsType<AppSettingsService>(provider.GetRequiredService<IAppSettingsService>());
         Assert.IsType<ServerCredentialService>(provider.GetRequiredService<IServerCredentialService>());
         Assert.IsType<ConfigSyncPackageService>(provider.GetRequiredService<ConfigSyncPackageService>());
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "SalmonEgg.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Repository root (SalmonEgg.sln) not found.");
     }
 }

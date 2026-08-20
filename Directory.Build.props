@@ -5,7 +5,7 @@
 
     <!-- Shared release identity for the GUI and CLI. Keep package and assembly versions derived
          from the same display version so release assets cannot drift apart. -->
-    <SalmonEggDisplayVersion Condition="'$(SalmonEggDisplayVersion)' == ''">1.0.5</SalmonEggDisplayVersion>
+    <SalmonEggDisplayVersion Condition="'$(SalmonEggDisplayVersion)' == ''">1.1.0</SalmonEggDisplayVersion>
     <SalmonEggPackageVersion Condition="'$(SalmonEggPackageVersion)' == ''">$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>
   </PropertyGroup>
 </Project>

@@ -37,6 +37,7 @@ SalmonEgg.Acp.Mcp.McpServerSupportResult
 SalmonEgg.Acp.Mcp.McpServerTransport
 SalmonEgg.Acp.Mcp.SseMcpServer
 SalmonEgg.Acp.Mcp.StdioMcpServer
+SalmonEgg.Acp.Observability.AcpActivitySources
 SalmonEgg.Acp.Plan.Plan
 SalmonEgg.Acp.Plan.PlanEntry
 SalmonEgg.Acp.Plan.PlanEntryPriority

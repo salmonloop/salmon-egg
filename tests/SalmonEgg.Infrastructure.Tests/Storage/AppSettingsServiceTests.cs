@@ -92,7 +92,7 @@ public sealed class AppSettingsServiceTests : IDisposable
         var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
         var loaded = await service.LoadAsync();
 
-        Assert.Contains("schema_version: 2", yaml, StringComparison.Ordinal);
+        Assert.Contains("schema_version: 3", yaml, StringComparison.Ordinal);
         Assert.True(loaded.CloudConfigSync.Enabled);
         Assert.Equal("onedrive", loaded.CloudConfigSync.ProviderId);
         Assert.True(loaded.CloudConfigSync.IncludeSecrets);
@@ -359,6 +359,99 @@ public sealed class AppSettingsServiceTests : IDisposable
         Assert.Equal("System", loaded.Theme);
     }
 
-    private AppSettingsService CreateService()
-        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance);
+    [Fact]
+    public async Task SaveThenLoad_RoundTripsTelemetrySettings()
+    {
+        // 用非默认值：若 YAML 映射漏了这几个字段，断言"等于默认值"会假绿。
+        var secureStorage = new VolatileSecureStorage();
+        var service = CreateService(secureStorage);
+
+        await service.SaveAsync(new AppSettings
+        {
+            TelemetrySharingEnabled = false,
+            TelemetryCustomEndpoint = "https://collector.example.com:4318",
+            TelemetryAuthHeader = "api-key=abc123"
+        });
+
+        var loaded = await service.LoadAsync();
+
+        Assert.False(loaded.TelemetrySharingEnabled);
+        Assert.Equal("https://collector.example.com:4318", loaded.TelemetryCustomEndpoint);
+        Assert.Equal("api-key=abc123", loaded.TelemetryAuthHeader);
+
+        var storedHeader = await secureStorage.LoadAsync("SalmonEgg.TelemetryAuthHeader");
+        Assert.Equal("api-key=abc123", storedHeader);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenTelemetryEndpointIsBlank_NormalizesToNullWithoutDroppingOtherFields()
+    {
+        // 空串必须还原为 null：否则会阻断 TelemetrySettings.Build 回退到部署环境变量，
+        // 并把无效的空地址保留为用户自定义端点。
+        //
+        // 同时断言一个非空字段：只断言"为 null"无法区分「已归一化」与「压根没映射」——
+        // 反向验证时删掉整段 YAML 映射，纯 null 断言依然会绿（假阳性）。
+        var service = CreateService();
+
+        await service.SaveAsync(new AppSettings
+        {
+            TelemetryCustomEndpoint = "   ",
+            TelemetryAuthHeader = "api-key=abc123"
+        });
+
+        var loaded = await service.LoadAsync();
+
+        Assert.Null(loaded.TelemetryCustomEndpoint);
+        Assert.Equal("api-key=abc123", loaded.TelemetryAuthHeader);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RaisesSavedWithPersistedSnapshot()
+    {
+        // 运行态（遥测管线）就是靠这个事件跟随磁盘真相的；不触发则"保存后立即生效"不成立。
+        var service = CreateService();
+        var received = new List<AppSettings>();
+        service.Saved += (_, args) => received.Add(args.Settings);
+
+        var settings = new AppSettings { TelemetryCustomEndpoint = "https://collector.example.com:4318" };
+        await service.SaveAsync(settings);
+
+        Assert.Single(received);
+        Assert.Same(settings, received[0]);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenSubscriberThrows_StillPersists()
+    {
+        // 订阅方（遥测重建）出错不得让"设置已保存"变成失败——磁盘此时已经写好了。
+        var service = CreateService();
+        service.Saved += (_, _) => throw new InvalidOperationException("subscriber failed");
+
+        var exception = await Record.ExceptionAsync(
+            () => service.SaveAsync(new AppSettings { Theme = "Dark" }));
+
+        Assert.Null(exception);
+        var loaded = await service.LoadAsync();
+        Assert.Equal("Dark", loaded.Theme);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenWriteFails_DoesNotRaiseSaved()
+    {
+        // "收到通知 ⇒ 磁盘已是该快照"是订阅方赖以成立的前提：写失败还通知，会让遥测切到
+        // 一份并不存在于磁盘上的配置。
+        var service = new AppSettingsService(
+            new FailingAppFileStore(),
+            new AppDataService(),
+            NullLogger<AppSettingsService>.Instance);
+        var raised = 0;
+        service.Saved += (_, _) => raised++;
+
+        await Assert.ThrowsAnyAsync<Exception>(() => service.SaveAsync(new AppSettings()));
+
+        Assert.Equal(0, raised);
+    }
+
+    private AppSettingsService CreateService(ISecureStorage? secureStorage = null)
+        => new(new FileSystemAppFileStore(), new AppDataService(), NullLogger<AppSettingsService>.Instance, secureStorage);
 }

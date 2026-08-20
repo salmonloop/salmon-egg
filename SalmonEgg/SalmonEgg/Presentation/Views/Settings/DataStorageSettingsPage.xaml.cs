@@ -10,6 +10,7 @@ namespace SalmonEgg.Presentation.Views.Settings;
 public sealed partial class DataStorageSettingsPage : SettingsPageBase
 {
     private static readonly ResourceLoader ResourceLoader = ResourceLoader.GetForViewIndependentUse();
+    private bool _isInitializingTelemetryAuthHeader;
 
     public DataStorageSettingsViewModel ViewModel { get; }
 
@@ -17,6 +18,9 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
     {
         ViewModel = App.ServiceProvider.GetRequiredService<DataStorageSettingsViewModel>();
         InitializeComponent();
+        _isInitializingTelemetryAuthHeader = true;
+        TelemetryAuthHeaderBox.Password = ViewModel.Preferences.TelemetryAuthHeader ?? string.Empty;
+        _isInitializingTelemetryAuthHeader = false;
         SetSettingsBreadcrumbForSection(SettingsSectionCatalog.DataStorageKey);
     }
 
@@ -36,6 +40,19 @@ public sealed partial class DataStorageSettingsPage : SettingsPageBase
         if (sender is PasswordBox passwordBox)
         {
             ViewModel.CloudConfig.S3SecretAccessKey = passwordBox.Password;
+        }
+    }
+
+    private void OnTelemetryAuthHeaderChanged(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializingTelemetryAuthHeader)
+        {
+            return;
+        }
+
+        if (sender is PasswordBox passwordBox)
+        {
+            ViewModel.Preferences.TelemetryAuthHeader = passwordBox.Password;
         }
     }
 

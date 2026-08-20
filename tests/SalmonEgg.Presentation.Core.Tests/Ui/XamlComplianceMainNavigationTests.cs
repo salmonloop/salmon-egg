@@ -269,8 +269,8 @@ public sealed class XamlComplianceMainNavigationTests
         Assert.DoesNotContain("x:Uid=\"DiffPanelPlaceholder\"", xaml);
         Assert.DoesNotContain("x:Uid=\"PlanEmptyTitle\"", xaml);
         Assert.DoesNotContain("x:Uid=\"PlanEmptySubtitle\"", xaml);
-        Assert.Contains("x:Uid=\"TaskOverviewEmptyTitle\"", xaml);
-        Assert.Contains("x:Uid=\"TaskOverviewEmptySubtitle\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"TaskOverviewEmptyTitle\"", xaml);
+        Assert.DoesNotContain("x:Uid=\"TaskOverviewEmptySubtitle\"", xaml);
     }
 
     [Fact]
@@ -293,7 +293,7 @@ public sealed class XamlComplianceMainNavigationTests
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverviewSummary\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.CurrentPlan\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.PlanList\"", xaml);
-        Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.EmptyTitle\"", xaml);
+        Assert.DoesNotContain("RightPanel.TaskOverview.EmptyTitle", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"RightPanel.TaskOverview.ChangesList\"", xaml);
         Assert.DoesNotContain("AutomationProperties.Name=\"\"", xaml);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"RightPanel.TodoEmptyTitle\"", xaml);

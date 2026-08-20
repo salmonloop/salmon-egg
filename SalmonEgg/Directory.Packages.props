@@ -24,6 +24,12 @@
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260710003" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260709004" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.17.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
     <PackageVersion Include="System.Security.Permissions" Version="10.0.10" />
     <PackageVersion Include="Uno.WinUI.Lottie" Version="6.6.166" />

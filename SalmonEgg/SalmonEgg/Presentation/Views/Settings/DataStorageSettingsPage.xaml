@@ -76,6 +76,61 @@
                                               VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <StackPanel>
+                                <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel VerticalAlignment="Center" Spacing="4">
+                                        <TextBlock x:Uid="DataStorage_TelemetrySharingTitle"
+                                                   Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                        <TextBlock x:Uid="DataStorage_TelemetrySharingDescription"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  x:Name="DataStorageTelemetrySharingToggle"
+                                                  x:Uid="DataStorage_TelemetrySharingSwitch"
+                                                  AutomationProperties.AutomationId="DataStorage.TelemetrySharing"
+                                                  IsOn="{x:Bind ViewModel.Preferences.TelemetrySharingEnabled, Mode=TwoWay}"
+                                                  VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <Border Height="1"
+                                        Margin="16,0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+                                <!-- 自定义端点属于开发者选项：默认收起，普通用户不必看到。
+                                     整节随总开关联动禁用，避免"关闭上报却仍可编辑端点"的矛盾状态。 -->
+                                <Expander x:Uid="DataStorage_TelemetryAdvanced"
+                                          IsExpanded="False"
+                                          IsEnabled="{x:Bind ViewModel.Preferences.TelemetrySharingEnabled, Mode=OneWay}"
+                                          Margin="16,12,16,12"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                    <StackPanel Spacing="8" Padding="0,8,0,0">
+                                        <TextBlock x:Uid="DataStorage_TelemetryAdvancedWarning"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                        <TextBox x:Uid="DataStorage_TelemetryCustomEndpoint"
+                                                 AutomationProperties.AutomationId="DataStorage.TelemetryCustomEndpoint"
+                                                 Text="{x:Bind ViewModel.Preferences.TelemetryCustomEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <PasswordBox x:Name="TelemetryAuthHeaderBox"
+                                                     x:Uid="DataStorage_TelemetryAuthHeader"
+                                                     AutomationProperties.AutomationId="DataStorage.TelemetryAuthHeader"
+                                                     PasswordChanged="OnTelemetryAuthHeaderChanged"/>
+                                        <TextBlock x:Uid="DataStorage_TelemetryApplyNotice"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"/>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel Spacing="12">

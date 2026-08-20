@@ -392,7 +392,7 @@ public partial class ChatViewModel
                 canObserveReplayProjection &&
                 _hydrationCompletionMode == AcpHydrationCompletionMode.StrictReplay &&
                 !hasCachedTranscript;
-            Logger.LogInformation(
+            Logger.LogDebug(
                 "Hydration replay wait policy resolved. conversationId={ConversationId} remoteSessionId={RemoteSessionId} shouldAwaitReplayProjection={ShouldAwaitReplayProjection} cachedTranscriptCount={CachedTranscriptCount}",
                 conversationId,
                 binding.RemoteSessionId,
@@ -422,7 +422,7 @@ public partial class ChatViewModel
                     SetHydrationOverlayPhase(conversationId, HydrationOverlayPhase.RequestingSessionLoad);
                 }).ConfigureAwait(false);
 #if DEBUG
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "Remote hydration overlay acquired. conversationId={ConversationId} activationVersion={ActivationVersion} remoteSessionId={RemoteSessionId}",
                     conversationId,
                     activationVersion,
@@ -703,7 +703,7 @@ public partial class ChatViewModel
                     IsRemoteHydrationPending = false;
                 }).ConfigureAwait(false);
 #if DEBUG
-                Logger.LogInformation(
+                Logger.LogDebug(
                     "Remote hydration logical completion reached. conversationId={ConversationId} activationVersion={ActivationVersion} pendingHistoryDismiss={PendingHistoryDismissConversationId}",
                     conversationId,
                     activationVersion,
@@ -3277,7 +3277,7 @@ public partial class ChatViewModel
 
         ResetHydrationOverlayPhaseIfOwnerChanged(historyConversationId);
 #if DEBUG
-        Logger.LogInformation(
+        Logger.LogDebug(
             "Overlay owners updated. currentSession={CurrentSessionId} sessionSwitch={SessionSwitchConversationId} connectionLifecycle={ConnectionLifecycleConversationId} history={HistoryConversationId} pendingHistoryDismiss={PendingHistoryDismissConversationId} isHydrating={IsHydrating} isRemoteHydrationPending={IsRemoteHydrationPending}",
             CurrentSessionId,
             _sessionSwitchOverlayConversationId,
@@ -3332,7 +3332,7 @@ public partial class ChatViewModel
         }
 
 #if DEBUG
-        Logger.LogInformation(
+        Logger.LogDebug(
             "Completing history overlay dismissal. conversationId={ConversationId} transcriptCount={TranscriptCount} hasVisibleTranscript={HasVisibleTranscript} turnStatusVisible={IsTurnStatusVisible}",
             projection.HydratedConversationId,
             projection.Transcript.Count,

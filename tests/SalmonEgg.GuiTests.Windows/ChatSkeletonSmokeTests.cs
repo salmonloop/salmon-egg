@@ -760,7 +760,8 @@ public sealed class ChatSkeletonSmokeTests
         using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
             sessionCount: 1,
             withContent: true,
-            messageCountPerSession: 4);
+            messageCountPerSession: 4,
+            withPlan: true);
         using var session = WindowsGuiAppSession.LaunchFresh();
         EnsureMainWindowWideForTitleBarCommands(session);
 
@@ -794,6 +795,10 @@ public sealed class ChatSkeletonSmokeTests
                 TimeSpan.FromSeconds(15)),
             $"Bottom panel reopened without terminal content. terminalName='{session.TryGetElementName("BottomPanel.TerminalWebView", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
 
+        Assert.True(
+            session.WaitUntilOnscreen("TitleBar.TaskOverviewPanel", TimeSpan.FromSeconds(5)),
+            "Task overview entry did not appear for a conversation with plan content.");
+
         var beforeRightPanelOpen = CaptureAuxiliaryPanelLayout(session);
         ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
@@ -807,8 +812,14 @@ public sealed class ChatSkeletonSmokeTests
                 TimeSpan.FromSeconds(5)),
             $"Task overview panel title was blank after first open. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
-            "Task overview panel empty title did not render on first open.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.CurrentPlan", TimeSpan.FromSeconds(5)),
+            "Task overview did not render its current plan item.");
+        var taskOverviewRoot = session.FindByAutomationId("RightPanel.TaskOverviewRoot", TimeSpan.FromSeconds(5));
+        Assert.NotNull(
+            session.TryFindVisibleText(
+                "Review right sidebar behavior",
+                taskOverviewRoot,
+                TimeSpan.FromSeconds(5)));
         var withRightPanelOpen = WaitForRightPanelLayoutToApply(
             session,
             beforeRightPanelOpen,
@@ -827,18 +838,31 @@ public sealed class ChatSkeletonSmokeTests
 
         ToggleButton(session, "TitleBar.TaskOverviewPanel");
         Assert.True(
-            session.WaitUntilVisible("RightPanel.Title", TimeSpan.FromSeconds(5)),
-            "Task overview panel title did not become visible after reopen toggle.");
+            session.WaitUntilVisible("RightPanel.TaskOverview.CurrentPlan", TimeSpan.FromSeconds(5)),
+            "Task overview panel reopened without its plan content.");
+    }
+
+    [Fact]
+    public void TaskOverviewPanel_WithoutPlanOrChanges_HidesEntry()
+    {
+        using var appData = GuiAppDataScope.CreateDeterministicLeftNavData(
+            sessionCount: 1,
+            withContent: true,
+            messageCountPerSession: 4);
+        using var session = WindowsGuiAppSession.LaunchFresh();
+        EnsureMainWindowWideForTitleBarCommands(session);
+
+        var sessionItem = session.FindByAutomationId("MainNav.Session.gui-session-01", TimeSpan.FromSeconds(15));
+        session.ActivateElement(sessionItem);
+        _ = WaitForSessionHeader(
+            session,
+            "GUI Session 01",
+            "task-overview-empty-header",
+            appData);
+
         Assert.True(
-            WaitForAutomationNameContains(
-                session,
-                "RightPanel.Title",
-                "Task overview",
-                TimeSpan.FromSeconds(5)),
-            $"Task overview panel title was blank after reopen. titleName='{session.TryGetElementName("RightPanel.Title", TimeSpan.FromMilliseconds(150)) ?? string.Empty}'");
-        Assert.True(
-            session.WaitUntilVisible("RightPanel.TaskOverview.EmptyTitle", TimeSpan.FromSeconds(5)),
-            "Task overview panel reopened without empty-state content.");
+            WaitUntilOffscreenOrMissing(session, "TitleBar.TaskOverviewPanel", TimeSpan.FromSeconds(5)),
+            "Task overview entry was visible without plan or change content.");
     }
 
     [Fact]

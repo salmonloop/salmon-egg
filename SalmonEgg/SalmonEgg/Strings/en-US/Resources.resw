@@ -1347,12 +1347,6 @@
   <data name="TaskOverviewChangesSectionTitle.Text" xml:space="preserve">
     <value>Changes</value>
   </data>
-  <data name="TaskOverviewEmptyTitle.Text" xml:space="preserve">
-    <value>No task status yet</value>
-  </data>
-  <data name="TaskOverviewEmptySubtitle.Text" xml:space="preserve">
-    <value>Agent plan updates and file changes will appear here.</value>
-  </data>
   <data name="TaskOverviewSummaryFormat.Text" xml:space="preserve">
     <value>{0} in progress · {1} pending · {2} completed · {3} files changed</value>
   </data>
@@ -1409,6 +1403,39 @@
   </data>
   <data name="DataStorage_CloudSyncTitle.Text" xml:space="preserve">
     <value>Configuration cloud sync</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingTitle.Text" xml:space="preserve">
+    <value>Share error reports and performance data</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingDescription.Text" xml:space="preserve">
+    <value>Helps improve SalmonEgg by sending crash reports, performance metrics, and usage patterns. Chat content and file contents are never collected. Reports do include technical context such as your device name, app version, and operating system.</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="DataStorage_TelemetrySharingSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvanced.Header" xml:space="preserve">
+    <value>Advanced: Custom telemetry endpoint</value>
+  </data>
+  <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
+    <value>For developers only. Telemetry stays inactive unless this endpoint or an OTLP deployment environment variable is configured. Make sure you trust the endpoint before entering credentials.</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
+    <value>OTLP endpoint</value>
+  </data>
+  <data name="DataStorage_TelemetryCustomEndpoint.PlaceholderText" xml:space="preserve">
+    <value>https://collector.example.com:4318  (leave blank to use the deployment environment)</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.Header" xml:space="preserve">
+    <value>OTLP headers</value>
+  </data>
+  <data name="DataStorage_TelemetryAuthHeader.PlaceholderText" xml:space="preserve">
+    <value>api-key=YOUR_KEY  (comma-separated key=value pairs, optional)</value>
+  </data>
+  <data name="DataStorage_TelemetryApplyNotice.Text" xml:space="preserve">
+    <value>Changes take effect as soon as they are saved. No restart needed.</value>
   </data>
   <data name="DataStorage_CloudSyncProviderTitle.Text" xml:space="preserve">
     <value>Cloud sync service</value>

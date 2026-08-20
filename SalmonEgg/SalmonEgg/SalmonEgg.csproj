@@ -44,6 +44,9 @@
     <PackageReference Include="Uno.Extensions.Reactive" />
     <PackageReference Include="Uno.Fonts.Fluent" GeneratePathProperty="true" />
     <PackageReference Include="Uno.Fonts.OpenSans" GeneratePathProperty="true" />
+    <!-- OpenTelemetry packages -->
+    <PackageReference Include="OpenTelemetry.Exporter.Console" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Condition="'$(TargetFramework)' != 'net10.0-browserwasm'" />
   </ItemGroup>
 
   <PropertyGroup>

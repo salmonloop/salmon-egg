@@ -212,6 +212,7 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayStatusPill));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
         NotifyComposerProjectionChanged();
     }
 
@@ -509,7 +510,7 @@ public partial class ChatViewModel
             .ConfigureAwait(false);
 
 #if DEBUG
-        Logger.LogInformation(
+        Logger.LogDebug(
             "Remote replay wait finished. remoteSessionId={RemoteSessionId} replayBaseline={ReplayBaseline} observedCount={ObservedCount} transcriptBaseline={TranscriptProjectionBaseline} transcriptObservedCount={TranscriptObservedCount} startTimedOut={StartTimedOut} transcriptTimedOut={TranscriptTimedOut}",
             remoteSessionId,
             replayBaseline,

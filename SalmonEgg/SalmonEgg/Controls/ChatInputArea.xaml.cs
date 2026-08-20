@@ -995,7 +995,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             && !ReferenceEquals(_openSelectorHost, comboBox))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Composer selector selection ignored because the selector is not the open host. Selector={Selector} AutomationId={AutomationId} OpenSelector={OpenSelector} AddedItemCount={AddedItemCount} RemovedItemCount={RemovedItemCount} SelectedIndex={SelectedIndex}",
                 ResolveSelectorHostName(comboBox),
                 ResolveSelectorAutomationId(comboBox),
@@ -1073,7 +1073,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         if (command.CanExecute(item))
         {
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Composer selector command executing. Source={Source} Selector={Selector} AutomationId={AutomationId} ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} SelectedIndex={SelectedIndex}",
                 source,
                 ResolveSelectorHostName(comboBox),
@@ -1180,7 +1180,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
             if (command is not null)
             {
 #if DEBUG
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Composer selector close fallback enqueued. Selector={Selector} AutomationId={AutomationId} SelectedIndex={SelectedIndex}",
                     ResolveSelectorHostName(comboBox),
                     ResolveSelectorAutomationId(comboBox),
@@ -1191,7 +1191,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
 #if DEBUG
             else
             {
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Composer selector close fallback skipped because command is missing. Selector={Selector} AutomationId={AutomationId} SelectedIndex={SelectedIndex}",
                     ResolveSelectorHostName(comboBox),
                     ResolveSelectorAutomationId(comboBox),
@@ -1206,7 +1206,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         }
 
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Composer selector dropdown closed. Selector={Selector} AutomationId={AutomationId} CommandExecutedDuringOpen={CommandExecutedDuringOpen} OpenSelectorCleared={OpenSelectorCleared}",
             ResolveSelectorHostName(sender as ComboBox),
             ResolveSelectorAutomationId(sender as ComboBox),
@@ -1242,7 +1242,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
     private void LogSelectorHostSnapshot(string eventName, ComboBox? comboBox)
     {
         var selectedItem = comboBox is null ? null : ResolveCurrentSelectorItem(comboBox);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Composer selector dropdown event. Event={Event} Selector={Selector} AutomationId={AutomationId} ItemCount={ItemCount} SelectedIndex={SelectedIndex} SelectedKind={SelectedKind} SelectedIdentity={SelectedIdentity} SelectedSemanticValue={SelectedSemanticValue} SelectedIsPlaceholder={SelectedIsPlaceholder} SelectedIsSelectable={SelectedIsSelectable} SelectedBlocksSubmit={SelectedBlocksSubmit} IsEnabled={IsEnabled} Visibility={Visibility} ActualWidth={ActualWidth} ActualHeight={ActualHeight} CommandExecutedDuringOpen={CommandExecutedDuringOpen}",
             eventName,
             ResolveSelectorHostName(comboBox),
@@ -1268,7 +1268,7 @@ public sealed partial class ChatInputArea : UserControl, INavigationIntentConsum
         ComposerSelectorItemViewModel? item,
         string reason)
     {
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Composer selector command skipped. Reason={Reason} Source={Source} Selector={Selector} AutomationId={AutomationId} ItemKind={ItemKind} ItemIdentity={ItemIdentity} ItemSemanticValue={ItemSemanticValue} ItemIsPlaceholder={ItemIsPlaceholder} ItemIsSelectable={ItemIsSelectable} SelectedIndex={SelectedIndex}",
             reason,
             source,

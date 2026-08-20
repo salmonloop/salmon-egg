@@ -10,6 +10,7 @@ public sealed class WindowsVersioningContractTests
     public void WindowsVersioning_UsesSingleDisplayVersionSourceAndGeneratedManifestTemplates()
     {
         var repositoryRoot = FindRepositoryRoot();
+        var rootBuildProperties = File.ReadAllText(Path.Combine(repositoryRoot, "Directory.Build.props"));
         var projectFile = File.ReadAllText(
             Path.Combine(repositoryRoot, "SalmonEgg", "SalmonEgg", "SalmonEgg.csproj"));
         var packageManifestTemplate = File.ReadAllText(
@@ -17,11 +18,22 @@ public sealed class WindowsVersioningContractTests
         var applicationManifestTemplate = File.ReadAllText(
             Path.Combine(repositoryRoot, "SalmonEgg", "SalmonEgg", "app.manifest"));
 
-        Assert.Contains("<SalmonEggDisplayVersion>", projectFile, StringComparison.Ordinal);
+        // The display version lives at the repository root so the GUI and the CLI ship the same
+        // release identity. The condition keeps release automation able to override it per build.
         Assert.Contains(
-            "<SalmonEggPackageVersion>$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>",
-            projectFile,
+            "<SalmonEggDisplayVersion Condition=\"'$(SalmonEggDisplayVersion)' == ''\">",
+            rootBuildProperties,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "<SalmonEggPackageVersion Condition=\"'$(SalmonEggPackageVersion)' == ''\">$(SalmonEggDisplayVersion).0</SalmonEggPackageVersion>",
+            rootBuildProperties,
+            StringComparison.Ordinal);
+
+        // Second-owner ban: the GUI project may only consume the shared properties. Redeclaring one
+        // here is how the packaged MSIX and the CLI artifacts silently drift onto two versions.
+        Assert.DoesNotContain("<SalmonEggDisplayVersion>", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("<SalmonEggPackageVersion>", projectFile, StringComparison.Ordinal);
+
         Assert.Contains("<Version>$(SalmonEggPackageVersion)</Version>", projectFile, StringComparison.Ordinal);
         Assert.Contains(
             "<ApplicationDisplayVersion>$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>",

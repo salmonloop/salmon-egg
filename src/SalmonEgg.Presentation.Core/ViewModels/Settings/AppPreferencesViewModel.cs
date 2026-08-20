@@ -62,6 +62,18 @@ public partial class AppPreferencesViewModel : ObservableObject
     [ObservableProperty]
     private int _cacheRetentionDays = 7;
 
+    // Telemetry：默认开启（opt-out 模式，与 VS Code / Firefox 一致）。
+    // 修改在设置保存成功后立即重建遥测管线；ViewModel 只表达用户意图，
+    // provider 生命周期由 Infrastructure 的重配置服务拥有。
+    [ObservableProperty]
+    private bool _telemetrySharingEnabled = true;
+
+    [ObservableProperty]
+    private string? _telemetryCustomEndpoint;
+
+    [ObservableProperty]
+    private string? _telemetryAuthHeader;
+
     [ObservableProperty]
     private CloudConfigSyncSettings _cloudConfigSync = new();
 
@@ -205,7 +217,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         var previousLanguage = "System";
         var nextLanguage = "System";
 #if DEBUG
-        _logger.LogInformation(
+        _logger.LogDebug(
             "App settings load started. ReloadShellOnLanguageChange={ReloadShellOnLanguageChange} IsInitialized={IsInitialized} IsLoaded={IsLoaded} CurrentLanguage={CurrentLanguage} AppliedLanguage={AppliedLanguage}",
             reloadShellOnLanguageChange,
             _isInitialized,
@@ -220,7 +232,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             var settings = await _appSettingsService.LoadAsync();
             var launchOnStartup = settings.LaunchOnStartup;
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "App settings file loaded. SettingsLanguage={SettingsLanguage} SettingsTheme={SettingsTheme} LastSelectedServerId={LastSelectedServerId} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount}",
                 settings.Language,
                 settings.Theme,
@@ -256,6 +268,9 @@ public partial class AppPreferencesViewModel : ObservableObject
                 LastSelectedServerId = settings.LastSelectedServerId;
                 SaveLocalHistory = settings.SaveLocalHistory;
                 CacheRetentionDays = settings.CacheRetentionDays;
+                TelemetrySharingEnabled = settings.TelemetrySharingEnabled;
+                TelemetryCustomEndpoint = settings.TelemetryCustomEndpoint;
+                TelemetryAuthHeader = settings.TelemetryAuthHeader;
                 CloudConfigSync = CloneCloudConfigSyncSettings(settings.CloudConfigSync);
                 KeyboardShortcutsEnabled = settings.KeyboardShortcutsEnabled;
                 LastSelectedProjectId = settings.LastSelectedProjectId;
@@ -311,7 +326,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 }
             }).ConfigureAwait(false);
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "App settings UI projection completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ProjectCount={ProjectCount} RemoteDirectoryCount={RemoteDirectoryCount} NavigationRemoteDirectoryIdCount={NavigationRemoteDirectoryIdCount} KeyBindingCount={KeyBindingCount}",
                 previousLanguage,
                 nextLanguage,
@@ -323,7 +338,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 
             cancellationToken.ThrowIfCancellationRequested();
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Applying language override from app settings. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage} ReloadShellOnLanguageChange={ReloadShellOnLanguageChange}",
                 previousLanguage,
                 nextLanguage,
@@ -331,7 +346,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 #endif
             await _languageService.ApplyLanguageOverrideAsync(nextLanguage).ConfigureAwait(false);
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Language override from app settings completed. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                 previousLanguage,
                 nextLanguage);
@@ -340,7 +355,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 !string.Equals(previousLanguage, nextLanguage, StringComparison.Ordinal))
             {
 #if DEBUG
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Reloading shell after app settings language change. PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                     previousLanguage,
                     nextLanguage);
@@ -357,7 +372,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to load app settings");
 #if DEBUG
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Surfacing app settings load failure. MarkLoaded={MarkLoaded} PreviousLanguage={PreviousLanguage} NextLanguage={NextLanguage}",
                 markLoaded,
                 previousLanguage,
@@ -383,7 +398,7 @@ public partial class AppPreferencesViewModel : ObservableObject
 
                 _suppressSave = false;
 #if DEBUG
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "App settings load finalized. MarkLoaded={MarkLoaded} IsLoaded={IsLoaded} SuppressSave={SuppressSave}",
                     markLoaded,
                     IsLoaded,
@@ -493,6 +508,9 @@ public partial class AppPreferencesViewModel : ObservableObject
     partial void OnLastSelectedServerIdChanged(string? value) => ScheduleSave();
     partial void OnSaveLocalHistoryChanged(bool value) => ScheduleSave();
     partial void OnCacheRetentionDaysChanged(int value) => ScheduleSave();
+    partial void OnTelemetrySharingEnabledChanged(bool value) => ScheduleSave();
+    partial void OnTelemetryCustomEndpointChanged(string? value) => ScheduleSave();
+    partial void OnTelemetryAuthHeaderChanged(string? value) => ScheduleSave();
     partial void OnCloudConfigSyncChanged(CloudConfigSyncSettings value) => ScheduleSave();
     partial void OnKeyboardShortcutsEnabledChanged(bool value)
     {
@@ -677,6 +695,9 @@ public partial class AppPreferencesViewModel : ObservableObject
             LastSelectedServerId = null;
             SaveLocalHistory = true;
             CacheRetentionDays = 7;
+            TelemetrySharingEnabled = true;
+            TelemetryCustomEndpoint = null;
+            TelemetryAuthHeader = null;
             CloudConfigSync = new CloudConfigSyncSettings();
             KeyboardShortcutsEnabled = true;
             AcpEnableConnectionEviction = false;
@@ -756,6 +777,13 @@ public partial class AppPreferencesViewModel : ObservableObject
             LastSelectedServerId = LastSelectedServerId,
             SaveLocalHistory = SaveLocalHistory,
             CacheRetentionDays = CacheRetentionDays,
+            TelemetrySharingEnabled = TelemetrySharingEnabled,
+            // 空白输入归一化为 null，使 TelemetrySettings.Build 正确回退到部署环境变量；
+            // 应用自身不配置默认 collector。
+            // 反向验证记录：移除这三行会使 ScheduleSave_PersistsTelemetryToggle 与
+            // ScheduleSave_TrimsTelemetryEndpointWhitespace 失败。
+            TelemetryCustomEndpoint = NormalizeOptional(TelemetryCustomEndpoint),
+            TelemetryAuthHeader = NormalizeOptional(TelemetryAuthHeader),
             CloudConfigSync = CloneCloudConfigSyncSettings(CloudConfigSync),
             KeyboardShortcutsEnabled = KeyboardShortcutsEnabled,
             AcpEnableConnectionEviction = AcpEnableConnectionEviction,
@@ -791,6 +819,16 @@ public partial class AppPreferencesViewModel : ObservableObject
     {
         CloudConfigSync = CloneCloudConfigSyncSettings(settings);
     }
+
+    /// <summary>
+    /// 把空白输入归一化为 null。
+    ///
+    /// 必要性：<c>TelemetrySettings.Build</c> 用空值判定用户是否自定义了端点；
+    /// 空字符串必须视作未配置，才能回退到部署环境变量。
+    /// 用户清空输入框后必须落成 null，才能正确回退到部署环境变量。
+    /// </summary>
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task ApplyLaunchOnStartupAsync(bool enabled)
     {
