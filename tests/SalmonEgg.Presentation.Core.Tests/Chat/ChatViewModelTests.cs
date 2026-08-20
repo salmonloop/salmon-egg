@@ -84,6 +84,7 @@ public partial class ChatViewModelTests
         IChatStateProjector? chatStateProjector = null,
         IUiInteractionService? uiInteractionService = null,
         IAiContentReportLauncher? aiContentReportLauncher = null,
+        IShellLayoutMetricsSink? shellLayoutMetricsSink = null,
         bool enableWorkspacePersistence = false)
     {
         var stateOwner = new object();
@@ -232,7 +233,8 @@ public partial class ChatViewModelTests
                 localizer: localizer,
                 languageService: languageService,
                 uiInteractionService: uiInteractionService,
-                aiContentReportLauncher: aiContentReportLauncher);
+                aiContentReportLauncher: aiContentReportLauncher,
+                shellLayoutMetricsSink: shellLayoutMetricsSink);
             conversationCatalogFacade.SetPanelCleanup(viewModel);
             return new ViewModelFixture(
                 viewModel,
@@ -5067,10 +5069,100 @@ public partial class ChatViewModelTests
         Assert.True(viewModel.HasPlanEntries);
         Assert.True(viewModel.ShouldShowPlanList);
         Assert.False(viewModel.ShouldShowPlanEmpty);
-        Assert.False(viewModel.TaskOverviewState.ShouldShowEmpty);
+        Assert.True(viewModel.TaskOverviewState.HasContent);
         Assert.True(viewModel.TaskOverviewState.ShouldShowPlanList);
         Assert.Equal(1, viewModel.TaskOverviewState.PendingPlanCount);
         Assert.Equal("Step 1", viewModel.TaskOverviewCurrentPlanContent);
+    }
+
+    [Fact]
+    public async Task TaskOverviewContentAvailability_FollowsPlanContentLifecycle()
+    {
+        var projectedAvailability = new List<bool>();
+        var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        metricsSink
+            .Setup(sink => sink.ReportRightPanelContentAvailability(It.IsAny<bool>(), It.IsAny<long>()))
+            .Callback<bool, long>((hasContent, _) => projectedAvailability.Add(hasContent))
+            .Returns(ValueTask.CompletedTask);
+        await using var fixture = CreateViewModel(shellLayoutMetricsSink: metricsSink.Object);
+        fixture.ViewModel.IsSessionActive = true;
+
+        Assert.Contains(false, projectedAvailability);
+
+        fixture.ViewModel.PlanEntries.Add(new PlanEntryViewModel
+        {
+            Content = "Step 1",
+            Priority = PlanEntryPriority.Medium,
+            Status = PlanEntryStatus.Pending
+        });
+        Assert.True(projectedAvailability[^1]);
+
+        fixture.ViewModel.PlanEntries.Clear();
+
+        Assert.False(projectedAvailability[^1]);
+    }
+
+    [Fact]
+    public async Task TaskOverviewContentAvailability_WhenShellHasNewLatestIntent_HidesStaleEntryUntilIntentClears()
+    {
+        var syncContext = new ImmediateSynchronizationContext();
+        var runtimeState = new ShellNavigationRuntimeStateStore();
+        var projectedAvailability = new List<bool>();
+        var metricsSink = new Mock<IShellLayoutMetricsSink>();
+        metricsSink
+            .Setup(sink => sink.ReportRightPanelContentAvailability(It.IsAny<bool>(), It.IsAny<long>()))
+            .Callback<bool, long>((hasContent, _) => projectedAvailability.Add(hasContent))
+            .Returns(ValueTask.CompletedTask);
+        await using var fixture = CreateViewModel(
+            syncContext,
+            shellNavigationRuntimeState: runtimeState,
+            shellLayoutMetricsSink: metricsSink.Object);
+        await AwaitWithSynchronizationContextAsync(
+            syncContext,
+            fixture.ViewModel.RestoreAsync(TestContext.Current.CancellationToken));
+
+        await fixture.UpdateStateAsync(state => state with
+        {
+            HydratedConversationId = "conv-1",
+            Transcript =
+            [
+                new ConversationMessageSnapshot
+                {
+                    Id = "message-1",
+                    Timestamp = new DateTime(2026, 8, 20, 0, 0, 0, DateTimeKind.Utc),
+                    IsOutgoing = false,
+                    ContentType = "text",
+                    TextContent = "current conversation"
+                }
+            ],
+            PlanEntries = ImmutableList.Create(new ConversationPlanEntrySnapshot
+            {
+                Content = "Review the right sidebar",
+                Status = "in_progress",
+                Priority = "high"
+            })
+        });
+        await WaitForConditionAsync(() => Task.FromResult(
+            fixture.ViewModel.ShouldShowActiveConversationRoot
+            && fixture.ViewModel.TaskOverviewState.HasContent
+            && projectedAvailability.Count > 0
+            && projectedAvailability[^1]));
+
+        runtimeState.ActiveSessionActivation = new SessionActivationSnapshot(
+            "conv-2",
+            null,
+            Version: 7,
+            SessionActivationPhase.NavigatingToChatShell);
+        runtimeState.DesiredSessionId = "conv-2";
+        runtimeState.IsSessionActivationInProgress = true;
+
+        Assert.False(projectedAvailability[^1]);
+
+        runtimeState.ActiveSessionActivation = null;
+        runtimeState.DesiredSessionId = null;
+        runtimeState.IsSessionActivationInProgress = false;
+
+        Assert.True(projectedAvailability[^1]);
     }
 
     private sealed class QueueingSynchronizationContext : SynchronizationContext, IUiDispatcher

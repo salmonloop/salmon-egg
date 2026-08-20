@@ -1754,5 +1754,6 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowTranscriptSurface));
         OnPropertyChanged(nameof(ShouldLoadTranscriptSurface));
         OnPropertyChanged(nameof(ShouldShowConversationInputSurface));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
     }
 }

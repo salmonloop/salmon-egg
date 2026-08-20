@@ -170,7 +170,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int sessionCount = 1,
         bool withContent = false,
         int messageCountPerSession = 2,
-        string? firstSessionDisplayName = null)
+        string? firstSessionDisplayName = null,
+        bool withPlan = false)
     {
         if (sessionCount <= 0)
         {
@@ -211,7 +212,7 @@ internal sealed class GuiAppDataScope : IDisposable
             previousGuiAppDataRootOverride,
             previousGuiControlFile: previousGuiControlFile);
 
-        scope.Seed(sessionCount, withContent, messageCountPerSession, firstSessionDisplayName);
+        scope.Seed(sessionCount, withContent, messageCountPerSession, firstSessionDisplayName, withPlan);
         return scope;
     }
 
@@ -993,7 +994,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int sessionCount,
         bool withContent = false,
         int messageCountPerSession = 2,
-        string? firstSessionDisplayName = null)
+        string? firstSessionDisplayName = null,
+        bool withPlan = false)
     {
         Directory.CreateDirectory(_configDirectory);
         Directory.CreateDirectory(_conversationsDirectory);
@@ -1002,7 +1004,13 @@ internal sealed class GuiAppDataScope : IDisposable
         TestFileIo.WriteAllTextWithRetry(_appYamlPath, BuildAppYaml(_projectRootPath), Encoding.UTF8);
         TestFileIo.WriteAllTextWithRetry(
             _conversationsPath,
-            BuildConversationsJson(_projectRootPath, sessionCount, withContent, messageCountPerSession, firstSessionDisplayName),
+            BuildConversationsJson(
+                _projectRootPath,
+                sessionCount,
+                withContent,
+                messageCountPerSession,
+                firstSessionDisplayName,
+                withPlan),
             Encoding.UTF8);
     }
 
@@ -1327,7 +1335,8 @@ internal sealed class GuiAppDataScope : IDisposable
         int sessionCount,
         bool withContent = false,
         int messageCountPerSession = 2,
-        string? firstSessionDisplayName = null)
+        string? firstSessionDisplayName = null,
+        bool withPlan = false)
     {
         var baseTime = new DateTimeOffset(2026, 03, 19, 09, 00, 00, TimeSpan.Zero);
         var conversations = Enumerable.Range(1, sessionCount)
@@ -1361,7 +1370,19 @@ internal sealed class GuiAppDataScope : IDisposable
                     createdAt = timestamp,
                     lastUpdatedAt = timestamp,
                     cwd = projectRootPath,
-                    messages = messages
+                    messages,
+                    plan = withPlan
+                        ? new object[]
+                        {
+                            new
+                            {
+                                content = "Review right sidebar behavior",
+                                status = "in_progress",
+                                priority = "high"
+                            }
+                        }
+                        : Array.Empty<object>(),
+                    showPlanPanel = withPlan
                 };
             })
             .ToArray();

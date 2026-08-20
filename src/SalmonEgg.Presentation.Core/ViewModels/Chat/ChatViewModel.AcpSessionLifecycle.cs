@@ -212,6 +212,7 @@ public partial class ChatViewModel
         OnPropertyChanged(nameof(ShouldShowBlockingLoadingMask));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayStatusPill));
         OnPropertyChanged(nameof(ShouldShowLoadingOverlayPresenter));
+        _ = PublishTaskOverviewContentAvailabilityAsync();
         NotifyComposerProjectionChanged();
     }
 

@@ -17,7 +17,6 @@ public sealed class TaskOverviewPanelStatePresenter
             activePlanCount,
             pendingPlanCount,
             completedPlanCount,
-            ShouldShowEmpty: !hasPlan && !hasChanges,
             ShouldShowPlanList: hasPlan,
             ShouldShowChangesList: hasChanges);
     }
