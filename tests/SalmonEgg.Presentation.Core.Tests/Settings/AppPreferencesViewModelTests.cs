@@ -439,6 +439,29 @@ public class AppPreferencesViewModelTests
     }
 
     [Fact]
+    public async Task ScheduleSave_PreservesCloudConfigSyncRevision()
+    {
+        var settingsService = new FakeAppSettingsService(new AppSettings
+        {
+            CloudConfigSync = new CloudConfigSyncSettings
+            {
+                Enabled = true,
+                ProviderId = "webdav",
+                Revision = 42,
+                IncludeSecrets = true
+            }
+        });
+        var vm = CreateViewModel(settingsService);
+        await vm.InitializeAsync(TestContext.Current.CancellationToken);
+
+        vm.TelemetrySharingEnabled = false;
+
+        await WaitForConditionAsync(() => settingsService.LastSaved is not null);
+
+        Assert.Equal(42, settingsService.LastSaved!.CloudConfigSync.Revision);
+    }
+
+    [Fact]
     public async Task ScheduleSave_NormalizesBlankTelemetryEndpointToNull()
     {
         var settingsService = new FakeAppSettingsService(new AppSettings
