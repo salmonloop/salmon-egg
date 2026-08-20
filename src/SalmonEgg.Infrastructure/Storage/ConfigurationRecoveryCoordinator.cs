@@ -16,6 +16,7 @@ internal sealed class ConfigurationRecoveryCoordinator
 
     private readonly IConfigurationFileStore _fileStore;
     private readonly ISecureStorage _secureStorage;
+    private readonly ISecureStorage _recoveryMaterialStorage;
     private readonly ConfigurationProfileLockProvider _lockProvider;
     private readonly string _recoveryDirectory;
     private readonly string _serversDirectory;
@@ -28,6 +29,12 @@ internal sealed class ConfigurationRecoveryCoordinator
     {
         _fileStore = fileStore ?? throw new ArgumentNullException(nameof(fileStore));
         _secureStorage = secureStorage ?? throw new ArgumentNullException(nameof(secureStorage));
+        // Rollback material is a copy of a secret the caller already stored, so it must not be blocked by
+        // a fail-closed policy: if it were, clearing or deleting a previously downgraded secret would be
+        // impossible. See ISecureStorageRecoveryMaterialSource.
+        _recoveryMaterialStorage = secureStorage is ISecureStorageRecoveryMaterialSource recoveryMaterialSource
+            ? recoveryMaterialSource.GetRecoveryMaterialStore()
+            : _secureStorage;
         if (appData is null) throw new ArgumentNullException(nameof(appData));
         _lockProvider = lockProvider ?? throw new ArgumentNullException(nameof(lockProvider));
         _recoveryDirectory = Path.Combine(appData.ConfigRootPath, "recovery");
@@ -204,10 +211,10 @@ internal sealed class ConfigurationRecoveryCoordinator
         }
 
         var tokenBackup = document.OldTokenPresent
-            ? await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetRecoveryTokenKey(profileId)).ConfigureAwait(false)
+            ? await _recoveryMaterialStorage.LoadAsync(ConfigurationSecretKeys.GetRecoveryTokenKey(profileId)).ConfigureAwait(false)
             : null;
         var apiKeyBackup = document.OldApiKeyPresent
-            ? await _secureStorage.LoadAsync(ConfigurationSecretKeys.GetRecoveryApiKeyKey(profileId)).ConfigureAwait(false)
+            ? await _recoveryMaterialStorage.LoadAsync(ConfigurationSecretKeys.GetRecoveryApiKeyKey(profileId)).ConfigureAwait(false)
             : null;
 
         if (document.OldTokenPresent && tokenBackup is null || document.OldApiKeyPresent && apiKeyBackup is null)
@@ -292,14 +299,14 @@ internal sealed class ConfigurationRecoveryCoordinator
     private Task WriteBackupAsync(string key, string? value, CancellationToken cancellationToken)
     {
         return value is null
-            ? _secureStorage.DeleteAsync(key)
-            : _secureStorage.SaveAsync(key, value);
+            ? _recoveryMaterialStorage.DeleteAsync(key)
+            : _recoveryMaterialStorage.SaveAsync(key, value);
     }
 
     private async Task ClearBackupSecretsAsync(string profileId, CancellationToken cancellationToken)
     {
-        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetRecoveryTokenKey(profileId)).ConfigureAwait(false);
-        await _secureStorage.DeleteAsync(ConfigurationSecretKeys.GetRecoveryApiKeyKey(profileId)).ConfigureAwait(false);
+        await _recoveryMaterialStorage.DeleteAsync(ConfigurationSecretKeys.GetRecoveryTokenKey(profileId)).ConfigureAwait(false);
+        await _recoveryMaterialStorage.DeleteAsync(ConfigurationSecretKeys.GetRecoveryApiKeyKey(profileId)).ConfigureAwait(false);
     }
 
     private async Task CleanupRecoveryMaterialAsync(
@@ -333,9 +340,13 @@ internal sealed class ConfigurationRecoveryCoordinator
 
     private Task RestorePrimarySecretAsync(string key, string? value, CancellationToken cancellationToken)
     {
+        // Restoring puts back a value that was already stored before the failed mutation, so it is not new
+        // credential material either. Letting a fail-closed policy refuse it would abandon the rollback
+        // half-applied and force manual recovery, which is strictly worse than restoring the secret to
+        // wherever it already lived.
         return value is null
-            ? _secureStorage.DeleteAsync(key)
-            : _secureStorage.SaveAsync(key, value);
+            ? _recoveryMaterialStorage.DeleteAsync(key)
+            : _recoveryMaterialStorage.SaveAsync(key, value);
     }
 
     private static string GetSafeFileName(string profileId)

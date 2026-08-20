@@ -98,7 +98,7 @@ public sealed class CredentialsHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Credential save failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Credential save failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -124,7 +124,7 @@ public sealed class CredentialsHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Credential clear failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Credential clear failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -148,7 +148,7 @@ public sealed class CredentialsHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Credential status failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Credential status failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
     }

@@ -34,12 +34,17 @@ public static class CliApplication
     /// composition root without invoking a command that reads or writes user data.
     /// </remarks>
     internal static ServiceProvider CreateServiceProvider(ICliOutput output, ICliInput? input = null)
-        => CreateServiceProvider(output, input, new CliFallbackSecureStorageWarningState());
+        => CreateServiceProvider(
+            output,
+            input,
+            new CliFallbackSecureStorageWarningState(),
+            SecureStorageDowngradePolicy.FailClosed);
 
     private static ServiceProvider CreateServiceProvider(
         ICliOutput output,
         ICliInput? input,
-        CliFallbackSecureStorageWarningState fallbackWarningState)
+        CliFallbackSecureStorageWarningState fallbackWarningState,
+        SecureStorageDowngradePolicy secureStorageDowngradePolicy)
     {
         if (output is null) throw new ArgumentNullException(nameof(output));
         if (fallbackWarningState is null) throw new ArgumentNullException(nameof(fallbackWarningState));
@@ -54,7 +59,7 @@ public static class CliApplication
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILogger<FallbackSecureStorage>>(fallbackWarningState);
-        services.AddSalmonEggDesktopConfiguration();
+        services.AddSalmonEggDesktopConfiguration(secureStorageDowngradePolicy);
         return services.BuildServiceProvider(validateScopes: true);
     }
 
@@ -112,12 +117,22 @@ public static class CliApplication
         try
         {
             var fallbackWarningState = new CliFallbackSecureStorageWarningState();
-            await using var services = CreateServiceProvider(output, new TextCliInput(stdin), fallbackWarningState);
+            // The secure-storage policy has to be known before the container is built, because the
+            // container owns the store. The command tree cannot be parsed that early — it needs the
+            // handlers the container provides — so the flag is read from raw arguments here and then
+            // reconciled against the parser below.
+            var bootstrapDowngradePolicy = CliSecureStorageOption.ResolveBootstrapPolicy(args);
+            await using var services = CreateServiceProvider(
+                output,
+                new TextCliInput(stdin),
+                fallbackWarningState,
+                bootstrapDowngradePolicy);
             try
             {
-                var root = (commandFactoryResolver is null
+                var commandFactory = commandFactoryResolver is null
                     ? services.GetRequiredService<CliCommandFactory>()
-                    : commandFactoryResolver(services)).CreateRootCommand(args);
+                    : commandFactoryResolver(services);
+                var root = commandFactory.CreateRootCommand(args);
                 var parseResult = root.Parse(args);
 
                 if (args.Length == 0)
@@ -142,6 +157,19 @@ public static class CliApplication
                     return CliExitCodes.Usage;
                 }
 
+                // The container was built from a raw-argument read of the flag. If the parser disagrees,
+                // the already-constructed secure storage is running under a policy the user did not ask
+                // for, so the invocation is refused rather than continued under the weaker of the two.
+                if (!CliSecureStorageOption.MatchesParsedValue(
+                        bootstrapDowngradePolicy,
+                        parseResult.GetValue(commandFactory.AllowInsecureStorageOption)))
+                {
+                    await output.WriteErrorAsync(
+                        $"Could not determine whether {CliSecureStorageOption.Name} was requested; "
+                        + "pass it as its own argument before the command.").ConfigureAwait(false);
+                    return CliExitCodes.Usage;
+                }
+
                 if (!IsMetadataOnlyInvocation(args))
                 {
                     try
@@ -152,7 +180,7 @@ public static class CliApplication
                     }
                     catch (ConfigurationPersistenceException exception)
                     {
-                        await output.WriteErrorAsync($"Startup recovery failed: {exception.UserMessage}").ConfigureAwait(false);
+                        await output.WriteErrorAsync($"Startup recovery failed: {CliPersistenceFailure.Describe(exception)}").ConfigureAwait(false);
                         return CliExitCodes.Failure;
                     }
                 }
@@ -177,7 +205,7 @@ public static class CliApplication
         }
         catch (ConfigurationPersistenceException exception)
         {
-            await output.WriteErrorAsync($"CLI failed: {exception.UserMessage}").ConfigureAwait(false);
+            await output.WriteErrorAsync($"CLI failed: {CliPersistenceFailure.Describe(exception)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
         catch (Exception exception)

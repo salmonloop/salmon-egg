@@ -44,6 +44,54 @@ public sealed class DesktopConfigurationServiceCollectionExtensionsTests
         Assert.Same(fileStore, configurationStore);
     }
 
+    [Fact]
+    public async Task AddSalmonEggDesktopConfiguration_WithFailClosedPolicy_RefusesToStoreSecretsUnprotected()
+    {
+        // Non-interactive hosts opt into fail-closed. On a machine with a working platform store this
+        // write succeeds; on one without it must throw rather than land in plaintext. Both outcomes are
+        // acceptable here — what must never happen is a silent plaintext write.
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        services.AddSalmonEggDesktopConfiguration(SecureStorageDowngradePolicy.FailClosed);
+        using var provider = services.BuildServiceProvider(validateScopes: true);
+
+        var storage = provider.GetRequiredService<ISecureStorage>();
+        var plaintextStore = provider.GetRequiredService<PlainTextFileSecureStorage>();
+        var key = $"salmonegg-tests/fail-closed/{Guid.NewGuid():N}";
+
+        try
+        {
+            await storage.SaveAsync(key, "secret-value");
+        }
+        catch (SecureStorageUnavailableException)
+        {
+            Assert.Null(await plaintextStore.LoadAsync(key));
+            return;
+        }
+
+        try
+        {
+            Assert.Null(await plaintextStore.LoadAsync(key));
+        }
+        finally
+        {
+            await storage.DeleteAsync(key);
+        }
+    }
+
+    [Fact]
+    public void AddSalmonEggDesktopConfiguration_DefaultPolicy_KeepsTheInteractiveDowngrade()
+    {
+        // The GUI depends on the downgrade to stay usable without a desktop keyring, so the default
+        // overload must not inherit the CLI's fail-closed choice.
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
+        services.AddSalmonEggDesktopConfiguration();
+        using var provider = services.BuildServiceProvider(validateScopes: true);
+
+        AssertSecureStorageMatchesCurrentDesktopPlatform(provider.GetRequiredService<ISecureStorage>());
+    }
+
     private static void AssertSecureStorageMatchesCurrentDesktopPlatform(ISecureStorage storage)
     {
         if (OperatingSystem.IsWindows())

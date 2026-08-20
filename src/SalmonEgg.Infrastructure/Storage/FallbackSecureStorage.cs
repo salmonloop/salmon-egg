@@ -15,7 +15,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 /// downgrade. Downgrades are logged because the app keeps working either way: without that record an
 /// operator cannot tell that credentials stopped being protected by the platform.
 /// </remarks>
-public sealed class FallbackSecureStorage : ISecureStorage
+public sealed class FallbackSecureStorage : ISecureStorage, ISecureStorageRecoveryMaterialSource
 {
     public const int SecretFallbackUsedEventId = 7101;
 
@@ -25,16 +25,42 @@ public sealed class FallbackSecureStorage : ISecureStorage
     private readonly ISecureStorage _primary;
     private readonly ISecureStorage _fallback;
     private readonly ILogger<FallbackSecureStorage> _logger;
+    private readonly SecureStorageDowngradePolicy _downgradePolicy;
 
     public FallbackSecureStorage(
         ISecureStorage primary,
         ISecureStorage fallback,
         ILogger<FallbackSecureStorage>? logger = null)
+        : this(primary, fallback, SecureStorageDowngradePolicy.AllowPlaintextDowngrade, logger)
+    {
+    }
+
+    public FallbackSecureStorage(
+        ISecureStorage primary,
+        ISecureStorage fallback,
+        SecureStorageDowngradePolicy downgradePolicy,
+        ILogger<FallbackSecureStorage>? logger = null)
     {
         _primary = primary ?? throw new ArgumentNullException(nameof(primary));
         _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
+        _downgradePolicy = downgradePolicy;
         _logger = logger ?? NullLogger<FallbackSecureStorage>.Instance;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Rollback material always uses the downgrade-allowing behavior. See
+    /// <see cref="ISecureStorageRecoveryMaterialSource"/> for why that cannot expose anything the caller
+    /// has not already stored, and why refusing it would make a fail-closed host unable to clear secrets.
+    /// </remarks>
+    public ISecureStorage GetRecoveryMaterialStore()
+        => _downgradePolicy == SecureStorageDowngradePolicy.AllowPlaintextDowngrade
+            ? this
+            : new FallbackSecureStorage(
+                _primary,
+                _fallback,
+                SecureStorageDowngradePolicy.AllowPlaintextDowngrade,
+                _logger);
 
     public async Task SaveAsync(string key, string value)
     {
@@ -43,6 +69,18 @@ public sealed class FallbackSecureStorage : ISecureStorage
         {
             await _primary.SaveAsync(key, value).ConfigureAwait(false);
             storedInPrimary = true;
+        }
+        catch (SecureStorageUnavailableException ex)
+            when (_downgradePolicy == SecureStorageDowngradePolicy.FailClosed)
+        {
+            // Rethrown rather than downgraded: the caller asked for the secret to be protected by the
+            // platform or not stored at all. Rethrowing the original keeps the transactional caller on
+            // its existing SecureStorageUnavailableException path, which already restores prior state.
+            _logger.LogWarning(
+                ex,
+                "Platform secret store unavailable and plaintext downgrade is disabled; the secret was not stored. PrimaryStore={PrimaryStore}",
+                _primary.GetType().Name);
+            throw;
         }
         catch (SecureStorageUnavailableException ex)
         {

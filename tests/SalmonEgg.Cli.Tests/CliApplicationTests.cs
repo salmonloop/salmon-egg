@@ -314,8 +314,12 @@ public sealed class CliApplicationTests
             await using var stderr = new StringWriter();
             using var stdin = new StringReader(secret + Environment.NewLine);
 
+            // --allow-insecure-storage keeps this test about credential secrecy rather than about which
+            // secret store the host machine happens to have: the write succeeds on a runner with a
+            // keychain and on one without, so the "value never leaks" assertions below are what varies.
             var exitCode = await CliApplication.RunAsync(
                 [
+                    "--allow-insecure-storage",
                     "config", "server", "add",
                     "--name", "Secret Agent",
                     "--url", "https://agent.example",

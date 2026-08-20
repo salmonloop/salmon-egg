@@ -70,7 +70,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"List failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"List failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -109,7 +109,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Show failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Show failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -214,7 +214,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Save failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Save failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -298,7 +298,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Update failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Update failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -333,7 +333,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Save failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Save failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 
@@ -372,7 +372,7 @@ public sealed class ServerConfigurationHandler
         }
         catch (ConfigurationPersistenceException ex)
         {
-            await _output.WriteErrorAsync($"Remove failed: {ex.UserMessage}").ConfigureAwait(false);
+            await _output.WriteErrorAsync($"Remove failed: {CliPersistenceFailure.Describe(ex)}").ConfigureAwait(false);
             return CliExitCodes.Failure;
         }
 

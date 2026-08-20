@@ -35,12 +35,19 @@ public sealed class CliCommandFactory
     }
 
     /// <summary>
+    /// The recursive secure-storage opt-in, exposed so the host can compare the parsed value against the
+    /// bootstrap value it had to read before the command tree existed.
+    /// </summary>
+    internal Option<bool> AllowInsecureStorageOption { get; } = CliSecureStorageOption.Create();
+
+    /// <summary>
     /// Creates the root command and the structural command groups.
     /// </summary>
     public RootCommand CreateRootCommand(IReadOnlyList<string>? rawArgs = null)
     {
         var root = new RootCommand(RootDescription);
         root.Children.OfType<VersionOption>().Single().Action = new PrintVersionAction(_versionProvider);
+        root.Options.Add(AllowInsecureStorageOption);
         root.SetAction(_ => CliExitCodes.Success);
 
         var config = CreateStructuralCommand("config", ConfigDescription);
