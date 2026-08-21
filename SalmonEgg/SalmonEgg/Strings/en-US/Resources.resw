@@ -1435,7 +1435,7 @@
     <value>Advanced: Custom telemetry endpoint</value>
   </data>
   <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
-    <value>For developers only. Telemetry stays inactive unless this endpoint or an OTLP deployment environment variable is configured. Make sure you trust the endpoint before entering credentials.</value>
+    <value>For developers only. Telemetry goes to the app's built-in gateway by default; configuring this endpoint or an OTLP deployment environment variable redirects it to your address. Make sure you trust the endpoint before entering credentials.</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
     <value>OTLP endpoint</value>

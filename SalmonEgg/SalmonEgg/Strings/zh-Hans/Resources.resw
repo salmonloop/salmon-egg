@@ -1435,7 +1435,7 @@
     <value>高级：自定义上报端点</value>
   </data>
   <data name="DataStorage_TelemetryAdvancedWarning.Text" xml:space="preserve">
-    <value>仅供开发者使用。只有配置此端点或部署环境中的 OTLP 环境变量后，遥测才会启用；填入凭证前请确认你信任该端点。</value>
+    <value>仅供开发者使用。默认情况下遥测发往应用内置网关；配置此端点或部署环境中的 OTLP 环境变量后，将改发你指定的地址。填入凭证前请确认你信任该端点。</value>
   </data>
   <data name="DataStorage_TelemetryCustomEndpoint.Header" xml:space="preserve">
     <value>OTLP 端点</value>
