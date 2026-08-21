@@ -9,6 +9,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using SalmonEgg.Application.Services.Chat;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Acp.Protocol;
 using SalmonEgg.Domain.Services;
@@ -872,7 +873,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             new AcpConnectionReuseKey(TransportType.WebSocket, string.Empty, string.Empty, "ws://localhost:9001")));
 
@@ -924,7 +925,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
 
@@ -965,7 +966,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
 
@@ -1057,7 +1058,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands { DisconnectProfileInPoolException = new InvalidOperationException("disconnect failed") };
@@ -1084,7 +1085,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands { ConnectProfileInPoolException = new InvalidOperationException("reconnect failed") };
@@ -1106,7 +1107,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var pending = new TaskCompletionSource();
@@ -1155,7 +1156,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var commands = new TestConnectionCommands();
@@ -1195,7 +1196,7 @@ public sealed class AcpConnectionSettingsViewModelTests
         var registry = new InMemoryAcpConnectionSessionRegistry();
         registry.Upsert(new AcpConnectionSession(
             "profile-a",
-            null!,
+            CreateRegistryService(),
             new InitializeResponse(),
             default));
         var pendingReconnect = new TaskCompletionSource();
@@ -1556,6 +1557,13 @@ public sealed class AcpConnectionSettingsViewModelTests
             new ImmediateUiDispatcher(),
             localizer ?? new TestCoreStringLocalizer(),
             operationErrorReporter);
+
+    private static AcpChatServiceAdapter CreateRegistryService()
+        => new(
+            new Mock<IChatService>().Object,
+            new AcpEventAdapter(
+                _ => { },
+                new ImmediateUiDispatcher()));
 
     private static void SelectProfile(AcpConnectionSettingsViewModel viewModel, string profileId)
     {
