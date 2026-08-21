@@ -32,8 +32,15 @@ public sealed class LinuxSystemNotificationService
     // "Expires according to the server's settings" — the desktop, not the app, owns the timeout.
     private const int ServerDefaultExpireTimeout = -1;
 
-    // The conventional action key a plain click invokes, per the Desktop Notifications specification.
+    // De-facto convention, NOT part of the specification: GNOME Shell and KDE treat an action keyed
+    // "default" as the one a plain click on the notification body invokes, and do not render it as a
+    // button. A server that follows the spec literally renders every action as a button, which is why
+    // the paired label is localized rather than a placeholder.
     private const string DefaultActionKey = "default";
+
+    // The bus only ever reports the numeric server id, so the maps below are what turn a click back
+    // into the turn it was about. They are bounded because a long session completes many turns.
+    private const int ActivationHistoryLimit = 256;
 
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
@@ -46,6 +53,7 @@ public sealed class LinuxSystemNotificationService
     // ActionInvoked and NotificationClosed only report the server id, so the reverse map is what turns
     // a click back into the turn it was about.
     private readonly Dictionary<uint, SystemNotificationActivatedEventArgs> _activationsByServerId = new();
+    private readonly Queue<string> _notificationIdHistory = new();
 
     private bool _isListening;
 
@@ -101,6 +109,9 @@ public sealed class LinuxSystemNotificationService
         }
     }
 
+    // The signal body is (id, action_key). The key is not filtered: the only action this app registers
+    // is the click-through one, and a server may report a plain body click under a key of its own
+    // choosing, so any invocation on one of our notifications means the same intent.
     private void OnActionInvoked(Notification<uint> notification)
     {
         if (notification.Exception is not null || !notification.HasValue)
@@ -176,10 +187,7 @@ public sealed class LinuxSystemNotificationService
             var serverId = await NotifyAsync(connection, request, cancellationToken).ConfigureAwait(false);
             lock (_sync)
             {
-                _serverIdsByNotificationId[request.NotificationId] = serverId;
-                _activationsByServerId[serverId] = new SystemNotificationActivatedEventArgs(
-                    request.NotificationId,
-                    request.ConversationId);
+                RememberLocked(request, serverId);
             }
 
             return SystemNotificationResult.Shown;
@@ -213,7 +221,11 @@ public sealed class LinuxSystemNotificationService
 
         // CallMethodAsync takes ownership of the buffer, so it must not be disposed here. MessageWriter
         // is a ref struct and cannot live across an await, hence the separate builder.
-        var message = BuildNotifyMessage(connection, request, replacesId);
+        var message = BuildNotifyMessage(
+            connection,
+            request,
+            replacesId,
+            _localizer["SystemNotification_OpenAction"].Value);
         return await connection
             .CallMethodAsync(message, static (Message reply, object? _) => reply.GetBodyReader().ReadUInt32())
             .WaitAsync(cancellationToken)
@@ -223,7 +235,8 @@ public sealed class LinuxSystemNotificationService
     private static MessageBuffer BuildNotifyMessage(
         DBusConnection connection,
         SystemNotificationRequest request,
-        uint replacesId)
+        uint replacesId,
+        string openActionLabel)
     {
         using var writer = connection.GetMessageWriter();
         writer.WriteMethodCallHeader(
@@ -238,9 +251,8 @@ public sealed class LinuxSystemNotificationService
         writer.WriteString(string.Empty); // app_icon: the desktop entry's icon is the right default.
         writer.WriteString(request.Title.Trim());
         writer.WriteString(request.Body.Trim());
-        // The spec's conventional "default" action is what a plain click invokes. The label is only
-        // shown by servers that render the default action as a button.
-        writer.WriteArray(new[] { DefaultActionKey, "Open" });
+        // Even elements are action keys, odd elements are their user-visible labels.
+        writer.WriteArray(new[] { DefaultActionKey, openActionLabel });
 
         var hints = writer.WriteDictionaryStart();
         writer.WriteDictionaryEntryStart();
@@ -250,6 +262,28 @@ public sealed class LinuxSystemNotificationService
 
         writer.WriteInt32(ServerDefaultExpireTimeout);
         return writer.CreateMessage();
+    }
+
+    private void RememberLocked(SystemNotificationRequest request, uint serverId)
+    {
+        if (!_serverIdsByNotificationId.ContainsKey(request.NotificationId))
+        {
+            _notificationIdHistory.Enqueue(request.NotificationId);
+        }
+
+        _serverIdsByNotificationId[request.NotificationId] = serverId;
+        _activationsByServerId[serverId] = new SystemNotificationActivatedEventArgs(
+            request.NotificationId,
+            request.ConversationId);
+
+        while (_notificationIdHistory.Count > ActivationHistoryLimit)
+        {
+            var evicted = _notificationIdHistory.Dequeue();
+            if (_serverIdsByNotificationId.Remove(evicted, out var evictedServerId))
+            {
+                _activationsByServerId.Remove(evictedServerId);
+            }
+        }
     }
 
     private async Task<bool> IsNotificationServerReachableAsync(CancellationToken cancellationToken)

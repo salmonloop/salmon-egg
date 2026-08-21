@@ -148,9 +148,13 @@ for entry in notifies:
     # -1 means "expires according to the server's settings": the desktop owns the timeout.
     if entry["timeout"] != -1:
         fail(f"expected the server default expire timeout (-1), got {entry['timeout']}")
-    # A plain click invokes the spec's conventional "default" action, which is how a tap routes.
-    if entry["actions"][:1] != ["default"]:
-        fail(f"expected a 'default' action so a click routes; got {entry['actions']}")
+    # Actions are a flat list of (key, label) pairs. The "default" key is the de-facto convention for
+    # "a plain click on the body"; a spec-literal server renders every action as a button, so a missing
+    # or blank label would show a blank button.
+    if len(entry["actions"]) != 2 or entry["actions"][0] != "default":
+        fail(f"expected exactly one ('default', label) action pair; got {entry['actions']}")
+    if not entry["actions"][1].strip():
+        fail("the default action needs a user-visible label; a spec-literal server renders it")
 
 print("[linux-notification-gate] Bus traffic matches the spec contract.")
 PY

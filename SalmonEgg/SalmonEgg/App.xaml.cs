@@ -189,9 +189,46 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 
     protected Microsoft.UI.Xaml.Window? MainWindow { get; private set; }
 
+    /// <summary>
+    /// Hands a cold-start notification click to the notification service before the shell exists.
+    /// </summary>
+    /// <remarks>
+    /// Windows delivers a click on a notification for a process that is not running through COM
+    /// activation, and the arguments are only readable from the launch activation args. Reading them
+    /// here — the earliest point the app controls — keeps the activation from being lost; the service
+    /// parks it and replays it once the conversation catalog exists.
+    /// </remarks>
+    private static void CaptureNotificationLaunchActivation()
+    {
+#if WINDOWS
+        try
+        {
+            var activatedArgs = global::Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent()
+                .GetActivatedEventArgs();
+            if (activatedArgs?.Kind
+                    != global::Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification
+                || activatedArgs.Data
+                    is not global::Microsoft.Windows.AppNotifications.AppNotificationActivatedEventArgs notificationArgs)
+            {
+                return;
+            }
+
+            ServiceProvider.GetService<Platforms.Windows.WindowsSystemNotificationService>()
+                ?.CaptureLaunchActivation(notificationArgs);
+        }
+        catch (Exception ex)
+        {
+            // A host without the notification stack cannot report activations; a normal launch is
+            // unaffected, so this must never block startup.
+            BootLog($"OnLaunched: notification launch activation unavailable ({ex.GetType().Name})");
+        }
+#endif
+    }
+
     protected override async void OnLaunched(global::Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         BootLog("OnLaunched: start");
+        CaptureNotificationLaunchActivation();
         MainWindow = new Microsoft.UI.Xaml.Window();
         BootLog("OnLaunched: window created");
 

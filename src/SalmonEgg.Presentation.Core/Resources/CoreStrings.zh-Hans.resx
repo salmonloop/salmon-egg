@@ -1186,6 +1186,9 @@
   <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
     <value>智能体已完成回复。</value>
   </data>
+  <data name="SystemNotification_OpenAction" xml:space="preserve">
+    <value>打开</value>
+  </data>
   <data name="SystemNotification_ChannelName" xml:space="preserve">
     <value>智能体任务完成</value>
   </data>

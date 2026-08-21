@@ -24,8 +24,10 @@ public sealed class AndroidSystemNotificationService : ISystemNotificationServic
     public const string NotificationIdExtra = "salmonegg.notificationId";
     public const string ConversationIdExtra = "salmonegg.conversationId";
 
-    // Notifications are keyed by their string tag, so one shared numeric slot is enough.
-    private const int NotificationSlotId = 0;
+    // Notification identity is (tag, id) and the per-turn tag is what varies, so one shared numeric
+    // slot is enough. It is deliberately not 0: that value is a common sentinel elsewhere in the
+    // platform and in third-party code, which invites collisions.
+    private const int NotificationSlotId = 1;
 
     private readonly Context _context;
     private readonly IStringLocalizer<CoreStrings> _localizer;

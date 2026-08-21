@@ -1180,6 +1180,9 @@ Create the corresponding Markdown file in:
   <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
     <value>The agent finished responding.</value>
   </data>
+  <data name="SystemNotification_OpenAction" xml:space="preserve">
+    <value>Open</value>
+  </data>
   <data name="SystemNotification_ChannelName" xml:space="preserve">
     <value>Agent task completions</value>
   </data>

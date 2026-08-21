@@ -18,6 +18,10 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
     private bool _isRegistered;
     private bool _isListening;
 
+    // A click can launch the process, so the activation can arrive before anything is listening. The
+    // latest one is parked until Start, then replayed.
+    private SystemNotificationActivatedEventArgs? _pendingActivation;
+
     public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
 
     public void Start()
@@ -34,6 +38,8 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
 
         try
         {
+            // Documented order: subscribe to NotificationInvoked, then Register. Registering first
+            // would let a launch-time activation land before there is a handler for it.
             AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked;
             EnsureRegistered();
         }
@@ -45,19 +51,78 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
             {
                 _isListening = false;
             }
+
+            return;
+        }
+
+        DrainPendingActivation();
+    }
+
+    /// <summary>
+    /// Records a launch-time notification activation so it survives until a listener exists.
+    /// </summary>
+    /// <remarks>
+    /// Windows delivers a cold-start notification click through COM activation, which the app observes
+    /// on its own launch path — before the shell has built the conversation catalog and before
+    /// <see cref="Start"/> runs. The application entry point hands it here so it is not lost.
+    /// </remarks>
+    public void CaptureLaunchActivation(AppNotificationActivatedEventArgs args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        if (!TryReadActivation(args, out var activation))
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            _pendingActivation = activation;
+            if (!_isListening)
+            {
+                return;
+            }
+        }
+
+        DrainPendingActivation();
+    }
+
+    private void DrainPendingActivation()
+    {
+        SystemNotificationActivatedEventArgs? pending;
+        lock (_sync)
+        {
+            pending = _pendingActivation;
+            _pendingActivation = null;
+        }
+
+        if (pending is not null)
+        {
+            Activated?.Invoke(this, pending);
         }
     }
 
     private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
     {
+        if (TryReadActivation(args, out var activation))
+        {
+            Activated?.Invoke(this, activation);
+        }
+    }
+
+    private static bool TryReadActivation(
+        AppNotificationActivatedEventArgs args,
+        out SystemNotificationActivatedEventArgs activation)
+    {
         args.Arguments.TryGetValue(NotificationIdArgument, out var notificationId);
         args.Arguments.TryGetValue(ConversationIdArgument, out var conversationId);
         if (string.IsNullOrWhiteSpace(notificationId))
         {
-            return;
+            activation = null!;
+            return false;
         }
 
-        Activated?.Invoke(this, new SystemNotificationActivatedEventArgs(notificationId, conversationId));
+        activation = new SystemNotificationActivatedEventArgs(notificationId, conversationId);
+        return true;
     }
 
     public bool IsSupported => AppNotificationManager.IsSupported();

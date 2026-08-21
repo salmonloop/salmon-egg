@@ -13,31 +13,65 @@ public sealed class IosSystemNotificationService : ISystemNotificationService, I
 {
     private const string ConversationIdUserInfoKey = "conversationId";
 
+    private static readonly object DelegateSync = new();
+    private static ActivationDelegate? _activationDelegate;
+
+    // A tap can launch the process, so the response can arrive before anything is listening. The
+    // latest one is parked until a service instance starts, then replayed.
+    private static SystemNotificationActivatedEventArgs? _pendingActivation;
+    private static IosSystemNotificationService? _activationOwner;
+
     private readonly object _sync = new();
     private Task<bool>? _authorizationTask;
-    private ActivationDelegate? _activationDelegate;
 
     public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
 
-    public void Start()
+    /// <summary>
+    /// Installs the notification delegate. Called from the application entry point, before the system
+    /// can deliver a launch-time tap response.
+    /// </summary>
+    /// <remarks>
+    /// UNUserNotificationCenter reports taps only through its delegate, and a response that arrives
+    /// before one is assigned is not redelivered. The delegate therefore cannot wait for dependency
+    /// injection or for the shell to mount; it parks the response until <see cref="Start"/> runs.
+    /// </remarks>
+    public static void InstallActivationDelegate()
     {
-        lock (_sync)
+        lock (DelegateSync)
         {
             if (_activationDelegate is not null)
             {
                 return;
             }
 
-            // The delegate must be set before the system delivers a launch-time response, and it is
-            // the only way UNUserNotificationCenter reports taps. Held in a field so it is not
-            // collected while the system still holds the native reference.
-            _activationDelegate = new ActivationDelegate(this);
+            // Held in a static field so it is not collected while the system holds the native reference.
+            _activationDelegate = new ActivationDelegate();
         }
 
         UNUserNotificationCenter.Current.Delegate = _activationDelegate;
     }
 
-    private void RaiseActivated(UNNotificationResponse response)
+    public void Start()
+    {
+        // The delegate is installed by the entry point; this only claims delivery and drains a tap
+        // that landed before the shared layers existed.
+        InstallActivationDelegate();
+
+        SystemNotificationActivatedEventArgs? pending;
+        lock (DelegateSync)
+        {
+            _activationOwner = this;
+            pending = _pendingActivation;
+            _pendingActivation = null;
+        }
+
+        if (pending is not null)
+        {
+            Activated?.Invoke(this, pending);
+        }
+    }
+
+    private static void PublishActivation(UNNotificationResponse response)
     {
         var request = response.Notification?.Request;
         var notificationId = request?.Identifier;
@@ -48,20 +82,26 @@ public sealed class IosSystemNotificationService : ISystemNotificationService, I
 
         var conversationId = request?.Content?.UserInfo?
             .ObjectForKey(new NSString(ConversationIdUserInfoKey)) as NSString;
-        Activated?.Invoke(
-            this,
-            new SystemNotificationActivatedEventArgs(notificationId, conversationId?.ToString()));
+        var activation = new SystemNotificationActivatedEventArgs(
+            notificationId,
+            conversationId?.ToString());
+
+        IosSystemNotificationService? owner;
+        lock (DelegateSync)
+        {
+            owner = _activationOwner;
+            if (owner is null)
+            {
+                _pendingActivation = activation;
+                return;
+            }
+        }
+
+        owner.Activated?.Invoke(owner, activation);
     }
 
     private sealed class ActivationDelegate : UNUserNotificationCenterDelegate
     {
-        private readonly IosSystemNotificationService _owner;
-
-        public ActivationDelegate(IosSystemNotificationService owner)
-        {
-            _owner = owner;
-        }
-
         public override void DidReceiveNotificationResponse(
             UNUserNotificationCenter center,
             UNNotificationResponse response,
@@ -69,7 +109,7 @@ public sealed class IosSystemNotificationService : ISystemNotificationService, I
         {
             try
             {
-                _owner.RaiseActivated(response);
+                PublishActivation(response);
             }
             finally
             {
