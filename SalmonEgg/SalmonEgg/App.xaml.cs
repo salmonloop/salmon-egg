@@ -203,6 +203,12 @@ public partial class App : global::Microsoft.UI.Xaml.Application
 #if WINDOWS
         try
         {
+            var notifications = ServiceProvider.GetService<Platforms.Windows.WindowsSystemNotificationService>();
+
+            // The Windows App SDK requires Register before GetActivatedEventArgs, otherwise a
+            // cold-start click is not reported at all.
+            notifications?.EnsureActivationListenerRegistered();
+
             var activatedArgs = global::Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent()
                 .GetActivatedEventArgs();
             if (activatedArgs?.Kind
@@ -213,8 +219,7 @@ public partial class App : global::Microsoft.UI.Xaml.Application
                 return;
             }
 
-            ServiceProvider.GetService<Platforms.Windows.WindowsSystemNotificationService>()
-                ?.CaptureLaunchActivation(notificationArgs);
+            notifications?.CaptureLaunchActivation(notificationArgs);
         }
         catch (Exception ex)
         {

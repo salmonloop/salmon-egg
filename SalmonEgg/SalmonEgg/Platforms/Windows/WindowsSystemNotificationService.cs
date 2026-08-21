@@ -16,6 +16,7 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
 
     private readonly object _sync = new();
     private bool _isRegistered;
+    private bool _isSubscribed;
     private bool _isListening;
 
     // A click can launch the process, so the activation can arrive before anything is listening. The
@@ -24,16 +25,25 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
 
     public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
 
-    public void Start()
+    /// <summary>
+    /// Subscribes to notification activations and registers with the platform.
+    /// </summary>
+    /// <remarks>
+    /// The Windows App SDK requires Register to be called before
+    /// <c>AppInstance.GetActivatedEventArgs</c>, so the application entry point calls this before it
+    /// reads its activation arguments. Activations are parked rather than raised until
+    /// <see cref="Start"/> runs, because the shared listener does not exist yet at that point.
+    /// </remarks>
+    public void EnsureActivationListenerRegistered()
     {
         lock (_sync)
         {
-            if (_isListening)
+            if (_isSubscribed)
             {
                 return;
             }
 
-            _isListening = true;
+            _isSubscribed = true;
         }
 
         try
@@ -49,10 +59,23 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
             // reports Unsupported, so there is nothing further to surface here.
             lock (_sync)
             {
-                _isListening = false;
+                _isSubscribed = false;
+            }
+        }
+    }
+
+    public void Start()
+    {
+        EnsureActivationListenerRegistered();
+
+        lock (_sync)
+        {
+            if (_isListening)
+            {
+                return;
             }
 
-            return;
+            _isListening = true;
         }
 
         DrainPendingActivation();
@@ -74,16 +97,7 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
             return;
         }
 
-        lock (_sync)
-        {
-            _pendingActivation = activation;
-            if (!_isListening)
-            {
-                return;
-            }
-        }
-
-        DrainPendingActivation();
+        ParkOrRaise(activation);
     }
 
     private void DrainPendingActivation()
@@ -105,8 +119,24 @@ public sealed class WindowsSystemNotificationService : ISystemNotificationServic
     {
         if (TryReadActivation(args, out var activation))
         {
-            Activated?.Invoke(this, activation);
+            ParkOrRaise(activation);
         }
+    }
+
+    // Registering happens before the shared listener is attached, so an activation in that window has
+    // to be parked. The newest one wins: it is the click the user just made.
+    private void ParkOrRaise(SystemNotificationActivatedEventArgs activation)
+    {
+        lock (_sync)
+        {
+            if (!_isListening)
+            {
+                _pendingActivation = activation;
+                return;
+            }
+        }
+
+        Activated?.Invoke(this, activation);
     }
 
     private static bool TryReadActivation(
