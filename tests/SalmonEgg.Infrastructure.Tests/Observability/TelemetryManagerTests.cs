@@ -170,6 +170,35 @@ public class TelemetryManagerTests
     }
 
     [Fact]
+    public void Reconfigure_ToDisabledThenBackToEnabled_RebuildsAllSignals()
+    {
+        // 关闭会拆掉 provider；重新打开必须能在拆除后的状态上完整重建三路信号，
+        // 否则用户"关了再开"会得到一个静默失效的遥测管线。
+        var factory = new TestTelemetryExporterFactory();
+        using var loggerProvider = new DynamicTelemetryLoggerProvider(factory);
+        var manager = new TelemetryManager(
+            TelemetrySettings.CreateInactiveBootstrap(),
+            factory,
+            loggerProvider);
+        manager.Reconfigure(CreateEnabledSettings("http://first.example.com:4318"));
+        manager.Reconfigure(new TelemetrySettings { Enabled = false, ServiceName = "Test" });
+        Assert.False(manager.IsEnabled);
+        Assert.Null(manager.TracerProvider);
+        Assert.Null(manager.MeterProvider);
+
+        manager.Reconfigure(CreateEnabledSettings("http://second.example.com:4318"));
+
+        Assert.True(manager.IsEnabled);
+        Assert.NotNull(manager.TracerProvider);
+        Assert.NotNull(manager.MeterProvider);
+        Assert.Equal(2, factory.TracerConfigureCount);
+        Assert.Equal(2, factory.MeterConfigureCount);
+        Assert.Equal(
+            new[] { "http://first.example.com:4318", "http://second.example.com:4318" },
+            factory.LoggerEndpoints);
+    }
+
+    [Fact]
     public void Reconfigure_WhenReplacementBuildFails_KeepsCurrentPipelineAndAllowsRetry()
     {
         var factory = new TestTelemetryExporterFactory();
@@ -264,6 +293,8 @@ public class TelemetryManagerTests
         public bool IsFileSupported => true;
         public bool TracerProviderConfigured { get; private set; }
         public bool MeterProviderConfigured { get; private set; }
+        public int TracerConfigureCount { get; private set; }
+        public int MeterConfigureCount { get; private set; }
 
         public bool ThrowOnMeterConfiguration { get; set; }
 
@@ -274,6 +305,7 @@ public class TelemetryManagerTests
             TelemetrySettings settings)
         {
             TracerProviderConfigured = true;
+            TracerConfigureCount++;
         }
 
         public void ConfigureMeterProvider(
@@ -286,6 +318,7 @@ public class TelemetryManagerTests
             }
 
             MeterProviderConfigured = true;
+            MeterConfigureCount++;
         }
 
         /// <summary>每次装配 Logs 维度时收到的端点，用于证明日志与 traces 一起切换。</summary>
