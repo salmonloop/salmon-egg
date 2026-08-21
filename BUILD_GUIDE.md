@@ -200,6 +200,19 @@ Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 A
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
 - Skia Desktop GUI readiness + seeded transcript projection + focused NumberBox contrast：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness、投影混排 transcript，并在真实 Data & Storage 页面验证深色主题 NumberBox 焦点态；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
+#### WASM notification gate
+WASM 原生通知走浏览器 Notification API。该桥接层是纯浏览器交互，用托管单测会变成 stub 掉被测 API 本身，
+所以门禁在真实浏览器里加载**本次构建产出**的模块，并让通知权限真实处于授予/拒绝状态：
+
+```bash
+scripts/gates/run-wasm-notification-gates.sh Release
+```
+
+门禁先断言模块确实进入了 published package（只存在于源码而没打进包，运行时会全部退化成 Failed），
+再用 Playwright 断言托管服务分流依赖的分支：权限字符串、API 缺失时的 `unsupported` 哨兵、per-turn tag
+作为替换键、以及构造函数抛错时返回 false 而非逸出异常。注意 granted 路径必须用完整 Chromium：
+headless *shell* 构建无论是否授权都把通知权限报成 denied。
+
 #### Linux notification gate
 Linux 原生通知走 freedesktop.org Desktop Notifications 规范，其契约只在 session bus 上可观测：
 「重复同一 turn 必须请求替换而非堆叠」「无通知服务时必须是能力缺失而非失败」。用 mock 的 D-Bus 层做单测

@@ -211,7 +211,9 @@ public static class DependencyInjection
 #elif __IOS__
         services.AddSingleton<ISystemNotificationService, IosSystemNotificationService>();
 #elif __WASM__
-        services.AddSingleton<ISystemNotificationService, UnsupportedSystemNotificationService>();
+#pragma warning disable CA1416 // Uno browserwasm target runs in the browser platform surface.
+        services.AddSingleton<ISystemNotificationService, WasmSystemNotificationService>();
+#pragma warning restore CA1416
 #else
         // One desktop TFM covers Linux and macOS, so the split is a runtime check rather than #if.
         // macOS has no managed UserNotifications binding here, so it stays honestly unsupported.
