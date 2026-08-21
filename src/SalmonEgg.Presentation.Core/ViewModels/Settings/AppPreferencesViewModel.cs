@@ -1078,22 +1078,32 @@ public partial class AppPreferencesViewModel : ObservableObject
                 option.Tag,
                 option.DisplayNameResourceKey)));
 
+    // 值域来自 AppSettingValueCatalog（与 CLI settings set 共享的单一事实源）；
+    // 本处只负责把值映射到展示资源键。
     private static ObservableCollection<SettingsOptionViewModel> CreateThemeOptions() =>
-        new(
-        [
-            new SettingsOptionViewModel("System", "Appearance_ThemeSystem.Content"),
-            new SettingsOptionViewModel("Light", "Appearance_ThemeLight.Content"),
-            new SettingsOptionViewModel("Dark", "Appearance_ThemeDark.Content")
-        ]);
+        new(AppSettingValueCatalog.ThemeValues.Select(MakeThemeOption));
+
+    private static SettingsOptionViewModel MakeThemeOption(string value) => new(
+        value,
+        value switch
+        {
+            "Light" => "Appearance_ThemeLight.Content",
+            "Dark" => "Appearance_ThemeDark.Content",
+            _ => "Appearance_ThemeSystem.Content"
+        });
 
     private static ObservableCollection<SettingsOptionViewModel> CreateBackdropOptions() =>
-        new(
-        [
-            new SettingsOptionViewModel("System", "Appearance_BackdropSystem.Content"),
-            new SettingsOptionViewModel("Mica", "Appearance_BackdropMica.Content"),
-            new SettingsOptionViewModel("Acrylic", "Appearance_BackdropAcrylic.Content"),
-            new SettingsOptionViewModel("Solid", "Appearance_BackdropSolid.Content")
-        ]);
+        new(AppSettingValueCatalog.BackdropValues.Select(MakeBackdropOption));
+
+    private static SettingsOptionViewModel MakeBackdropOption(string value) => new(
+        value,
+        value switch
+        {
+            "Mica" => "Appearance_BackdropMica.Content",
+            "Acrylic" => "Appearance_BackdropAcrylic.Content",
+            "Solid" => "Appearance_BackdropSolid.Content",
+            _ => "Appearance_BackdropSystem.Content"
+        });
 
     private AppLanguageOptionViewModel ResolveLanguageOption(string? tag)
     {

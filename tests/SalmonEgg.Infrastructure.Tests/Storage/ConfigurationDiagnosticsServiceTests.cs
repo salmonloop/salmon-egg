@@ -83,8 +83,10 @@ public sealed class ConfigurationDiagnosticsServiceTests : IDisposable
 
         var unparsable = Assert.Single(results, r => r.Kind == ConfigurationDiagnosticKind.Unparsable);
         Assert.Contains("broken", unparsable.FileName, StringComparison.Ordinal);
-        // 诊断不得回显文件内容。
+        // 诊断不得回显文件内容：Detail 只含位置与异常类别。
         Assert.DoesNotContain(unparsable.Detail!, "do-not-echo", StringComparison.Ordinal);
+        Assert.DoesNotContain(unparsable.Detail!, "unclosed", StringComparison.Ordinal);
+        Assert.StartsWith("YAML parse failed at line", unparsable.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

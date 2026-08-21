@@ -58,6 +58,15 @@ public static class AppSettingValueCatalog
     /// <summary>水合完成模式合法值。</summary>
     public static IReadOnlyList<string> HydrationCompletionModeValues { get; } = ["StrictReplay", "LoadResponse"];
 
+    private static IReadOnlyList<string> LanguageTags { get; } = AppLanguageCatalog.SupportedOptions
+        .Select(option => option.Tag)
+        .ToArray();
+
+    private static bool IsKnownLanguageTag(string value) =>
+        AppLanguageCatalog.SupportedOptions.Any(option =>
+            string.Equals(option.Tag, value, StringComparison.OrdinalIgnoreCase) ||
+            option.Aliases.Contains(value, StringComparer.OrdinalIgnoreCase));
+
     /// <summary>
     /// 尝试把单个键值对应用到设置快照上。
     /// </summary>
@@ -78,8 +87,11 @@ public static class AppSettingValueCatalog
                 settings.Backdrop = value;
                 return true;
             case LanguageKey:
-                // 语言走目录自身的别名归一（zh-CN → zh-Hans 等），非法标签回退 System，
-                // 与 LoadAsync 的宽容读语义一致。
+                // 写入路径显式拒绝未知标签（读路径的宽容回退是 LoadAsync 的事，不在这里）。
+                // 校验必须针对原始输入：NormalizeTag 会把未知标签折叠成 System，若先归一再
+                // 比对，任何垃圾输入都会「变成」合法的 System 溜过守卫。
+                // 合法形态 = 规范标签本身或目录声明的别名；命中后写入规范标签。
+                if (!IsKnownLanguageTag(value.Trim())) return false;
                 settings.Language = AppLanguageCatalog.NormalizeTag(value);
                 return true;
             case AnimationEnabledKey:
@@ -126,7 +138,7 @@ public static class AppSettingValueCatalog
     {
         ThemeKey => ThemeValues,
         BackdropKey => BackdropValues,
-        LanguageKey => AppLanguageCatalog.SupportedOptions.Select(option => option.Tag).ToArray(),
+        LanguageKey => LanguageTags,
         _ => null
     };
 

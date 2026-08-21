@@ -113,6 +113,20 @@ public sealed class AppSettingsHandlerTests
         Assert.False(File.Exists(fixture.AppYamlPath));
     }
 
+    [Fact]
+    public async Task SetAsync_WithUnknownLanguageTag_RejectsWithAllowedValuesHint()
+    {
+        using var fixture = new SettingsFixture();
+
+        var exitCode = await fixture.Handler.SetAsync("language", "gibberish", TestContext.Current.CancellationToken);
+
+        Assert.Equal(CliExitCodes.Usage, exitCode);
+        var error = Assert.Single(fixture.Output.Errors);
+        Assert.Contains("Allowed values", error, StringComparison.Ordinal);
+        Assert.Contains(AppLanguageCatalog.SimplifiedChineseTag, error, StringComparison.Ordinal);
+        Assert.False(File.Exists(fixture.AppYamlPath));
+    }
+
     /// <summary>
     /// Saved 事件语义：CLI 写入必须像 GUI 保存一样触发订阅方，且订阅方异常不阻断落盘。
     /// </summary>
