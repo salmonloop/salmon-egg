@@ -66,7 +66,8 @@ public sealed class ConfigSyncPackageService
             {
                 CreatedAtUtc = DateTimeOffset.UtcNow.ToString("O"),
                 IncludesSecrets = includeSecrets,
-                Files = files.Select(GetRelativeConfigPath).OrderBy(x => x, StringComparer.Ordinal).ToList()
+                // manifest 是便携包元数据，路径契约与 zip 条目一致（恒定 '/'），不得携带平台分隔符。
+                Files = files.Select(GetRelativeConfigPath).Select(ConfigurationPackagePaths.Normalize).OrderBy(x => x, StringComparer.Ordinal).ToList()
             };
 
             await WriteManifestEntryAsync(archive, manifest, cancellationToken).ConfigureAwait(false);
@@ -85,7 +86,11 @@ public sealed class ConfigSyncPackageService
                     continue;
                 }
 
-                await WriteFileEntryAsync(archive, ConfigEntryPrefix + ToZipPath(GetRelativeConfigPath(path)), path, cancellationToken)
+                await WriteFileEntryAsync(
+                        archive,
+                        ConfigEntryPrefix + ConfigurationPackagePaths.Normalize(GetRelativeConfigPath(path)),
+                        path,
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -464,6 +469,4 @@ public sealed class ConfigSyncPackageService
 
         return relative;
     }
-
-    private static string ToZipPath(string relativePath) => relativePath.Replace(Path.DirectorySeparatorChar, '/');
 }
