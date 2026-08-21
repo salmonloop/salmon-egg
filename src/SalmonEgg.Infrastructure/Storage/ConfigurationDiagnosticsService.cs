@@ -103,7 +103,7 @@ public sealed class ConfigurationDiagnosticsService
         {
             using var input = entry.Open();
             using var reader = new StreamReader(input);
-            var yaml = reader.ReadToEndAsync().GetAwaiter().GetResult();
+            var yaml = reader.ReadToEnd();
 
             // app.yaml 与 servers/*.yaml 各有专属模型与支持版本，按包内路径分流，
             // 使「拒绝导入」的阈值与对应服务写入守卫的阈值完全一致。
@@ -118,13 +118,20 @@ public sealed class ConfigurationDiagnosticsService
         }
         catch (YamlException exception)
         {
-            return ConfigurationDiagnostic.Unparsable(relativeName, exception.Message);
+            return ConfigurationDiagnostic.Unparsable(relativeName, DescribeYamlFailure(exception));
         }
         catch (IOException exception)
         {
             return ConfigurationDiagnostic.Unparsable(relativeName, exception.GetType().Name);
         }
     }
+
+    /// <summary>
+    /// 把 YAML 失败压缩为「异常类别 + 位置」，不携带消息原文——部分 YamlDotNet 错误类
+    /// 会在消息里引用出错行的内容，而配置文件里可能有凭据。
+    /// </summary>
+    private static string DescribeYamlFailure(YamlException exception) =>
+        $"YAML parse failed at line {exception.Start.Line}, column {exception.Start.Column} ({exception.GetType().Name}).";
 
     private async Task<ConfigurationDiagnostic> InspectAppSettingsAsync(CancellationToken cancellationToken)
     {
@@ -142,7 +149,7 @@ public sealed class ConfigurationDiagnosticsService
         }
         catch (YamlException exception)
         {
-            return ConfigurationDiagnostic.Unparsable("app.yaml", exception.Message);
+            return ConfigurationDiagnostic.Unparsable("app.yaml", DescribeYamlFailure(exception));
         }
     }
 
@@ -173,7 +180,7 @@ public sealed class ConfigurationDiagnosticsService
             }
             catch (YamlException exception)
             {
-                results.Add(ConfigurationDiagnostic.Unparsable(relativeName, exception.Message));
+                results.Add(ConfigurationDiagnostic.Unparsable(relativeName, DescribeYamlFailure(exception)));
             }
         }
 

@@ -56,6 +56,7 @@ public sealed class AppSettingValueCatalogTests
     [InlineData("cache_retention_days", "-3")]
     [InlineData("cache_retention_days", "many")]
     [InlineData("language", "   ")]
+    [InlineData("language", "gibberish")]
     public void TryApply_WithInvalidValues_RejectsAndLeavesDefaults(string key, string value)
     {
         var settings = new AppSettings();
@@ -64,6 +65,7 @@ public sealed class AppSettingValueCatalogTests
 
         Assert.Equal(new AppSettings().Theme, settings.Theme);
         Assert.Equal(new AppSettings().CacheRetentionDays, settings.CacheRetentionDays);
+        Assert.Equal(new AppSettings().Language, settings.Language);
     }
 
     [Fact]
@@ -96,11 +98,11 @@ public sealed class AppSettingValueCatalogTests
     }
 
     [Fact]
-    public void ThemeAndBackdropValues_MatchGuiOptionLists()
+    public void ThemeAndBackdropValues_AreTheCanonicalSets()
     {
-        // GUI 选项列表（AppPreferencesViewModel.CreateThemeOptions/CreateBackdropOptions）
-        // 与本目录必须同源同序；此处锁定值集，防止两处漂移。
-        Assert.Equal(3, AppSettingValueCatalog.ThemeValues.Count);
-        Assert.Equal(4, AppSettingValueCatalog.BackdropValues.Count);
+        // GUI 选项列表（AppPreferencesViewModel）已改为从本目录取值；这里锁定规范值集本身，
+        // 防止未来有人把目录改坏（例如改名 "Dark" → "Dim" 而存储层不认）。
+        Assert.Equal(new[] { "System", "Light", "Dark" }, AppSettingValueCatalog.ThemeValues);
+        Assert.Equal(new[] { "System", "Mica", "Acrylic", "Solid" }, AppSettingValueCatalog.BackdropValues);
     }
 }
