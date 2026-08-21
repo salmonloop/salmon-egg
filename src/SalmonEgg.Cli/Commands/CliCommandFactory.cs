@@ -23,15 +23,21 @@ public sealed class CliCommandFactory
     private readonly CliVersionProvider _versionProvider;
     private readonly ServerConfigurationHandler _serverConfigurationHandler;
     private readonly CredentialsHandler _credentialsHandler;
+    private readonly AppSettingsHandler _appSettingsHandler;
+    private readonly ConfigPackageHandler _configPackageHandler;
 
     public CliCommandFactory(
         CliVersionProvider versionProvider,
         ServerConfigurationHandler serverConfigurationHandler,
-        CredentialsHandler credentialsHandler)
+        CredentialsHandler credentialsHandler,
+        AppSettingsHandler appSettingsHandler,
+        ConfigPackageHandler configPackageHandler)
     {
         _versionProvider = versionProvider ?? throw new ArgumentNullException(nameof(versionProvider));
         _serverConfigurationHandler = serverConfigurationHandler ?? throw new ArgumentNullException(nameof(serverConfigurationHandler));
         _credentialsHandler = credentialsHandler ?? throw new ArgumentNullException(nameof(credentialsHandler));
+        _appSettingsHandler = appSettingsHandler ?? throw new ArgumentNullException(nameof(appSettingsHandler));
+        _configPackageHandler = configPackageHandler ?? throw new ArgumentNullException(nameof(configPackageHandler));
     }
 
     /// <summary>
@@ -52,6 +58,10 @@ public sealed class CliCommandFactory
 
         var config = CreateStructuralCommand("config", ConfigDescription);
         config.Subcommands.Add(ConfigServerCommandFactory.CreateServerCommand(_serverConfigurationHandler, rawArgs));
+        config.Subcommands.Add(ConfigSettingsCommandFactory.CreateSettingsCommand(_appSettingsHandler));
+        config.Subcommands.Add(ConfigPackageCommandFactory.CreateValidateCommand(_configPackageHandler));
+        config.Subcommands.Add(ConfigPackageCommandFactory.CreateExportCommand(_configPackageHandler));
+        config.Subcommands.Add(ConfigPackageCommandFactory.CreateImportCommand(_configPackageHandler));
         var credentials = CredentialsCommandFactory.CreateCredentialsNamespaceCommand();
 
         root.Subcommands.Add(config);

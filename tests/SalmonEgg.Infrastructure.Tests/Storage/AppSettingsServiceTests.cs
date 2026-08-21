@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Services;
 using SalmonEgg.Infrastructure.Storage;
 using Xunit;
 
@@ -450,6 +451,29 @@ public sealed class AppSettingsServiceTests : IDisposable
         await Assert.ThrowsAnyAsync<Exception>(() => service.SaveAsync(new AppSettings()));
 
         Assert.Equal(0, raised);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenSchemaTooNew_ThrowsTypedRefusalAndLeavesFileUntouched()
+    {
+        // 高版本文件是更新的程序写的；拒绝写回必须可被宿主按类型识别（给出升级指引而非
+        // 重试建议），且拒绝后原文件必须原样保留。
+        var appYamlPath = Path.Combine(_testDirectory, "SalmonEgg", "config", "app.yaml");
+        Directory.CreateDirectory(Path.GetDirectoryName(appYamlPath)!);
+        const string foreignYaml = "schema_version: 99\ntheme: Dark\n";
+        await File.WriteAllTextAsync(appYamlPath, foreignYaml, TestContext.Current.CancellationToken);
+        var service = CreateService();
+        var raised = 0;
+        service.Saved += (_, _) => raised++;
+
+        var exception = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => service.SaveAsync(new AppSettings { Theme = "Light" }));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.SchemaVersionTooNew, exception.Reason);
+        Assert.Contains("schema_version 99", exception.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("Refusing to overwrite", exception.UserMessage, StringComparison.Ordinal);
+        Assert.Equal(0, raised);
+        Assert.Equal(foreignYaml, await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken));
     }
 
     private AppSettingsService CreateService(ISecureStorage? secureStorage = null)

@@ -718,6 +718,25 @@ public sealed class ConfigurationManagerTests : IDisposable
         Assert.False(Directory.Exists(serversDirectory));
     }
 
+    [Fact]
+    public async Task SaveConfigurationAsync_WhenSchemaTooNew_ThrowsTypedRefusalAndLeavesFileUntouched()
+    {
+        // 高版本 server 文件必须拒绝写回且原样保留；宿主按 Reason 识别后给出升级指引。
+        const string foreignYaml =
+            "schema_version: 88\nid: future-001\nname: Future\ntransport: websocket\nserver_url: ws://localhost:1\n";
+        var path = GetServerYamlPath("future-001");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, foreignYaml, TestContext.Current.CancellationToken);
+
+        var exception = await Assert.ThrowsAsync<ConfigurationPersistenceException>(
+            () => _configManager.SaveConfigurationAsync(CreateTestConfiguration("future-001")));
+
+        Assert.Equal(ConfigurationPersistenceFailureReason.SchemaVersionTooNew, exception.Reason);
+        Assert.Contains("schema_version 88", exception.UserMessage, StringComparison.Ordinal);
+        Assert.Contains("Refusing to overwrite", exception.UserMessage, StringComparison.Ordinal);
+        Assert.Equal(foreignYaml, await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+    }
+
     private string GetServerYamlPath(string id) =>
         Path.Combine(_testDirectory, "SalmonEgg", "config", "servers", $"{id}.yaml");
 

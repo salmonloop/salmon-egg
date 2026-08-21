@@ -69,6 +69,7 @@ public static class DesktopConfigurationServiceCollectionExtensions
 
         services.AddSingleton<ConfigurationSecretSnapshotService>();
         services.AddSingleton<ConfigSyncPackageService>();
+        services.AddSingleton<ConfigurationDiagnosticsService>();
 
         return services;
     }

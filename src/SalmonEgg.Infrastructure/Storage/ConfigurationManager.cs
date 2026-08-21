@@ -19,7 +19,10 @@ namespace SalmonEgg.Infrastructure.Storage;
 /// </summary>
 public sealed class ConfigurationManager : IConfigurationService, IConfigurationRecoveryService
 {
-    private const int CurrentSchemaVersion = 2;
+    /// <summary>本程序写入 server 配置时使用的 schema 版本。</summary>
+    public const int CurrentServerConfigurationSchemaVersion = 2;
+
+    private const int CurrentSchemaVersion = CurrentServerConfigurationSchemaVersion;
 
     private readonly ISecureStorage _secureStorage;
     private readonly IConfigurationFileStore _fileStore;
@@ -426,8 +429,11 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
     {
         if (current.Model is not null && current.Model.SchemaVersion > CurrentSchemaVersion)
         {
-            throw new InvalidOperationException(
-                $"Configuration schema_version {current.Model.SchemaVersion} is newer than supported version {CurrentSchemaVersion}. Refusing to overwrite.");
+            // 类型化异常而非裸 InvalidOperationException：CLI 等宿主需要按「拒绝写回」
+            // 给出升级指引，而不是把它当一般写入失败处理。
+            throw new ConfigurationPersistenceException(
+                ConfigurationPersistenceFailureReason.SchemaVersionTooNew,
+                $"Configuration schema_version {current.Model.SchemaVersion} is newer than supported version {CurrentSchemaVersion}. Refusing to overwrite. Upgrade Salmon Egg to a version that supports schema_version {current.Model.SchemaVersion}.");
         }
 
         var currentRevision = current.Model?.Revision ?? string.Empty;
