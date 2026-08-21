@@ -14,7 +14,7 @@ on:
       - "NuGet.config"
       - "global.json"
   pull_request:
-    branches: [main]
+    branches: [develop]
     paths:
       - "src/SalmonEgg.Acp/**"
       - "src/SalmonEgg.Acp/README.md"

@@ -5,7 +5,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [develop]
 
 concurrency:
   group: gui-smoke-gates-${{ github.workflow }}-${{ github.ref }}
