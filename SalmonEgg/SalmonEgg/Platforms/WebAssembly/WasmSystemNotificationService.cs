@@ -18,7 +18,8 @@ namespace SalmonEgg.Platforms.WebAssembly;
 /// notification, is reported as an absent capability rather than a failure.
 /// </remarks>
 [SupportedOSPlatform("browser")]
-public sealed partial class WasmSystemNotificationService : ISystemNotificationService
+public sealed partial class WasmSystemNotificationService
+    : ISystemNotificationService, ISystemNotificationActivationSource
 {
     private const string NotificationsModuleName = "salmon-egg-wasm-notifications.js";
 
@@ -47,6 +48,46 @@ public sealed partial class WasmSystemNotificationService : ISystemNotificationS
                 return false;
             }
         }
+    }
+
+    // A browser click callback lands on a static JSExport, so the instance that should raise the event
+    // is held statically. There is one notification service per app.
+    private static WasmSystemNotificationService? _activationOwner;
+
+    public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
+
+    public void Start()
+    {
+        _activationOwner = this;
+        _ = StartAsync();
+    }
+
+    private async Task StartAsync()
+    {
+        try
+        {
+            await EnsureModuleImportedAsync(CancellationToken.None).ConfigureAwait(false);
+            SetActivationSinkInterop(OnNotificationActivated);
+        }
+        catch
+        {
+            // A browser without the API cannot report clicks. Posting already reports Unsupported.
+        }
+    }
+
+    internal static void OnNotificationActivated(string notificationId, string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(notificationId))
+        {
+            return;
+        }
+
+        var owner = _activationOwner;
+        owner?.Activated?.Invoke(
+            owner,
+            new SystemNotificationActivatedEventArgs(
+                notificationId,
+                string.IsNullOrWhiteSpace(conversationId) ? null : conversationId));
     }
 
     public async Task<SystemNotificationPermissionResult> RequestPermissionAsync(
@@ -107,7 +148,8 @@ public sealed partial class WasmSystemNotificationService : ISystemNotificationS
             return ShowNotificationInterop(
                 request.NotificationId,
                 request.Title.Trim(),
-                request.Body.Trim())
+                request.Body.Trim(),
+                request.ConversationId?.Trim() ?? string.Empty)
                 ? SystemNotificationResult.Shown
                 : SystemNotificationResult.Failed;
         }
@@ -154,6 +196,14 @@ public sealed partial class WasmSystemNotificationService : ISystemNotificationS
     internal static partial Task<string> RequestPermissionInteropAsync();
 
     [JSImport("showNotification", NotificationsModuleName)]
-    internal static partial bool ShowNotificationInterop(string notificationId, string title, string body);
+    internal static partial bool ShowNotificationInterop(
+        string notificationId,
+        string title,
+        string body,
+        string conversationId);
+
+    [JSImport("setActivationSink", NotificationsModuleName)]
+    internal static partial void SetActivationSinkInterop(
+        [JSMarshalAs<JSType.Function<JSType.String, JSType.String>>] Action<string, string> sink);
 }
 #endif

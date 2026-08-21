@@ -148,8 +148,9 @@ for entry in notifies:
     # -1 means "expires according to the server's settings": the desktop owns the timeout.
     if entry["timeout"] != -1:
         fail(f"expected the server default expire timeout (-1), got {entry['timeout']}")
-    if entry["actions"]:
-        fail(f"no notification action is routed yet, so actions must be empty; got {entry['actions']}")
+    # A plain click invokes the spec's conventional "default" action, which is how a tap routes.
+    if entry["actions"][:1] != ["default"]:
+        fail(f"expected a 'default' action so a click routes; got {entry['actions']}")
 
 print("[linux-notification-gate] Bus traffic matches the spec contract.")
 PY

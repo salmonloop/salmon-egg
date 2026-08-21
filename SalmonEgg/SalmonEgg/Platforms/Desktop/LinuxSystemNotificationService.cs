@@ -22,7 +22,8 @@ namespace SalmonEgg.Platforms.Desktop;
 /// was shown.
 /// </remarks>
 [SupportedOSPlatform("linux")]
-public sealed class LinuxSystemNotificationService : ISystemNotificationService, IDisposable
+public sealed class LinuxSystemNotificationService
+    : ISystemNotificationService, ISystemNotificationActivationSource, IDisposable
 {
     private const string NotificationsService = "org.freedesktop.Notifications";
     private const string NotificationsPath = "/org/freedesktop/Notifications";
@@ -30,6 +31,9 @@ public sealed class LinuxSystemNotificationService : ISystemNotificationService,
 
     // "Expires according to the server's settings" — the desktop, not the app, owns the timeout.
     private const int ServerDefaultExpireTimeout = -1;
+
+    // The conventional action key a plain click invokes, per the Desktop Notifications specification.
+    private const string DefaultActionKey = "default";
 
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
@@ -39,12 +43,81 @@ public sealed class LinuxSystemNotificationService : ISystemNotificationService,
     // per-turn string id has to be mapped to whatever the server last handed back.
     private readonly Dictionary<string, uint> _serverIdsByNotificationId = new(StringComparer.Ordinal);
 
+    // ActionInvoked and NotificationClosed only report the server id, so the reverse map is what turns
+    // a click back into the turn it was about.
+    private readonly Dictionary<uint, SystemNotificationActivatedEventArgs> _activationsByServerId = new();
+
+    private bool _isListening;
+
     private DBusConnection? _connection;
     private bool _disposed;
 
     public LinuxSystemNotificationService(IStringLocalizer<CoreStrings> localizer)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+    }
+
+    public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
+
+    public void Start()
+    {
+        lock (_sync)
+        {
+            if (_isListening || _disposed)
+            {
+                return;
+            }
+
+            _isListening = true;
+        }
+
+        // Fire and forget: a desktop without a notification server simply never signals, and posting
+        // already reports that as Unsupported.
+        _ = WatchActionInvokedAsync();
+    }
+
+    private async Task WatchActionInvokedAsync()
+    {
+        try
+        {
+            var connection = await GetConnectionAsync(CancellationToken.None).ConfigureAwait(false);
+            await connection.WatchSignalAsync(
+                NotificationsService,
+                NotificationsPath,
+                NotificationsInterface,
+                "ActionInvoked",
+                static (Message message, object? _) => message.GetBodyReader().ReadUInt32(),
+                OnActionInvoked,
+                ObserverFlags.None,
+                false,
+                null).ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (_sync)
+            {
+                _isListening = false;
+            }
+        }
+    }
+
+    private void OnActionInvoked(Notification<uint> notification)
+    {
+        if (notification.Exception is not null || !notification.HasValue)
+        {
+            return;
+        }
+
+        SystemNotificationActivatedEventArgs? activation;
+        lock (_sync)
+        {
+            _activationsByServerId.TryGetValue(notification.Value, out activation);
+        }
+
+        if (activation is not null)
+        {
+            Activated?.Invoke(this, activation);
+        }
     }
 
     public bool IsSupported => OperatingSystem.IsLinux() && HasSessionBusAddress;
@@ -104,6 +177,9 @@ public sealed class LinuxSystemNotificationService : ISystemNotificationService,
             lock (_sync)
             {
                 _serverIdsByNotificationId[request.NotificationId] = serverId;
+                _activationsByServerId[serverId] = new SystemNotificationActivatedEventArgs(
+                    request.NotificationId,
+                    request.ConversationId);
             }
 
             return SystemNotificationResult.Shown;
@@ -162,7 +238,9 @@ public sealed class LinuxSystemNotificationService : ISystemNotificationService,
         writer.WriteString(string.Empty); // app_icon: the desktop entry's icon is the right default.
         writer.WriteString(request.Title.Trim());
         writer.WriteString(request.Body.Trim());
-        writer.WriteArray(Array.Empty<string>()); // actions: nothing routes a notification action yet.
+        // The spec's conventional "default" action is what a plain click invokes. The label is only
+        // shown by servers that render the default action as a button.
+        writer.WriteArray(new[] { DefaultActionKey, "Open" });
 
         var hints = writer.WriteDictionaryStart();
         writer.WriteDictionaryEntryStart();

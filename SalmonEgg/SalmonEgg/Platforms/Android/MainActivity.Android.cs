@@ -4,8 +4,11 @@ using System.Threading.Tasks;
 using Android;
 using Android.App;
 using Android.Content.PM;
+using Android.Content;
 using Android.OS;
 using Android.Views;
+using SalmonEgg.Domain.Services;
+using SalmonEgg.Platforms.Android;
 
 namespace SalmonEgg.Droid;
 
@@ -18,13 +21,73 @@ public class MainActivity : Microsoft.UI.Xaml.ApplicationActivity
 {
     private const int NotificationPermissionRequestCode = 4107;
     private static readonly object PermissionSync = new();
+    private static readonly object ActivationSync = new();
     private static TaskCompletionSource<bool>? _notificationPermissionSource;
+
+    // A tap can launch the process, so the intent may arrive before anything is listening. The latest
+    // one is parked until the notification service starts, then drained.
+    private static SystemNotificationActivatedEventArgs? _pendingActivation;
+
+    /// <summary>Raised when the user taps a notification this app posted.</summary>
+    public static event EventHandler<SystemNotificationActivatedEventArgs>? NotificationActivated;
+
+    /// <summary>Replays a tap that arrived before the notification service began listening.</summary>
+    public static void DrainPendingNotificationActivation()
+    {
+        SystemNotificationActivatedEventArgs? pending;
+        lock (ActivationSync)
+        {
+            pending = _pendingActivation;
+            _pendingActivation = null;
+        }
+
+        if (pending is not null)
+        {
+            NotificationActivated?.Invoke(null, pending);
+        }
+    }
+
+    private static void PublishNotificationActivation(Intent? intent)
+    {
+        var notificationId = intent?.GetStringExtra(AndroidSystemNotificationService.NotificationIdExtra);
+        if (string.IsNullOrWhiteSpace(notificationId))
+        {
+            return;
+        }
+
+        var conversationId = intent?.GetStringExtra(AndroidSystemNotificationService.ConversationIdExtra);
+        var activation = new SystemNotificationActivatedEventArgs(notificationId, conversationId);
+
+        var handler = NotificationActivated;
+        if (handler is null)
+        {
+            lock (ActivationSync)
+            {
+                _pendingActivation = activation;
+            }
+
+            return;
+        }
+
+        handler.Invoke(null, activation);
+    }
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         global::AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
 
         base.OnCreate(savedInstanceState);
+
+        // Cold launch by notification tap: the activation is on the launch intent.
+        PublishNotificationActivation(Intent);
+    }
+
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+
+        // Warm tap: SingleTop delivers it here rather than recreating the activity.
+        PublishNotificationActivation(intent);
     }
 
     protected override void OnDestroy()

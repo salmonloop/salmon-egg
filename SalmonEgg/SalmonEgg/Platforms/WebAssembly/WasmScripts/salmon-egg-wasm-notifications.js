@@ -34,7 +34,7 @@ export async function requestPermission() {
     }
 }
 
-export function showNotification(notificationId, title, body) {
+export function showNotification(notificationId, title, body, conversationId) {
     if (typeof Notification !== "function" || Notification.permission !== "granted") {
         return false;
     }
@@ -42,10 +42,25 @@ export function showNotification(notificationId, title, body) {
     try {
         // The tag is the browser's own replace key: re-notifying one turn replaces its notification
         // instead of stacking a second one.
-        new Notification(title, { body, tag: notificationId });
+        const notification = new Notification(title, { body, tag: notificationId });
+        notification.onclick = () => {
+            // Focusing is the native expectation for a notification click; the managed layer decides
+            // what to open.
+            try { window.focus(); } catch { /* focus is best-effort and may be refused. */ }
+            notification.close();
+            const sink = globalThis.salmonEggNotificationActivated;
+            if (typeof sink === "function") {
+                sink(notificationId, conversationId ?? "");
+            }
+        };
         return true;
     } catch {
         // Chrome on Android throws for page-created Notifications and requires a service worker.
         return false;
     }
+}
+
+// The managed side installs its activation callback here before the first notification is shown.
+export function setActivationSink(sink) {
+    globalThis.salmonEggNotificationActivated = sink;
 }

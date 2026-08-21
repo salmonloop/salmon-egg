@@ -59,22 +59,30 @@ const granted = await withPage(['notifications'], async page => {
     const constructed = [];
     const RealNotification = window.Notification;
     // Wrap rather than replace so `typeof Notification === "function"` and .permission stay real.
+    const constructedNotifications = [];
     class Recording extends RealNotification {
       constructor(title, options) {
         super(title, options);
         constructed.push({ title, body: options?.body, tag: options?.tag });
+        constructedNotifications.push(this);
       }
       static get permission() { return RealNotification.permission; }
       static requestPermission(...a) { return RealNotification.requestPermission(...a); }
     }
     window.Notification = Recording;
     const permission = mod.getPermission();
-    const first = mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'First turn.');
-    const repeat = mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'First turn.');
-    const second = mod.showNotification('turn:conv-1:turn-2', 'Task completed', 'Second turn.');
+    // Record what a click reports so the routing payload is observable.
+    const activations = [];
+    mod.setActivationSink((notificationId, conversationId) => activations.push({ notificationId, conversationId }));
+    const first = mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'First turn.', 'conv-1');
+    const repeat = mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'First turn.', 'conv-1');
+    const second = mod.showNotification('turn:conv-1:turn-2', 'Task completed', 'Second turn.', 'conv-2');
     const requested = await mod.requestPermission();
+    // A click must report the turn and its conversation to the managed sink.
+    constructedNotifications[0].onclick();
+    constructedNotifications[2].onclick();
     window.Notification = RealNotification;
-    return { permission, first, repeat, second, requested, constructed };
+    return { permission, first, repeat, second, requested, constructed, activations };
   }, origin);
 });
 check('granted: getPermission', granted.permission, 'granted');
@@ -88,6 +96,10 @@ check('granted: notification tags are the per-turn ids',
 check('granted: bodies pass through',
   granted.constructed.map(n => n.body),
   ['First turn.', 'First turn.', 'Second turn.']);
+check('granted: a click reports the turn and its conversation',
+  granted.activations,
+  [{ notificationId: 'turn:conv-1:turn-1', conversationId: 'conv-1' },
+   { notificationId: 'turn:conv-1:turn-2', conversationId: 'conv-2' }]);
 
 // Case 2: permission denied. showNotification must refuse rather than throw.
 const denied = await withPage([], async page => {
@@ -95,7 +107,7 @@ const denied = await withPage([], async page => {
     const mod = await import(`${origin}/mod.js`);
     return {
       permission: mod.getPermission(),
-      shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.'),
+      shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.', 'conv-1'),
     };
   }, origin);
 });
@@ -112,7 +124,7 @@ const unsupported = await withPage([], async page => {
       return {
         permission: mod.getPermission(),
         requested: await mod.requestPermission(),
-        shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.'),
+        shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.', 'conv-1'),
       };
     } finally {
       window.Notification = real;
@@ -133,7 +145,7 @@ const throwing = await withPage(['notifications'], async page => {
     Object.defineProperty(Exploding, 'permission', { get: () => 'granted' });
     window.Notification = Exploding;
     try {
-      return { shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.') };
+      return { shown: mod.showNotification('turn:conv-1:turn-1', 'Task completed', 'Body.', 'conv-1') };
     } finally {
       window.Notification = real;
     }

@@ -26,7 +26,7 @@ public sealed class ConversationOpenRouterTests
 
         // Assert
         Assert.Equal(ConversationOpenResult.Opened, result);
-        Assert.Equal(new[] { ("conv-1", "project-1") }, activation.Requests);
+        Assert.Equal(new (string, string?)[] { ("conv-1", "project-1") }, activation.Requests);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public sealed class ConversationOpenRouterTests
 
         // Assert
         Assert.Equal(ConversationOpenResult.Opened, result);
-        Assert.Equal(new[] { ("conv-1", "project-1") }, activation.Requests);
+        Assert.Equal(new (string, string?)[] { ("conv-1", "project-1") }, activation.Requests);
     }
 
     [Fact]

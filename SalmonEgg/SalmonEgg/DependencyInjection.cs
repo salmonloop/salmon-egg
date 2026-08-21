@@ -204,22 +204,43 @@ public static class DependencyInjection
             }
             return new WinUiDispatcher(queue!, logger);
         });
+        // The same platform object both posts notifications and reports taps, because the native handle
+        // is one and the same. Registering one singleton under both contracts keeps that single owner.
 #if WINDOWS
-        services.AddSingleton<ISystemNotificationService, WindowsSystemNotificationService>();
+        services.AddSingleton<WindowsSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
 #elif __ANDROID__
-        services.AddSingleton<ISystemNotificationService, AndroidSystemNotificationService>();
+        services.AddSingleton<AndroidSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
 #elif __IOS__
-        services.AddSingleton<ISystemNotificationService, IosSystemNotificationService>();
+        services.AddSingleton<IosSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
 #elif __WASM__
 #pragma warning disable CA1416 // Uno browserwasm target runs in the browser platform surface.
-        services.AddSingleton<ISystemNotificationService, WasmSystemNotificationService>();
+        services.AddSingleton<WasmSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
 #pragma warning restore CA1416
 #else
         // One desktop TFM covers Linux and macOS, so the split is a runtime check rather than #if.
         // macOS has no managed UserNotifications binding here, so it stays honestly unsupported.
-        services.AddSingleton<ISystemNotificationService>(sp => OperatingSystem.IsLinux()
-            ? new LinuxSystemNotificationService(sp.GetRequiredService<IStringLocalizer<CoreStrings>>())
+        services.AddSingleton(sp => OperatingSystem.IsLinux()
+            ? (ISystemNotificationService)new LinuxSystemNotificationService(
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>())
             : new UnsupportedSystemNotificationService());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            (ISystemNotificationActivationSource)sp.GetRequiredService<ISystemNotificationService>());
 #endif
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
@@ -679,14 +700,20 @@ public static class DependencyInjection
             // 这里，订阅与激活同时就位。
             _ = sp.GetRequiredService<TelemetrySettingsProjection>();
             _ = sp.GetRequiredService<ChatCompletionNotificationCoordinator>();
+            // Starting here rather than in a page keeps notification activation on the same
+            // application-scoped owner as the rest of startup.
+            var notificationActivation = sp.GetRequiredService<NotificationActivationCoordinator>();
+            notificationActivation.Start();
             return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>(),
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<ITelemetryRuntime>(),
+                notificationActivation,
                 sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
         });
         services.AddSingleton<ChatCompletionNotificationCoordinator>();
+        services.AddSingleton<NotificationActivationCoordinator>();
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),

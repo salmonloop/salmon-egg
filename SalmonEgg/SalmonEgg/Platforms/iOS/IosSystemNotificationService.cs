@@ -2,16 +2,82 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Foundation;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Services;
 using UserNotifications;
 
 namespace SalmonEgg.Platforms.iOS;
 
-public sealed class IosSystemNotificationService : ISystemNotificationService
+public sealed class IosSystemNotificationService : ISystemNotificationService, ISystemNotificationActivationSource
 {
+    private const string ConversationIdUserInfoKey = "conversationId";
+
     private readonly object _sync = new();
     private Task<bool>? _authorizationTask;
+    private ActivationDelegate? _activationDelegate;
+
+    public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
+
+    public void Start()
+    {
+        lock (_sync)
+        {
+            if (_activationDelegate is not null)
+            {
+                return;
+            }
+
+            // The delegate must be set before the system delivers a launch-time response, and it is
+            // the only way UNUserNotificationCenter reports taps. Held in a field so it is not
+            // collected while the system still holds the native reference.
+            _activationDelegate = new ActivationDelegate(this);
+        }
+
+        UNUserNotificationCenter.Current.Delegate = _activationDelegate;
+    }
+
+    private void RaiseActivated(UNNotificationResponse response)
+    {
+        var request = response.Notification?.Request;
+        var notificationId = request?.Identifier;
+        if (string.IsNullOrWhiteSpace(notificationId))
+        {
+            return;
+        }
+
+        var conversationId = request?.Content?.UserInfo?
+            .ObjectForKey(new NSString(ConversationIdUserInfoKey)) as NSString;
+        Activated?.Invoke(
+            this,
+            new SystemNotificationActivatedEventArgs(notificationId, conversationId?.ToString()));
+    }
+
+    private sealed class ActivationDelegate : UNUserNotificationCenterDelegate
+    {
+        private readonly IosSystemNotificationService _owner;
+
+        public ActivationDelegate(IosSystemNotificationService owner)
+        {
+            _owner = owner;
+        }
+
+        public override void DidReceiveNotificationResponse(
+            UNUserNotificationCenter center,
+            UNNotificationResponse response,
+            Action completionHandler)
+        {
+            try
+            {
+                _owner.RaiseActivated(response);
+            }
+            finally
+            {
+                // The system requires this call; skipping it stalls further delivery.
+                completionHandler();
+            }
+        }
+    }
 
     public bool IsSupported => true;
 
@@ -73,6 +139,13 @@ public sealed class IosSystemNotificationService : ISystemNotificationService
                 Body = request.Body.Trim(),
                 Sound = UNNotificationSound.Default
             };
+            if (!string.IsNullOrWhiteSpace(request.ConversationId))
+            {
+                // UserInfo comes back on the tap response, which is how a tap routes.
+                content.UserInfo = NSDictionary.FromObjectAndKey(
+                    new NSString(request.ConversationId.Trim()),
+                    new NSString(ConversationIdUserInfoKey));
+            }
 
             var trigger = UNTimeIntervalNotificationTrigger.Create(1, repeats: false);
 

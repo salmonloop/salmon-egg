@@ -210,7 +210,7 @@ scripts/gates/run-wasm-notification-gates.sh Release
 
 门禁先断言模块确实进入了 published package（只存在于源码而没打进包，运行时会全部退化成 Failed），
 再用 Playwright 断言托管服务分流依赖的分支：权限字符串、API 缺失时的 `unsupported` 哨兵、per-turn tag
-作为替换键、以及构造函数抛错时返回 false 而非逸出异常。注意 granted 路径必须用完整 Chromium：
+作为替换键、点击回调把 turn 与其 conversation 报回托管层、以及构造函数抛错时返回 false 而非逸出异常。注意 granted 路径必须用完整 Chromium：
 headless *shell* 构建无论是否授权都把通知权限报成 denied。
 
 #### Linux notification gate
@@ -225,7 +225,7 @@ scripts/gates/run-linux-notification-gates.sh Release
 三种情形各跑一遍：无 `DBUS_SESSION_BUS_ADDRESS`、有 session bus 但无通知服务、有通知服务。
 最后一种情形用 `scripts/gates/linux-notification-server-stub.py` 拥有 `org.freedesktop.Notifications`
 并把每次 `Notify` 落成 JSON-lines，gate 据此断言 `replaces_id` 的 per-turn 语义、`-1`（由桌面决定超时）
-与空 actions。前置依赖：`dbus-run-session`、`python3` 以及 python `jeepney` 包。macOS desktop 无托管
+以及用于承接点击的 `default` action。前置依赖：`dbus-run-session`、`python3` 以及 python `jeepney` 包。macOS desktop 无托管
 UserNotifications 绑定，仍诚实报告 Unsupported，不在本 gate 覆盖范围。
 
 #### Mobile target contract gate

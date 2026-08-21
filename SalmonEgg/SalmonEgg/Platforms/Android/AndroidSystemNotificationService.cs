@@ -16,13 +16,16 @@ using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Platforms.Android;
 
-public sealed class AndroidSystemNotificationService : ISystemNotificationService
+public sealed class AndroidSystemNotificationService : ISystemNotificationService, ISystemNotificationActivationSource
 {
     private const string ChannelId = "agent-completions";
 
+    // Intent extras the launch intent carries back when the user taps a notification.
+    public const string NotificationIdExtra = "salmonegg.notificationId";
+    public const string ConversationIdExtra = "salmonegg.conversationId";
+
     // Notifications are keyed by their string tag, so one shared numeric slot is enough.
     private const int NotificationSlotId = 0;
-    private const int LaunchRequestCode = 0;
 
     private readonly Context _context;
     private readonly IStringLocalizer<CoreStrings> _localizer;
@@ -33,6 +36,19 @@ public sealed class AndroidSystemNotificationService : ISystemNotificationServic
         _context = global::Android.App.Application.Context
             ?? throw new InvalidOperationException("Android application context is unavailable.");
     }
+
+    public event EventHandler<SystemNotificationActivatedEventArgs>? Activated;
+
+    public void Start()
+    {
+        // MainActivity receives taps as intents, both for a cold launch and via OnNewIntent, and
+        // forwards them here. There is no separate native listener to attach.
+        global::SalmonEgg.Droid.MainActivity.NotificationActivated += OnNotificationActivated;
+        global::SalmonEgg.Droid.MainActivity.DrainPendingNotificationActivation();
+    }
+
+    private void OnNotificationActivated(object? sender, SystemNotificationActivatedEventArgs e)
+        => Activated?.Invoke(this, e);
 
     public bool IsSupported => true;
 
@@ -95,12 +111,20 @@ public sealed class AndroidSystemNotificationService : ISystemNotificationServic
             var launchIntent = _context.PackageManager?.GetLaunchIntentForPackage(_context.PackageName!);
             if (launchIntent is not null)
             {
-                // Tapping the notification brings the running task to the front, which is the native
-                // expectation. It carries no payload because nothing routes a notification yet.
+                // Tapping brings the running task to the front and carries the turn's identity so
+                // the shared layer can route to the conversation.
                 launchIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+                launchIntent.PutExtra(NotificationIdExtra, request.NotificationId);
+                if (!string.IsNullOrWhiteSpace(request.ConversationId))
+                {
+                    launchIntent.PutExtra(ConversationIdExtra, request.ConversationId.Trim());
+                }
+
+                // A distinct request code per turn keeps each turn's extras intact; UpdateCurrent on a
+                // shared code would rewrite an earlier notification's payload.
                 var pendingIntent = PendingIntent.GetActivity(
                     _context,
-                    LaunchRequestCode,
+                    LaunchRequestCode(request.NotificationId),
                     launchIntent,
                     PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
                 builder.SetContentIntent(pendingIntent);
@@ -143,6 +167,22 @@ public sealed class AndroidSystemNotificationService : ISystemNotificationServic
                 ChannelId,
                 _localizer["SystemNotification_ChannelName"].Value,
                 NotificationImportance.Default));
+    }
+
+    // PendingIntent identity is (request code, intent), so per-turn codes keep per-turn extras.
+    // FNV-1a rather than string.GetHashCode, whose seed is randomized per process: a turn re-notified
+    // after a restart must land on the same request code.
+    private static int LaunchRequestCode(string notificationId)
+    {
+        const uint offsetBasis = 2166136261;
+        const uint prime = 16777619;
+        var hash = offsetBasis;
+        foreach (var character in notificationId)
+        {
+            hash = (hash ^ character) * prime;
+        }
+
+        return (int)(hash & int.MaxValue);
     }
 
     private bool IsNotificationsEnabled()

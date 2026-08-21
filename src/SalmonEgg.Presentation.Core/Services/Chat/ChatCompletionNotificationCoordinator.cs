@@ -99,7 +99,8 @@ public sealed class ChatCompletionNotificationCoordinator : IDisposable
         var request = new SystemNotificationRequest(
             notificationId,
             _localizer["SystemNotification_TurnCompletedTitle"],
-            _localizer["SystemNotification_TurnCompletedBody"]);
+            _localizer["SystemNotification_TurnCompletedBody"],
+            completedTurn.ConversationId);
 
         try
         {
