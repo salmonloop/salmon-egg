@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [develop]
 
 concurrency:
   group: code-quality-${{ github.workflow }}-${{ github.ref }}
@@ -45,13 +45,25 @@ jobs:
         shell: pwsh
         run: |
           $eventName = "${{ github.event_name }}"
-          $base = if ($eventName -eq "pull_request") { "${{ github.event.pull_request.base.sha }}" } else { "${{ github.event.before }}" }
+          if ($eventName -eq "pull_request")
+          {
+              $baseRef = "${{ github.base_ref }}"
+              $head = "${{ github.event.pull_request.head.sha }}"
+              git fetch --no-tags origin $baseRef
+              $base = git merge-base "origin/$baseRef" $head
+          }
+          else
+          {
+              $base = "${{ github.event.before }}"
+              $head = "${{ github.sha }}"
+          }
+
           if ([string]::IsNullOrWhiteSpace($base) -or $base -eq "0000000000000000000000000000000000000000")
           {
               $base = "HEAD~1"
           }
 
-          $changed = git diff --name-only $base ${{ github.sha }} -- "*.cs"
+          $changed = git diff --name-only $base $head -- "*.cs"
           $existing = @($changed | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) })
 
           if ($existing.Count -eq 0)
