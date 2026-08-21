@@ -21,5 +21,14 @@ public sealed class ConfigurationPersistenceException : Exception
 
 public enum ConfigurationPersistenceFailureReason
 {
-    SecureStorageUnavailable
+    SecureStorageUnavailable,
+    SecretPersistenceFailed,
+    ConfigurationWriteFailed,
+    ConfigurationReadFailed,
+    ConfigurationRollbackFailed,
+    SecureStorageCleanupFailed,
+    ConfigurationDeleteFailed,
+    ConfigurationConflict,
+    ConfigurationLockUnavailable,
+    ConfigurationRecoveryRequired
 }

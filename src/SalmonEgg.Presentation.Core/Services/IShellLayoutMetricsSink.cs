@@ -10,6 +10,7 @@ public interface IShellLayoutMetricsSink
     ValueTask ReportNavToggle(string source);
     ValueTask ReportNavPaneOpenIntent(bool isOpen, string source);
     ValueTask ReportContentContext(bool isChatContext, long version);
+    ValueTask ReportRightPanelContentAvailability(bool hasContent, long version);
     ValueTask ReportToggleRightPanel(RightPanelMode targetMode);
     ValueTask ReportToggleBottomPanel();
     ValueTask ReportRightPanelMode(RightPanelMode mode);
@@ -37,6 +38,9 @@ public sealed class ShellLayoutMetricsSink : IShellLayoutMetricsSink
 
     public ValueTask ReportContentContext(bool isChatContext, long version)
         => _store.Dispatch(new ContentContextChanged(isChatContext, version));
+
+    public ValueTask ReportRightPanelContentAvailability(bool hasContent, long version)
+        => _store.Dispatch(new RightPanelContentAvailabilityChanged(hasContent, version));
 
     public ValueTask ReportToggleRightPanel(RightPanelMode targetMode)
         => _store.Dispatch(new ToggleRightPanelRequested(targetMode));

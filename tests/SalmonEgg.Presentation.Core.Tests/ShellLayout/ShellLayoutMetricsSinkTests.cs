@@ -32,6 +32,21 @@ public class ShellLayoutMetricsSinkTests
         Assert.Equal(4, action.Version);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MetricsSink_Dispatches_RightPanelContentAvailability(bool hasContent)
+    {
+        await using var store = new CapturingStore();
+        var sink = new ShellLayoutMetricsSink(store);
+
+        await sink.ReportRightPanelContentAvailability(hasContent, version: 7);
+
+        var action = Assert.IsType<RightPanelContentAvailabilityChanged>(store.LastAction);
+        Assert.Equal(hasContent, action.HasContent);
+        Assert.Equal(7, action.Version);
+    }
+
     [Fact]
     public async Task MetricsSink_Dispatches_NavPaneOpenIntent()
     {

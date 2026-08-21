@@ -9,6 +9,8 @@ internal sealed class ServerConfigurationYaml
 
     public string UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow.ToString("O");
 
+    public string Revision { get; set; } = string.Empty;
+
     public string Id { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;

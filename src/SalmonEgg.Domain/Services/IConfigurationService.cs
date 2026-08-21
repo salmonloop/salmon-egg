@@ -32,6 +32,6 @@ namespace SalmonEgg.Domain.Services
         /// 删除指定的服务器配置
         /// </summary>
         /// <param name="id">配置 ID</param>
-        Task DeleteConfigurationAsync(string id);
+        Task DeleteConfigurationAsync(string id, string? expectedRevision = null);
     }
 }

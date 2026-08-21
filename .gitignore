@@ -170,3 +170,8 @@ SalmonEgg/SalmonEgg.Package/*.pfx
 /*.txt
 .dotnet-home/
 .vercel
+
+# Release tooling is source, not build output. The build-results patterns above ([Rr]elease/) match a
+# "release" path segment at any depth, which would otherwise make this directory uncommittable.
+!scripts/release/
+!scripts/release/**

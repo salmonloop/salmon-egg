@@ -1003,6 +1003,11 @@ public partial class AppPreferencesViewModel : ObservableObject, IApplicationNot
         {
             Enabled = settings.Enabled,
             ProviderId = settings.ProviderId?.Trim() ?? string.Empty,
+            // Revision 是云同步基线的一部分，投影必须原样带回。
+            // 丢掉它会让任意普通偏好保存把 app.yaml 的修订号写回 0，
+            // 指纹随之判定本地已变，启动自动同步按 fail-closed 报人工冲突（issue #82）。
+            // 反向验证记录：移除此行会使 ScheduleSave_PreservesCloudConfigSyncRevision 失败（Expected 42, Actual 0）。
+            Revision = settings.Revision,
             IncludeSecrets = settings.IncludeSecrets,
             ProviderOptions = CloneProviderOptions(settings.ProviderOptions)
         };

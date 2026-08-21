@@ -106,6 +106,7 @@ public class ShellLayoutViewModelTests
         {
             WindowMetrics = new WindowMetrics(500, 900, 500, 900),
             IsChatContext = true,
+            HasRightPanelContent = true,
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             RightPanelPreferredWidth = 400
         };
@@ -144,6 +145,7 @@ public class ShellLayoutViewModelTests
         var desired = ShellLayoutState.Default with
         {
             IsChatContext = true,
+            HasRightPanelContent = true,
             WindowMetrics = new WindowMetrics(1000, 650, 1000, 650),
             DesiredRightPanelMode = RightPanelMode.TaskOverview,
             DesiredBottomPanelMode = BottomPanelMode.Dock,
@@ -162,7 +164,11 @@ public class ShellLayoutViewModelTests
     [Fact]
     public async Task ViewModel_ToggleTaskOverviewPanelCommand_DispatchExpectedIntent()
     {
-        await using var store = new FakeShellLayoutStore(ShellLayoutState.Default with { IsChatContext = true });
+        await using var store = new FakeShellLayoutStore(ShellLayoutState.Default with
+        {
+            IsChatContext = true,
+            HasRightPanelContent = true
+        });
         using var vm = new ShellLayoutViewModel(store, new ImmediateUiDispatcher());
 
         await vm.ToggleTaskOverviewPanelCommand.ExecuteAsync(null);

@@ -80,6 +80,12 @@ jobs:
         shell: pwsh
         run: ./scripts/gates/run-core-gates.ps1 -Configuration ${{ env.CONFIGURATION }}
 
+      # The release build can only assert this rule while producing a real MSI, which happens on tags
+      # only. Running the rule itself here keeps a weakened PATH check from reaching a release.
+      - name: Run CLI MSI PATH contract gate
+        shell: pwsh
+        run: ./scripts/gates/run-cli-msi-path-contract-gate.ps1
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v5

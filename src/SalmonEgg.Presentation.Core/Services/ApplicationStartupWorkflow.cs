@@ -10,13 +10,16 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
 {
     private readonly IShellStartupNavigationService _shellStartupNavigation;
     private readonly IChatRuntimeInitialization _chatRuntimeInitialization;
+    private readonly IConfigurationRecoveryService? _configurationRecoveryService;
     private readonly IAppSettingsService _appSettingsService;
     private readonly ITelemetryRuntime _telemetryRuntime;
     private readonly IConversationRestoreCompletionSink _restoreCompletionSink;
     private readonly ILogger<ApplicationStartupWorkflow> _logger;
     private readonly object _runtimeInitializationSync = new();
+    private Task<bool>? _configurationRecoveryTask;
     private Task<bool>? _profileInitializationTask;
     private Task<bool>? _conversationRestoreTask;
+    private bool _configurationRecoveryCompleted;
     private Task? _telemetryActivationTask;
     private bool _profileInitializationCompleted;
     private bool _conversationRestoreCompleted;
@@ -24,6 +27,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
     public ApplicationStartupWorkflow(
         IShellStartupNavigationService shellStartupNavigation,
         IChatRuntimeInitialization chatRuntimeInitialization,
+        IConfigurationRecoveryService? configurationRecoveryService,
         IAppSettingsService appSettingsService,
         ITelemetryRuntime telemetryRuntime,
         IConversationRestoreCompletionSink restoreCompletionSink,
@@ -31,6 +35,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
     {
         _shellStartupNavigation = shellStartupNavigation ?? throw new ArgumentNullException(nameof(shellStartupNavigation));
         _chatRuntimeInitialization = chatRuntimeInitialization ?? throw new ArgumentNullException(nameof(chatRuntimeInitialization));
+        _configurationRecoveryService = configurationRecoveryService;
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _telemetryRuntime = telemetryRuntime ?? throw new ArgumentNullException(nameof(telemetryRuntime));
         _restoreCompletionSink = restoreCompletionSink ?? throw new ArgumentNullException(nameof(restoreCompletionSink));
@@ -46,6 +51,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
         // 最需要 trace 的启动路径）会发生在没有 provider 的窗口内，永久采集不到。
         // 读配置是异步的，禁止在 App 构造函数里同步阻塞取得（启动副作用所有权约束）。
         await EnsureTelemetryActivatedAsync().ConfigureAwait(false);
+        await EnsureConfigurationRecoveredAsync().ConfigureAwait(false);
 
         var profileInitialization = EnsureProfilesInitializedAsync();
         var conversationRestore = EnsureConversationsRestoredAsync();
@@ -86,6 +92,35 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
             // 不抛，此处兜住的是 LoadAsync（如文件存储权限异常）。
             _logger.LogError(ex, "Failed to activate telemetry during startup; telemetry stays inactive");
         }
+    }
+
+    private Task<bool> EnsureConfigurationRecoveredAsync()
+    {
+        lock (_runtimeInitializationSync)
+        {
+            if (_configurationRecoveryCompleted || _configurationRecoveryService is null)
+            {
+                return Task.FromResult(true);
+            }
+
+            if (_configurationRecoveryTask is null || _configurationRecoveryTask.IsCompleted)
+            {
+                _configurationRecoveryTask = RecoverConfigurationCoreAsync();
+            }
+
+            return _configurationRecoveryTask;
+        }
+    }
+
+    private async Task<bool> RecoverConfigurationCoreAsync()
+    {
+        await _configurationRecoveryService!.RecoverPendingTransactionsAsync().ConfigureAwait(false);
+        lock (_runtimeInitializationSync)
+        {
+            _configurationRecoveryCompleted = true;
+        }
+
+        return true;
     }
 
     private Task<bool> EnsureProfilesInitializedAsync()

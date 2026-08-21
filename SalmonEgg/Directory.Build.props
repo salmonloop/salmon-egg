@@ -1,4 +1,11 @@
 <Project>
+  <!--
+    MSBuild stops walking up at the first Directory.Build.props it finds, so the repository-root file
+    has to be imported explicitly. Without this the app subtree would need its own copy of shared
+    release identity properties, which is exactly the version drift the root file exists to prevent.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
   <PropertyGroup>
     <!-- Ensure WinUI builds resolve the intended Windows SDK toolset. -->
     <WindowsSdkVersion Condition="'$(WindowsSdkVersion)' == ''">10.0.26100.0</WindowsSdkVersion>

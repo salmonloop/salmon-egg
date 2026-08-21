@@ -182,6 +182,8 @@ public sealed class CoreStringResourceTests
     [InlineData("McpSettings_DefaultServerName")]
     [InlineData("AgentProfileEditor_ValidationFailedFormat")]
     [InlineData("AgentProfileEditor_SaveFailedFormat")]
+    [InlineData("AgentProfileEditor_LoadFailedFormat")]
+    [InlineData("AgentProfileEditor_RetryLoad")]
     [InlineData("AcpProfiles_RefreshFailed")]
     [InlineData("AcpProfiles_DeleteFailed")]
     [InlineData("AcpProfiles_SaveFailed")]

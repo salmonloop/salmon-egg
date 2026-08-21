@@ -14,7 +14,6 @@
 
     <Page.Resources>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
     </Page.Resources>
 
     <Grid>
@@ -56,7 +55,13 @@
                     <InfoBar IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                              Severity="Error"
                              Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
-                             IsClosable="True"/>
+                             IsClosable="{x:Bind ViewModel.CanDismissError, Mode=OneWay}">
+                        <InfoBar.ActionButton>
+                            <Button Content="{x:Bind ViewModel.RetryProfileLoadLabel, Mode=OneWay}"
+                                    Command="{x:Bind ViewModel.RetryProfileLoadCommand}"
+                                    Visibility="{x:Bind ViewModel.CanRetryProfileLoad, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </InfoBar.ActionButton>
+                    </InfoBar>
 
                     <Border Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -168,7 +173,7 @@
                         <Button x:Uid="AgentProfileEditorSaveButton"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Click="OnSaveClick"
-                                IsEnabled="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
+                                IsEnabled="{x:Bind ViewModel.CanSaveConfiguration, Mode=OneWay}"/>
                     </StackPanel>
                 </StackPanel>
             </controls:ResponsiveContentHost.Child>

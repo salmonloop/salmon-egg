@@ -46,12 +46,14 @@ public static class ShellLayoutPolicy
         var contentHeight = Math.Max(0, availableHeight - state.TitleBarInsetsHeight);
         var maxBottomPanelHeight = Math.Min(BottomPanelMaxHeight, Math.Max(0, contentHeight - MinimumChatRegionHeight));
         var canToggleRightPanels = state.IsChatContext
+            && state.HasRightPanelContent
             && maxRightPanelWidth >= MinimumRightPanelWidth
             && mode != NavigationPaneDisplayMode.Minimal;
         var canToggleBottomPanel = state.IsChatContext
             && state.SupportsLocalTerminal
             && maxBottomPanelHeight >= BottomPanelMinHeight;
-        var showAuxiliaryTitleBarButtons = state.IsChatContext;
+        var showAuxiliaryTitleBarButtons = state.IsChatContext
+            && (canToggleRightPanels || canToggleBottomPanel);
         var hasSearchRegion = searchVisible;
         var hasAuxiliaryRegion = showAuxiliaryTitleBarButtons;
         var titleBarInteractiveRegionToken = (hasSearchRegion ? 1 : 0) | (hasAuxiliaryRegion ? 2 : 0);

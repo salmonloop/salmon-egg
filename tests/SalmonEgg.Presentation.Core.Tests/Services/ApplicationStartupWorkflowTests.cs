@@ -18,6 +18,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             shellStartup.Object,
             chatRuntime.Object,
+            configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
             new RecordingRestoreCompletionSink(),
@@ -56,6 +57,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             chatRuntime.Object,
+            configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
             new RecordingRestoreCompletionSink(),
@@ -78,6 +80,46 @@ public sealed class ApplicationStartupWorkflowTests
     }
 
     [Fact]
+    public async Task InitializeRuntimeAsync_WhenCalledConcurrently_SharesRecoveryAndRunsItBeforeRuntimeInitialization()
+    {
+        var recoveryStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRecovery = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recovery = new Mock<IConfigurationRecoveryService>(MockBehavior.Strict);
+        recovery
+            .Setup(service => service.RecoverPendingTransactionsAsync(default))
+            .Returns(async () =>
+            {
+                recoveryStarted.TrySetResult(null);
+                await allowRecovery.Task;
+            });
+        var chatRuntime = new Mock<IChatRuntimeInitialization>(MockBehavior.Strict);
+        chatRuntime.Setup(runtime => runtime.InitializeAcpProfilesAsync()).ReturnsAsync(true);
+        chatRuntime.Setup(runtime => runtime.RestoreConversationsAsync()).ReturnsAsync(true);
+        var workflow = new ApplicationStartupWorkflow(
+            Mock.Of<IShellStartupNavigationService>(),
+            chatRuntime.Object,
+            recovery.Object,
+            CreateSettingsService(),
+            Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
+            NullLogger<ApplicationStartupWorkflow>.Instance);
+
+        var first = workflow.InitializeRuntimeAsync();
+        await recoveryStarted.Task;
+        var second = workflow.InitializeRuntimeAsync();
+
+        recovery.Verify(service => service.RecoverPendingTransactionsAsync(default), Times.Once);
+        chatRuntime.VerifyNoOtherCalls();
+        allowRecovery.SetResult(null);
+        await Task.WhenAll(first, second);
+        await workflow.InitializeRuntimeAsync();
+
+        recovery.Verify(service => service.RecoverPendingTransactionsAsync(default), Times.Once);
+        chatRuntime.Verify(runtime => runtime.InitializeAcpProfilesAsync(), Times.Once);
+        chatRuntime.Verify(runtime => runtime.RestoreConversationsAsync(), Times.Once);
+    }
+
+    [Fact]
     public async Task InitializeRuntimeAsync_WhenProfileInitializationFails_RetriesOnlyProfiles()
     {
         var chatRuntime = new Mock<IChatRuntimeInitialization>(MockBehavior.Strict);
@@ -91,6 +133,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             chatRuntime.Object,
+            configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
             new RecordingRestoreCompletionSink(),
@@ -117,6 +160,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             chatRuntime.Object,
+            configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
             new RecordingRestoreCompletionSink(),
@@ -152,6 +196,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             chatRuntime.Object,
+            configurationRecoveryService: null,
             CreateSettingsService(),
             telemetry.Object,
             new RecordingRestoreCompletionSink(),
@@ -183,6 +228,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             CreateSucceedingChatRuntime(),
+            configurationRecoveryService: null,
             CreateSettingsService(persisted),
             telemetry.Object,
             new RecordingRestoreCompletionSink(),
@@ -207,6 +253,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             chatRuntime.Object,
+            configurationRecoveryService: null,
             settingsService.Object,
             Mock.Of<ITelemetryRuntime>(),
             new RecordingRestoreCompletionSink(),
@@ -240,6 +287,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             CreateSucceedingChatRuntime(),
+            configurationRecoveryService: null,
             settingsService.Object,
             telemetry.Object,
             new RecordingRestoreCompletionSink(),
@@ -273,6 +321,7 @@ public sealed class ApplicationStartupWorkflowTests
         var workflow = new ApplicationStartupWorkflow(
             Mock.Of<IShellStartupNavigationService>(),
             CreateSucceedingChatRuntime(),
+            configurationRecoveryService: null,
             CreateSettingsService(),
             telemetry.Object,
             new RecordingRestoreCompletionSink(),

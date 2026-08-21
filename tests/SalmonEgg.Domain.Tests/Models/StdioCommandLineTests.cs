@@ -35,4 +35,20 @@ public sealed class StdioCommandLineTests
 
         Assert.NotEqual(secondCanonical, firstCanonical);
     }
+
+    [Fact]
+    public void ParseArgumentsText_WithEmptyQuotedArgument_PreservesEmptyArgument()
+    {
+        var result = StdioCommandLine.ParseArgumentsText("--flag \"\" value");
+
+        Assert.Equal(new[] { "--flag", string.Empty, "value" }, result);
+    }
+
+    [Theory]
+    [InlineData("--flag \"unterminated")]
+    [InlineData("--flag 'unterminated")]
+    public void ParseArgumentsText_WithUnterminatedQuote_ThrowsParseException(string arguments)
+    {
+        Assert.Throws<StdioCommandLineParseException>(() => StdioCommandLine.ParseArgumentsText(arguments));
+    }
 }
