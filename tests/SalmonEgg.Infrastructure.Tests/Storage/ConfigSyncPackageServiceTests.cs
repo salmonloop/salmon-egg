@@ -111,6 +111,34 @@ public sealed class ConfigSyncPackageServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreatePackageAsync_ManifestFilesUsePortableSlashSeparators()
+    {
+        var serversDirectory = Path.Combine(_appData.ConfigRootPath, "servers");
+        Directory.CreateDirectory(serversDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(serversDirectory, "agent.yaml"),
+            "schema_version: 2\nid: agent\n",
+            TestContext.Current.CancellationToken);
+
+        var package = await _packageService.CreatePackageAsync(
+            includeSecrets: false,
+            TestContext.Current.CancellationToken);
+
+        using var stream = new MemoryStream(package, writable: false);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var manifestEntry = archive.GetEntry("manifest.json");
+        Assert.NotNull(manifestEntry);
+        using var reader = new StreamReader(manifestEntry!.Open());
+        var manifest = System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
+        var files = manifest.RootElement.GetProperty("files").EnumerateArray()
+            .Select(value => value.GetString())
+            .ToList();
+        // 便携包元数据的路径契约与 zip 条目一致：恒定 '/'（相对 config root），不随平台分隔符漂移。
+        Assert.Contains("servers/agent.yaml", files);
+        Assert.All(files, file => Assert.False(file!.Contains('\\', StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task CreatePackageAsync_ExcludesConfigurationRecoveryDirectory()
     {
         Directory.CreateDirectory(Path.Combine(_appData.ConfigRootPath, "recovery"));

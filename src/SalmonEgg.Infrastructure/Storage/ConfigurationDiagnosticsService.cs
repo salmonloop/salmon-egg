@@ -166,7 +166,8 @@ public sealed class ConfigurationDiagnosticsService
         foreach (var path in Directory.EnumerateFiles(serversDirectory, "*.yaml").OrderBy(p => p, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var relativeName = Path.GetRelativePath(_appData.ConfigRootPath, path);
+            // FileName 是逻辑包内路径（CLI 展示与测试契约），跨平台恒定用 '/'，不随平台分隔符漂移。
+            var relativeName = ConfigurationPackagePaths.Normalize(Path.GetRelativePath(_appData.ConfigRootPath, path));
             var yaml = await ReadOrNullAsync(path, cancellationToken).ConfigureAwait(false);
             if (yaml is null)
             {

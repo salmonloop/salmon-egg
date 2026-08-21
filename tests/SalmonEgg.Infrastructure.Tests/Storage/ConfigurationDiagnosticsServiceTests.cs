@@ -51,7 +51,7 @@ public sealed class ConfigurationDiagnosticsServiceTests : IDisposable
         var app = Assert.Single(results, r => r.FileName == "app.yaml");
         Assert.Equal(ConfigurationDiagnosticKind.Ok, app.Kind);
         Assert.Equal(3, app.SchemaVersion);
-        var server = Assert.Single(results, r => r.FileName == Path.Combine("servers", "alpha.yaml"));
+        var server = Assert.Single(results, r => r.FileName == "servers/alpha.yaml");
         Assert.Equal(ConfigurationDiagnosticKind.Ok, server.Kind);
         Assert.Equal(2, server.SchemaVersion);
     }

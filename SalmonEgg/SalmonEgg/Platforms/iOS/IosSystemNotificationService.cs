@@ -187,7 +187,7 @@ public sealed class IosSystemNotificationService : ISystemNotificationService, I
                     new NSString(ConversationIdUserInfoKey));
             }
 
-            var trigger = UNTimeIntervalNotificationTrigger.Create(1, repeats: false);
+            var trigger = UNTimeIntervalNotificationTrigger.CreateTrigger(1, false);
 
             // The request identifier keys the notification, so re-notifying one turn replaces it.
             var notificationRequest = UNNotificationRequest.FromIdentifier(
