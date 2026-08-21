@@ -27,7 +27,7 @@ using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Navigation;
 
-public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable
+public sealed partial class MainNavigationViewModel : ObservableObject, IDisposable, IConversationActivationEntryPoint
 {
     public const string UnclassifiedProjectId = NavigationProjectIds.Unclassified;
     private const int VisibleSessionsPerProjectLimit = 20;

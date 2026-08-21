@@ -64,7 +64,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -93,7 +95,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -118,7 +122,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
             Mock.Of<ILogger<GlobalSearchViewModel>>(),
@@ -148,7 +154,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -177,7 +185,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -205,7 +215,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -236,7 +248,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
         Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -295,7 +309,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -324,7 +340,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -375,7 +393,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             Mock.Of<INavigationCoordinator>(),
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             pipeline,
             Mock.Of<IStringLocalizer<CoreStrings>>(),
                 Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -416,7 +436,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
             Mock.Of<ILogger<GlobalSearchViewModel>>());
@@ -460,7 +482,9 @@ public sealed class GlobalSearchViewModelTests
             preferences,
             navigationCoordinator.Object,
             presenter,
-            new ProjectAffinityResolver(),
+            new ConversationProjectAffinityResolver(
+                new ProjectAffinityResolver(),
+                new NavigationProjectPreferencesAdapter(preferences)),
             new DefaultGlobalSearchPipeline(Mock.Of<IStringLocalizer<CoreStrings>>()),
             Mock.Of<IStringLocalizer<CoreStrings>>(),
             Mock.Of<ILogger<GlobalSearchViewModel>>());

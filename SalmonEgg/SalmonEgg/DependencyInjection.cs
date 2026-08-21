@@ -507,6 +507,7 @@ public static class DependencyInjection
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
+        services.AddSingleton<IConversationProjectAffinityResolver, ConversationProjectAffinityResolver>();
 #if !__WASM__ && !__ANDROID__ && !__IOS__
         services.AddSingleton<ILocalTerminalCwdResolver, LocalTerminalCwdResolver>();
         services.AddSingleton<ILocalTerminalSessionManager, LocalTerminalSessionManager>();
@@ -570,6 +571,10 @@ public static class DependencyInjection
         services.AddSingleton<IChatRuntimePersistence>(sp => sp.GetRequiredService<ChatViewModel>());
 
         services.AddSingleton<ChatShellViewModel>();
+        // The navigation VM owns session activation; the router only supplies a conversation id.
+        services.AddSingleton<IConversationActivationEntryPoint>(sp =>
+            sp.GetRequiredService<MainNavigationViewModel>());
+        services.AddSingleton<IConversationOpenRouter, ConversationOpenRouter>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
@@ -687,7 +692,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<AppPreferencesViewModel>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
-                sp.GetRequiredService<IProjectAffinityResolver>(),
+                sp.GetRequiredService<IConversationProjectAffinityResolver>(),
                 sp.GetRequiredService<IGlobalSearchPipeline>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<ILogger<GlobalSearchViewModel>>(),

@@ -11,7 +11,6 @@ using SalmonEgg.Presentation.Core.Services.Chat;
 using SalmonEgg.Presentation.Core.Services.ProjectAffinity;
 using SalmonEgg.Presentation.Core.ViewModels.ShellLayout;
 using SalmonEgg.Presentation.ViewModels.Navigation;
-using SalmonEgg.Presentation.ViewModels.Settings;
 
 namespace SalmonEgg.Presentation.ViewModels.Chat;
 
@@ -20,8 +19,7 @@ public sealed partial class ChatShellViewModel : ObservableObject, IDisposable
     private const int MiniWindowCompactDisplayNameMaxLength = 24;
     private readonly MainNavigationViewModel _navigationViewModel;
     private readonly IConversationCatalogDisplayReadModel _conversationCatalog;
-    private readonly IProjectAffinityResolver _projectAffinityResolver;
-    private readonly AppPreferencesViewModel _preferences;
+    private readonly IConversationProjectAffinityResolver _projectAffinityResolver;
     private readonly ILogger<ChatShellViewModel> _logger;
     private bool _suppressMiniWindowSelectionSync;
     private readonly ObservableCollection<MiniWindowConversationItemViewModel> _miniWindowSessions = [];
@@ -31,8 +29,7 @@ public sealed partial class ChatShellViewModel : ObservableObject, IDisposable
         ShellLayoutViewModel shellLayout,
         MainNavigationViewModel navigationViewModel,
         IConversationCatalogDisplayReadModel conversationCatalog,
-        IProjectAffinityResolver projectAffinityResolver,
-        AppPreferencesViewModel preferences,
+        IConversationProjectAffinityResolver projectAffinityResolver,
         ILogger<ChatShellViewModel> logger)
     {
         Chat = chat ?? throw new ArgumentNullException(nameof(chat));
@@ -40,7 +37,6 @@ public sealed partial class ChatShellViewModel : ObservableObject, IDisposable
         _navigationViewModel = navigationViewModel ?? throw new ArgumentNullException(nameof(navigationViewModel));
         _conversationCatalog = conversationCatalog ?? throw new ArgumentNullException(nameof(conversationCatalog));
         _projectAffinityResolver = projectAffinityResolver ?? throw new ArgumentNullException(nameof(projectAffinityResolver));
-        _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         Chat.PropertyChanged += OnChatPropertyChanged;
@@ -177,22 +173,13 @@ public sealed partial class ChatShellViewModel : ObservableObject, IDisposable
     }
 
     private string? GetActivationProjectId(ConversationCatalogDisplayItem? conversation)
-    {
-        if (conversation is null)
-        {
-            return null;
-        }
-
-        return _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
-            RemoteCwd: conversation.Cwd,
-            BoundProfileId: conversation.BoundProfileId,
-            RemoteSessionId: conversation.RemoteSessionId,
-            OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
-            Projects: _preferences.Projects,
-            RemoteDirectories: _preferences.AgentRemoteDirectories,
-            UnclassifiedProjectId: NavigationProjectIds.Unclassified,
-            NavigationRemoteDirectoryIds: _preferences.NavigationRemoteDirectoryIds)).EffectiveProjectId;
-    }
+        => conversation is null
+            ? null
+            : _projectAffinityResolver.ResolveActivationProjectId(new ConversationProjectAffinityRequest(
+                conversation.Cwd,
+                conversation.BoundProfileId,
+                conversation.RemoteSessionId,
+                conversation.ProjectAffinityOverrideProjectId));
 
     private static string CreateMiniWindowCompactDisplayName(string displayName)
     {
