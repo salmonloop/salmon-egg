@@ -13,7 +13,10 @@ namespace SalmonEgg.Infrastructure.Storage;
 
 public sealed class AppSettingsService : IAppSettingsService
 {
-    private const int CurrentSchemaVersion = 3;
+    /// <summary>本程序写入 app.yaml 时使用的 schema 版本。</summary>
+    public const int CurrentAppSettingsSchemaVersion = 3;
+
+    private const int CurrentSchemaVersion = CurrentAppSettingsSchemaVersion;
     private const string TelemetryAuthHeaderStorageKey = "SalmonEgg.TelemetryAuthHeader";
 
     private readonly IAppFileStore _fileStore;
@@ -220,13 +223,12 @@ public sealed class AppSettingsService : IAppSettingsService
             var existing = YamlSerialization.CreateDeserializer().Deserialize<AppSettingsYamlV1>(yaml);
             if (existing.SchemaVersion > CurrentSchemaVersion)
             {
-                throw new InvalidOperationException(
-                    $"App settings schema_version {existing.SchemaVersion} is newer than supported version {CurrentSchemaVersion}. Refusing to overwrite.");
+                // 类型化异常而非裸 InvalidOperationException：CLI 等宿主需要按「拒绝写回」
+                // 给出升级指引，而不是把它当一般写入失败处理。
+                throw new ConfigurationPersistenceException(
+                    ConfigurationPersistenceFailureReason.SchemaVersionTooNew,
+                    $"App settings schema_version {existing.SchemaVersion} is newer than supported version {CurrentSchemaVersion}. Refusing to overwrite. Upgrade Salmon Egg to a version that supports schema_version {existing.SchemaVersion}.");
             }
-        }
-        catch (InvalidOperationException)
-        {
-            throw;
         }
         catch (YamlException ex)
         {

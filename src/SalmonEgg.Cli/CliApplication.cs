@@ -56,6 +56,8 @@ public static class CliApplication
         services.AddSingleton<CliCommandFactory>();
         services.AddSingleton<ServerConfigurationHandler>();
         services.AddSingleton<CredentialsHandler>();
+        services.AddSingleton<AppSettingsHandler>();
+        services.AddSingleton<ConfigPackageHandler>();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<ILogger<FallbackSecureStorage>>(fallbackWarningState);
