@@ -114,6 +114,12 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <!-- freedesktop notifications on Linux. Already a transitive Uno Skia X11 dependency; the version
+         is pinned centrally. macOS/Windows desktop hosts never reach the D-Bus code path. -->
+    <PackageReference Include="Tmds.DBus.Protocol" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
     <Content Include="$(PkgUno_Fonts_OpenSans)\lib\net7.0\Uno.Fonts.OpenSans\Fonts\*.ttf"
              Link="Uno.Fonts.OpenSans\Fonts\%(Filename)%(Extension)"
              TargetPath="Uno.Fonts.OpenSans/Fonts/%(Filename)%(Extension)"

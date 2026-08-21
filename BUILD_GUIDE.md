@@ -200,6 +200,21 @@ Linux Skia Desktop 当前使用 Uno X11 host。该 host-window smoke 不声明 A
 - BrowserWasm GUI 行为：`scripts/gates/run-wasm-smoke-gates.sh Debug`，使用 Playwright/Chromium；
 - Skia Desktop GUI readiness + seeded transcript projection + focused NumberBox contrast：`scripts/gates/run-skia-desktop-gui-smoke-gates.sh Debug`，验证跨平台 desktop shell 在真实 GUI host 中到达主窗口 readiness、投影混排 transcript，并在真实 Data & Storage 页面验证深色主题 NumberBox 焦点态；Linux 还验证 X11 窗口映射、非空像素、host-window focus 和 XTest 键盘输入边界。
 
+#### Linux notification gate
+Linux 原生通知走 freedesktop.org Desktop Notifications 规范，其契约只在 session bus 上可观测：
+「重复同一 turn 必须请求替换而非堆叠」「无通知服务时必须是能力缺失而非失败」。用 mock 的 D-Bus 层做单测
+等于断言我方测试替身，所以该 gate 用真实 session bus 跑真实服务，并断言通知服务实际收到的报文：
+
+```bash
+scripts/gates/run-linux-notification-gates.sh Release
+```
+
+三种情形各跑一遍：无 `DBUS_SESSION_BUS_ADDRESS`、有 session bus 但无通知服务、有通知服务。
+最后一种情形用 `scripts/gates/linux-notification-server-stub.py` 拥有 `org.freedesktop.Notifications`
+并把每次 `Notify` 落成 JSON-lines，gate 据此断言 `replaces_id` 的 per-turn 语义、`-1`（由桌面决定超时）
+与空 actions。前置依赖：`dbus-run-session`、`python3` 以及 python `jeepney` 包。macOS desktop 无托管
+UserNotifications 绑定，仍诚实报告 Unsupported，不在本 gate 覆盖范围。
+
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：
 

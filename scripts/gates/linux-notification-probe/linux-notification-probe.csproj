@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Drives the app's own LinuxSystemNotificationService against a real session bus. The service lives
+    in the Uno app project, whose net10.0-desktop TFM cannot be referenced from a plain net10.0
+    console host, so the single source file is compiled in here instead of duplicated.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The Uno reactive generator derives a namespace from the assembly name, so it must be a
+         valid C# identifier (no hyphens). -->
+    <AssemblyName>SalmonEgg.Gates.LinuxNotificationProbe</AssemblyName>
+    <RootNamespace>SalmonEgg.Gates.LinuxNotificationProbe</RootNamespace>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <!-- The probe only ever runs on Linux; the gate script owns that precondition. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/SalmonEgg.Domain/SalmonEgg.Domain.csproj" />
+    <ProjectReference Include="../../../src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../SalmonEgg/SalmonEgg/Platforms/Desktop/LinuxSystemNotificationService.cs" />
+  </ItemGroup>
+
+</Project>

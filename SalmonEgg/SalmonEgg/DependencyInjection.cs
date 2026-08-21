@@ -56,6 +56,7 @@ using SalmonEgg.Platforms.Mobile.Observability;
 using SalmonEgg.Platforms.Mobile.Observability;
 using SalmonEgg.Platforms.iOS;
 #else
+using SalmonEgg.Platforms.Desktop;
 using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
@@ -209,8 +210,14 @@ public static class DependencyInjection
         services.AddSingleton<ISystemNotificationService, AndroidSystemNotificationService>();
 #elif __IOS__
         services.AddSingleton<ISystemNotificationService, IosSystemNotificationService>();
-#else
+#elif __WASM__
         services.AddSingleton<ISystemNotificationService, UnsupportedSystemNotificationService>();
+#else
+        // One desktop TFM covers Linux and macOS, so the split is a runtime check rather than #if.
+        // macOS has no managed UserNotifications binding here, so it stays honestly unsupported.
+        services.AddSingleton<ISystemNotificationService>(sp => OperatingSystem.IsLinux()
+            ? new LinuxSystemNotificationService(sp.GetRequiredService<IStringLocalizer<CoreStrings>>())
+            : new UnsupportedSystemNotificationService());
 #endif
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
