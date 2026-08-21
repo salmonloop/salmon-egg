@@ -1364,7 +1364,8 @@ public sealed class DiscoverSessionsViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private static ServerConfiguration CreateProfile()

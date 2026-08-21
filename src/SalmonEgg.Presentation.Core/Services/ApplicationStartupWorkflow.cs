@@ -13,6 +13,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
     private readonly IConfigurationRecoveryService? _configurationRecoveryService;
     private readonly IAppSettingsService _appSettingsService;
     private readonly ITelemetryRuntime _telemetryRuntime;
+    private readonly IConversationRestoreCompletionSink _restoreCompletionSink;
     private readonly ILogger<ApplicationStartupWorkflow> _logger;
     private readonly object _runtimeInitializationSync = new();
     private Task<bool>? _configurationRecoveryTask;
@@ -29,6 +30,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
         IConfigurationRecoveryService? configurationRecoveryService,
         IAppSettingsService appSettingsService,
         ITelemetryRuntime telemetryRuntime,
+        IConversationRestoreCompletionSink restoreCompletionSink,
         ILogger<ApplicationStartupWorkflow> logger)
     {
         _shellStartupNavigation = shellStartupNavigation ?? throw new ArgumentNullException(nameof(shellStartupNavigation));
@@ -36,6 +38,7 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
         _configurationRecoveryService = configurationRecoveryService;
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _telemetryRuntime = telemetryRuntime ?? throw new ArgumentNullException(nameof(telemetryRuntime));
+        _restoreCompletionSink = restoreCompletionSink ?? throw new ArgumentNullException(nameof(restoreCompletionSink));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -172,15 +175,25 @@ public sealed class ApplicationStartupWorkflow : IApplicationStartupWorkflow
 
     private async Task<bool> RestoreConversationsCoreAsync()
     {
-        var restored = await _chatRuntimeInitialization.RestoreConversationsAsync().ConfigureAwait(false);
-        if (restored)
+        var restored = false;
+        try
         {
-            lock (_runtimeInitializationSync)
+            restored = await _chatRuntimeInitialization.RestoreConversationsAsync().ConfigureAwait(false);
+            if (restored)
             {
-                _conversationRestoreCompleted = true;
+                lock (_runtimeInitializationSync)
+                {
+                    _conversationRestoreCompleted = true;
+                }
             }
-        }
 
-        return restored;
+            return restored;
+        }
+        finally
+        {
+            // Work deferred until the conversation catalog exists — a notification tap that launched
+            // the app — must be released even when restore failed, otherwise it waits forever.
+            _restoreCompletionSink.OnConversationRestoreCompleted(restored);
+        }
     }
 }

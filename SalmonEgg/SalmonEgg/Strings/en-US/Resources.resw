@@ -162,6 +162,21 @@
   <data name="General_StartupTitle.Text" xml:space="preserve">
     <value>Startup and window</value>
   </data>
+  <data name="General_NotificationsTitle.Text" xml:space="preserve">
+    <value>Notifications</value>
+  </data>
+  <data name="General_SystemNotificationsTitle.Text" xml:space="preserve">
+    <value>Show system notifications when a task completes</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OnContent" xml:space="preserve">
+    <value>On</value>
+  </data>
+  <data name="General_SystemNotificationsSwitch.OffContent" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="General_SystemNotificationsUnsupported.Text" xml:space="preserve">
+    <value>System notifications are not available on this platform.</value>
+  </data>
   <data name="General_AutoStartTitle.Text" xml:space="preserve">
     <value>Launch on startup</value>
   </data>

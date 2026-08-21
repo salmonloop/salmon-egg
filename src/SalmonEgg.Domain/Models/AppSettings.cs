@@ -15,6 +15,8 @@ public sealed class AppSettings
 
     public bool MinimizeToTray { get; set; } = true;
 
+    public bool SystemNotificationsEnabled { get; set; }
+
     /// <summary>
     /// Canonical UI language tag from <see cref="AppLanguageCatalog"/>, e.g. "System", "zh-Hans", "en-US".
     /// </summary>

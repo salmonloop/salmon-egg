@@ -52,6 +52,35 @@
                     </StackPanel>
 
                     <StackPanel Spacing="12">
+                        <TextBlock x:Uid="General_NotificationsTitle"
+                                   Style="{StaticResource SettingsSectionTitleTextStyle}"/>
+
+                        <Border Style="{StaticResource SettingsSectionContainerStyle}">
+                            <Grid Style="{StaticResource SettingsRowGridStyle}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock x:Uid="General_SystemNotificationsTitle"
+                                               Style="{StaticResource SettingsRowTitleTextStyle}"/>
+                                    <TextBlock x:Uid="General_SystemNotificationsUnsupported"
+                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                               Visibility="{x:Bind ViewModel.Preferences.IsSystemNotificationsSupported, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                </StackPanel>
+
+                                <ToggleSwitch Grid.Column="1"
+                                              x:Uid="General_SystemNotificationsSwitch"
+                                              AutomationProperties.AutomationId="GeneralSettings.SystemNotifications"
+                                              IsOn="{x:Bind ViewModel.Preferences.SystemNotificationsEnabled, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind ViewModel.Preferences.IsSystemNotificationsSupported, Mode=OneWay}"
+                                              VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Spacing="12">
                         <TextBlock x:Uid="General_StartupTitle"
                                    Style="{StaticResource SettingsSectionTitleTextStyle}"/>
 

@@ -326,7 +326,8 @@ public sealed class ShellStartupNavigationServiceTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
     }
 
     private sealed class FakeNavigationPaneState : INavigationPaneState

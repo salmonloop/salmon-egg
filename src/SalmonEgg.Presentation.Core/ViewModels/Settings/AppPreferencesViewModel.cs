@@ -18,7 +18,7 @@ using SalmonEgg.Presentation.Services;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings;
 
-public partial class AppPreferencesViewModel : ObservableObject
+public partial class AppPreferencesViewModel : ObservableObject, IApplicationNotificationSettings
 {
     private readonly IAppSettingsService _appSettingsService;
     private readonly IAppStartupService _startupService;
@@ -29,8 +29,10 @@ public partial class AppPreferencesViewModel : ObservableObject
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly ILogger<AppPreferencesViewModel> _logger;
     private readonly IUiDispatcher _uiDispatcher;
+    private readonly ISystemNotificationService _systemNotificationService;
     private readonly SemaphoreSlim _initializeGate = new(1, 1);
     private CancellationTokenSource? _saveCts;
+    private CancellationTokenSource? _notificationPermissionCts;
     private bool _isInitialized;
     private bool _suppressSave;
     private string _appliedLanguage = "System";
@@ -49,6 +51,9 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _minimizeToTray = true;
+
+    [ObservableProperty]
+    private bool _systemNotificationsEnabled;
 
     [ObservableProperty]
     private string _language = "System";
@@ -132,6 +137,12 @@ public partial class AppPreferencesViewModel : ObservableObject
 
     public bool IsMinimizeToTraySupported => _capabilities.SupportsTray;
 
+    // Notification support is read from the notification platform service rather than
+    // IPlatformCapabilityService on purpose: the answer depends on the native notification stack
+    // (e.g. AppNotificationManager.IsSupported()), which only the platform service can see. Copying
+    // it into the capability service would create a second owner of the same fact.
+    public bool IsSystemNotificationsSupported => _systemNotificationService.IsSupported;
+
     public bool IsLanguageOverrideSupported => _capabilities.SupportsLanguageOverride;
 
     public bool IsMiniWindowSupported => _capabilities.SupportsMiniWindow;
@@ -151,7 +162,8 @@ public partial class AppPreferencesViewModel : ObservableObject
         IUiInteractionService ui,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<AppPreferencesViewModel> logger,
-        IUiDispatcher uiDispatcher)
+        IUiDispatcher uiDispatcher,
+        ISystemNotificationService systemNotificationService)
     {
         _appSettingsService = appSettingsService ?? throw new ArgumentNullException(nameof(appSettingsService));
         _startupService = startupService ?? throw new ArgumentNullException(nameof(startupService));
@@ -162,6 +174,7 @@ public partial class AppPreferencesViewModel : ObservableObject
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
+        _systemNotificationService = systemNotificationService ?? throw new ArgumentNullException(nameof(systemNotificationService));
         KeyBindings.CollectionChanged += OnKeyBindingsChanged;
         Projects.CollectionChanged += OnProjectsChanged;
         AgentRemoteDirectories.CollectionChanged += OnAgentRemoteDirectoriesChanged;
@@ -263,6 +276,7 @@ public partial class AppPreferencesViewModel : ObservableObject
                 Backdrop = settings.Backdrop;
                 LaunchOnStartup = launchOnStartup;
                 MinimizeToTray = settings.MinimizeToTray;
+                SystemNotificationsEnabled = settings.SystemNotificationsEnabled;
                 Language = nextLanguage;
                 _appliedLanguage = nextLanguage;
                 LastSelectedServerId = settings.LastSelectedServerId;
@@ -450,6 +464,22 @@ public partial class AppPreferencesViewModel : ObservableObject
         _ = ApplyLaunchOnStartupAsync(value);
     }
     partial void OnMinimizeToTrayChanged(bool value) => ScheduleSave();
+    partial void OnSystemNotificationsEnabledChanged(bool value)
+    {
+        if (_suppressSave)
+        {
+            return;
+        }
+
+        if (!value)
+        {
+            CancelNotificationPermissionRequest();
+            ScheduleSave();
+            return;
+        }
+
+        _ = EnableSystemNotificationsAsync();
+    }
     partial void OnLanguageChanged(string? oldValue, string newValue)
     {
         var normalized = AppLanguageCatalog.NormalizeTag(newValue);
@@ -690,6 +720,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             Backdrop = "System";
             LaunchOnStartup = false;
             MinimizeToTray = true;
+            SystemNotificationsEnabled = false;
             Language = "System";
             _appliedLanguage = "System";
             LastSelectedServerId = null;
@@ -773,6 +804,7 @@ public partial class AppPreferencesViewModel : ObservableObject
             Backdrop = Backdrop,
             LaunchOnStartup = LaunchOnStartup,
             MinimizeToTray = MinimizeToTray,
+            SystemNotificationsEnabled = SystemNotificationsEnabled,
             Language = AppLanguageCatalog.NormalizeTag(Language),
             LastSelectedServerId = LastSelectedServerId,
             SaveLocalHistory = SaveLocalHistory,
@@ -854,6 +886,89 @@ public partial class AppPreferencesViewModel : ObservableObject
             await _ui.ShowInfoAsync(_localizer["General_LaunchOnStartupFailed"]).ConfigureAwait(false);
         }
     }
+
+    private async Task EnableSystemNotificationsAsync()
+    {
+        var service = _systemNotificationService;
+        if (!service.IsSupported)
+        {
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            return;
+        }
+
+        CancelNotificationPermissionRequest();
+        var cts = new CancellationTokenSource();
+        _notificationPermissionCts = cts;
+        try
+        {
+            var result = await service.RequestPermissionAsync(cts.Token).ConfigureAwait(false);
+            if (!IsCurrentNotificationPermissionRequest(cts))
+            {
+                return;
+            }
+
+            if (result == SystemNotificationPermissionResult.Granted)
+            {
+                ScheduleSave();
+                return;
+            }
+
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_SystemNotificationsPermissionDenied"]).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (!IsCurrentNotificationPermissionRequest(cts))
+            {
+                return;
+            }
+
+            _logger.LogWarning(ex, "System notification permission request failed.");
+            await RevertSystemNotificationsAsync().ConfigureAwait(false);
+            await _ui.ShowInfoAsync(_localizer["General_SystemNotificationsPermissionDenied"]).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (ReferenceEquals(_notificationPermissionCts, cts))
+            {
+                _notificationPermissionCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    private Task RevertSystemNotificationsAsync()
+        => _uiDispatcher.EnqueueAsync(() =>
+        {
+            _suppressSave = true;
+            try
+            {
+                SystemNotificationsEnabled = false;
+            }
+            finally
+            {
+                _suppressSave = false;
+            }
+        });
+
+    private void CancelNotificationPermissionRequest()
+    {
+        var cts = _notificationPermissionCts;
+        _notificationPermissionCts = null;
+        if (cts is null)
+        {
+            return;
+        }
+
+        cts.Cancel();
+    }
+
+    private bool IsCurrentNotificationPermissionRequest(CancellationTokenSource cts)
+        => ReferenceEquals(_notificationPermissionCts, cts);
 
     private Task RevertLaunchOnStartupAsync(bool attemptedEnabled)
     {

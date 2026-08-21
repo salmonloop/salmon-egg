@@ -15,7 +15,7 @@ public sealed partial class WasmPlatformShellService : IPlatformShellService
     private const string ShellModuleName = "salmon-egg-wasm-shell.js";
 
     private static readonly SemaphoreSlim ShellModuleLock = new(1, 1);
-    private static readonly string ShellModuleUrl = ResolveShellModuleUrl();
+    private static readonly string ShellModuleUrl = WasmModuleUrlResolver.Resolve(ShellModuleName);
     private static JSObject? _shellModule;
 
     private readonly UnsupportedPlatformShellService _unsupported = new();
@@ -96,24 +96,5 @@ public sealed partial class WasmPlatformShellService : IPlatformShellService
 
     [JSImport("readClipboardText", "salmon-egg-wasm-shell.js")]
     internal static partial Task<string?> ReadClipboardTextInteropAsync();
-
-    private static string ResolveShellModuleUrl()
-    {
-        var appBase = NormalizePathSegment(Environment.GetEnvironmentVariable("UNO_BOOTSTRAP_APP_BASE"));
-        if (string.IsNullOrWhiteSpace(appBase))
-        {
-            return "./" + ShellModuleName;
-        }
-
-        var webAppBasePath = NormalizePathSegment(Environment.GetEnvironmentVariable("UNO_BOOTSTRAP_WEBAPP_BASE_PATH"));
-        return string.IsNullOrWhiteSpace(webAppBasePath)
-            ? $"/{appBase}/_framework/{ShellModuleName}"
-            : $"/{webAppBasePath}/{appBase}/_framework/{ShellModuleName}";
-    }
-
-    private static string NormalizePathSegment(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            ? string.Empty
-            : value.Trim().Trim('/');
 }
 #endif

@@ -52,9 +52,14 @@ using SalmonEgg.Platforms.WebAssembly.Observability;
 #elif WINDOWS
 using SalmonEgg.Platforms.Windows;
 using SalmonEgg.Platforms.Windows.Observability;
-#elif __ANDROID__ || __IOS__
+#elif __ANDROID__
+using SalmonEgg.Platforms.Android;
 using SalmonEgg.Platforms.Mobile.Observability;
+#elif __IOS__
+using SalmonEgg.Platforms.Mobile.Observability;
+using SalmonEgg.Platforms.iOS;
 #else
+using SalmonEgg.Platforms.Desktop;
 using SalmonEgg.Platforms.Desktop.Observability;
 #endif
 
@@ -202,6 +207,44 @@ public static class DependencyInjection
             }
             return new WinUiDispatcher(queue!, logger);
         });
+        // The same platform object both posts notifications and reports taps, because the native handle
+        // is one and the same. Registering one singleton under both contracts keeps that single owner.
+#if WINDOWS
+        services.AddSingleton<WindowsSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WindowsSystemNotificationService>());
+#elif __ANDROID__
+        services.AddSingleton<AndroidSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<AndroidSystemNotificationService>());
+#elif __IOS__
+        services.AddSingleton<IosSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<IosSystemNotificationService>());
+#elif __WASM__
+#pragma warning disable CA1416 // Uno browserwasm target runs in the browser platform surface.
+        services.AddSingleton<WasmSystemNotificationService>();
+        services.AddSingleton<ISystemNotificationService>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            sp.GetRequiredService<WasmSystemNotificationService>());
+#pragma warning restore CA1416
+#else
+        // One desktop TFM covers Linux and macOS, so the split is a runtime check rather than #if.
+        // macOS has no managed UserNotifications binding here, so it stays honestly unsupported.
+        services.AddSingleton(sp => OperatingSystem.IsLinux()
+            ? (ISystemNotificationService)new LinuxSystemNotificationService(
+                sp.GetRequiredService<IStringLocalizer<CoreStrings>>())
+            : new UnsupportedSystemNotificationService());
+        services.AddSingleton<ISystemNotificationActivationSource>(sp =>
+            (ISystemNotificationActivationSource)sp.GetRequiredService<ISystemNotificationService>());
+#endif
 #if WINDOWS
         services.AddSingleton<WindowsRawGameControllerMapper>();
         services.AddSingleton<WindowsGamepadInputService>();
@@ -488,6 +531,7 @@ public static class DependencyInjection
         services.AddSingleton<IConversationCatalogDisplayReadModel>(sp =>
             sp.GetRequiredService<ConversationCatalogDisplayPresenter>());
         services.AddSingleton<IProjectAffinityResolver, ProjectAffinityResolver>();
+        services.AddSingleton<IConversationProjectAffinityResolver, ConversationProjectAffinityResolver>();
 #if !__WASM__ && !__ANDROID__ && !__IOS__
         services.AddSingleton<ILocalTerminalCwdResolver, LocalTerminalCwdResolver>();
         services.AddSingleton<ILocalTerminalSessionManager, LocalTerminalSessionManager>();
@@ -551,6 +595,10 @@ public static class DependencyInjection
         services.AddSingleton<IChatRuntimePersistence>(sp => sp.GetRequiredService<ChatViewModel>());
 
         services.AddSingleton<ChatShellViewModel>();
+        // The navigation VM owns session activation; the router only supplies a conversation id.
+        services.AddSingleton<IConversationActivationEntryPoint>(sp =>
+            sp.GetRequiredService<MainNavigationViewModel>());
+        services.AddSingleton<IConversationOpenRouter, ConversationOpenRouter>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
@@ -645,14 +693,22 @@ public static class DependencyInjection
             // 挂在启动 workflow 上是因为该 workflow 必然在启动路径被解析，且遥测首次激活也在
             // 这里，订阅与激活同时就位。
             _ = sp.GetRequiredService<TelemetrySettingsProjection>();
+            _ = sp.GetRequiredService<ChatCompletionNotificationCoordinator>();
+            // Starting here rather than in a page keeps notification activation on the same
+            // application-scoped owner as the rest of startup.
+            var notificationActivation = sp.GetRequiredService<NotificationActivationCoordinator>();
+            notificationActivation.Start();
             return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>(),
                 sp.GetRequiredService<IConfigurationRecoveryService>(),
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<ITelemetryRuntime>(),
+                notificationActivation,
                 sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());
         });
+        services.AddSingleton<ChatCompletionNotificationCoordinator>();
+        services.AddSingleton<NotificationActivationCoordinator>();
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),
@@ -667,7 +723,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<AppPreferencesViewModel>(),
                 sp.GetRequiredService<INavigationCoordinator>(),
                 sp.GetRequiredService<IConversationCatalogReadModel>(),
-                sp.GetRequiredService<IProjectAffinityResolver>(),
+                sp.GetRequiredService<IConversationProjectAffinityResolver>(),
                 sp.GetRequiredService<IGlobalSearchPipeline>(),
                 sp.GetRequiredService<IStringLocalizer<CoreStrings>>(),
                 sp.GetRequiredService<ILogger<GlobalSearchViewModel>>(),
@@ -715,6 +771,8 @@ public static class DependencyInjection
 
         // App preferences used by General/Appearance settings and window behaviors.
         services.AddSingleton<AppPreferencesViewModel>();
+        services.AddSingleton<IApplicationNotificationSettings>(sp =>
+            sp.GetRequiredService<AppPreferencesViewModel>());
         services.AddSingleton<WindowBackdropService>();
 
         // General settings
@@ -860,6 +918,7 @@ public static class DependencyInjection
         services.AddSingleton<ShellLayoutViewModel>();
         services.AddSingleton<AppActivationSignalSource>();
         services.AddSingleton<IApplicationActivationSignalSource>(sp => sp.GetRequiredService<AppActivationSignalSource>());
+        services.AddSingleton<IApplicationVisibilityState>(sp => sp.GetRequiredService<AppActivationSignalSource>());
         services.AddSingleton<WindowMetricsProvider>();
     }
 

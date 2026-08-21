@@ -34,7 +34,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
     private readonly AppPreferencesViewModel _preferences;
     private readonly INavigationCoordinator _navigationCoordinator;
     private readonly IConversationCatalogReadModel _conversationCatalog;
-    private readonly IProjectAffinityResolver _projectAffinityResolver;
+    private readonly IConversationProjectAffinityResolver _projectAffinityResolver;
     private readonly IGlobalSearchPipeline _searchPipeline;
     private readonly IStringLocalizer<CoreStrings> _localizer;
     private readonly IAppLanguageService? _languageService;
@@ -80,7 +80,7 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
         AppPreferencesViewModel preferences,
         INavigationCoordinator navigationCoordinator,
         IConversationCatalogReadModel conversationCatalog,
-        IProjectAffinityResolver projectAffinityResolver,
+        IConversationProjectAffinityResolver projectAffinityResolver,
         IGlobalSearchPipeline searchPipeline,
         IStringLocalizer<CoreStrings> localizer,
         ILogger<GlobalSearchViewModel> logger,
@@ -298,15 +298,11 @@ public sealed partial class GlobalSearchViewModel : ObservableObject, IDisposabl
             return null;
         }
 
-        return _projectAffinityResolver.Resolve(new ProjectAffinityRequest(
-            RemoteCwd: conversation.Cwd,
-            BoundProfileId: conversation.BoundProfileId,
-            RemoteSessionId: conversation.RemoteSessionId,
-            OverrideProjectId: conversation.ProjectAffinityOverrideProjectId,
-            Projects: _preferences.Projects,
-            RemoteDirectories: _preferences.AgentRemoteDirectories,
-            UnclassifiedProjectId: MainNavigationViewModel.UnclassifiedProjectId,
-            NavigationRemoteDirectoryIds: _preferences.NavigationRemoteDirectoryIds)).EffectiveProjectId;
+        return _projectAffinityResolver.ResolveActivationProjectId(new ConversationProjectAffinityRequest(
+            conversation.Cwd,
+            conversation.BoundProfileId,
+            conversation.RemoteSessionId,
+            conversation.ProjectAffinityOverrideProjectId));
     }
 
     [RelayCommand]

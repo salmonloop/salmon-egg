@@ -1097,7 +1097,8 @@ public sealed class WorkspaceWriterTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
     }
 
     private static ConversationMessageSnapshot CreateTextMessage(string id, string text)

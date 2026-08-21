@@ -1216,7 +1216,8 @@ public sealed class ConversationActivationCoordinatorTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         }
         finally
         {

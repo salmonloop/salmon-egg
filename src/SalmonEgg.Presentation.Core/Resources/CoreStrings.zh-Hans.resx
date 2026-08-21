@@ -1186,4 +1186,19 @@
   <data name="McpSettings_DefaultServerName" xml:space="preserve">
     <value>新 MCP 服务器</value>
   </data>
+  <data name="SystemNotification_TurnCompletedTitle" xml:space="preserve">
+    <value>任务完成</value>
+  </data>
+  <data name="SystemNotification_TurnCompletedBody" xml:space="preserve">
+    <value>智能体已完成回复。</value>
+  </data>
+  <data name="SystemNotification_OpenAction" xml:space="preserve">
+    <value>打开</value>
+  </data>
+  <data name="SystemNotification_ChannelName" xml:space="preserve">
+    <value>智能体任务完成</value>
+  </data>
+  <data name="General_SystemNotificationsPermissionDenied" xml:space="preserve">
+    <value>系统通知权限未授予。</value>
+  </data>
 </root>

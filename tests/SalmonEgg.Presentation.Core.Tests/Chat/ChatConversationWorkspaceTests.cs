@@ -3242,7 +3242,8 @@ public sealed class ChatConversationWorkspaceTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             Mock.Of<ILogger<AppPreferencesViewModel>>(),
-            new ImmediateUiDispatcher());
+            new ImmediateUiDispatcher(),
+            TestSystemNotificationService.Instance);
         }
         finally
         {

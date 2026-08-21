@@ -59,6 +59,7 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-browserwasm'">
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js" />
     <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js" />
+    <WasmShellNativeFileReference Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-notifications.js" />
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-storage.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>_framework/salmon-egg-wasm-storage.js</TargetPath>
@@ -66,6 +67,10 @@
     <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-shell.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>_framework/salmon-egg-wasm-shell.js</TargetPath>
+    </Content>
+    <Content Include="Platforms\WebAssembly\WasmScripts\salmon-egg-wasm-notifications.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>_framework/salmon-egg-wasm-notifications.js</TargetPath>
     </Content>
   </ItemGroup>
 
@@ -111,6 +116,12 @@
   <ItemGroup>
     <!-- Use the repository's custom black-and-white artwork as the single Uno.Resizetizer app icon source. -->
     <UnoIcon Include="Assets\Icons\icon.png" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <!-- freedesktop notifications on Linux. Already a transitive Uno Skia X11 dependency; the version
+         is pinned centrally. macOS/Windows desktop hosts never reach the D-Bus code path. -->
+    <PackageReference Include="Tmds.DBus.Protocol" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">

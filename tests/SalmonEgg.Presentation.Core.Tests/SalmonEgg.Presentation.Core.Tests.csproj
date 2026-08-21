@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="SalmonEgg.Presentation.Core.Tests.TestDoubles" />
     <Using Include="Xunit" />
   </ItemGroup>
 

@@ -21,6 +21,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.ActivateShellAsync();
@@ -59,6 +60,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         var firstInitialization = workflow.InitializeRuntimeAsync();
@@ -99,6 +101,7 @@ public sealed class ApplicationStartupWorkflowTests
             recovery.Object,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         var first = workflow.InitializeRuntimeAsync();
@@ -133,6 +136,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -159,6 +163,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -194,6 +199,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             telemetry.Object,
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -225,6 +231,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(persisted),
             telemetry.Object,
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -249,6 +256,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             settingsService.Object,
             Mock.Of<ITelemetryRuntime>(),
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -282,6 +290,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             settingsService.Object,
             telemetry.Object,
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         var first = workflow.InitializeRuntimeAsync();
@@ -315,6 +324,7 @@ public sealed class ApplicationStartupWorkflowTests
             configurationRecoveryService: null,
             CreateSettingsService(),
             telemetry.Object,
+            new RecordingRestoreCompletionSink(),
             NullLogger<ApplicationStartupWorkflow>.Instance);
 
         await workflow.InitializeRuntimeAsync();
@@ -338,5 +348,12 @@ public sealed class ApplicationStartupWorkflowTests
         var service = new Mock<IAppSettingsService>();
         service.Setup(s => s.LoadAsync()).ReturnsAsync(settings ?? new AppSettings());
         return service.Object;
+    }
+
+    private sealed class RecordingRestoreCompletionSink : IConversationRestoreCompletionSink
+    {
+        public List<bool> Completions { get; } = new();
+
+        public void OnConversationRestoreCompleted(bool restored) => Completions.Add(restored);
     }
 }

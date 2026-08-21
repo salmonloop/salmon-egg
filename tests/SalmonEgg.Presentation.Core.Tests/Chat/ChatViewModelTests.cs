@@ -158,7 +158,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync();
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -912,8 +913,9 @@ public partial class ChatViewModelTests
             shellLayout,
             navigationViewModel,
             displayCatalog.Presenter,
-            resolver.Object,
-            fixture.Preferences,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
             Mock.Of<ILogger<ChatShellViewModel>>());
 
         var remoteItem = fixture.ViewModel.MiniWindowSessions.Single(item =>
@@ -1002,8 +1004,9 @@ public partial class ChatViewModelTests
             shellLayout,
             navigationViewModel,
             displayCatalog.Presenter,
-            resolver.Object,
-            fixture.Preferences,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
             Mock.Of<ILogger<ChatShellViewModel>>());
 
         Assert.Equal("conv-local", shellViewModel.SelectedMiniWindowSession?.ConversationId);
@@ -1066,8 +1069,9 @@ public partial class ChatViewModelTests
             shellLayout,
             navigationViewModel,
             displayCatalog.Presenter,
-            resolver.Object,
-            fixture.Preferences,
+            new ConversationProjectAffinityResolver(
+                resolver.Object,
+                new NavigationProjectPreferencesAdapter(fixture.Preferences)),
             Mock.Of<ILogger<ChatShellViewModel>>());
 
         Assert.NotNull(shellViewModel.SelectedMiniWindowSession);
@@ -4617,7 +4621,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4721,7 +4726,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -4833,7 +4839,8 @@ public partial class ChatViewModelTests
             Mock.Of<IUiInteractionService>(),
             new TestCoreStringLocalizer(),
             prefsLogger.Object,
-            uiDispatcher);
+            uiDispatcher,
+            TestSystemNotificationService.Instance);
         _ = preferences.InitializeAsync(TestContext.Current.CancellationToken);
 
         var profilesLogger = new Mock<ILogger<AcpProfilesViewModel>>();
@@ -15322,8 +15329,9 @@ public partial class ChatViewModelTests
                 shellLayout,
                 navigationViewModel,
                 displayCatalog.Presenter,
-                resolver.Object,
-                fixture.Preferences,
+                new ConversationProjectAffinityResolver(
+                    resolver.Object,
+                    new NavigationProjectPreferencesAdapter(fixture.Preferences)),
                 Mock.Of<ILogger<ChatShellViewModel>>());
 
             fixture.Profiles.Profiles.Add(new ServerConfiguration { Id = "profile-1", Name = "Profile 1", Transport = TransportType.Stdio });
