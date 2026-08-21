@@ -33,8 +33,12 @@ internal static class NumberBoxThemeProbeDriver
     private const string ContentElementName = "ContentElement";
     private const string BorderElementName = "BorderElement";
     private const int SampleCount = 3;
+    private const int SampleAttemptCount = 9;
     private const int FocusAttemptCount = 10;
     private const int FocusSettleDelayMilliseconds = 100;
+    private const int SampleSettleDelayMilliseconds = 300;
+    private const int RenderCaptureAttemptCount = 5;
+    private const int RenderCaptureRetryDelayMilliseconds = 100;
     private const double MinimumBackgroundSampleInset = 6;
     private const int BackgroundClusterTolerance = 6;
     private const double MinimumContrastRatio = 4.5;
@@ -139,7 +143,24 @@ internal static class NumberBoxThemeProbeDriver
                 () => targets.InputBox.FocusState != FocusState.Unfocused)
             .ConfigureAwait(true);
 
-        for (var sample = 1; sample <= SampleCount; sample++)
+        // The first Skia render after Settings navigation can expose the realized template before
+        // its backdrop has a complete frame. Warm the same native focus path once before counting
+        // samples so the three observations measure the settled control, not first-frame timing.
+        _ = await TryMoveKeyboardFocusAsync(
+                targets.FocusSink,
+                () => targets.FocusSink.FocusState != FocusState.Unfocused
+                    && targets.InputBox.FocusState == FocusState.Unfocused)
+            .ConfigureAwait(true);
+        _ = await TryMoveKeyboardFocusAsync(
+                targets.InputBox,
+                () => targets.InputBox.FocusState != FocusState.Unfocused)
+            .ConfigureAwait(true);
+        await Task.Delay(SampleSettleDelayMilliseconds).ConfigureAwait(true);
+
+        var completedSamples = 0;
+        for (var sampleAttempt = 1;
+            sampleAttempt <= SampleAttemptCount && completedSamples < SampleCount;
+            sampleAttempt++)
         {
             var unfocusedBeforeSample = await TryMoveKeyboardFocusAsync(
                     targets.FocusSink,
@@ -153,7 +174,7 @@ internal static class NumberBoxThemeProbeDriver
                     targets.InputBox,
                     () => targets.InputBox.FocusState != FocusState.Unfocused)
                 .ConfigureAwait(true);
-            await Task.Delay(50).ConfigureAwait(true);
+            await Task.Delay(SampleSettleDelayMilliseconds).ConfigureAwait(true);
 
             targets.NumberBox.UpdateLayout();
             targets.InputBox.UpdateLayout();
@@ -162,18 +183,28 @@ internal static class NumberBoxThemeProbeDriver
                     targets.InputBox,
                     unfocusedBeforeSample && inputFocused)
                 .ConfigureAwait(true);
+            if (snapshot.Foreground is null || snapshot.Background is null)
+            {
+                App.BootLog(snapshot.FormatUnavailable(sampleAttempt));
+                continue;
+            }
+
+            completedSamples++;
             allSamplesPassed &= snapshot.Passed;
-            App.BootLog(snapshot.Format(sample));
+            App.BootLog(snapshot.Format(completedSamples));
         }
 
         var valueUnchanged = targets.NumberBox.Value.Equals(originalValue);
-        var passed = allSamplesPassed && valueUnchanged;
-        var failureReason = !allSamplesPassed
+        var collectedRequiredSamples = completedSamples == SampleCount;
+        var passed = collectedRequiredSamples && allSamplesPassed && valueUnchanged;
+        var failureReason = !collectedRequiredSamples
+            ? "capture-unavailable"
+            : !allSamplesPassed
             ? "sample-invariant"
             : valueUnchanged
                 ? "none"
                 : "value-changed";
-        return new NumberBoxThemeProbeRunResult(SampleCount, valueUnchanged, passed, failureReason);
+        return new NumberBoxThemeProbeRunResult(completedSamples, valueUnchanged, passed, failureReason);
     }
 
     private static async Task<bool> TryMoveKeyboardFocusAsync(Control target, Func<bool> reachedExpectedState)
@@ -206,12 +237,10 @@ internal static class NumberBoxThemeProbeDriver
             inputBox,
             static candidate => string.Equals(candidate.Name, BorderElementName, StringComparison.Ordinal));
 
-        var background = contentElement is null || borderElement is null
-            ? null
-            : await TryCaptureRenderedBackgroundAsync(borderElement).ConfigureAwait(true);
-        var foreground = background is null
-            ? null
-            : TryResolveEffectiveForeground(contentElement?.Foreground, background.Value);
+        var renderedColors = await TryCaptureRenderedColorsAsync(contentElement, borderElement)
+            .ConfigureAwait(true);
+        var background = renderedColors.Background;
+        var foreground = renderedColors.Foreground;
         var contrast = foreground is not null && background is not null
             ? CalculateContrastRatio(foreground.Value, background.Value)
             : 0;
@@ -242,7 +271,43 @@ internal static class NumberBoxThemeProbeDriver
             foreground,
             background,
             contrast,
+            renderedColors.Attempts,
             passed);
+    }
+
+    private static async Task<RenderedColors> TryCaptureRenderedColorsAsync(
+        ScrollViewer? contentElement,
+        Border? borderElement)
+    {
+        if (contentElement is null || borderElement is null)
+        {
+            return RenderedColors.Unavailable;
+        }
+
+        Windows.UI.Color? background = null;
+        Windows.UI.Color? foreground = null;
+        for (var attempt = 1; attempt <= RenderCaptureAttemptCount; attempt++)
+        {
+            borderElement.UpdateLayout();
+            background = await TryCaptureRenderedBackgroundAsync(borderElement).ConfigureAwait(true);
+            foreground = background is null
+                ? null
+                : TryResolveEffectiveForeground(contentElement.Foreground, background.Value);
+            if (background is not null && foreground is not null)
+            {
+                return new RenderedColors(foreground, background, attempt);
+            }
+
+            if (attempt < RenderCaptureAttemptCount)
+            {
+                // RenderTargetBitmap can transiently return an incomplete Skia frame immediately
+                // after a native focus-state transition. Retry the same realized control instead
+                // of treating an unavailable frame as evidence of unreadable colors.
+                await Task.Delay(RenderCaptureRetryDelayMilliseconds).ConfigureAwait(true);
+            }
+        }
+
+        return new RenderedColors(foreground, background, RenderCaptureAttemptCount);
     }
 
     private static async Task<Windows.UI.Color?> TryCaptureRenderedBackgroundAsync(
@@ -582,6 +647,7 @@ internal static class NumberBoxThemeProbeDriver
         Windows.UI.Color? Foreground,
         Windows.UI.Color? Background,
         double Contrast,
+        int CaptureAttempts,
         bool Passed)
     {
         public string Format(int sample)
@@ -590,7 +656,15 @@ internal static class NumberBoxThemeProbeDriver
                 + $" focusState={FocusState} numberBoxTheme={NumberBoxTheme} inputTheme={InputTheme}"
                 + $" contentTheme={ContentTheme} borderTheme={BorderTheme}"
                 + $" foreground={FormatColor(Foreground)} background={FormatColor(Background)}"
-                + $" contrast={Contrast.ToString("F2", CultureInfo.InvariantCulture)} passed={Passed}";
+                + $" contrast={Contrast.ToString("F2", CultureInfo.InvariantCulture)}"
+                + $" captureAttempts={CaptureAttempts} passed={Passed}";
+
+        public string FormatUnavailable(int attempt)
+            => $"NumberBoxThemeProbe: capture-unavailable attempt={attempt} visible={Visible}"
+                + $" focusTransition={FocusTransitionSucceeded} focused={Focused}"
+                + $" focusState={FocusState} numberBoxTheme={NumberBoxTheme} inputTheme={InputTheme}"
+                + $" contentTheme={ContentTheme} borderTheme={BorderTheme}"
+                + $" captureAttempts={CaptureAttempts}";
 
         private static string FormatColor(Windows.UI.Color? color)
             => color is { } value
@@ -602,6 +676,14 @@ internal static class NumberBoxThemeProbeDriver
         NumberBox NumberBox,
         TextBox InputBox,
         ToggleSwitch FocusSink);
+
+    private readonly record struct RenderedColors(
+        Windows.UI.Color? Foreground,
+        Windows.UI.Color? Background,
+        int Attempts)
+    {
+        public static RenderedColors Unavailable { get; } = new(null, null, 0);
+    }
 
     private readonly record struct ColorLayer(
         double Red,
