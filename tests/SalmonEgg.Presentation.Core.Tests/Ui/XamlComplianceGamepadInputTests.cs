@@ -813,7 +813,7 @@ public sealed class XamlComplianceGamepadInputTests
     [Fact]
     public void WindowsDpapiSecureStorage_DoesNotDecodeLegacyPlainTextSecrets()
     {
-        var code = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\WindowsDpapiSecureStorage.cs");
+        var code = LoadText(@"src\SalmonEgg.Infrastructure.Desktop\Storage\WindowsDpapiSecureStorage.cs");
 
         Assert.DoesNotContain("TryDecodeLegacyPlainText", code, StringComparison.Ordinal);
         Assert.DoesNotContain("IsPlausibleLegacySecret", code, StringComparison.Ordinal);

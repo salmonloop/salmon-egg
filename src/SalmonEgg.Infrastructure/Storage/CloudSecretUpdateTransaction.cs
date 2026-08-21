@@ -8,16 +8,18 @@ namespace SalmonEgg.Infrastructure.Storage;
 
 public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
 {
-    private readonly ISecureStorage? _secureStorage;
+    // Only ever used to put previous values back, never to apply an update, so it is the restore store
+    // rather than the caller's store.
+    private readonly ISecureStorage? _restoreStorage;
     private readonly IReadOnlyDictionary<string, string?> _previousValues;
     private bool _completed;
     private bool _disposed;
 
     private CloudSecretUpdateTransaction(
-        ISecureStorage? secureStorage,
+        ISecureStorage? restoreStorage,
         IReadOnlyDictionary<string, string?> previousValues)
     {
-        _secureStorage = secureStorage;
+        _restoreStorage = restoreStorage;
         _previousValues = previousValues;
     }
 
@@ -39,7 +41,13 @@ public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
             previousValues[update.Key] = await secureStorage.LoadAsync(update.Key).ConfigureAwait(false);
         }
 
-        var transaction = new CloudSecretUpdateTransaction(secureStorage, previousValues);
+        // Applying an update goes through the caller's store so a fail-closed policy can still refuse a
+        // new secret. Restoring must not be refused: it puts back a value that was already stored, and a
+        // blocked restore would strand the mutation half-applied. See ISecureStorageRecoveryMaterialSource.
+        var restoreStorage = secureStorage is ISecureStorageRecoveryMaterialSource recoveryMaterialSource
+            ? recoveryMaterialSource.GetRecoveryMaterialStore()
+            : secureStorage;
+        var transaction = new CloudSecretUpdateTransaction(restoreStorage, previousValues);
         try
         {
             foreach (var update in updates)
@@ -57,9 +65,17 @@ public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
 
             return transaction;
         }
-        catch
+        catch (Exception operationException)
         {
-            await transaction.RestoreAsync().ConfigureAwait(false);
+            try
+            {
+                await transaction.RestoreAsync().ConfigureAwait(false);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(operationException, rollbackException);
+            }
+
             throw;
         }
     }
@@ -82,7 +98,7 @@ public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
 
     private async Task RestoreAsync()
     {
-        if (_secureStorage is null)
+        if (_restoreStorage is null)
         {
             return;
         }
@@ -91,11 +107,11 @@ public sealed class CloudSecretUpdateTransaction : ICloudSecretUpdateTransaction
         {
             if (previous.Value is null)
             {
-                await _secureStorage.DeleteAsync(previous.Key).ConfigureAwait(false);
+                await _restoreStorage.DeleteAsync(previous.Key).ConfigureAwait(false);
             }
             else
             {
-                await _secureStorage.SaveAsync(previous.Key, previous.Value).ConfigureAwait(false);
+                await _restoreStorage.SaveAsync(previous.Key, previous.Value).ConfigureAwait(false);
             }
         }
     }

@@ -80,6 +80,55 @@ public sealed class ConfigSyncPackageServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreatePackageAsync_ExcludesInFlightConfigurationTransactionArtifacts()
+    {
+        var serversDirectory = Path.Combine(_appData.ConfigRootPath, "servers");
+        Directory.CreateDirectory(serversDirectory);
+        var profilePath = Path.Combine(serversDirectory, "agent.yaml");
+        await File.WriteAllTextAsync(profilePath, "schema_version: 2\nid: agent\n", TestContext.Current.CancellationToken);
+        // Recovery material from an interrupted local save belongs to this device, not to the package.
+        await File.WriteAllTextAsync(
+            profilePath + ConfigurationFileTransactionArtifacts.PendingSuffix + "abc",
+            "schema_version: 2\nid: agent-candidate\n",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            profilePath + ConfigurationFileTransactionArtifacts.RollbackSuffix + "def",
+            "schema_version: 2\nid: agent-previous\n",
+            TestContext.Current.CancellationToken);
+
+        var package = await _packageService.CreatePackageAsync(
+            includeSecrets: false,
+            TestContext.Current.CancellationToken);
+
+        using var stream = new MemoryStream(package, writable: false);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var entryNames = archive.Entries.Select(entry => entry.FullName).ToList();
+        Assert.Contains("files/config/servers/agent.yaml", entryNames);
+        Assert.DoesNotContain(
+            entryNames,
+            name => name.Contains(ConfigurationFileTransactionArtifacts.PendingSuffix, StringComparison.Ordinal)
+                || name.Contains(ConfigurationFileTransactionArtifacts.RollbackSuffix, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CreatePackageAsync_ExcludesConfigurationRecoveryDirectory()
+    {
+        Directory.CreateDirectory(Path.Combine(_appData.ConfigRootPath, "recovery"));
+        await File.WriteAllTextAsync(
+            Path.Combine(_appData.ConfigRootPath, "recovery", "pending.journal.json"),
+            "{\"profileId\":\"agent\"}",
+            TestContext.Current.CancellationToken);
+
+        var package = await _packageService.CreatePackageAsync(
+            includeSecrets: false,
+            TestContext.Current.CancellationToken);
+
+        using var stream = new MemoryStream(package, writable: false);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        Assert.DoesNotContain(archive.Entries, entry => entry.FullName.Contains("recovery", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RestorePackageAsync_WhenConfigRootDeleteFailsMidway_RestoresConfigRootFromBackupAndRethrowsOriginal()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "只读文件仅在 Windows 上阻断递归删除。");

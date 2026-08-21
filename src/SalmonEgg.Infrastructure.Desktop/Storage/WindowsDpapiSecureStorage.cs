@@ -1,13 +1,21 @@
-#if WINDOWS
 using System;
 using System.IO;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using SalmonEgg.Infrastructure.Storage;
 
-namespace SalmonEgg.Platforms.Windows;
+namespace SalmonEgg.Infrastructure.Storage;
 
+/// <summary>
+/// Windows DPAPI-backed secure storage.
+/// </summary>
+/// <remarks>
+/// The implementation is shared by the WinUI application and the desktop CLI. The on-disk
+/// directory and file-name encoding are intentionally unchanged so existing credentials remain
+/// readable after the implementation moves out of the Uno application assembly.
+/// </remarks>
+[SupportedOSPlatform("windows")]
 public sealed class WindowsDpapiSecureStorage : ISecureStorage
 {
     private readonly string _storageDirectory;
@@ -91,4 +99,3 @@ public sealed class WindowsDpapiSecureStorage : ISecureStorage
         }
     }
 }
-#endif

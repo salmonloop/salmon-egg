@@ -43,6 +43,9 @@ using SalmonEgg.Presentation.ViewModels.Start;
 using Serilog;
 using Uno.Extensions.Reactive;
 using SalmonEgg.Infrastructure.Observability;
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+using SalmonEgg.Infrastructure.Desktop.DependencyInjection;
+#endif
 #if __WASM__
 using SalmonEgg.Platforms.WebAssembly;
 using SalmonEgg.Platforms.WebAssembly.Observability;
@@ -255,7 +258,9 @@ public static class DependencyInjection
         services.AddSingleton<IGamepadShortcutDispatcher, MainShellGamepadShortcutDispatcher>();
         services.AddSingleton<IGamepadContextIntentDispatcher, MainShellGamepadContextIntentDispatcher>();
 
-        // File system persistence -- must be registered before IAppFileStore and ISecureStorage.
+#if __WASM__ || __ANDROID__ || __IOS__
+        // Restricted platforms keep their platform-local storage registrations. Desktop hosts use the
+        // shared composition root below so the CLI and GUI cannot drift into separate backend chains.
 #if __WASM__
         if (OperatingSystem.IsBrowser())
         {
@@ -271,44 +276,37 @@ public static class DependencyInjection
 
         services.AddSingleton<IAppDataService, AppDataService>();
         services.AddSingleton<IConfigChangeSignal, ConfigChangeSignal>();
-
-        // App settings (config/app.yaml)
-        services.AddSingleton<IAppFileStore>(sp => new FileSystemAppFileStore(
+        services.AddSingleton<IConfigurationFileStore>(sp => new FileSystemAppFileStore(
             sp.GetRequiredService<IFileSystemPersistence>(),
             sp.GetRequiredService<IConfigChangeSignal>()));
+        services.AddSingleton<IAppFileStore>(sp => sp.GetRequiredService<IConfigurationFileStore>());
+        services.AddSingleton<IConfigurationFileTransactionStore>(sp =>
+            sp.GetRequiredService<IConfigurationFileStore>());
         services.AddSingleton<PlainTextFileSecureStorage>();
-
-        // Secure Storage
-        // Windows: DPAPI (hardware-bound, user-scoped encryption).
-        // Linux desktop: Secret Service via libsecret's secret-tool.
-        // macOS desktop: Keychain via Security.framework.
-        // Android: AndroidKeyStore-backed AES-GCM with private SharedPreferences ciphertext.
-        // iOS: Keychain generic password item.
-#if WINDOWS
-        services.AddSingleton<ISecureStorage, WindowsDpapiSecureStorage>();
-#elif __ANDROID__
+#if __ANDROID__
         services.AddSingleton<ISecureStorage, AndroidKeyStoreSecureStorage>();
 #elif __IOS__
         services.AddSingleton<ISecureStorage, IosKeychainSecureStorage>();
 #elif __WASM__
         services.AddSingleton<ISecureStorage>(sp => sp.GetRequiredService<PlainTextFileSecureStorage>());
-#else
-        services.AddSingleton<ISecureStorage>(sp =>
-        {
-            var fallback = sp.GetRequiredService<PlainTextFileSecureStorage>();
-            var fallbackLogger = sp.GetRequiredService<ILogger<FallbackSecureStorage>>();
-            return RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                ? new FallbackSecureStorage(new LinuxSecretServiceSecureStorage(), fallback, fallbackLogger)
-                : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                    ? new FallbackSecureStorage(new MacOSKeychainSecureStorage(), fallback, fallbackLogger)
-                    : fallback;
-        });
 #endif
-        services.AddSingleton<IAppSettingsService>(sp => new AppSettingsService(
-            sp.GetRequiredService<IAppFileStore>(),
+        services.AddSingleton<IAppSettingsService, AppSettingsService>();
+        services.AddSingleton<ConfigurationManager>(sp => new ConfigurationManager(
+            sp.GetRequiredService<ISecureStorage>(),
+            sp.GetRequiredService<IConfigurationFileStore>(),
             sp.GetRequiredService<IAppDataService>(),
-            sp.GetRequiredService<ILogger<AppSettingsService>>(),
-            sp.GetRequiredService<ISecureStorage>()));
+            sp.GetRequiredService<ILogger<ConfigurationManager>>()));
+        services.AddSingleton<IConfigurationService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IConfigurationRecoveryService>(sp => sp.GetRequiredService<ConfigurationManager>());
+        services.AddSingleton<IServerCredentialService, ServerCredentialService>();
+        services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
+        services.AddSingleton<ConfigurationSecretSnapshotService>();
+        services.AddSingleton<ConfigSyncPackageService>();
+#else
+        // Desktop hosts (GUI and CLI) share one composition root, which already owns
+        // IAppSettingsService together with the secure storage backend it depends on.
+        services.AddSalmonEggDesktopConfiguration();
+#endif
         services.AddSingleton<IMcpSettingsService, McpSettingsService>();
         services.AddSingleton<IAppMaintenanceService, AppMaintenanceService>();
         services.AddSingleton<IAppDocumentService, AppDocumentService>();
@@ -343,8 +341,6 @@ public static class DependencyInjection
 #endif
         services.AddSingleton<AppCultureService>();
         services.AddSingleton<IAppLanguageService, UnoAppLanguageService>();
-        services.AddSingleton<IConfigurationService, ConfigurationManager>();
-        services.AddSingleton<IValidator<ServerConfiguration>, ServerConfigurationValidator>();
 #if __WASM__ || __ANDROID__ || __IOS__
         services.AddSingleton<IStdioTransportFactory, UnsupportedStdioTransportFactory>();
 #else
@@ -386,8 +382,6 @@ public static class DependencyInjection
         services.AddSingleton<IConversationPreviewStore, ConversationPreviewStore>();
         services.AddSingleton<ISessionExportService, SalmonEgg.Infrastructure.Services.SessionExportService>();
         services.AddSingleton<ILogFileCatalog, SalmonEgg.Infrastructure.Services.LogFileCatalog>();
-        services.AddSingleton<ConfigurationSecretSnapshotService>();
-        services.AddSingleton<ConfigSyncPackageService>();
         services.AddSingleton<CloudConfigSyncStateStore>();
         services.AddSingleton<ConfigContentFingerprint>();
         services.AddSingleton<ICloudConfigStorageProvider, OneDriveCloudConfigStorageProvider>();
@@ -654,6 +648,7 @@ public static class DependencyInjection
             return new ApplicationStartupWorkflow(
                 sp.GetRequiredService<IShellStartupNavigationService>(),
                 sp.GetRequiredService<IChatRuntimeInitialization>(),
+                sp.GetRequiredService<IConfigurationRecoveryService>(),
                 sp.GetRequiredService<IAppSettingsService>(),
                 sp.GetRequiredService<ITelemetryRuntime>(),
                 sp.GetRequiredService<ILogger<ApplicationStartupWorkflow>>());

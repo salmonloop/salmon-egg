@@ -28,6 +28,130 @@ public sealed class FallbackSecureStorageTests
     }
 
     [Fact]
+    public async Task SaveAsync_UnderFailClosedPolicy_RefusesToDowngradeAndStoresNothing()
+    {
+        var primary = new UnavailableSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        var logger = new RecordingLogger();
+        var sut = new FallbackSecureStorage(
+            primary,
+            fallback,
+            SecureStorageDowngradePolicy.FailClosed,
+            logger);
+
+        await Assert.ThrowsAsync<SecureStorageUnavailableException>(() => sut.SaveAsync("token", "secret-value"));
+
+        // The weaker store must stay untouched: a partially written secret would be plaintext material
+        // the caller believes was never stored.
+        Assert.Empty(fallback.Values);
+        Assert.Contains(LogLevel.Warning, logger.Levels);
+    }
+
+    [Fact]
+    public async Task LoadAsync_UnderFailClosedPolicy_StillReturnsAnEarlierDowngradedSecret()
+    {
+        // Reads are not gated by the policy. A secret an earlier session downgraded has to remain
+        // visible so it can be rotated or cleared; hiding it would strand plaintext material on disk.
+        var primary = new UnavailableSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        await fallback.SaveAsync("token", "downgraded-value");
+        var sut = new FallbackSecureStorage(
+            primary,
+            fallback,
+            SecureStorageDowngradePolicy.FailClosed,
+            new RecordingLogger());
+
+        Assert.Equal("downgraded-value", await sut.LoadAsync("token"));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnderFailClosedPolicy_StillClearsAnEarlierDowngradedSecret()
+    {
+        var primary = new UnavailableSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        await fallback.SaveAsync("token", "downgraded-value");
+        var sut = new FallbackSecureStorage(
+            primary,
+            fallback,
+            SecureStorageDowngradePolicy.FailClosed,
+            new RecordingLogger());
+
+        await sut.DeleteAsync("token");
+
+        Assert.DoesNotContain("token", fallback.Values);
+        Assert.Null(await sut.LoadAsync("token"));
+    }
+
+    [Fact]
+    public async Task SaveAsync_UnderFailClosedPolicy_WhenPlatformStoreWorks_StoresNormally()
+    {
+        var primary = new RecordingSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        var logger = new RecordingLogger();
+        var sut = new FallbackSecureStorage(
+            primary,
+            fallback,
+            SecureStorageDowngradePolicy.FailClosed,
+            logger);
+
+        await sut.SaveAsync("token", "secret-value");
+
+        Assert.Equal("secret-value", Assert.Contains("token", primary.Values));
+        Assert.Empty(fallback.Values);
+        Assert.Empty(logger.Levels);
+    }
+
+    [Fact]
+    public async Task GetRecoveryMaterialStore_UnderFailClosedPolicy_StillWritesRollbackMaterial()
+    {
+        // Rollback material is a copy of a secret that is already stored. Refusing it under a fail-closed
+        // policy makes clearing or deleting a previously downgraded secret impossible, because those
+        // operations must snapshot the old value before they can remove it.
+        var primary = new UnavailableSecureStorage();
+        var fallback = new RecordingSecureStorage();
+        var sut = new FallbackSecureStorage(
+            primary,
+            fallback,
+            SecureStorageDowngradePolicy.FailClosed,
+            new RecordingLogger());
+
+        var recoveryStore = sut.GetRecoveryMaterialStore();
+        await recoveryStore.SaveAsync("recovery/token", "previously-stored-value");
+
+        Assert.Equal("previously-stored-value", await recoveryStore.LoadAsync("recovery/token"));
+
+        // The caller-facing store must remain fail-closed: only the recovery store is permissive.
+        await Assert.ThrowsAsync<SecureStorageUnavailableException>(() => sut.SaveAsync("token", "new-value"));
+    }
+
+    [Fact]
+    public void GetRecoveryMaterialStore_UnderPermissivePolicy_ReusesTheSameInstance()
+    {
+        var sut = new FallbackSecureStorage(
+            new UnavailableSecureStorage(),
+            new RecordingSecureStorage(),
+            SecureStorageDowngradePolicy.AllowPlaintextDowngrade,
+            new RecordingLogger());
+
+        Assert.Same(sut, sut.GetRecoveryMaterialStore());
+    }
+
+    [Fact]
+    public async Task DefaultConstructor_KeepsAllowingTheDowngrade()
+    {
+        // The interactive GUI host relies on the downgrade to keep working on a desktop without a
+        // keyring, so the parameterless overload must not silently become fail-closed.
+        var sut = new FallbackSecureStorage(
+            new UnavailableSecureStorage(),
+            new RecordingSecureStorage(),
+            new RecordingLogger());
+
+        await sut.SaveAsync("token", "secret-value");
+
+        Assert.Equal("secret-value", await sut.LoadAsync("token"));
+    }
+
+    [Fact]
     public async Task SaveAsync_WhenPlatformStoreWorks_LeavesNoSecretInFallbackAndDoesNotWarn()
     {
         var primary = new RecordingSecureStorage();
@@ -75,19 +199,52 @@ public sealed class FallbackSecureStorageTests
     }
 
     [Fact]
-    public async Task LoadAsync_WhenPlatformStoreHasNoValue_FallsThroughWithoutWarning()
+    public async Task LoadAsync_WhenLegacyFallbackValueExists_TreatsItAsAuthoritativeAndWarns()
     {
-        // An absent secret is not a downgrade, so it must not be reported as one.
         var primary = new RecordingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
         var fallback = new RecordingSecureStorage();
-        await fallback.SaveAsync("token", "older-value");
+        await fallback.SaveAsync("token", "outage-value");
         var logger = new RecordingLogger();
         var sut = new FallbackSecureStorage(primary, fallback, logger);
 
         var loaded = await sut.LoadAsync("token");
 
-        Assert.Equal("older-value", loaded);
-        Assert.Empty(logger.Levels);
+        Assert.Equal("outage-value", loaded);
+        Assert.Contains(LogLevel.Warning, logger.Levels);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenPlatformStoreRecovers_DoesNotResurrectItsStaleValue()
+    {
+        var primary = new AvailabilityChangingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
+        primary.IsAvailable = false;
+        var fallback = new RecordingSecureStorage();
+        var sut = new FallbackSecureStorage(primary, fallback, new RecordingLogger());
+
+        await sut.SaveAsync("token", "outage-value");
+        primary.IsAvailable = true;
+
+        Assert.Equal("outage-value", await sut.LoadAsync("token"));
+        Assert.Equal("stale-platform-value", Assert.Contains("token", primary.Values));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenPlatformStoreRecovers_DoesNotResurrectItsStaleValue()
+    {
+        var primary = new AvailabilityChangingSecureStorage();
+        await primary.SaveAsync("token", "stale-platform-value");
+        primary.IsAvailable = false;
+        var fallback = new RecordingSecureStorage();
+        await fallback.SaveAsync("token", "outage-value");
+        var sut = new FallbackSecureStorage(primary, fallback, new RecordingLogger());
+
+        await sut.DeleteAsync("token");
+        primary.IsAvailable = true;
+
+        Assert.Null(await sut.LoadAsync("token"));
+        Assert.Equal("stale-platform-value", Assert.Contains("token", primary.Values));
     }
 
     [Fact]
@@ -102,7 +259,7 @@ public sealed class FallbackSecureStorageTests
 
         await sut.DeleteAsync("token");
 
-        Assert.Empty(fallback.Values);
+        Assert.DoesNotContain("token", fallback.Values);
         Assert.Contains(LogLevel.Warning, logger.Levels);
     }
 
@@ -141,16 +298,39 @@ public sealed class FallbackSecureStorageTests
         }
     }
 
-    private sealed class UnavailableSecureStorage : ISecureStorage
+    private sealed class AvailabilityChangingSecureStorage : ISecureStorage
     {
+        public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
+
+        public bool IsAvailable { get; set; } = true;
+
         public Task SaveAsync(string key, string value)
-            => throw new SecureStorageUnavailableException("platform store unavailable");
+        {
+            EnsureAvailable();
+            Values[key] = value;
+            return Task.CompletedTask;
+        }
 
         public Task<string?> LoadAsync(string key)
-            => throw new SecureStorageUnavailableException("platform store unavailable");
+        {
+            EnsureAvailable();
+            return Task.FromResult(Values.TryGetValue(key, out var value) ? value : null);
+        }
 
         public Task DeleteAsync(string key)
-            => throw new SecureStorageUnavailableException("platform store unavailable");
+        {
+            EnsureAvailable();
+            Values.Remove(key);
+            return Task.CompletedTask;
+        }
+
+        private void EnsureAvailable()
+        {
+            if (!IsAvailable)
+            {
+                throw new SecureStorageUnavailableException("platform store unavailable");
+            }
+        }
     }
 
     private sealed class RecordingLogger : ILogger<FallbackSecureStorage>

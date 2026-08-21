@@ -89,9 +89,27 @@ public partial class ConfigurationEditorViewModel(
     public bool IsEditing { get; private set; }
     public ServerConfiguration Configuration { get; private set; } = new();
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSaveConfiguration))]
+    [NotifyPropertyChangedFor(nameof(CanRetryProfileLoad))]
+    [NotifyPropertyChangedFor(nameof(CanDismissError))]
+    private bool _hasProfileLoadError;
+
+    private string? _profileId;
+
+    public bool CanSaveConfiguration => !IsBusy && !HasProfileLoadError;
+
+    public bool CanRetryProfileLoad => HasProfileLoadError && !IsBusy && !string.IsNullOrWhiteSpace(_profileId);
+
+    public bool CanDismissError => !HasProfileLoadError;
+
+    public string RetryProfileLoadLabel => _localizer["AgentProfileEditor_RetryLoad"];
+
     public void LoadBlankConfiguration()
     {
         var defaultTransport = _transportSupportPolicy.DefaultTransport;
+        _profileId = null;
+        HasProfileLoadError = false;
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
@@ -153,10 +171,73 @@ public partial class ConfigurationEditorViewModel(
         ProxyMode = value.Mode;
     }
 
+    protected override void OnIsBusyChangedCore(bool value)
+    {
+        OnPropertyChanged(nameof(CanSaveConfiguration));
+        OnPropertyChanged(nameof(CanRetryProfileLoad));
+    }
+
+    public async Task LoadConfigurationAsync(string profileId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
+
+        _profileId = profileId;
+        IsBusy = true;
+
+        try
+        {
+            var configuration = await _configurationService.LoadConfigurationAsync(profileId);
+            if (configuration == null)
+            {
+                LoadBlankConfiguration();
+                return;
+            }
+
+            LoadConfiguration(configuration);
+            _profileId = profileId;
+        }
+        catch (ConfigurationPersistenceException ex)
+        {
+            Logger.LogError(ex, "Failed to load configuration: {Reason}", ex.Reason);
+            LoadBlankConfiguration();
+            _profileId = profileId;
+            HasProfileLoadError = true;
+            SetError(_localizer["AgentProfileEditor_LoadFailedFormat", ex.UserMessage]);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load configuration");
+            LoadBlankConfiguration();
+            _profileId = profileId;
+            HasProfileLoadError = true;
+            SetError(_localizer["AgentProfileEditor_LoadFailedFormat", ex.Message]);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RetryProfileLoadAsync()
+    {
+        if (!CanRetryProfileLoad)
+        {
+            return;
+        }
+
+        await LoadConfigurationAsync(_profileId!);
+    }
+
     public void LoadConfiguration(ServerConfiguration config)
     {
+        ArgumentNullException.ThrowIfNull(config);
+
+        _profileId = config.Id;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = true;
-        Configuration = config ?? new ServerConfiguration();
+        Configuration = config;
         var transport = ResolveSupportedTransportType(Configuration.Transport);
         Name = Configuration.Name;
         ServerUrl = Configuration.ServerUrl;
@@ -186,6 +267,9 @@ public partial class ConfigurationEditorViewModel(
 
     public void LoadNewConfiguration()
     {
+        _profileId = null;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
@@ -217,6 +301,9 @@ public partial class ConfigurationEditorViewModel(
         }
 
         var transport = ResolveSupportedTransportType(transportConfig.SelectedTransportType);
+        _profileId = null;
+        HasProfileLoadError = false;
+        ClearError();
         IsEditing = false;
         Configuration = new ServerConfiguration
         {
@@ -245,6 +332,11 @@ public partial class ConfigurationEditorViewModel(
     [RelayCommand]
     public async Task SaveConfigurationAsync()
     {
+        if (!CanSaveConfiguration)
+        {
+            return;
+        }
+
         try
         {
             ClearError();

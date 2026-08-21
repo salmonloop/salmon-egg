@@ -13,6 +13,13 @@ namespace SalmonEgg.Domain.Models
         public string Id { get; set; } = string.Empty;
 
         /// <summary>
+        /// Opaque persistence revision returned by the authoritative configuration store.
+        /// It is used to reject stale read-modify-write operations and is never serialized into
+        /// a connection profile by the domain layer.
+        /// </summary>
+        public string? PersistenceRevision { get; set; }
+
+        /// <summary>
         /// 配置名称
         /// </summary>
         public string Name { get; set; } = string.Empty;

@@ -2,7 +2,6 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using SalmonEgg.Domain.Services;
 using SalmonEgg.Presentation.Models;
 using SalmonEgg.Presentation.Models.Navigation;
 using SalmonEgg.Presentation.Models.Settings;
@@ -29,13 +28,11 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         private set => SetValue(PageTitleProperty, value);
     }
 
-    private readonly IConfigurationService _configurationService;
     private readonly AcpProfilesViewModel _profiles;
 
     public AgentProfileEditorPage()
     {
         ViewModel = App.ServiceProvider.GetRequiredService<ConfigurationEditorViewModel>();
-        _configurationService = App.ServiceProvider.GetRequiredService<IConfigurationService>();
         _profiles = App.ServiceProvider.GetRequiredService<AcpProfilesViewModel>();
 
         InitializeComponent();
@@ -62,16 +59,7 @@ public sealed partial class AgentProfileEditorPage : SettingsPageBase
         if (e.Parameter is AgentProfileEditorArgs args && args.IsEditing && !string.IsNullOrWhiteSpace(args.ProfileId))
         {
             PageTitle = ResolveResourceString("AgentProfileEditorPageTitleEdit", "Edit");
-            var config = await _configurationService.LoadConfigurationAsync(args.ProfileId);
-            if (config != null)
-            {
-                ViewModel.LoadConfiguration(config);
-            }
-            else
-            {
-                ViewModel.LoadBlankConfiguration();
-            }
-
+            await ViewModel.LoadConfigurationAsync(args.ProfileId);
             UpdateBreadcrumb();
             return;
         }
