@@ -19,9 +19,12 @@ Presentation Layer (Uno/WinUI3 Views + ViewModels in Presentation.Core)
 Application Layer (Use Cases / Services)
        ↓
 Domain Layer (Models / Interfaces)
-       ↑
 Infrastructure Layer (Network / Storage / Logging)
+
+SalmonEgg.Acp (独立 ACP 协议 SDK，供 Application / Infrastructure / Presentation.Core 消费)
 ```
+
+`SalmonEgg.Cli` 是第二个入口宿主，与 GUI 并列消费 Application / Infrastructure，不参与 Presentation 链路。
 
 各层职责：
 
@@ -31,6 +34,15 @@ Infrastructure Layer (Network / Storage / Logging)
 4. **Infrastructure Layer** (`src/SalmonEgg.Infrastructure/` + `src/SalmonEgg.Infrastructure.Desktop/`)：外部依赖实现（网络传输、存储、日志）。桌面专用能力（`Stdio` 子进程、本地文件系统）集中在 `Infrastructure.Desktop`。
 
 平台差异实现必须集中在 `SalmonEgg/SalmonEgg/Platforms/` 下或平台服务中，禁止散落在 ViewModel 或业务逻辑里。
+
+### 独立交付单元
+
+除分层项目外，仓库还包含两个不属于 GUI 分层链路的独立交付单元：
+
+- **`src/SalmonEgg.Acp/`** — 可独立分发的 ACP 协议 SDK（`net10.0`，`PackageId` 为 `SalmonEgg.Acp`）。零包依赖、AOT/trim 兼容，由 Application、Infrastructure 和 Presentation.Core 共同消费，不反向依赖本仓库其他项目。公开面与协议版本策略见 [`../src/SalmonEgg.Acp/README.md`](../src/SalmonEgg.Acp/README.md)。
+- **`src/SalmonEgg.Cli/`** — 配置管理命令行（`net10.0`，产物名 `salmon-egg`，self-contained 单文件）。引用 `Application` / `Infrastructure` / `Infrastructure.Desktop`，不引用任何 Presentation 项目。安装与 PATH 契约见 [`release-guide.md`](release-guide.md)。
+
+安装 GUI 不会注册 `salmon-egg` 命令；全局命令只来自 CLI 安装包。
 
 ## 项目结构
 
@@ -46,6 +58,19 @@ SalmonEgg.sln
 │       └── DependencyInjection.cs     # DI 容器配置
 │
 ├── src/
+│   ├── SalmonEgg.Acp/                 # 独立 ACP 协议 SDK（可打包，零包依赖）
+│   │   ├── Protocol/                  # 协议 wire DTO
+│   │   ├── Client/                    # IAcpClient / AcpClient 与 host seam
+│   │   ├── JsonRpc/                   # JSON-RPC 封包（assembly-internal）
+│   │   ├── Serialization/             # AcpJsonContext 源生成序列化
+│   │   ├── Content/ Tool/ Plan/ Mcp/  # 内容、工具、计划、MCP wire 类型
+│   │   └── Observability/             # SDK 侧诊断
+│   │
+│   ├── SalmonEgg.Cli/                 # 配置管理 CLI（产物 salmon-egg，单文件）
+│   │   ├── Commands/                  # 子命令实现
+│   │   ├── Hosting/                   # CLI 宿主与 DI 组装
+│   │   └── Output/                    # 输出格式化
+│   │
 │   ├── SalmonEgg.Presentation.Core/   # 跨平台共享 ViewModel / Service 接口
 │   │   ├── ViewModels/                # 主要 ViewModel 实现（Navigation、Chat、Settings 等）
 │   │   └── Services/                  # Presentation 层服务接口与实现
@@ -69,7 +94,9 @@ SalmonEgg.sln
 │       └── Transport/                 # Stdio 子进程传输实现
 │
 └── tests/
+    ├── SalmonEgg.Acp.Tests/
     ├── SalmonEgg.Application.Tests/
+    ├── SalmonEgg.Cli.Tests/
     ├── SalmonEgg.Domain.Tests/
     ├── SalmonEgg.Infrastructure.Tests/
     ├── SalmonEgg.Presentation.Core.Tests/

@@ -40,7 +40,9 @@ SalmonEgg/
 │   ├── SalmonEgg.Application/    # 应用层
 │   ├── SalmonEgg.Infrastructure/ # 基础设施层
 │   ├── SalmonEgg.Infrastructure.Desktop/
-│   └── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Acp/             # 独立 ACP 协议 SDK
+│   └── SalmonEgg.Cli/             # 配置管理 CLI
 ├── tests/
 └── docs/
 ```
@@ -98,6 +100,7 @@ printf '%s\n' "$AGENT_TOKEN" | salmon-egg --allow-insecure-storage set-credentia
 
 ## 文档
 
+- [文档导航](docs/README.md)
 - [构建指南](BUILD_GUIDE.md)
 - [编码规范](docs/coding-standards.md)
 - [发布指南](docs/release-guide.md)

@@ -16,6 +16,8 @@
 .opencode/
 .claude/
 .codex/
+.superpowers/
+.vercel-dotnet/
 
 # Build results
 [Dd]ebug/

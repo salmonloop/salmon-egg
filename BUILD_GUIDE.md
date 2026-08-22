@@ -1,5 +1,72 @@
 # SalmonEgg 构建指南
 
+> 本文件是仓库唯一的日常构建与运行指南。先看本页，再按目标平台执行命令；发布和安装包流程见 [`docs/release-guide.md`](docs/release-guide.md)。
+
+## 新成员首次配置
+
+### 先确认目录和 SDK
+
+所有命令都从仓库根目录执行：
+
+```bash
+git clone <repository-url> salmon-egg
+cd salmon-egg
+
+dotnet --version
+dotnet --info
+```
+
+仓库通过 `global.json` 锁定 .NET SDK `10.0.302`，允许同一 feature band 内的 patch 前滚；Uno SDK 锁定为 `6.6.29`。版本不匹配时先安装 .NET 10 SDK，不要手改项目 TFM 或 `global.json`。
+
+### 必需与可选依赖
+
+| 目标 | 首次安装要求 |
+|------|--------------|
+| Desktop / Core | .NET 10 SDK；Linux 还需要下方的原生库 |
+| BrowserWasm | .NET 10 SDK + `wasm-tools` workload |
+| Windows MSIX | Visual Studio 18.8+ 或 Build Tools；MSBuild、C++ 构建工具、Windows SDK `10.0.26100.0`；`signtool` 使用 SDK `10.0.22621.0` |
+| Android | Android workload、Android SDK 和 Java JDK 17+；默认构建不启用 Android |
+| iOS | macOS、匹配的 Xcode 和 iOS workload；默认构建不启用 iOS |
+
+BrowserWasm 首次配置：
+
+```bash
+dotnet workload install wasm-tools
+dotnet workload list
+```
+
+Android/iOS 的完整工具链、Xcode 选择和发布限制见 [`docs/release-guide.md`](docs/release-guide.md)；不要只根据本地能 restore 就宣称移动端发布可用。
+
+### Linux Desktop 原生库
+
+下面是 Debian/Ubuntu 示例包名。不同发行版的包名可能不同，先用发行版包管理器查找对应的 GTK、WebKitGTK 和 Secret Service 包：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libfreetype6 fontconfig libfontconfig1 libgtk-3-0 libx11-6 \
+  xvfb libxtst6 xdg-utils libsecret-tools
+```
+
+需要应用内本地终端 WebView 时，还要安装发行版对应的 WebKitGTK / JavaScriptCore 运行库，例如 Ubuntu 的 `libwebkit2gtk-4.1-0`。
+
+### 第一次构建
+
+```bash
+dotnet restore SalmonEgg.sln
+dotnet build SalmonEgg.sln --configuration Release
+dotnet test --solution SalmonEgg.sln --configuration Release --timeout 20m --output Normal
+```
+
+只想先启动跨平台桌面版：
+
+```bash
+dotnet run --project SalmonEgg/SalmonEgg/SalmonEgg.csproj \
+  --framework net10.0-desktop
+```
+
+Windows 原生路径必须用 MSIX 脚本；Linux/macOS 桌面版走 Skia；WASM 必须使用 BrowserWasm 目标。不要用一个目标的成功替代其他平台验证。
+
 ## 快速开始
 
 ### Windows 用户
@@ -66,7 +133,7 @@ dotnet --version
 
 ```bash
 git clone <repository-url>
-cd salmon-acp
+cd salmon-egg
 ```
 
 ### 4. 构建项目
@@ -581,7 +648,7 @@ dotnet publish \
 3. 运行测试
 4. 打包应用
 
-查看 `.github/workflows/ci.yml` 了解详情。
+查看 `.github/workflows/ci-core.yml`、`.github/workflows/code-quality.yml`、`.github/workflows/platform-build-gates.yml` 和 `.github/workflows/release-packaging.yml` 了解各平台门禁与发布流程。
 
 ## 相关文档
 

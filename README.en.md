@@ -40,7 +40,9 @@ SalmonEgg/
 │   ├── SalmonEgg.Application/    # Application layer
 │   ├── SalmonEgg.Infrastructure/ # Infrastructure layer
 │   ├── SalmonEgg.Infrastructure.Desktop/
-│   └── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Presentation.Core/
+│   ├── SalmonEgg.Acp/             # Standalone ACP protocol SDK
+│   └── SalmonEgg.Cli/             # Configuration management CLI
 ├── tests/
 └── docs/
 ```
@@ -160,6 +162,7 @@ Release packaging, the supported runtime identifiers, and the install/PATH gates
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [Build Guide](BUILD_GUIDE.md)
 - [Coding Standards](docs/coding-standards.md)
 - [Session / Navigation / Search Constraints](docs/hard-constraints-session-navigation-and-search.md)

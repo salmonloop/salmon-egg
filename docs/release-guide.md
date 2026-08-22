@@ -20,7 +20,7 @@
 ### 通用要求
 
 - .NET 10.0 SDK 或更高版本
-- Visual Studio 2022 (17.12+) 或 Visual Studio Code
+- Visual Studio 18.8+ 或 Visual Studio Code
 - Git
 
 ### 平台特定要求
