@@ -67,8 +67,18 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
             var resourceBuilder = BuildResource(targetSettings);
             var tracerBuilder = Sdk.CreateTracerProviderBuilder()
                 .SetResourceBuilder(resourceBuilder)
+                // parent-not-sampled 的两个分支必须显式设为 RecordOnly：单参构造会把它们默认成
+                // AlwaysOff，而本方案下父 span 常态未 Recorded，子 span 会根本不被创建，
+                // error-biased 就只对 root 生效、内层 ACP 请求的错误永久丢失。
                 .SetSampler(new ParentBasedSampler(
-                    new TraceIdRatioBasedSampler(targetSettings.Sampling.NormalRate)));
+                    rootSampler: new ErrorBiasedSampler(targetSettings.Sampling.NormalRate),
+                    remoteParentSampled: new AlwaysOnSampler(),
+                    remoteParentNotSampled: new RecordOnlySampler(),
+                    localParentSampled: new AlwaysOnSampler(),
+                    localParentNotSampled: new RecordOnlySampler()))
+                // 必须在导出器之前注册：处理器按注册顺序成链，导出器读的是被调用那一刻的
+                // Recorded flag，晚于它提升就不会被导出（且静默无错）。
+                .AddProcessor(new ErrorBiasedExportProcessor());
 
             foreach (var sourceName in TelemetrySourceNames.ActivitySources)
             {
