@@ -39,6 +39,8 @@ internal static class NumberBoxThemeProbeDriver
     private const int SampleSettleDelayMilliseconds = 300;
     private const int RenderCaptureAttemptCount = 5;
     private const int RenderCaptureRetryDelayMilliseconds = 100;
+    private const int ViewportSettleAttemptCount = 20;
+    private const int ViewportSettleDelayMilliseconds = 50;
     private const double MinimumBackgroundSampleInset = 6;
     private const int BackgroundClusterTolerance = 6;
     private const double MinimumContrastRatio = 4.5;
@@ -168,8 +170,6 @@ internal static class NumberBoxThemeProbeDriver
                         && targets.InputBox.FocusState == FocusState.Unfocused)
                 .ConfigureAwait(true);
 
-            targets.NumberBox.StartBringIntoView();
-            targets.NumberBox.UpdateLayout();
             var inputFocused = await TryMoveKeyboardFocusAsync(
                     targets.InputBox,
                     () => targets.InputBox.FocusState != FocusState.Unfocused)
@@ -178,6 +178,14 @@ internal static class NumberBoxThemeProbeDriver
 
             targets.NumberBox.UpdateLayout();
             targets.InputBox.UpdateLayout();
+
+            // Focusing the sink scrolls the page away from the NumberBox, and BringIntoView only
+            // requests a scroll: it does not complete before the next layout pass. Capturing here
+            // without waiting samples a rect that still lies outside the render root, which yields
+            // an empty region indistinguishable from an unreadable frame. Wait for the realized
+            // geometry to land inside the render root before sampling pixels.
+            await WaitForSampleBoundsInsideRenderRootAsync(targets.NumberBox, targets.InputBox)
+                .ConfigureAwait(true);
             var snapshot = await CaptureSnapshotAsync(
                     targets.NumberBox,
                     targets.InputBox,
@@ -302,7 +310,9 @@ internal static class NumberBoxThemeProbeDriver
             {
                 // RenderTargetBitmap can transiently return an incomplete Skia frame immediately
                 // after a native focus-state transition. Retry the same realized control instead
-                // of treating an unavailable frame as evidence of unreadable colors.
+                // of treating an unavailable frame as evidence of unreadable colors. Re-request the
+                // scroll as well: a delay alone cannot move a control that is still out of view.
+                borderElement.StartBringIntoView();
                 await Task.Delay(RenderCaptureRetryDelayMilliseconds).ConfigureAwait(true);
             }
         }
@@ -318,18 +328,6 @@ internal static class NumberBoxThemeProbeDriver
             return null;
         }
 
-        var horizontalInset = Math.Max(
-            MinimumBackgroundSampleInset,
-            Math.Max(borderElement.BorderThickness.Left, borderElement.BorderThickness.Right) + 2);
-        var verticalInset = Math.Max(
-            MinimumBackgroundSampleInset,
-            Math.Max(borderElement.BorderThickness.Top, borderElement.BorderThickness.Bottom) + 2);
-        if (borderElement.ActualWidth <= horizontalInset * 2
-            || borderElement.ActualHeight <= verticalInset * 2)
-        {
-            return null;
-        }
-
         var renderRoot = FindVisualRoot(borderElement);
         if (renderRoot is null || renderRoot.RenderSize.Width <= 0 || renderRoot.RenderSize.Height <= 0)
         {
@@ -338,12 +336,12 @@ internal static class NumberBoxThemeProbeDriver
 
         // Skia Acrylic samples its ancestor backdrop. Rendering only BorderElement, or rebuilding
         // brush layers from properties, would omit that composition and can produce a false contrast.
-        var sampleBounds = borderElement.TransformToVisual(renderRoot).TransformBounds(
-            new Rect(
-                horizontalInset,
-                verticalInset,
-                borderElement.ActualWidth - (horizontalInset * 2),
-                borderElement.ActualHeight - (verticalInset * 2)));
+        var sampleBounds = TryResolveSampleBounds(borderElement, renderRoot);
+        if (sampleBounds is null)
+        {
+            return null;
+        }
+
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(renderRoot);
         if (bitmap.PixelWidth <= 0 || bitmap.PixelHeight <= 0)
@@ -366,15 +364,80 @@ internal static class NumberBoxThemeProbeDriver
 
         var scaleX = bitmap.PixelWidth / renderRoot.RenderSize.Width;
         var scaleY = bitmap.PixelHeight / renderRoot.RenderSize.Height;
+        var bounds = sampleBounds.Value;
         return TrySampleOpaqueBackground(
             pixels,
             bitmap.PixelWidth,
             bitmap.PixelHeight,
             new Rect(
-                sampleBounds.X * scaleX,
-                sampleBounds.Y * scaleY,
-                sampleBounds.Width * scaleX,
-                sampleBounds.Height * scaleY));
+                bounds.X * scaleX,
+                bounds.Y * scaleY,
+                bounds.Width * scaleX,
+                bounds.Height * scaleY));
+    }
+
+    /// <summary>
+    /// Waits until the inset BorderElement sample region is fully inside the render root, so the
+    /// pixel sample measures the realized control instead of an off-viewport empty rect.
+    /// </summary>
+    private static async Task<bool> WaitForSampleBoundsInsideRenderRootAsync(
+        NumberBox numberBox,
+        TextBox inputBox)
+    {
+        for (var attempt = 1; attempt <= ViewportSettleAttemptCount; attempt++)
+        {
+            numberBox.StartBringIntoView();
+            numberBox.UpdateLayout();
+            inputBox.UpdateLayout();
+
+            var borderElement = FindDescendant<Border>(
+                inputBox,
+                static candidate => string.Equals(candidate.Name, BorderElementName, StringComparison.Ordinal));
+            var renderRoot = borderElement is null ? null : FindVisualRoot(borderElement);
+            if (borderElement is not null
+                && renderRoot is not null
+                && TryResolveSampleBounds(borderElement, renderRoot) is { } bounds
+                && IsInsideRenderRoot(bounds, renderRoot.RenderSize))
+            {
+                return true;
+            }
+
+            await Task.Delay(ViewportSettleDelayMilliseconds).ConfigureAwait(true);
+        }
+
+        return false;
+    }
+
+    private static bool IsInsideRenderRoot(Rect sampleBounds, Size renderSize)
+        => sampleBounds.X >= 0
+            && sampleBounds.Y >= 0
+            && sampleBounds.X + sampleBounds.Width <= renderSize.Width
+            && sampleBounds.Y + sampleBounds.Height <= renderSize.Height;
+
+    /// <summary>
+    /// Projects the inset BorderElement region into render-root coordinates, or <c>null</c> when the
+    /// realized control is too small to expose an unambiguous background region.
+    /// </summary>
+    private static Rect? TryResolveSampleBounds(Border borderElement, UIElement renderRoot)
+    {
+        var horizontalInset = Math.Max(
+            MinimumBackgroundSampleInset,
+            Math.Max(borderElement.BorderThickness.Left, borderElement.BorderThickness.Right) + 2);
+        var verticalInset = Math.Max(
+            MinimumBackgroundSampleInset,
+            Math.Max(borderElement.BorderThickness.Top, borderElement.BorderThickness.Bottom) + 2);
+        if (borderElement.ActualWidth <= horizontalInset * 2
+            || borderElement.ActualHeight <= verticalInset * 2)
+        {
+            return null;
+        }
+
+        return borderElement.TransformToVisual(renderRoot).TransformBounds(
+            new Rect(
+                horizontalInset,
+                verticalInset,
+                borderElement.ActualWidth - (horizontalInset * 2),
+                borderElement.ActualHeight - (verticalInset * 2)));
     }
 
     private static UIElement? FindVisualRoot(DependencyObject element)
