@@ -1,11 +1,23 @@
 name: Release Packaging
 
+# One authoritative entry point: pushing a `v*` tag. docs/release-guide.md documents exactly that, and
+# the workflow creates the GitHub release itself when the tag build reaches the publish job.
+#
+# `release: [created]` used to be a second entry. It made the same tag reachable through two independent
+# runs — push the tag, then create a release from it in the UI, and both fire. Both then race to
+# `gh release upload --clobber` on the same assets, and because the concurrency group keys on github.ref
+# (which differs between the two events) neither cancels the other. Removing it costs nothing: creating a
+# release from an existing tag no longer needs to rebuild what that tag already produced.
 on:
   push:
     tags: ["v*"]
-  release:
-    types: [created]
   workflow_dispatch:
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
   group: release-packaging-${{ github.workflow }}-${{ github.ref }}
@@ -26,10 +38,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -41,8 +53,14 @@ jobs:
           cd SalmonEgg/SalmonEgg
           dotnet publish -f net10.0-browserwasm -c ${{ env.CONFIGURATION }} -o ../../publish/wasm
 
+      # A green publish is not evidence the bundle boots. Assert the payload the browser actually needs
+      # exists before this becomes a release asset.
+      - name: Verify WebAssembly artifact contract
+        shell: bash
+        run: scripts/gates/run-release-artifact-contract-gate.sh wasm publish/wasm
+
       - name: Upload WebAssembly artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wasm-build
           path: publish/wasm
@@ -53,10 +71,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -147,13 +165,70 @@ jobs:
             (Join-Path $wixObjDir "Harvest.wixobj")
 
       - name: Upload Desktop artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-build
           path: publish/desktop-windows
 
+      # The CLI MSI verifies its own Environment table (scripts/release/build-cli-msi.ps1); this MSI had
+      # no equivalent, so a heat harvest that picked up nothing would still emit a valid, installable,
+      # and empty package. Read the built package's own tables rather than trusting the authoring above.
+      #
+      # Native COM calls, matching build-cli-msi.ps1 after 2690a1eb: the GetType().InvokeMember(...) form
+      # was tried and replaced there, and GitHubWorkflowContractTests pins the native shape. Using the
+      # rejected form here would reintroduce what that commit removed.
+      - name: Verify Windows Skia MSI contract
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path artifacts/installer -Filter *.msi | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw "No .msi was produced under artifacts/installer."
+          }
+
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi.FullName, 0)
+          try {
+            function Get-MsiScalar {
+              param($Database, [string]$Query)
+
+              $view = $Database.OpenView($Query)
+              $view.Execute()
+              $record = $view.Fetch()
+              if ($null -eq $record) {
+                return $null
+              }
+
+              return $record.StringData(1)
+            }
+
+            # A package that installs no files is the failure mode a green candle/light run cannot show.
+            $fileCount = [int](Get-MsiScalar -Database $database -Query 'SELECT COUNT(*) FROM `File`')
+            if ($fileCount -lt 1) {
+              throw "The built MSI contains $fileCount file rows: the harvest produced an empty package."
+            }
+
+            # The executable this per-user install exists to deliver must actually be inside it.
+            $appExe = Get-MsiScalar -Database $database `
+              -Query "SELECT ``FileName`` FROM ``File`` WHERE ``FileName`` LIKE '%SalmonEgg.exe'"
+            if ([string]::IsNullOrWhiteSpace($appExe)) {
+              throw "The built MSI contains no SalmonEgg.exe file row."
+            }
+
+            $version = Get-MsiScalar -Database $database `
+              -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'"
+            if ($version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "MSI ProductVersion must be a three-part numeric version, got: '$version'."
+            }
+
+            Write-Host "[desktop-msi] verified: $fileCount file row(s), ProductVersion $version, $appExe present"
+          }
+          finally {
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+          }
+
       - name: Upload Windows Skia MSI artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-skia-msi
           path: artifacts/installer/*.msi
@@ -164,10 +239,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -251,16 +326,33 @@ jobs:
             /p:Restore=false `
             /v:minimal
 
+      # Same contract the PR-level packaging gate enforces, applied to the signed package that actually
+      # ships. A signed package with missing shell assets is still a package with missing shell assets.
+      - name: Verify MSIX package contract
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path artifacts/msix -Recurse -Filter *.msix |
+            Select-Object -First 1
+          if ($null -eq $package) {
+            throw "MSIX publish produced no .msix under artifacts/msix."
+          }
+
+          ./scripts/gates/run-msix-package-contract-gate.ps1 -Package $package.FullName
+
       - name: Upload Windows MSIX artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-windows-msix
           path: artifacts/msix/**/*.msix
 
   package-macos:
     name: Package macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 60
+    # Signing secrets are job-scoped env, so downstream jobs cannot re-evaluate them. Publish the
+    # single fact the release job actually needs: whether a .dmg was produced and uploaded.
+    outputs:
+      dmg-produced: ${{ steps.collect-dmg.outputs.dmg-produced }}
     env:
       MACOS_RID: osx-arm64
       MACOS_APP_CODESIGN_KEY: ${{ secrets.MACOS_APP_CODESIGN_KEY }}
@@ -268,10 +360,10 @@ jobs:
       MACOS_NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -327,6 +419,7 @@ jobs:
             @notaryArgs
 
       - name: Collect macOS disk image
+        id: collect-dmg
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
         run: |
           set -euo pipefail
@@ -337,16 +430,30 @@ jobs:
             exit 1
           fi
           cp "$DMG_PATH" publish/dmg/
+          echo "dmg-produced=true" >> "$GITHUB_OUTPUT"
+
+      # The bundle is a directory contract, and an Info.plist naming an executable that is not there
+      # produces an app that installs and then does nothing. Check it here, not after a user reports it.
+      - name: Verify macOS bundle contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find publish/macos-bundle -maxdepth 1 -name "*.app" -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle was collected." >&2
+            exit 1
+          fi
+          scripts/gates/run-release-artifact-contract-gate.sh macos-bundle "$APP_PATH"
 
       - name: Upload macOS bundle artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-macos-bundle
           path: publish/macos-bundle/*
 
       - name: Upload macOS .dmg artifact
         if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: desktop-macos-dmg
           path: publish/dmg/*.dmg
@@ -367,14 +474,16 @@ jobs:
             deb-architecture: amd64
           - rid: win-x64
             runs-on: windows-latest
+          # Pinned for the same reason as the macOS package job: a rolling image alias silently changes
+          # the toolchain that produced a released binary.
           - rid: osx-arm64
-            runs-on: macos-latest
+            runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -422,7 +531,7 @@ jobs:
           ./scripts/release/build-cli-msi.ps1 -Executable $executable -Version $env:CLI_VERSION
 
       - name: Upload CLI artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: cli-${{ matrix.rid }}
           path: |
@@ -438,59 +547,61 @@ jobs:
     needs: [package-wasm, package-desktop, package-windows-msix, package-macos, package-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+    # Only a tag build publishes. workflow_dispatch remains available for rehearsing the packaging jobs
+    # without creating or touching a release.
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-windows-msix
           path: windows-msix
 
       - name: Download WebAssembly artifact
         if: needs.package-wasm.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: wasm-build
           path: wasm-build
 
       - name: Download Windows Skia MSI artifact
         if: needs.package-desktop.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-windows-skia-msi
           path: windows-skia-msi
 
       - name: Download macOS bundle artifact
         if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-macos-bundle
           path: macos-bundle
 
       - name: Download macOS .dmg artifact
-        if: env.MACOS_APP_CODESIGN_KEY != '' && env.MACOS_DMG_CODESIGN_KEY != ''
-        uses: actions/download-artifact@v5
+        if: needs.package-macos.outputs.dmg-produced == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: desktop-macos-dmg
           path: macos-dmg
 
       - name: Checkout for release tooling
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           path: repo
 
       - name: Download CLI artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: cli-*
           merge-multiple: true

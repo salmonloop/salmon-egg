@@ -4,8 +4,32 @@ on:
   workflow_dispatch:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
   pull_request:
     branches: [develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
   group: gui-smoke-gates-${{ github.workflow }}-${{ github.ref }}
@@ -25,10 +49,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: "10.0.3xx"
 
@@ -49,15 +73,20 @@ jobs:
 
   deterministic-gui-smokes:
     name: Deterministic GUI Smoke Gates
+    # This repository currently has no self-hosted Windows runner registered, so a dispatched run of
+    # this job would queue until it timed out instead of failing fast — a gate that has never once
+    # executed. The job stays wired for the day a runner exists, but it is enabled by an explicit
+    # repository variable rather than by assuming a runner is there. Until then the FlaUI/UIA3 gate
+    # is a local-only gate; see BUILD_GUIDE.md.
     runs-on: [self-hosted, windows]
     timeout-minutes: 45
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && vars.WINDOWS_GUI_SELF_HOSTED_RUNNER == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: "10.0.3xx"
 

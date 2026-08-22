@@ -27,6 +27,12 @@ on:
       - "global.json"
   workflow_dispatch:
 
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
+
 concurrency:
   group: acp-sdk-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -43,10 +49,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -56,7 +62,7 @@ jobs:
         run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
 
       - name: Upload ACP SDK package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: acp-sdk-package
           path: "${{ env.PACKAGE_OUTPUT }}/*.nupkg"
@@ -68,15 +74,15 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Download ACP SDK package
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: acp-sdk-package
           path: artifacts/acp-sdk-package

@@ -3,12 +3,48 @@ name: Platform Build Gates
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
   pull_request:
     branches: [develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
+
+  # The Apple and Android toolchains -- Xcode, the Android SDK, workload manifests, and the hosted runner
+  # images themselves -- move independently of this repository. Push/PR triggers only re-verify them when
+  # somebody happens to commit, so a break during a quiet period stays hidden and then gets attributed to
+  # whichever innocent commit next touches the tree. A scheduled run separates "our change broke it" from
+  # "the platform moved". Scheduled runs always use the default branch and ignore paths filters.
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
-  group: platform-build-gates-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Include the event name in the group. A scheduled canary runs against the default branch, so without
+  # this it would share a group with pushes to that branch and get cancelled by the next commit — the one
+  # run whose whole purpose is to complete on a quiet tree would be the one most likely to be killed.
+  group: platform-build-gates-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   DOTNET_VERSION: "10.0.3xx"
@@ -25,10 +61,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -43,14 +79,17 @@ jobs:
 
   macos-desktop:
     name: macOS Desktop
-    runs-on: macos-latest
+    # Pinned rather than macos-latest: GitHub rolls that alias to a new major image on its own schedule,
+    # which moves Xcode and the Apple toolchain underneath a commit that changed nothing. The iOS job
+    # already pins for exactly this reason; an unpinned macOS job just fails later and less obviously.
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -63,16 +102,91 @@ jobs:
           --self-contained false
           --output publish/macos-desktop
 
+  windows-msix:
+    # The MSIX package is the shipping Windows artifact, but until now it was only ever built by the
+    # tag-triggered release workflow, which also requires signing secrets. That left manifest, asset-glob,
+    # and WinUI packaging regressions undetectable until a release. Signing is a release concern; the
+    # packaging chain is not, so this gate builds the package unsigned on every change and asserts the
+    # package actually carries what its manifest declares.
+    name: Windows MSIX Package
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore WinUI app for isolated MSIX build
+        shell: pwsh
+        run: |
+          dotnet msbuild `
+            SalmonEgg/SalmonEgg/SalmonEgg.csproj `
+            /t:Restore `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:DisableCustomWinSdkXamlReferences=true `
+            /v:minimal
+
+      - name: Build net10.0 project references
+        shell: pwsh
+        run: |
+          dotnet build `
+            src/SalmonEgg.Presentation.Core/SalmonEgg.Presentation.Core.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+          dotnet build `
+            src/SalmonEgg.Infrastructure.Desktop/SalmonEgg.Infrastructure.Desktop.csproj `
+            -c ${{ env.CONFIGURATION }} `
+            -f net10.0 `
+            -v minimal
+
+      - name: Publish unsigned Windows MSIX
+        shell: pwsh
+        run: |
+          dotnet msbuild `
+            SalmonEgg/SalmonEgg/SalmonEgg.csproj `
+            /t:Publish `
+            /p:Configuration=${{ env.CONFIGURATION }} `
+            /p:TargetFramework=net10.0-windows10.0.26100.0 `
+            /p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml `
+            /p:EnableWinUIBuild=true `
+            /p:IsolatedMsixBuild=true `
+            /p:BuildProjectReferences=false `
+            /p:DisableCustomWinSdkXamlReferences=true `
+            /p:AppxPackageSigningEnabled=false `
+            /p:Restore=false `
+            /v:minimal
+
+      - name: Verify MSIX package contract
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path artifacts/msix -Recurse -Filter *.msix |
+            Select-Object -First 1
+          if ($null -eq $package) {
+            throw "MSIX publish produced no .msix under artifacts/msix."
+          }
+
+          Write-Host "Inspecting $($package.FullName)"
+          ./scripts/gates/run-msix-package-contract-gate.ps1 -Package $package.FullName
+
   android:
     name: Android
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -128,10 +242,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 

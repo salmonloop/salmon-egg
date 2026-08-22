@@ -289,9 +289,21 @@ public sealed class WasmStartupAssetsTests
         Assert.DoesNotContain("-p:PublishTrimmed=false", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:MtouchLink=", gate, StringComparison.Ordinal);
         Assert.Contains("DOTNET_VERSION: \"10.0.3xx\"", gate, StringComparison.Ordinal);
+
+        // One per job: linux-desktop, macos-desktop, windows-msix, android, ios. Every job must resolve
+        // the SDK from the shared DOTNET_VERSION rather than pinning its own.
         Assert.Equal(
-            4,
+            5,
             gate.Split("dotnet-version: ${{ env.DOTNET_VERSION }}", StringSplitOptions.None).Length - 1);
+
+        // The MSIX job is the one place a single TargetFramework is legitimately forced: the WinUI head is
+        // built in isolation, exactly as the release workflow does it, because its target cannot be
+        // reached through the mobile/desktop TFM expansion this test otherwise guards. It uses the `/p:`
+        // form; the `-p:` prohibition above is about the restore/build commands for the platform heads.
+        Assert.Equal(
+            2,
+            gate.Split("/p:TargetFramework=net10.0-windows10.0.26100.0", StringSplitOptions.None).Length - 1);
+        Assert.Contains("/p:AppxPackageSigningEnabled=false", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("global-json-file:", gate, StringComparison.Ordinal);
         Assert.Equal(2, gate.Split("dotnet workload list", StringSplitOptions.None).Length - 1);
         Assert.Equal(2, gate.Split("10.0.3??", StringSplitOptions.None).Length - 1);

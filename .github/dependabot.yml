@@ -1,0 +1,62 @@
+# Two ecosystems, two very different reasons.
+#
+# github-actions: every `uses:` in this repository is pinned to a commit SHA, which removes the
+# supply-chain risk of a retargeted tag but also removes the automatic patch updates a floating tag gave
+# us. Dependabot rewrites the SHA and the trailing version comment together, so pinning stays a security
+# improvement instead of becoming a stagnation policy.
+#
+# nuget: package versions live inline in each csproj (there is no Directory.Packages.props), so a
+# transitive advisory is only visible if something reads those files on a schedule.
+#
+# Both target `develop`, because `main` only ever receives what develop has already gated.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+      # Off the hour on purpose: scheduled jobs that all ask for :00 pile onto the same minute.
+      time: "04:17"
+      timezone: Etc/UTC
+    target-branch: develop
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(actions)"
+    labels:
+      - dependencies
+      - github-actions
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "04:23"
+      timezone: Etc/UTC
+    target-branch: develop
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+      - nuget
+    groups:
+      # Serilog and the Microsoft.Extensions family each move as a set; separate PRs for co-versioned
+      # packages produce restore conflicts that a human then has to resolve by hand.
+      serilog:
+        patterns:
+          - "Serilog*"
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      testing:
+        patterns:
+          - "Microsoft.Testing.*"
+          - "xunit*"
+          - "coverlet*"
+    ignore:
+      # The Uno version is declared in global.json as an MSBuild SDK, not a PackageReference, and moving
+      # it changes generated code and control templates across every platform head. That is a deliberate,
+      # gated migration (see the NavView upstream-defect notes), not a dependency bump.
+      - dependency-name: "Uno.*"

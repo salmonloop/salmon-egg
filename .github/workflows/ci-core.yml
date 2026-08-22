@@ -3,8 +3,32 @@ name: CI Core
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
   pull_request:
     branches: [develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
   group: ci-core-${{ github.workflow }}-${{ github.ref }}
@@ -26,12 +50,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -44,41 +68,40 @@ jobs:
       - name: Build
         run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore
 
+      # Deliberately single-pass. An automatic retry turns a genuinely flaky test into a green run,
+      # which erases the only signal that would tell us the flakiness exists. When a failure really is
+      # infrastructure noise, a human re-runs the job and the re-run is visible in the run history.
       - name: Test
         timeout-minutes: 20
         shell: pwsh
         run: |
-          $testArgs = @(
-            "test",
-            "--solution", "SalmonEgg.sln",
-            "--configuration", "${{ env.CONFIGURATION }}",
-            "--no-build",
-            "--verbosity", "normal",
-            "--timeout", "20m",
-            "--long-running", "300",
-            "--results-directory", "${{ env.TEST_RESULTS_DIR }}",
-            "--report-xunit-trx",
-            "--coverlet",
-            "--coverlet-output-format", "cobertura"
-          )
-
-          Write-Host "Running test pass 1..."
-          dotnet @testArgs
-          if ($LASTEXITCODE -eq 0)
-          {
-              exit 0
-          }
-
-          Write-Warning "Test pass 1 failed. Retrying once to filter transient flakiness..."
-          dotnet @testArgs
+          dotnet test `
+            --solution SalmonEgg.sln `
+            --configuration ${{ env.CONFIGURATION }} `
+            --no-build `
+            --verbosity normal `
+            --timeout 20m `
+            --long-running 300 `
+            --results-directory ${{ env.TEST_RESULTS_DIR }} `
+            --report-xunit-trx `
+            --coverlet `
+            --coverlet-output-format cobertura
           if ($LASTEXITCODE -ne 0)
           {
               exit $LASTEXITCODE
           }
 
+      # The restore above already resolved this solution in this workspace, and the test step above
+      # already ran every class the gate script filters for. What the script still contributes -- and the
+      # reason it runs at all -- is the app build under a restricted SalmonEggTargetFrameworks, a target
+      # graph the full-solution build never evaluates. Skip the duplicated halves, keep the unique one.
       - name: Run Core Gate Script
         shell: pwsh
-        run: ./scripts/gates/run-core-gates.ps1 -Configuration ${{ env.CONFIGURATION }}
+        run: >-
+          ./scripts/gates/run-core-gates.ps1
+          -Configuration ${{ env.CONFIGURATION }}
+          -SkipSolutionRestore
+          -SkipContractSuites
 
       # The release build can only assert this rule while producing a real MSI, which happens on tags
       # only. Running the rule itself here keeps a weakened PATH check from reaching a release.
@@ -86,16 +109,27 @@ jobs:
         shell: pwsh
         run: ./scripts/gates/run-cli-msi-path-contract-gate.ps1
 
+      # The MSIX contract gate itself only runs against a real package in the platform workflow. Running
+      # its self-test here keeps the rule from being weakened without anyone noticing: a check that never
+      # rehearses its own failure cases is indistinguishable from a check that passes everything.
+      - name: Run MSIX package contract gate self-test
+        shell: pwsh
+        run: ./scripts/gates/run-msix-package-contract-gate.ps1 -SelfTest
+
+      - name: Run release artifact contract gate self-test
+        shell: bash
+        run: scripts/gates/run-release-artifact-contract-gate.sh --self-test
+
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: test-results
           path: "${{ env.TEST_RESULTS_DIR }}/**/*.trx"
 
       - name: Upload coverage reports
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: coverage-report
           path: "**/coverage*.xml"

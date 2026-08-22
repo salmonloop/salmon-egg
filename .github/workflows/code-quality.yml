@@ -3,8 +3,32 @@ name: Code Quality
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
   pull_request:
     branches: [develop]
+    paths-ignore:
+      # Documentation-only edits cannot change build or test outcomes, and running the heavy platform
+      # matrix for them costs runner minutes while adding no signal. Listed explicitly rather than as
+      # `**.md`: src/SalmonEgg.Acp/README.md is packed into the published nupkg, so it is shipping
+      # content and must keep triggering its gates.
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/FUNDING.yml"
+
+# Least privilege by default: every job here only reads the repository. The one job that needs to
+# write (release asset upload) raises it locally. Without this block the workflow inherits whatever
+# the repository default happens to be, which is a setting that can drift without a code change.
+permissions:
+  contents: read
 
 concurrency:
   group: code-quality-${{ github.workflow }}-${{ github.ref }}
@@ -25,12 +49,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 

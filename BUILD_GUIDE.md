@@ -295,6 +295,32 @@ scripts/gates/run-linux-notification-gates.sh Release
 以及用于承接点击的 `default` action。前置依赖：`dbus-run-session`、`python3` 以及 python `jeepney` 包。macOS desktop 无托管
 UserNotifications 绑定，仍诚实报告 Unsupported，不在本 gate 覆盖范围。
 
+#### Release artifact contract gates
+
+发布产物的"构建成功"不等于"用户能用"。CLI 早就有真实校验（执行刚构建的可执行文件、安装刚构建的 .deb），
+其余产物此前只有 publish 退出码作为证据。两个新门禁补上这一层，且都能在任意平台跑自检：
+
+```bash
+# WASM publish 输出与 macOS .app bundle 的结构契约
+scripts/gates/run-release-artifact-contract-gate.sh wasm publish/wasm
+scripts/gates/run-release-artifact-contract-gate.sh macos-bundle publish/macos-bundle/SalmonEgg.app
+scripts/gates/run-release-artifact-contract-gate.sh --self-test
+```
+
+```powershell
+# MSIX 包内容契约：identity、已替换的版本号、manifest 声明的每个 shell 资源都真的在包里
+./scripts/gates/run-msix-package-contract-gate.ps1 -Package artifacts/msix/SalmonEgg_1.2.0.0_x64.msix
+./scripts/gates/run-msix-package-contract-gate.ps1 -SelfTest
+```
+
+MSIX gate 针对的是 `SalmonEgg.csproj` 里 Assets ItemGroup 注释描述的那个缺陷：WinUI 3 目标同时落在 Uno
+与 WinAppSDK 两套默认项归属的空隙里，资源项一旦回归，构建照样成功、包照样合法，只是 manifest 声明的
+图标不在包内，Windows 于是回落到通用占位图标。它用 zip + XML 检查实现，不依赖 Windows API，因此规则本身
+可以在 Linux 上排练——`-SelfTest` 会逐一构造这些缺陷并断言每条检查真的拒绝它。
+
+两个 gate 的 `--self-test` / `-SelfTest` 都挂在 `ci-core.yml` 的每次 push / PR 上：真实产物只在 Windows
+或打 tag 时才存在，若不排练失败用例，一个被削弱的检查与一个放行一切的检查无法区分。
+
 #### Mobile target contract gate
 移动端目标默认不进入常规构建，但 target graph 和平台安全存储源码必须保持可验证：
 
@@ -347,7 +373,9 @@ scripts/gates/run-wasm-smoke-gates.sh Debug
 - Gamepad 能力边界：确认 BrowserWasm 通过浏览器 Gamepad API 投影标准手柄读数，并验证 DPad / A 键进入 Diagnostics 的 pressed 槽位与 ActiveInputs 意图事实（`MoveDown` / `Activate`）。原生焦点由键盘/XYFocus 与控件 consumer 拥有；壳层不再对轮询手柄做全局 SendInput / FocusManager 焦点 bridge，避免双路径分发；
 - WASM ACP 全链路：用同一 profile 和 remote directory 从 Start 页面创建远端会话，断言 mock ACP Server 收到 `initialize`、`session/new`（`cwd` 为所选 remote path）和 `session/prompt`，并确认 agent reply 投影到 Chat UI。
 
-它补充 Windows self-hosted FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
+它补充 Windows FlaUI gate，专门覆盖 WASM 浏览器里的原生 Uno 控件行为与当前构建产物的浏览器持久化链路。
+
+> Windows FlaUI/UIA3 gate（`scripts/gates/run-gui-smoke-gates.ps1`）目前是**本机门禁**：它需要真实 Windows 交互会话，而本仓库没有注册自托管 Windows runner。`gui-smoke-gates.yml` 里对应的 job 仍然保留接线，但由仓库变量 `WINDOWS_GUI_SELF_HOSTED_RUNNER=true` 显式启用；未启用时不会排队等待一个不存在的 runner。
 
 #### BrowserWasm multi-brand gamepad identity smoke
 
