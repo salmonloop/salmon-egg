@@ -46,6 +46,10 @@ public sealed class GitHubWorkflowContractTests
         Assert.Contains("if ($executable -match '^/([A-Za-z])/(.+)$')", workflow, StringComparison.Ordinal);
         Assert.Contains("$executable = \"$($matches[1].ToUpperInvariant()):\\$($matches[2] -replace '/', '\\')\"", workflow, StringComparison.Ordinal);
         Assert.Contains("-Executable $executable -Version $env:CLI_VERSION", workflow, StringComparison.Ordinal);
+
+        var msiScript = TestSourceFiles.ReadAllText(@"scripts\release\build-cli-msi.ps1").Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("InvokeMember('Execute', 'InvokeMethod', $null, $view, @())", msiScript, StringComparison.Ordinal);
+        Assert.Contains("InvokeMember('Fetch', 'InvokeMethod', $null, $view, @())", msiScript, StringComparison.Ordinal);
     }
 
     private static string ReadWorkflow(string workflowName) =>

@@ -123,13 +123,13 @@ try {
     $view = $database.GetType().InvokeMember(
         'OpenView', 'InvokeMethod', $null, $database,
         @('SELECT `Name`, `Value` FROM `Environment`'))
-    $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null)
+    $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, @())
 
     # Every row is read rather than just the first: a second row introduced later — a machine PATH entry,
     # say — would ship unchecked if the read stopped after one.
     $rows = @()
     while ($true) {
-        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, @())
         if ($null -eq $record) {
             break
         }
