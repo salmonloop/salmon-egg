@@ -117,26 +117,23 @@ if (-not (Test-Path -LiteralPath $msiPath)) {
 . (Join-Path $PSScriptRoot 'CliMsiPathContract.ps1')
 
 $installer = New-Object -ComObject WindowsInstaller.Installer
-$database = $installer.GetType().InvokeMember(
-    'OpenDatabase', 'InvokeMethod', $null, $installer, @($msiPath, 0))
+$database = $installer.OpenDatabase($msiPath, 0)
 try {
-    $view = $database.GetType().InvokeMember(
-        'OpenView', 'InvokeMethod', $null, $database,
-        @('SELECT `Name`, `Value` FROM `Environment`'))
-    $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, @())
+    $view = $database.OpenView('SELECT `Name`, `Value` FROM `Environment`')
+    $view.Execute()
 
     # Every row is read rather than just the first: a second row introduced later — a machine PATH entry,
     # say — would ship unchecked if the read stopped after one.
     $rows = @()
     while ($true) {
-        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, @())
+        $record = $view.Fetch()
         if ($null -eq $record) {
             break
         }
 
         $rows += [pscustomobject]@{
-            Name  = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(1))
-            Value = $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(2))
+            Name  = $record.StringData(1)
+            Value = $record.StringData(2)
         }
     }
 

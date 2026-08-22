@@ -48,8 +48,11 @@ public sealed class GitHubWorkflowContractTests
         Assert.Contains("-Executable $executable -Version $env:CLI_VERSION", workflow, StringComparison.Ordinal);
 
         var msiScript = TestSourceFiles.ReadAllText(@"scripts\release\build-cli-msi.ps1").Replace("\r\n", "\n", StringComparison.Ordinal);
-        Assert.Contains("InvokeMember('Execute', 'InvokeMethod', $null, $view, @())", msiScript, StringComparison.Ordinal);
-        Assert.Contains("InvokeMember('Fetch', 'InvokeMethod', $null, $view, @())", msiScript, StringComparison.Ordinal);
+        Assert.Contains("$database = $installer.OpenDatabase($msiPath, 0)", msiScript, StringComparison.Ordinal);
+        Assert.Contains("$view = $database.OpenView('SELECT `Name`, `Value` FROM `Environment`')", msiScript, StringComparison.Ordinal);
+        Assert.Contains("$view.Execute()", msiScript, StringComparison.Ordinal);
+        Assert.Contains("$record = $view.Fetch()", msiScript, StringComparison.Ordinal);
+        Assert.Contains("Name  = $record.StringData(1)", msiScript, StringComparison.Ordinal);
     }
 
     private static string ReadWorkflow(string workflowName) =>
