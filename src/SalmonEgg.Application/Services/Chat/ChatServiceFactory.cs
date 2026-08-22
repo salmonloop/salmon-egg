@@ -63,7 +63,7 @@ public class ChatServiceFactory
         string? url = null)
     {
         using var activity = ApplicationActivitySources.ChatService.StartActivity(
-            "CreateChatService",
+            "chat.service.create",
             ActivityKind.Internal);
 
         activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, transportType.ToString());
@@ -114,7 +114,7 @@ public class ChatServiceFactory
         }
 
         using var activity = ApplicationActivitySources.ChatService.StartActivity(
-            "CreateChatServiceFromConfiguration",
+            "chat.service.create_from_configuration",
             ActivityKind.Internal);
 
         activity?.SetTag(ApplicationSemanticConventions.Chat.TransportType, configuration.Transport.ToString());
