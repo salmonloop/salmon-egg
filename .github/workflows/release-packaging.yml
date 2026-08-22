@@ -410,10 +410,16 @@ jobs:
       - name: Build Windows MSI
         if: matrix.rid == 'win-x64'
         shell: pwsh
-        run: >-
-          ./scripts/release/build-cli-msi.ps1
-          -Executable "${{ steps.build-cli.outputs.executable-path }}"
-          -Version "${{ steps.build-cli.outputs.display-version }}"
+        env:
+          CLI_EXECUTABLE: ${{ steps.build-cli.outputs.executable-path }}
+          CLI_VERSION: ${{ steps.build-cli.outputs.display-version }}
+        run: |
+          $executable = $env:CLI_EXECUTABLE
+          if ($executable -match '^/([A-Za-z])/(.+)$') {
+            $executable = "$($matches[1].ToUpperInvariant()):\$($matches[2] -replace '/', '\')"
+          }
+
+          ./scripts/release/build-cli-msi.ps1 -Executable $executable -Version $env:CLI_VERSION
 
       - name: Upload CLI artifacts
         uses: actions/upload-artifact@v5
