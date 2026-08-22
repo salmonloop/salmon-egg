@@ -29,6 +29,25 @@ fail() {
   return 1
 }
 
+# The macOS checks need a plist reader. `python3` is present on the macOS and Linux runners this gate runs
+# on; on a Windows runner under Git Bash it may not be, and the macOS artifact does not exist there
+# anyway. Resolve it once so a missing interpreter produces a clear message instead of an obscure failure
+# deep inside a check.
+PYTHON_BIN=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PYTHON_BIN="$candidate"
+    break
+  fi
+done
+
+require_python() {
+  if [ -z "$PYTHON_BIN" ]; then
+    echo "[artifact-gate] FAIL no python3/python on PATH; the macOS bundle checks need one to read Info.plist" >&2
+    return 1
+  fi
+}
+
 # --- wasm ---------------------------------------------------------------------------------------------
 
 verify_wasm() {
@@ -36,9 +55,11 @@ verify_wasm() {
 
   [ -d "$dir" ] || { fail "publish directory does not exist: $dir"; return 1; }
 
+  # The publish output puts the served files under wwwroot (there is also a _framework directory at the
+  # publish root holding the app's own JS interop modules, which is not the runtime payload). Accept
+  # either the publish root or the wwwroot itself, so this works against `-o publish/wasm` and against an
+  # unzipped release bundle.
   local root
-  # Uno/Blazor publish output puts the served files under wwwroot; accept either the publish root or the
-  # wwwroot itself so the gate works against both `-o publish/wasm` and an unzipped release bundle.
   if [ -f "$dir/wwwroot/index.html" ]; then
     root="$dir/wwwroot"
   elif [ -f "$dir/index.html" ]; then
@@ -48,52 +69,75 @@ verify_wasm() {
     return 1
   fi
 
-  # The boot manifest is what the browser reads to discover the assemblies. Without it nothing loads,
-  # and its absence is invisible to the publish exit code.
-  local boot=""
-  for candidate in "$root/_framework/blazor.boot.json" "$root/_framework/dotnet.boot.js" "$root/_framework/dotnet.js"; do
-    if [ -f "$candidate" ]; then
-      boot="$candidate"
-      break
-    fi
-  done
-  [ -n "$boot" ] || { fail "no runtime boot entry under $root/_framework (looked for blazor.boot.json, dotnet.boot.js, dotnet.js)"; return 1; }
+  [ -d "$root/_framework" ] || { fail "no _framework directory under $root"; return 1; }
 
-  # A framework directory containing only the boot entry is the signature of a publish that resolved the
-  # host but emitted no managed payload.
+  # The runtime loader. Its name carries a content hash (dotnet.<hash>.js) because fingerprinting is on,
+  # so match the shape rather than a literal name. Dissecting the shipped v1.2.0 bundle showed the
+  # _framework directory holds exactly dotnet.<hash>.js, dotnet.native.<hash>.js,
+  # dotnet.runtime.<hash>.js, the icu .dat files and the .wasm payload -- and no blazor.boot.json at all,
+  # which an earlier version of this check wrongly required.
+  local loader_count
+  loader_count="$(find "$root/_framework" -maxdepth 1 -name 'dotnet.*js' -not -name '*.br' -not -name '*.gz' | wc -l | tr -d ' ')"
+  [ "$loader_count" -gt 0 ] || { fail "no dotnet loader script under $root/_framework"; return 1; }
+
+  # A _framework directory holding the loader but no managed payload is the signature of a publish that
+  # resolved the host and emitted nothing to run.
   local wasm_count
-  wasm_count="$(find "$root/_framework" -maxdepth 1 -name '*.wasm' | wc -l | tr -d ' ')"
+  wasm_count="$(find "$root/_framework" -maxdepth 1 -name '*.wasm' -not -name '*.br' -not -name '*.gz' | wc -l | tr -d ' ')"
   [ "$wasm_count" -gt 0 ] || { fail "no .wasm payload under $root/_framework"; return 1; }
 
-  # These two are requested automatically by the browser on every load. Shipping without them turns
-  # every deployment into a console full of 404s.
+  # The app's own interop modules. Their absence does not fail the build but does break storage,
+  # notifications, and the shell at runtime; SalmonEgg.csproj declares them as WasmShellNativeFileReference.
+  local interop_missing=""
+  for module in salmon-egg-wasm-storage.js salmon-egg-wasm-shell.js salmon-egg-wasm-notifications.js; do
+    if ! find "$dir" "$root" -maxdepth 3 -name "$module" 2>/dev/null | grep -q .; then
+      interop_missing="$interop_missing $module"
+    fi
+  done
+  [ -z "$interop_missing" ] || { fail "missing app interop module(s):$interop_missing"; return 1; }
+
+  # Requested automatically by the browser on every load; shipping without them turns every deployment
+  # into a console full of 404s. scripts/gates/verify-wasm-static-assets.sh checks the same two names
+  # against a deployed URL -- this is the same contract, asserted before upload.
   for required in "manifest.webmanifest" "service-worker.js"; do
     [ -f "$root/$required" ] || { fail "missing $required under $root"; return 1; }
   done
 
-  echo "[artifact-gate] wasm: index.html, $(basename "$boot"), ${wasm_count} .wasm payload file(s), manifest.webmanifest, service-worker.js all present"
+  echo "[artifact-gate] wasm: index.html, ${loader_count} loader script(s), ${wasm_count} .wasm payload file(s), 3 interop module(s), manifest.webmanifest, service-worker.js all present"
 }
 
 # --- macos app bundle ---------------------------------------------------------------------------------
 
-# Reads a top-level string value from an Info.plist without PlistBuddy or plutil, so the rule is
-# rehearsable on Linux. Matches <key>NAME</key> followed by the next <string> value.
+# Reads a top-level string value from an Info.plist.
+#
+# The real bundle's Info.plist is a BINARY plist -- the shipped v1.2.0 SalmonEgg.app begins with the
+# `bplist00` magic. An awk/XML text scan (which the first version of this gate used) reads nothing out of
+# it and would report every correct bundle as declaring no CFBundleExecutable. Python's plistlib reads
+# both the binary and XML forms and is present on every runner used here, including the macOS packaging
+# runner, so the rule stays rehearsable off macOS without plutil or PlistBuddy.
 read_plist_string() {
   local plist="$1" key="$2"
-  awk -v key="$key" '
-    $0 ~ "<key>" key "</key>" { found = 1; next }
-    found && match($0, /<string>.*<\/string>/) {
-      line = substr($0, RSTART, RLENGTH)
-      sub(/^<string>/, "", line)
-      sub(/<\/string>$/, "", line)
-      print line
-      exit
-    }
-  ' "$plist"
+  "$PYTHON_BIN" -c '
+import plistlib
+import sys
+
+path, key = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "rb") as handle:
+        data = plistlib.load(handle)
+except Exception:
+    sys.exit(1)
+
+value = data.get(key)
+if isinstance(value, str) and value:
+    print(value)
+' "$plist" "$key"
 }
 
 verify_macos_bundle() {
   local app="$1"
+
+  require_python || return 1
 
   [ -d "$app" ] || { fail "app bundle is not a directory: $app"; return 1; }
   case "$app" in
@@ -148,31 +192,52 @@ run_self_test() {
     fi
   }
 
+  # Mirrors the layout of the shipped bundle rather than an idealized one: hashed loader names, no
+  # blazor.boot.json, interop modules under _framework, served files under wwwroot.
   make_good_wasm() {
     local root="$1"
     mkdir -p "$root/wwwroot/_framework"
     printf '<html></html>' > "$root/wwwroot/index.html"
-    printf '{}' > "$root/wwwroot/_framework/blazor.boot.json"
+    printf '// loader' > "$root/wwwroot/_framework/dotnet.115cw7iqpe.js"
+    printf '// native' > "$root/wwwroot/_framework/dotnet.native.e4tubmy6fd.js"
+    printf '// runtime' > "$root/wwwroot/_framework/dotnet.runtime.zbexyp8zrs.js"
     printf 'wasm' > "$root/wwwroot/_framework/dotnet.native.wasm"
+    printf 'wasm' > "$root/wwwroot/_framework/SalmonEgg.abc123.wasm"
+    for module in salmon-egg-wasm-storage.js salmon-egg-wasm-shell.js salmon-egg-wasm-notifications.js; do
+      printf '// interop' > "$root/wwwroot/_framework/$module"
+    done
     printf '{}' > "$root/wwwroot/manifest.webmanifest"
     printf '// sw' > "$root/wwwroot/service-worker.js"
   }
 
+  # Written as a real binary plist, which is the form the packaging tool emits.
   make_good_bundle() {
     local app="$1" exe="${2:-SalmonEgg}"
     mkdir -p "$app/Contents/MacOS"
-    cat > "$app/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key>
-  <string>com.salmonloop.salmonegg</string>
-  <key>CFBundleExecutable</key>
-  <string>${exe}</string>
-</dict>
-</plist>
-PLIST
+    "$PYTHON_BIN" -c '
+import plistlib
+import sys
+
+path, exe = sys.argv[1], sys.argv[2]
+with open(path, "wb") as handle:
+    plistlib.dump(
+        {"CFBundleIdentifier": "com.companyname.salmonegg", "CFBundleExecutable": exe},
+        handle,
+        fmt=plistlib.FMT_BINARY,
+    )
+' "$app/Contents/Info.plist" "$exe"
     printf 'bin' > "$app/Contents/MacOS/$exe"
+  }
+
+  write_partial_plist() {
+    "$PYTHON_BIN" -c '
+import plistlib
+import sys
+
+path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path, "wb") as handle:
+    plistlib.dump({key: value}, handle, fmt=plistlib.FMT_BINARY)
+' "$1" "$2" "$3"
   }
 
   # wasm: conforming
@@ -182,15 +247,30 @@ PLIST
   # wasm: accepted when pointed straight at wwwroot
   expect "a wasm publish addressed via its wwwroot" pass verify_wasm "$work/wasm-ok/wwwroot"
 
-  # wasm: no boot manifest
-  make_good_wasm "$work/wasm-noboot"
-  rm "$work/wasm-noboot/wwwroot/_framework/blazor.boot.json"
-  expect "a wasm publish with no runtime boot entry" fail verify_wasm "$work/wasm-noboot"
+  # wasm: no loader script. The names are content-hashed, so remove by glob rather than literal name.
+  make_good_wasm "$work/wasm-noloader"
+  rm "$work/wasm-noloader"/wwwroot/_framework/dotnet.*.js
+  expect "a wasm publish with no dotnet loader script" fail verify_wasm "$work/wasm-noloader"
 
-  # wasm: boot entry present but no managed payload
+  # wasm: loader present but no managed payload at all
   make_good_wasm "$work/wasm-nopayload"
-  rm "$work/wasm-nopayload/wwwroot/_framework/dotnet.native.wasm"
+  find "$work/wasm-nopayload/wwwroot/_framework" -name '*.wasm' -delete
   expect "a wasm publish whose framework directory has no .wasm payload" fail verify_wasm "$work/wasm-nopayload"
+
+  # wasm: one payload file removed while others remain -- still a valid publish
+  make_good_wasm "$work/wasm-onepayload"
+  rm "$work/wasm-onepayload/wwwroot/_framework/SalmonEgg.abc123.wasm"
+  expect "a wasm publish with fewer payload files but not zero" pass verify_wasm "$work/wasm-onepayload"
+
+  # wasm: the app's own interop module dropped
+  make_good_wasm "$work/wasm-nointerop"
+  rm "$work/wasm-nointerop/wwwroot/_framework/salmon-egg-wasm-storage.js"
+  expect "a wasm publish missing an app interop module" fail verify_wasm "$work/wasm-nointerop"
+
+  # wasm: the whole framework directory absent
+  make_good_wasm "$work/wasm-noframework"
+  rm -rf "$work/wasm-noframework/wwwroot/_framework"
+  expect "a wasm publish with no _framework directory" fail verify_wasm "$work/wasm-noframework"
 
   # wasm: missing service worker
   make_good_wasm "$work/wasm-nosw"
@@ -207,6 +287,19 @@ PLIST
   expect "an empty publish directory" fail verify_wasm "$work/wasm-empty"
   expect "a publish directory that does not exist" fail verify_wasm "$work/wasm-absent"
 
+  # The macOS half needs a plist reader. Skipping it silently would make a Windows run of this self-test
+  # look like full coverage, so say so out loud; the wasm half above needs nothing beyond coreutils.
+  if [ -z "$PYTHON_BIN" ]; then
+    echo "[artifact-gate] self-test: macOS bundle cases SKIPPED (no python3/python on PATH)"
+    if [ "$failures" -gt 0 ]; then
+      echo "[artifact-gate] self-test failed with $failures wrong outcome(s)" >&2
+      return 1
+    fi
+
+    echo "[artifact-gate] self-test passed (wasm cases only)"
+    return 0
+  fi
+
   # macos: conforming
   make_good_bundle "$work/Good.app"
   expect "a complete .app bundle" pass verify_macos_bundle "$work/Good.app"
@@ -222,29 +315,36 @@ PLIST
 
   # macos: plist without CFBundleExecutable
   mkdir -p "$work/NoExecKey.app/Contents/MacOS"
-  cat > "$work/NoExecKey.app/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key>
-  <string>com.salmonloop.salmonegg</string>
-</dict>
-</plist>
-PLIST
+  write_partial_plist "$work/NoExecKey.app/Contents/Info.plist" CFBundleIdentifier com.companyname.salmonegg
   expect "a bundle declaring no CFBundleExecutable" fail verify_macos_bundle "$work/NoExecKey.app"
 
   # macos: plist without CFBundleIdentifier
   make_good_bundle "$work/NoId.app"
-  cat > "$work/NoId.app/Contents/Info.plist" <<'PLIST'
+  write_partial_plist "$work/NoId.app/Contents/Info.plist" CFBundleExecutable SalmonEgg
+  expect "a bundle declaring no CFBundleIdentifier" fail verify_macos_bundle "$work/NoId.app"
+
+  # macos: an XML plist must also be readable -- the format is an implementation detail of the toolchain
+  # and could change back.
+  mkdir -p "$work/XmlPlist.app/Contents/MacOS"
+  printf 'bin' > "$work/XmlPlist.app/Contents/MacOS/SalmonEgg"
+  cat > "$work/XmlPlist.app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.companyname.salmonegg</string>
   <key>CFBundleExecutable</key>
   <string>SalmonEgg</string>
 </dict>
 </plist>
 PLIST
-  expect "a bundle declaring no CFBundleIdentifier" fail verify_macos_bundle "$work/NoId.app"
+  expect "a bundle whose Info.plist is XML rather than binary" pass verify_macos_bundle "$work/XmlPlist.app"
+
+  # macos: a plist that is not a plist at all
+  mkdir -p "$work/Garbage.app/Contents/MacOS"
+  printf 'bin' > "$work/Garbage.app/Contents/MacOS/SalmonEgg"
+  printf 'not a plist' > "$work/Garbage.app/Contents/Info.plist"
+  expect "a bundle whose Info.plist is unreadable" fail verify_macos_bundle "$work/Garbage.app"
 
   # macos: a plain directory that is not a bundle
   mkdir -p "$work/not-a-bundle"

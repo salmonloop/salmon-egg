@@ -124,6 +124,55 @@ function Get-ManifestAssetReference
     return ($references | Sort-Object -Unique)
 }
 
+# A manifest names an asset by its unqualified path (Assets\Icons\Windows\iconLogo44.png) while MakePRI
+# stores the generated scale/targetsize/theme variants under qualified names
+# (assets/icons/windows/iconlogo44.scale-200.png) and records the mapping in resources.pri. Dissecting the
+# shipped v1.2.0 package confirmed this: all seven manifest references resolve to zero exact entries and to
+# 10-52 qualified variants each. An exact-name check would therefore reject every correct package.
+#
+# So the assertion is "the package carries at least one file that can satisfy this reference": an exact
+# entry, or any entry whose name is the reference's stem followed by a qualifier segment. That still fails
+# when the asset items regress -- the defect this gate exists for removes the whole family, not one
+# variant -- while accepting the naming the packaging tool actually produces.
+function Test-PackageCarriesAsset
+{
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Entries,
+        [Parameter(Mandatory = $true)][string]$Reference
+    )
+
+    foreach ($entry in $Entries)
+    {
+        if ($entry -ieq $Reference)
+        {
+            return $true
+        }
+    }
+
+    $extension = [System.IO.Path]::GetExtension($Reference)
+    if ([string]::IsNullOrEmpty($extension))
+    {
+        return $false
+    }
+
+    # "assets/icons/windows/iconlogo44." -- the qualifier follows the stem and precedes the extension.
+    $stem = $Reference.Substring(0, $Reference.Length - $extension.Length) + '.'
+    foreach ($entry in $Entries)
+    {
+        if (-not $entry.StartsWith($stem, [System.StringComparison]::OrdinalIgnoreCase))
+        {
+            continue
+        }
+
+        if ($entry.EndsWith($extension, [System.StringComparison]::OrdinalIgnoreCase))
+        {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Get-MsixContractViolation
 {
     param(
@@ -205,8 +254,7 @@ function Get-MsixContractViolation
 
         foreach ($reference in $assetReferences)
         {
-            $present = $entries | Where-Object { $_ -ieq $reference } | Select-Object -First 1
-            if ($null -eq $present)
+            if (-not (Test-PackageCarriesAsset -Entries $entries -Reference $reference))
             {
                 return [pscustomobject]@{ Id = 'DeclaredAssetMissing'; Detail = $reference }
             }
@@ -313,11 +361,63 @@ function Invoke-SelfTest
             'Assets/Icons/Windows/iconLogo150.png'         = 'png'
         }
 
+        # What the packaging tool actually produces, taken from dissecting the shipped v1.2.0 package: no
+        # unqualified file exists at all, only scale/targetsize/theme variants. The first version of this
+        # gate matched names exactly and would have rejected every real package. These cases keep that
+        # regression from returning.
+        $mrtAssets = @{
+            'AppxManifest.xml'                                                   = New-TestManifest
+            'Assets/Icons/Windows/iconLogo.scale-200.png'                         = 'png'
+            'Assets/Icons/Windows/iconLogo.targetsize-32.png'                     = 'png'
+            'Assets/Icons/Windows/iconLogo44.scale-200.png'                       = 'png'
+            'Assets/Icons/Windows/iconLogo44.altform-unplated_targetsize-16.png'  = 'png'
+            'Assets/Icons/Windows/iconLogo150.scale-400.png'                      = 'png'
+        }
+
         $cases = @(
             @{
                 Description = 'a package carrying every asset its manifest declares'
                 Entries     = $allAssets
                 Expected    = $null
+            }
+            @{
+                Description = 'a package carrying only MRT-qualified variants, as the tool emits them'
+                Entries     = $mrtAssets
+                Expected    = $null
+            }
+            @{
+                # One variant missing is not a defect: the resource index resolves another. Rejecting it
+                # would make the gate fail on packages that work.
+                Description = 'a family missing one variant but otherwise complete'
+                Entries     = @{
+                    'AppxManifest.xml'                                = New-TestManifest
+                    'Assets/Icons/Windows/iconLogo.scale-200.png'      = 'png'
+                    'Assets/Icons/Windows/iconLogo44.scale-100.png'    = 'png'
+                    'Assets/Icons/Windows/iconLogo150.scale-400.png'   = 'png'
+                }
+                Expected    = $null
+            }
+            @{
+                # An asset-item regression removes the whole family, which is the defect that ships a
+                # package showing the generic placeholder icon.
+                Description = 'a package whose entire qualified logo family was dropped'
+                Entries     = @{
+                    'AppxManifest.xml'                                = New-TestManifest
+                    'Assets/Icons/Windows/iconLogo.scale-200.png'      = 'png'
+                    'Assets/Icons/Windows/iconLogo150.scale-400.png'   = 'png'
+                }
+                Expected    = 'DeclaredAssetMissing'
+            }
+            @{
+                # A qualifier must not be able to satisfy a different asset: iconLogo150 is not a variant
+                # of iconLogo, even though one name is a prefix of the other.
+                Description = 'a package where a similarly-named asset stands in for a missing one'
+                Entries     = @{
+                    'AppxManifest.xml'                                = New-TestManifest
+                    'Assets/Icons/Windows/iconLogo150.scale-200.png'   = 'png'
+                    'Assets/Icons/Windows/iconLogo44.scale-200.png'    = 'png'
+                }
+                Expected    = 'DeclaredAssetMissing'
             }
             @{
                 # The exact defect the Assets ItemGroup in SalmonEgg.csproj exists to prevent: build

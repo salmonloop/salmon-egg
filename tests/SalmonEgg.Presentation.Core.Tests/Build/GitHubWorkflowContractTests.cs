@@ -226,6 +226,38 @@ public sealed class GitHubWorkflowContractTests
         }
     }
 
+    [Fact]
+    public void MsixPackagingIsIdenticalAcrossGateAndRelease_ExceptForSigning()
+    {
+        // The PR-level gate exists to catch packaging regressions before a release. It only does that if it
+        // drives the same packaging chain the release drives; if the two drift, the gate starts proving
+        // something about a configuration nobody ships. Signing is the one intended difference.
+        var gate = ReadWorkflow("platform-build-gates.yml");
+        var release = ReadWorkflow("release-packaging.yml");
+
+        string[] sharedArguments =
+        [
+            "/p:TargetFramework=net10.0-windows10.0.26100.0",
+            "/p:PublishProfile=Properties/PublishProfiles/win-msix-x64.pubxml",
+            "/p:EnableWinUIBuild=true",
+            "/p:IsolatedMsixBuild=true",
+            "/p:BuildProjectReferences=false",
+            "/p:DisableCustomWinSdkXamlReferences=true",
+            "/p:Restore=false"
+        ];
+
+        foreach (var argument in sharedArguments)
+        {
+            Assert.Contains(argument, gate, StringComparison.Ordinal);
+            Assert.Contains(argument, release, StringComparison.Ordinal);
+        }
+
+        // The gate must never require signing secrets, and the release must never stop signing.
+        Assert.Contains("/p:AppxPackageSigningEnabled=false", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("/p:AppxPackageSigningEnabled=true", gate, StringComparison.Ordinal);
+        Assert.Contains("/p:AppxPackageSigningEnabled=true", release, StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string haystack, string needle)
     {
         var count = 0;

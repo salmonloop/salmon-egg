@@ -60,7 +60,11 @@ jobs:
         with:
           languages: csharp
           build-mode: manual
-          queries: security-and-quality
+          # security-extended, not security-and-quality: the quality suite reports maintainability and
+          # style findings that this repository already governs through analyzers and dotnet format in
+          # code-quality.yml, and duplicating them here would bury the security findings this workflow
+          # exists to surface. security-extended keeps the lower-precision security queries.
+          queries: security-extended
 
       # Deliberately not `autobuild`, and deliberately not the whole solution. Every project analyzed
       # here targets plain net10.0; the app head (SalmonEgg.csproj) additionally targets desktop,

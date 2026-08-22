@@ -28,7 +28,8 @@ on:
   # images themselves -- move independently of this repository. Push/PR triggers only re-verify them when
   # somebody happens to commit, so a break during a quiet period stays hidden and then gets attributed to
   # whichever innocent commit next touches the tree. A scheduled run separates "our change broke it" from
-  # "the platform moved". Scheduled runs always use the default branch and ignore paths filters.
+  # "the platform moved". A scheduled run always uses the default branch (main here, which trails
+  # develop by whatever has not been promoted yet) and ignores the paths filters above.
   schedule:
     - cron: "43 3 * * *"
   workflow_dispatch:

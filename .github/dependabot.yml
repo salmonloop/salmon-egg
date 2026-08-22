@@ -28,7 +28,15 @@ updates:
       - github-actions
 
   - package-ecosystem: nuget
-    directory: /
+    # `directory` is a single, non-recursive path, and only `directories` supports globbing. Every
+    # PackageReference version in this repository lives inline in a csproj under src/, tests/, SalmonEgg/,
+    # or scripts/gates/ — a bare `directory: /` would find none of them and the ecosystem would silently
+    # do nothing.
+    directories:
+      - /src/*
+      - /tests/*
+      - /SalmonEgg/SalmonEgg
+      - /scripts/gates/linux-notification-probe
     schedule:
       interval: weekly
       day: tuesday
