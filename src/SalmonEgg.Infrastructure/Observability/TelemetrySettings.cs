@@ -108,10 +108,16 @@ public sealed class TelemetrySettings
     /// When no endpoint is configured the built-in gateway (<see cref="TelemetryDefaults.DefaultOtlpEndpoint"/>)
     /// is used so telemetry can flow without per-deployment setup; the gateway injects upstream auth.
     /// </summary>
+    /// <param name="installationId">
+    /// <c>app.installation.id</c>：本次安装的稳定标识，使后端能区分设备数。为 null 时不写该
+    /// 属性——写入空串会在后端形成一个无意义的维度取值。由调用方异步取得后传入，本方法保持
+    /// 同步且只读环境变量。
+    /// </param>
     public static TelemetrySettings Build(
         Domain.Models.AppSettings? userSettings,
         SamplingSettings platformSamplingDefaults,
-        string? serviceVersion = null)
+        string? serviceVersion = null,
+        string? installationId = null)
     {
         ArgumentNullException.ThrowIfNull(platformSamplingDefaults);
 
@@ -138,6 +144,21 @@ public sealed class TelemetrySettings
         var logs = ResolveSignal(OtlpSignal.Logs, userEndpoint, userHeaders, genericEndpoint, genericHeaders, genericProtocol, useFallbackGateway);
         var enabled = !userDisabled && !sdkDisabled && traces.IsConfigured && metrics.IsConfigured && logs.IsConfigured;
 
+        var resourceAttributes = new Dictionary<string, string>
+        {
+            [SemanticConventions.Resource.DeploymentEnvironmentName] =
+                NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT")) ?? TelemetryDefaults.DefaultEnvironment,
+            [SemanticConventions.Resource.ServiceInstanceId] = ProcessInstanceId
+        };
+
+        // 取不到时省略而非写空串：空串会在后端形成一个无意义的维度取值，且无法与「这台设备
+        // 还没生成标识」区分开。
+        var normalizedInstallationId = NormalizeOptional(installationId);
+        if (normalizedInstallationId is not null)
+        {
+            resourceAttributes[SemanticConventions.Resource.AppInstallationId] = normalizedInstallationId;
+        }
+
         return new TelemetrySettings
         {
             Enabled = enabled,
@@ -149,12 +170,7 @@ public sealed class TelemetrySettings
             Logs = logs,
             ServiceName = NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")) ?? TelemetryDefaults.ServiceName,
             ServiceVersion = serviceVersion,
-            ResourceAttributes = new Dictionary<string, string>
-            {
-                [SemanticConventions.Resource.DeploymentEnvironmentName] =
-                    NormalizeOptional(Environment.GetEnvironmentVariable("OTEL_ENVIRONMENT")) ?? TelemetryDefaults.DefaultEnvironment,
-                [SemanticConventions.Resource.ServiceInstanceId] = ProcessInstanceId
-            },
+            ResourceAttributes = resourceAttributes,
             Sampling = platformSamplingDefaults
         };
     }
