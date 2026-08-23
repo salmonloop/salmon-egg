@@ -12,6 +12,10 @@ namespace SalmonEgg.Platforms.WebAssembly.Observability;
 /// - 不支持文件导出
 /// - 需要 CORS 配置
 /// - 降低导出频率以减少网络请求
+///
+/// 导出器契约与 Desktop / Windows 一致：配置了 OTLP 端点 → 只走 OTLP；
+/// 未配置 → console 兜底。此前 WASM 是无条件双导出（console + OTLP 同时挂），
+/// 与其他平台不一致且生产流量被拖慢。
 /// </summary>
 public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
 {
@@ -25,11 +29,11 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
 
     public void ConfigureTracerProvider(TracerProviderBuilder builder, TelemetrySettings settings)
     {
-        // WASM 总是附加 Console Exporter（输出到浏览器 DevTools Console）
-        builder.AddConsoleExporter();
-
+        // 与 Desktop / Windows 同一契约：配置了端点只走 OTLP；未配置时 console 兜底
+        // （输出到浏览器 DevTools Console），避免生产流量被双份导出拖慢。
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))
         {
+            builder.AddConsoleExporter();
             return;
         }
 
@@ -42,10 +46,9 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
 
     public void ConfigureMeterProvider(MeterProviderBuilder builder, TelemetrySettings settings)
     {
-        builder.AddConsoleExporter();
-
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))
         {
+            builder.AddConsoleExporter();
             return;
         }
 
@@ -58,7 +61,11 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
 
     public void ConfigureLoggerProvider(OpenTelemetryLoggerOptions options, TelemetrySettings settings)
     {
-        options.AddConsoleExporter();
+        if (string.IsNullOrEmpty(settings.OtlpEndpoint))
+        {
+            options.AddConsoleExporter();
+            return;
+        }
 
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))
         {
