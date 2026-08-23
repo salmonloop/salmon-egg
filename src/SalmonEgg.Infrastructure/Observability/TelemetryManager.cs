@@ -95,6 +95,14 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
                 meterBuilder.AddMeter(meterName);
             }
 
+            // 运行时指标（GC / JIT / 线程池 / 工作集）由平台能力位门控：WASM 上调用会抛
+            // PlatformNotSupportedException 并使整条管线装配失败。不需要另外 AddMeter——
+            // 实测该插装自行注册其 meter（System.Runtime），补一次 AddMeter 是纯冗余。
+            if (_exporterFactory.IsRuntimeInstrumentationSupported)
+            {
+                meterBuilder.AddRuntimeInstrumentation();
+            }
+
             _exporterFactory.ConfigureMeterProvider(meterBuilder, targetSettings);
             candidateMeter = meterBuilder.Build();
 

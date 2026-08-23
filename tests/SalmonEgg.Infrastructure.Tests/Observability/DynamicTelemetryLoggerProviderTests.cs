@@ -143,6 +143,8 @@ public sealed class DynamicTelemetryLoggerProviderTests
 
         public bool IsFileSupported => true;
 
+        public bool IsRuntimeInstrumentationSupported => true;
+
         public void ConfigureTracerProvider(TracerProviderBuilder builder, TelemetrySettings settings)
         {
         }

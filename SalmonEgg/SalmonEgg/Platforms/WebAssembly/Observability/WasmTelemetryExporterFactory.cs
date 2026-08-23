@@ -18,6 +18,11 @@ public sealed class WasmTelemetryExporterFactory : ITelemetryExporterFactory
     public bool IsGrpcSupported => false;
     public bool IsFileSupported => false;
 
+    // AddRuntimeInstrumentation 依赖 EventSource 与 System.Diagnostics.Process，浏览器沙箱
+    // 两者都没有，调用会抛 PlatformNotSupportedException 并使整条管线装配失败
+    // （open-telemetry/opentelemetry-dotnet-contrib#2529）。
+    public bool IsRuntimeInstrumentationSupported => false;
+
     public void ConfigureTracerProvider(TracerProviderBuilder builder, TelemetrySettings settings)
     {
         // WASM 总是附加 Console Exporter（输出到浏览器 DevTools Console）
