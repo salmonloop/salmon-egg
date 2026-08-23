@@ -14,7 +14,23 @@ public static class SemanticConventions
     {
         public const string ServiceName = "service.name";
         public const string ServiceVersion = "service.version";
+
+        /// <summary>
+        /// 注意：规范上只保证「同时存在的实例之间唯一」，SDK 默认每进程随机生成，
+        /// 因此这是**进程/启动**判别符。<c>count(distinct)</c> 约等于启动次数而非设备数；
+        /// 要数设备用 <see cref="AppInstallationId"/>，两者不可互相顶替。
+        /// </summary>
         public const string ServiceInstanceId = "service.instance.id";
+
+        /// <summary>
+        /// 本次安装在本设备上的稳定标识，用于统计设备数 / DAU。
+        /// </summary>
+        /// <remarks>
+        /// 规范要求跨启动与跨升级保持不变、卸载后改变，且**硬件 ID（序列号 / IMEI / MAC）
+        /// MUST NOT 用作该值**。requirement level 是 Recommended（不是 Opt-In），故可默认
+        /// 上报、不需要额外的用户开关；用户仍可通过关闭遥测总开关来停止上报。
+        /// </remarks>
+        public const string AppInstallationId = "app.installation.id";
 
         /// <summary>
         /// 注意：旧名 <c>deployment.environment</c> 已被规范弃用，

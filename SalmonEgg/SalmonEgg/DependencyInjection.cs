@@ -134,11 +134,19 @@ public static class DependencyInjection
             sp.GetRequiredService<ITelemetryExporterFactory>(),
             sp.GetRequiredService<DynamicTelemetryLoggerProvider>()));
 
+        // app.installation.id 的来源。注册在此处但由 TelemetryRuntime 在 apply 时才异步读取：
+        // DI 工厂与构造函数不得触发真实文件系统副作用（启动副作用所有权约束）。
+        services.AddSingleton<IInstallationIdentityService>(sp => new InstallationIdentityService(
+            sp.GetRequiredService<IAppFileStore>(),
+            sp.GetRequiredService<IAppDataService>(),
+            sp.GetRequiredService<ILogger<InstallationIdentityService>>()));
+
         services.AddSingleton<ITelemetryRuntime>(sp => new TelemetryRuntime(
             sp.GetRequiredService<ITelemetryManager>(),
             GetPlatformSamplingDefaults,
             sp.GetRequiredService<ILogger<TelemetryRuntime>>(),
-            typeof(App).Assembly.GetName().Version?.ToString()));
+            typeof(App).Assembly.GetName().Version?.ToString(),
+            sp.GetRequiredService<IInstallationIdentityService>()));
 
         // 订阅持久化边界，使任何写入方（设置页保存、云配置恢复）落盘后都立即重建管线。
         services.AddSingleton<TelemetrySettingsProjection>();

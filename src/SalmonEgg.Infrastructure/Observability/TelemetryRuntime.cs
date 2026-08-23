@@ -19,6 +19,7 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
 {
     private readonly ITelemetryManager _telemetryManager;
     private readonly Func<SamplingSettings> _samplingDefaultsProvider;
+    private readonly IInstallationIdentityService? _installationIdentity;
     private readonly ILogger<TelemetryRuntime> _logger;
     private readonly string? _serviceVersion;
 
@@ -31,16 +32,22 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
 
     private TelemetrySettings? _appliedSettings;
 
+    /// <param name="installationIdentity">
+    /// 提供 <c>app.installation.id</c>。可为 null（不上报装机标识），使既有测试与不需要
+    /// 该维度的宿主无需构造它。
+    /// </param>
     public TelemetryRuntime(
         ITelemetryManager telemetryManager,
         Func<SamplingSettings> samplingDefaultsProvider,
         ILogger<TelemetryRuntime> logger,
-        string? serviceVersion = null)
+        string? serviceVersion = null,
+        IInstallationIdentityService? installationIdentity = null)
     {
         _telemetryManager = telemetryManager ?? throw new ArgumentNullException(nameof(telemetryManager));
         _samplingDefaultsProvider = samplingDefaultsProvider ?? throw new ArgumentNullException(nameof(samplingDefaultsProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _serviceVersion = serviceVersion;
+        _installationIdentity = installationIdentity;
     }
 
     public async Task ApplyAsync(AppSettings settings, CancellationToken cancellationToken = default)
@@ -51,10 +58,15 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
 
         try
         {
+            // 在等 apply 闸门之前取：这是一次性的本地读（之后走内存缓存），放在锁内会把
+            // 首启的文件 IO 串到每次 apply 的临界区里。
+            var installationId = await GetInstallationIdAsync(cancellationToken).ConfigureAwait(false);
+
             var target = TelemetrySettings.Build(
                 settings,
                 _samplingDefaultsProvider(),
-                _serviceVersion);
+                _serviceVersion,
+                installationId);
 
             await _applyGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -96,6 +108,31 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
         {
             // 遥测是旁路能力：重建失败只应停用遥测，不得让设置保存或应用启动失败。
             _logger.LogError(ex, "Failed to apply telemetry configuration; telemetry may be inactive");
+        }
+    }
+
+    /// <summary>
+    /// 取装机标识；失败一律降级为 null（不上报该维度），不得让遥测 apply 失败。
+    /// </summary>
+    private async Task<string?> GetInstallationIdAsync(CancellationToken cancellationToken)
+    {
+        if (_installationIdentity is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _installationIdentity.GetOrCreateAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve installation identity; telemetry omits app.installation.id");
+            return null;
         }
     }
 
