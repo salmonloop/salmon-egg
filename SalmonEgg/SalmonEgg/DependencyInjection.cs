@@ -538,7 +538,9 @@ public static class DependencyInjection
                 ? new DesktopAcpSetupConnectivityTester(sp.GetRequiredService<IAcpSetupHandshakeProbe>())
                 : new UnsupportedAcpSetupConnectivityTester());
 #endif
-        services.AddSingleton<AcpSetupWizardViewModel>();
+        // Transient: the wizard must open on its first step every time, so each navigation gets a fresh
+        // ViewModel instead of one still showing the previous run's saved state.
+        services.AddTransient<AcpSetupWizardViewModel>();
         services.AddSingleton<AcpSetupWizardOrchestrator>(sp =>
             new AcpSetupWizardOrchestrator(
                 sp.GetRequiredService<IAcpAgentCatalog>(),
