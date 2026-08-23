@@ -44,7 +44,7 @@
 
                         <!-- ── Step 1: agent selection ─────────────────────── -->
                         <StackPanel x:Name="AgentSelectionPanel"
-                                    Visibility="{x:Bind ViewModel.IsOnAgentSelection, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsOnAgentSelection, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Spacing="12">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock x:Uid="AcpSetup_AgentsTitle"
@@ -96,7 +96,7 @@
                                                         Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 <HyperlinkButton NavigateUri="{x:Bind InstallDocumentation}"
                                                                  x:Uid="AcpSetup_InstallDocs"
-                                                                 Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource InverseBooleanConverter}}"/>
+                                                                 Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
@@ -106,7 +106,7 @@
 
                         <!-- ── Step 2: components (runtime + adapter) ──────── -->
                         <StackPanel x:Name="ComponentSetupPanel"
-                                    Visibility="{x:Bind ViewModel.IsOnComponentSetup, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsOnComponentSetup, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Spacing="12">
                             <TextBlock x:Uid="AcpSetup_ComponentsTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
@@ -144,7 +144,7 @@
 
                         <!-- ── Step 3: launch parameters ───────────────────── -->
                         <StackPanel x:Name="ParametersPanel"
-                                    Visibility="{x:Bind ViewModel.IsOnParameters, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsOnParameters, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Spacing="12">
                             <TextBlock x:Uid="AcpSetup_ParametersTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
@@ -172,7 +172,7 @@
                                                 <TextBox Grid.Column="1"
                                                          Text="{x:Bind Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          PlaceholderText="{x:Bind Example}"
-                                                         Visibility="{x:Bind HasAllowedValues, Converter={StaticResource InverseBooleanConverter}}"/>
+                                                         Visibility="{x:Bind HasAllowedValues, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
                                             </Grid>
                                             <TextBlock Text="{x:Bind Description}"
                                                        Style="{StaticResource CaptionTextBlockStyle}"
@@ -189,7 +189,7 @@
 
                         <!-- ── Step 4: test ────────────────────────────────── -->
                         <StackPanel x:Name="TestPanel"
-                                    Visibility="{x:Bind ViewModel.IsOnTest, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsOnTest, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Spacing="12">
                             <TextBlock x:Uid="AcpSetup_TestTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
@@ -211,7 +211,7 @@
 
                         <!-- ── Step 5: save ────────────────────────────────── -->
                         <StackPanel x:Name="SavePanel"
-                                    Visibility="{x:Bind ViewModel.IsOnSave, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsOnSave, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                     Spacing="12">
                             <TextBlock x:Uid="AcpSetup_SaveTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>

@@ -15,6 +15,45 @@ using static SalmonEgg.Presentation.Core.Tests.Ui.XamlComplianceTestHelpers;
 public sealed class XamlComplianceSettingsTests
 {
 
+    /// <summary>
+    /// A converter bound to <c>Visibility</c> must return <c>Visibility</c>. The compiled x:Bind setter
+    /// casts the converter's result straight to the target type, so returning <c>bool</c> throws
+    /// <see cref="InvalidCastException"/> from inside the native layout callback — which WinUI cannot
+    /// swallow, so it fail-fasts the process even though the app's UnhandledException handler ran.
+    /// The build cannot see it (the converter is resolved by key at runtime) and no ViewModel test can
+    /// either, so the type contract is asserted here.
+    /// </summary>
+    [Fact]
+    public void VisibilityBindings_DoNotUseConvertersThatReturnBoolean()
+    {
+        var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var offender = new Regex(
+            @"Visibility\s*=\s*""\{[^}]*Converter\s*=\s*\{StaticResource\s+InverseBooleanConverter\}",
+            RegexOptions.Singleline);
+        var failures = new List<string>();
+
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var text = File.ReadAllText(xamlFile);
+            foreach (var match in offender.Matches(text).Cast<Match>())
+            {
+                var line = text.Take(match.Index).Count(character => character == '\n') + 1;
+                failures.Add(
+                    $"{Path.GetRelativePath(FindRepoRoot(), xamlFile)}:{line}"
+                    + " binds Visibility through InverseBooleanConverter, which returns bool."
+                    + " Use BoolToVisibilityConverter with ConverterParameter=Invert.");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
     [Fact]
     public void AcpEditors_ExposeStableAutomationIdsForEditableFields()
     {
