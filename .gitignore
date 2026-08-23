@@ -177,3 +177,4 @@ SalmonEgg/SalmonEgg.Package/*.pfx
 # "release" path segment at any depth, which would otherwise make this directory uncommittable.
 !scripts/release/
 !scripts/release/**
+.impeccable/
