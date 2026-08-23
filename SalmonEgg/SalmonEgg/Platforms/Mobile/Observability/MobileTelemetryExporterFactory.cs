@@ -17,6 +17,8 @@ public sealed class MobileTelemetryExporterFactory : ITelemetryExporterFactory
     public bool IsGrpcSupported => true;  // Android 支持，iOS 视网络库而定
     public bool IsFileSupported => false;  // Mobile 存储受限，不启用文件导出
 
+    public bool IsRuntimeInstrumentationSupported => true;
+
     public void ConfigureTracerProvider(TracerProviderBuilder builder, TelemetrySettings settings)
     {
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))

@@ -14,6 +14,8 @@ public sealed class WinUI3TelemetryExporterFactory : ITelemetryExporterFactory
     public bool IsGrpcSupported => true;
     public bool IsFileSupported => true;
 
+    public bool IsRuntimeInstrumentationSupported => true;
+
     public void ConfigureTracerProvider(TracerProviderBuilder builder, TelemetrySettings settings)
     {
         if (string.IsNullOrEmpty(settings.OtlpEndpoint))

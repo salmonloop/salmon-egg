@@ -21,6 +21,20 @@ public interface ITelemetryExporterFactory
     bool IsFileSupported { get; }
 
     /// <summary>
+    /// 平台是否支持 .NET 运行时指标插装（GC / JIT / 线程池 / 工作集）。
+    /// </summary>
+    /// <remarks>
+    /// WASM 必须为 <c>false</c>：<c>AddRuntimeInstrumentation()</c> 依赖 <c>EventSource</c> 与
+    /// <c>System.Diagnostics.Process</c>，浏览器沙箱两者都没有，调用会直接抛
+    /// <c>PlatformNotSupportedException</c>（open-telemetry/opentelemetry-dotnet-contrib#2529）。
+    /// 该异常发生在装配阶段，会让整条遥测管线构造失败，而不只是少掉运行时指标。
+    ///
+    /// 之所以做成能力位而不是在装配处写 <c>#if __WASM__</c>：平台差异必须集中在平台服务
+    /// （AGENTS.md 第 4/9 条），与 <see cref="IsGrpcSupported"/> 同型。
+    /// </remarks>
+    bool IsRuntimeInstrumentationSupported { get; }
+
+    /// <summary>
     /// 配置 TracerProvider（Traces 维度）
     /// </summary>
     /// <param name="builder">TracerProviderBuilder 实例</param>

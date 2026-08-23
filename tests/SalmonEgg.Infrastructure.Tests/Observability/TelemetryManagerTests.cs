@@ -291,6 +291,10 @@ public class TelemetryManagerTests
     {
         public bool IsGrpcSupported => true;
         public bool IsFileSupported => true;
+
+        /// <summary>可切换，用于覆盖 WASM（不支持运行时插装）与其余平台两条装配分支。</summary>
+        public bool IsRuntimeInstrumentationSupported { get; set; } = true;
+
         public bool TracerProviderConfigured { get; private set; }
         public bool MeterProviderConfigured { get; private set; }
         public int TracerConfigureCount { get; private set; }
