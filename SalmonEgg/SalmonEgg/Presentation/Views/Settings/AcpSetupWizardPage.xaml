@@ -29,6 +29,10 @@
                                        Style="{StaticResource SettingsPageTitleTextStyle}"/>
                             <TextBlock x:Uid="AcpSetup_PageSummary"
                                        Style="{StaticResource SettingsPageSummaryTextStyle}"/>
+                            <TextBlock x:Name="AcpSetupStepPosition"
+                                       Text="{x:Bind ViewModel.StepPositionText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
 
                         <!-- Operation failure surface, shared by every command. -->
@@ -68,10 +72,12 @@
                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                               Glyph="&#xE73E;"
+                                                              x:Uid="AcpSetup_StatusInstalled"
                                                               FontSize="14"
                                                               Visibility="{x:Bind IsInstalled, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                               Glyph="&#xE711;"
+                                                              x:Uid="AcpSetup_StatusMissing"
                                                               FontSize="14"
                                                               Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <ProgressRing IsActive="{x:Bind IsChecking}" Width="16" Height="16"/>
@@ -83,7 +89,7 @@
                                             <StackPanel Orientation="Horizontal" Spacing="8"
                                                         Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibilityConverter}}">
                                                 <Button x:Name="InstallAgentInlineButton"
-                                                        Content="{x:Bind DisplayName}"
+                                                        x:Uid="AcpSetup_InstallAgentRow"
                                                         Tag="{x:Bind}"
                                                         Click="OnInstallAgentRowClick"
                                                         AutomationProperties.AutomationId="AcpSetup.Agents.InstallRow"
@@ -188,6 +194,7 @@
                             <TextBlock x:Uid="AcpSetup_TestTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
                             <InfoBar x:Name="AcpSetupTestSuccessBar"
+                                     x:Uid="AcpSetup_TestSuccessBar"
                                      IsOpen="{x:Bind ViewModel.IsTestSuccessful, Mode=OneWay}"
                                      Severity="Success"
                                      IsClosable="False"/>
@@ -209,14 +216,31 @@
                             <TextBlock x:Uid="AcpSetup_SaveTitle"
                                        Style="{StaticResource SettingsSectionTitleTextStyle}"/>
                             <TextBox x:Name="AcpSetupProfileNameBox"
-                                     Header="{x:Null}"
+                                     x:Uid="AcpSetup_ProfileName"
                                      Text="{x:Bind ViewModel.ProfileName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      MinWidth="320"
                                      HorizontalAlignment="Left"/>
+                            <Button x:Name="AcpSetupSaveButton"
+                                    x:Uid="AcpSetup_Save"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Command="{x:Bind ViewModel.SaveCommand}"
+                                    AutomationProperties.AutomationId="AcpSetup.Save"/>
                             <InfoBar x:Name="AcpSetupSavedBar"
+                                     x:Uid="AcpSetup_SavedBar"
                                      IsOpen="{x:Bind ViewModel.HasSavedProfile, Mode=OneWay}"
                                      Severity="Success"
                                      IsClosable="False"/>
+                        </StackPanel>
+
+                        <!-- Busy feedback shared by every long operation. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                          Width="16"
+                                          Height="16"/>
+                            <TextBlock x:Uid="AcpSetup_Working"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                         </StackPanel>
 
                         <!-- ── Wizard navigation bar ───────────────────────── -->

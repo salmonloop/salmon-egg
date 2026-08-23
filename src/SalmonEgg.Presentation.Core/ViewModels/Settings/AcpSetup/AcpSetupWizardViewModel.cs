@@ -78,6 +78,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOnParameters))]
     [NotifyPropertyChangedFor(nameof(IsOnTest))]
     [NotifyPropertyChangedFor(nameof(IsOnSave))]
+    [NotifyPropertyChangedFor(nameof(StepPositionText))]
     private AcpSetupWizardStep _step = AcpSetupWizardStep.AgentSelection;
 
     [ObservableProperty]
@@ -155,6 +156,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     public bool IsOnTest => Step == AcpSetupWizardStep.Test;
 
     public bool IsOnSave => Step == AcpSetupWizardStep.Save;
+
+    /// <summary>Human-readable step position ("Step 2 of 5"), so the walk's place is always stated.</summary>
+    public string StepPositionText => Localize(
+        "AcpSetup_Step_Position",
+        $"Step {(int)Step + 1} of {TotalSteps}")
+        .Replace("{0}", ((int)Step + 1).ToString(System.Globalization.CultureInfo.CurrentCulture))
+        .Replace("{1}", TotalSteps.ToString(System.Globalization.CultureInfo.CurrentCulture));
+
+    private const int TotalSteps = 5;
 
     public bool HasSavedProfile => SavedProfile is not null;
 
