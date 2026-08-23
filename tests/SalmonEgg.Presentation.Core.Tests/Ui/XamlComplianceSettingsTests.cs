@@ -23,12 +23,22 @@ public sealed class XamlComplianceSettingsTests
     /// The build cannot see it (the converter is resolved by key at runtime) and no ViewModel test can
     /// either, so the type contract is asserted here.
     /// </summary>
+    /// <remarks>
+    /// The offending converters are discovered from their own source rather than listed, so a new
+    /// bool-returning converter is covered the day it is written instead of the day someone remembers
+    /// to extend this test.
+    /// </remarks>
     [Fact]
     public void VisibilityBindings_DoNotUseConvertersThatReturnBoolean()
     {
         var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var booleanConverters = FindBooleanReturningConverters(root);
+        Assert.NotEmpty(booleanConverters);
+
         var offender = new Regex(
-            @"Visibility\s*=\s*""\{[^}]*Converter\s*=\s*\{StaticResource\s+InverseBooleanConverter\}",
+            @"Visibility\s*=\s*""\{[^}]*Converter\s*=\s*\{StaticResource\s+("
+            + string.Join("|", booleanConverters.Select(Regex.Escape))
+            + @")\}",
             RegexOptions.Singleline);
         var failures = new List<string>();
 
@@ -46,12 +56,45 @@ public sealed class XamlComplianceSettingsTests
                 var line = text.Take(match.Index).Count(character => character == '\n') + 1;
                 failures.Add(
                     $"{Path.GetRelativePath(FindRepoRoot(), xamlFile)}:{line}"
-                    + " binds Visibility through InverseBooleanConverter, which returns bool."
-                    + " Use BoolToVisibilityConverter with ConverterParameter=Invert.");
+                    + $" binds Visibility through {match.Groups[1].Value}, which returns bool."
+                    + " Use BoolToVisibilityConverter (ConverterParameter=Invert to negate)"
+                    + " or InverseBoolToVisibilityConverter.");
             }
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
+    /// Names the converters whose <c>Convert</c> only ever returns <c>bool</c>, read from their source.
+    /// A converter that returns a <see cref="Visibility"/> on any path is out of scope: the cast in the
+    /// generated binding setter is what fails, and that only happens for a value that is never one.
+    /// </summary>
+    private static string[] FindBooleanReturningConverters(string root)
+    {
+        var convertersRoot = Path.Combine(root, "Presentation", "Converters");
+        var convertBody = new Regex(
+            @"public object Convert\([^)]*\)(?<body>.*?)\n    \}",
+            RegexOptions.Singleline);
+
+        return Directory
+            .EnumerateFiles(convertersRoot, "*.cs", SearchOption.TopDirectoryOnly)
+            .Select(path => (Name: Path.GetFileNameWithoutExtension(path), Text: File.ReadAllText(path)))
+            .Where(converter =>
+            {
+                var body = convertBody.Match(converter.Text);
+                if (!body.Success)
+                {
+                    return false;
+                }
+
+                var convert = body.Groups["body"].Value;
+                return !convert.Contains("Visibility.", StringComparison.Ordinal)
+                       && Regex.IsMatch(convert, @"return\s+(!|true|false)");
+            })
+            .Select(converter => converter.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
     }
 
     [Fact]
