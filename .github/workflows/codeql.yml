@@ -30,8 +30,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: codeql-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Include the event name in the group, for the same reason the platform canary does. A scheduled scan
+  # runs against the default branch, so a group keyed only on the ref makes it share a slot with pushes to
+  # that branch — and the next commit cancels the one run whose entire purpose is to re-evaluate code that
+  # nobody touched. The weekly scan is the only trigger that catches an advisory published against
+  # unchanged code, so it is the run least able to afford being cancelled.
+  group: codeql-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   DOTNET_VERSION: "10.0.3xx"

@@ -169,17 +169,48 @@ public sealed class GitHubWorkflowContractTests
     }
 
     [Fact]
-    public void PlatformGates_RunOnAScheduleAndSurviveConcurrentPushes()
+    public void PlatformGates_RunOnASchedule()
     {
         var workflow = ReadWorkflow("platform-build-gates.yml");
 
         // The Apple and Android toolchains move without any commit here, so only a scheduled run can
         // separate "our change broke it" from "the platform moved".
         Assert.Contains("schedule:", workflow, StringComparison.Ordinal);
+    }
 
-        // A canary that a push cancels is not a canary.
-        Assert.Contains("cancel-in-progress: ${{ github.event_name != 'schedule' }}", workflow, StringComparison.Ordinal);
-        Assert.Contains("${{ github.event_name }}", workflow, StringComparison.Ordinal);
+    [Fact]
+    public void EveryScheduledWorkflow_SurvivesConcurrentPushes()
+    {
+        // A scheduled run always executes against the default branch, so a concurrency group keyed only on
+        // the ref shares a slot with pushes to that branch, and the next commit cancels the one run whose
+        // whole purpose is to complete against a tree nobody touched.
+        //
+        // Written as a rule over every scheduled workflow rather than a check on one file, because the
+        // single-file version is what let the defect recur: the assertion named platform-build-gates.yml,
+        // so codeql.yml shipped with a ref-only group and a weekly security scan a push could cancel.
+        var scheduled = AllWorkflowNames
+            .Select(workflowName => (Name: workflowName, Body: ReadWorkflow(workflowName)))
+            .Where(entry => entry.Body.Contains("\n  schedule:\n", StringComparison.Ordinal))
+            .ToArray();
+
+        // Naming the members keeps the rule below from going vacuous. "No scheduled workflow violates X"
+        // is trivially true of an empty set, so a change that dropped a schedule would leave this test
+        // green while deleting the continuous coverage that schedule exists to provide.
+        Assert.Equal(
+            ["codeql.yml", "platform-build-gates.yml"],
+            scheduled.Select(entry => entry.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+
+        // Assert on the group line itself rather than searching the whole file for the event-name
+        // expression: `${{ github.event_name }}` appears in step conditions too, so a whole-file contains
+        // would pass on a workflow whose group had never been scoped at all.
+        var unprotected = scheduled
+            .Where(entry =>
+                !ConcurrencyGroupLine(entry.Body).Contains("${{ github.event_name }}", StringComparison.Ordinal)
+                || !entry.Body.Contains("cancel-in-progress: ${{ github.event_name != 'schedule' }}", StringComparison.Ordinal))
+            .Select(entry => $"{entry.Name}: {ConcurrencyGroupLine(entry.Body)}")
+            .ToArray();
+
+        Assert.Empty(unprotected);
     }
 
     [Fact]
@@ -270,6 +301,13 @@ public sealed class GitHubWorkflowContractTests
 
         return count;
     }
+
+    private static string ConcurrencyGroupLine(string workflow) =>
+        workflow
+            .Split('\n')
+            .SkipWhile(line => !line.StartsWith("concurrency:", StringComparison.Ordinal))
+            .FirstOrDefault(line => line.TrimStart().StartsWith("group:", StringComparison.Ordinal), string.Empty)
+            .Trim();
 
     private static string ReadWorkflow(string workflowName) =>
         TestSourceFiles.ReadAllText($@".github\workflows\{workflowName}").Replace("\r\n", "\n", StringComparison.Ordinal);
