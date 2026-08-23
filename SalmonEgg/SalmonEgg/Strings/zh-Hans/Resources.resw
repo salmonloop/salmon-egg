@@ -759,6 +759,54 @@
   <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
     <value>删除</value>
   </data>
+  <data name="Acp_ProfilesSetupWizard.Content" xml:space="preserve">
+    <value>配置向导</value>
+  </data>
+  <data name="AcpSetup_PageTitle.Text" xml:space="preserve">
+    <value>ACP 配置向导</value>
+  </data>
+  <data name="AcpSetup_PageSummary.Text" xml:space="preserve">
+    <value>按步骤检测 Agent、安装 ACP 适配器、填写启动参数并验证连接，最后保存为配置。</value>
+  </data>
+  <data name="AcpSetup_AgentsTitle.Text" xml:space="preserve">
+    <value>1. 选择 Agent</value>
+  </data>
+  <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
+    <value>重新检测</value>
+  </data>
+  <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
+    <value>2. 检查组件</value>
+  </data>
+  <data name="AcpSetup_InstallAdapter.Content" xml:space="preserve">
+    <value>一键安装适配器</value>
+  </data>
+  <data name="AcpSetup_RedetectAdapter.Content" xml:space="preserve">
+    <value>重新检测</value>
+  </data>
+  <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
+    <value>安装文档</value>
+  </data>
+  <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
+    <value>3. 启动参数</value>
+  </data>
+  <data name="AcpSetup_CommandPreviewLabel.Text" xml:space="preserve">
+    <value>启动命令预览</value>
+  </data>
+  <data name="AcpSetup_TestTitle.Text" xml:space="preserve">
+    <value>4. 测试连接</value>
+  </data>
+  <data name="AcpSetup_RunTest.Content" xml:space="preserve">
+    <value>开始测试</value>
+  </data>
+  <data name="AcpSetup_SaveTitle.Text" xml:space="preserve">
+    <value>5. 保存配置</value>
+  </data>
+  <data name="AcpSetup_Back.Content" xml:space="preserve">
+    <value>上一步</value>
+  </data>
+  <data name="AcpSetup_Next.Content" xml:space="preserve">
+    <value>下一步</value>
+  </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>
   </data>

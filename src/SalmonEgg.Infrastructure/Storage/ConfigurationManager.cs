@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -20,7 +20,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 public sealed class ConfigurationManager : IConfigurationService, IConfigurationRecoveryService
 {
     /// <summary>本程序写入 server 配置时使用的 schema 版本。</summary>
-    public const int CurrentServerConfigurationSchemaVersion = 2;
+    public const int CurrentServerConfigurationSchemaVersion = 3;
 
     private const int CurrentSchemaVersion = CurrentServerConfigurationSchemaVersion;
 
@@ -573,6 +573,7 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             ServerUrl = config.ServerUrl,
             StdioCommand = config.StdioCommand,
             StdioArguments = config.StdioArguments?.ToList() ?? new List<string>(),
+            StdioEnvironment = ToYamlStdioEnvironment(config.StdioEnvironment),
             ConnectionTimeoutSeconds = config.ConnectionTimeout,
             Authentication = new AuthenticationYamlV1 { Mode = mode },
             Proxy = new ProxyYamlV1
@@ -593,6 +594,7 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
             ServerUrl = yamlModel.ServerUrl ?? string.Empty,
             StdioCommand = yamlModel.StdioCommand ?? string.Empty,
             StdioArguments = yamlModel.StdioArguments ?? new List<string>(),
+            StdioEnvironment = CloneStdioEnvironment(yamlModel.StdioEnvironment),
             Transport = TransportFromString(yamlModel.Transport),
             ConnectionTimeout = AcpConnectionTimeoutPolicy.ResolveSeconds(yamlModel.ConnectionTimeoutSeconds)
         };
@@ -607,6 +609,47 @@ public sealed class ConfigurationManager : IConfigurationService, IConfiguration
         };
 
         return config;
+    }
+
+    /// <summary>
+    /// Projects the environment overlay for YAML, returning null when there is nothing to persist.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than an empty map so the serializer's OmitNull drops the key instead of writing a
+    /// flow-style <c>{}</c>: configuration YAML stays block-style, which is what keeps it readable and
+    /// mergeable.
+    /// </remarks>
+    private static Dictionary<string, string>? ToYamlStdioEnvironment(
+        IReadOnlyDictionary<string, string>? environment)
+    {
+        var clone = CloneStdioEnvironment(environment);
+        return clone.Count == 0 ? null : clone;
+    }
+
+    /// <summary>
+    /// Copies the environment overlay, dropping blank names so a hand-edited YAML cannot produce an
+    /// unnamed variable that the process launcher would reject.
+    /// </summary>
+    private static Dictionary<string, string> CloneStdioEnvironment(
+        IReadOnlyDictionary<string, string>? environment)
+    {
+        var clone = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (environment is null)
+        {
+            return clone;
+        }
+
+        foreach (var entry in environment)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Key))
+            {
+                continue;
+            }
+
+            clone[entry.Key.Trim()] = entry.Value ?? string.Empty;
+        }
+
+        return clone;
     }
 
     private async Task HydrateSecretsAsync(ServerConfiguration config, string? mode)

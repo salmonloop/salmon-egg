@@ -106,6 +106,10 @@
                                             AutomationProperties.AutomationId="Acp.Profiles.Refresh"
                                             Command="{x:Bind ViewModel.Profiles.RefreshCommand}"
                                             IsEnabled="{x:Bind ViewModel.CanRefreshProfiles, Mode=OneWay}"/>
+                                    <Button x:Name="AcpProfilesWizardButton"
+                                            x:Uid="Acp_ProfilesSetupWizard"
+                                            AutomationProperties.AutomationId="Acp.Profiles.SetupWizard"
+                                            Click="OnOpenSetupWizardClick"/>
                                     <Button x:Name="AcpProfilesAddButton"
                                             x:Uid="Acp_ProfilesAdd"
                                             AutomationProperties.AutomationId="Acp.Profiles.Add"

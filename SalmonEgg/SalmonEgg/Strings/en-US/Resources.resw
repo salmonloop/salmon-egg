@@ -834,6 +834,54 @@
   <data name="Acp_RemoteDirectoryDelete.Content" xml:space="preserve">
     <value>Delete</value>
   </data>
+  <data name="Acp_ProfilesSetupWizard.Content" xml:space="preserve">
+    <value>Setup wizard</value>
+  </data>
+  <data name="AcpSetup_PageTitle.Text" xml:space="preserve">
+    <value>ACP Setup Wizard</value>
+  </data>
+  <data name="AcpSetup_PageSummary.Text" xml:space="preserve">
+    <value>Detect your agent, install the ACP adapter, fill in launch parameters, verify the connection, and save it as a profile.</value>
+  </data>
+  <data name="AcpSetup_AgentsTitle.Text" xml:space="preserve">
+    <value>1. Choose an agent</value>
+  </data>
+  <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
+    <value>Detect again</value>
+  </data>
+  <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
+    <value>2. Check components</value>
+  </data>
+  <data name="AcpSetup_InstallAdapter.Content" xml:space="preserve">
+    <value>Install adapter</value>
+  </data>
+  <data name="AcpSetup_RedetectAdapter.Content" xml:space="preserve">
+    <value>Detect again</value>
+  </data>
+  <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
+    <value>Install docs</value>
+  </data>
+  <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
+    <value>3. Launch parameters</value>
+  </data>
+  <data name="AcpSetup_CommandPreviewLabel.Text" xml:space="preserve">
+    <value>Command preview</value>
+  </data>
+  <data name="AcpSetup_TestTitle.Text" xml:space="preserve">
+    <value>4. Test connection</value>
+  </data>
+  <data name="AcpSetup_RunTest.Content" xml:space="preserve">
+    <value>Run test</value>
+  </data>
+  <data name="AcpSetup_SaveTitle.Text" xml:space="preserve">
+    <value>5. Save profile</value>
+  </data>
+  <data name="AcpSetup_Back.Content" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="AcpSetup_Next.Content" xml:space="preserve">
+    <value>Next</value>
+  </data>
   <data name="Start_Title.Text" xml:space="preserve">
     <value>Salmon Egg</value>
   </data>

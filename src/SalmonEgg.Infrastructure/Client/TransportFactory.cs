@@ -75,7 +75,8 @@ public class TransportFactory : ITransportFactory
             configuration.Transport == TransportType.Stdio ? configuration.StdioArguments : null,
             configuration.Transport == TransportType.Stdio ? null : configuration.ServerUrl,
             connectTimeout,
-            configuration.Proxy);
+            configuration.Proxy,
+            configuration.Transport == TransportType.Stdio ? configuration.StdioEnvironment : null);
     }
 
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateTransportCore(
@@ -84,13 +85,14 @@ public class TransportFactory : ITransportFactory
         IReadOnlyList<string>? arguments,
         string? url,
         TimeSpan connectTimeout,
-        ProxyConfig? proxy = null)
+        ProxyConfig? proxy = null,
+        IReadOnlyDictionary<string, string>? stdioEnvironment = null)
     {
         _logger.Information("Creating transport instance. TransportType={TransportType}", transportType);
 
         return transportType switch
         {
-            TransportType.Stdio => CreateStdioTransport(command, arguments),
+            TransportType.Stdio => CreateStdioTransport(command, arguments, stdioEnvironment),
             TransportType.WebSocket => CreateWebSocketTransport(url, connectTimeout, proxy),
             TransportType.StreamableHttp => CreateStreamableHttpTransport(url, connectTimeout, proxy),
             _ => throw new NotSupportedException($"Unsupported transport type: {transportType}.")
@@ -102,11 +104,13 @@ public class TransportFactory : ITransportFactory
     /// </summary>
     /// <param name="command">命令</param>
     /// <param name="arguments">命令行参数</param>
+    /// <param name="environment">叠加到子进程环境的变量</param>
     /// <returns>Stdio 传输实例</returns>
     /// <exception cref="ArgumentException">当命令为空时抛出</exception>
     private SalmonEgg.Domain.Interfaces.Transport.ITransport CreateStdioTransport(
         string? command,
-        IReadOnlyList<string>? arguments)
+        IReadOnlyList<string>? arguments,
+        IReadOnlyDictionary<string, string>? environment)
     {
         if (!_transportSupportPolicy.IsSupported(TransportType.Stdio))
         {
@@ -123,7 +127,7 @@ public class TransportFactory : ITransportFactory
         var argsArray = arguments?.ToArray() ?? Array.Empty<string>();
         _logger.Information("Creating Stdio transport. Command={Command}, ArgsCount={ArgsCount}", command, argsArray.Length);
 
-        return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8);
+        return _stdioTransportFactory.Create(command.Trim(), argsArray, Encoding.UTF8, environment);
     }
 
     /// <summary>

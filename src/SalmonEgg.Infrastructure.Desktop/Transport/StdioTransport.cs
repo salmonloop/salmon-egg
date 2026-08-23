@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -26,10 +27,13 @@ namespace SalmonEgg.Infrastructure.Transport
         private StreamReader? _stderr;
         private CancellationTokenSource? _readCts;
         private static readonly TimeSpan StartupObservationTimeout = TimeSpan.FromMilliseconds(500);
+        private static readonly IReadOnlyDictionary<string, string> EmptyEnvironment =
+            new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly string _command;
         private readonly string[] _args;
         private readonly Encoding _encoding;
         private readonly string _workingDirectory;
+        private readonly IReadOnlyDictionary<string, string> _environment;
         private bool _disposed;
         private readonly object _lock = new();
 
@@ -59,10 +63,14 @@ namespace SalmonEgg.Infrastructure.Transport
         /// <param name="command">Agent 可执行文件的命令</param>
         /// <param name="args">命令行参数</param>
         /// <param name="encoding">字符编码</param>
+        /// <param name="environment">
+        /// 附加到子进程环境的变量。叠加在继承环境之上，null 或空表示不修改环境。
+        /// </param>
         public StdioTransport(
             string command,
             string[]? args = null,
-            Encoding? encoding = null)
+            Encoding? encoding = null,
+            IReadOnlyDictionary<string, string>? environment = null)
         {
             // 去除命令和参数中的首尾空格（避免意外输入导致找不到文件）
             string trimmedCommand = (command ?? string.Empty).Trim();
@@ -87,6 +95,32 @@ namespace SalmonEgg.Infrastructure.Transport
             }
 
             _encoding = NormalizeTransportEncoding(encoding ?? Encoding.UTF8);
+            _environment = NormalizeEnvironment(environment);
+        }
+
+        /// <summary>
+        /// 复制并去掉空名条目，使传输持有自己的不可变副本，避免调用方后续修改影响已建连的进程。
+        /// </summary>
+        private static IReadOnlyDictionary<string, string> NormalizeEnvironment(
+            IReadOnlyDictionary<string, string>? environment)
+        {
+            if (environment is null || environment.Count == 0)
+            {
+                return EmptyEnvironment;
+            }
+
+            var normalized = new Dictionary<string, string>(environment.Count, StringComparer.Ordinal);
+            foreach (var entry in environment)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key))
+                {
+                    continue;
+                }
+
+                normalized[entry.Key.Trim()] = entry.Value ?? string.Empty;
+            }
+
+            return normalized;
         }
 
         private static Encoding NormalizeTransportEncoding(Encoding encoding)
@@ -222,6 +256,12 @@ namespace SalmonEgg.Infrastructure.Transport
             foreach (var argument in _args)
             {
                 processInfo.ArgumentList.Add(argument);
+            }
+
+            // Applied after construction so configured values win over the inherited environment.
+            foreach (var entry in _environment)
+            {
+                processInfo.Environment[entry.Key] = entry.Value;
             }
 
             return processInfo;

@@ -5,7 +5,7 @@ namespace SalmonEgg.Infrastructure.Storage.YamlModels;
 
 internal sealed class ServerConfigurationYaml
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
 
     public string UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow.ToString("O");
 
@@ -22,6 +22,17 @@ internal sealed class ServerConfigurationYaml
     public string StdioCommand { get; set; } = string.Empty;
 
     public List<string> StdioArguments { get; set; } = new();
+
+    /// <summary>
+    /// Stdio child-process environment overlay. Added in schema_version 3; absent in v2 files, which
+    /// deserialize to null and therefore need no migration step.
+    /// </summary>
+    /// <remarks>
+    /// Nullable and left null when there is nothing to write, so <c>OmitNull</c> drops the key entirely
+    /// rather than emitting a flow-style <c>{}</c>. Configuration YAML stays block-style so it remains
+    /// readable and mergeable, which is the shape the persistence spec requires.
+    /// </remarks>
+    public Dictionary<string, string>? StdioEnvironment { get; set; }
 
     public int ConnectionTimeoutSeconds { get; set; } = AcpConnectionTimeoutPolicy.DefaultSeconds;
 

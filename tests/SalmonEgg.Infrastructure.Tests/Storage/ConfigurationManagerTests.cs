@@ -185,6 +185,91 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveConfigurationAsync_WithStdioEnvironment_PersistsBlockStyleAndLoadsBack()
+    {
+        var config = new ServerConfiguration
+        {
+            Id = "stdio-env-001",
+            Name = "Env Overlay",
+            Transport = TransportType.Stdio,
+            StdioCommand = "npx",
+            StdioArguments = ["@scope/adapter", "--acp"],
+            StdioEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["AGENT_DISABLE_AUTO_UPDATE"] = "1"
+            },
+            ConnectionTimeout = 10
+        };
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        // Block style, one entry per indented line: the persistence spec requires the file stay
+        // readable and mergeable, which a flow-style map would break.
+        Assert.Contains(
+            "stdio_environment:" + Environment.NewLine + "  AGENT_DISABLE_AUTO_UPDATE: 1",
+            yaml.ReplaceLineEndings(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("{", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Equal("1", Assert.Contains("AGENT_DISABLE_AUTO_UPDATE", loaded!.StdioEnvironment));
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithoutStdioEnvironment_OmitsTheKeyEntirely()
+    {
+        var config = new ServerConfiguration
+        {
+            Id = "stdio-env-absent-001",
+            Name = "No Env",
+            Transport = TransportType.Stdio,
+            StdioCommand = "agent",
+            ConnectionTimeout = 10
+        };
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("stdio_environment", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Empty(loaded!.StdioEnvironment);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WithSchemaVersion2File_HydratesEmptyEnvironmentWithoutMigration()
+    {
+        var configId = "schema-v2-no-env-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 2
+            id: schema-v2-no-env-001
+            name: Legacy Stdio
+            transport: stdio
+            stdio_command: agent
+            stdio_arguments:
+            - --acp
+            connection_timeout_seconds: 10
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """, TestContext.Current.CancellationToken);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal("agent", loaded!.StdioCommand);
+        Assert.Empty(loaded.StdioEnvironment);
+    }
+
+    [Fact]
     public async Task TransportPersistence_WritesAndReadsCanonicalStreamableHttp()
     {
         var config = CreateTestConfiguration("streamable-http-001");

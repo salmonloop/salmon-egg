@@ -1,0 +1,404 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Localization;
+using SalmonEgg.Application.Services.AcpSetup;
+using SalmonEgg.Domain.Models;
+using SalmonEgg.Domain.Models.AcpSetup;
+using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Tests.Localization;
+using SalmonEgg.Presentation.Core.Tests.Threading;
+using SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
+using Xunit;
+
+namespace SalmonEgg.Presentation.Core.Tests.Settings.AcpSetup;
+
+public sealed class AcpSetupWizardViewModelTests
+{
+    private const string HandshakeRemediationKey = "AcpSetup_Remediation_Handshake";
+    private const string StageHandshakeKey = "AcpSetup_Stage_Handshake";
+
+    [Fact]
+    public void Constructor_SeedsCatalogRows_AsUndeterminedOnFirstStep()
+    {
+        var wizard = CreateWizard();
+
+        Assert.Single(wizard.Agents);
+        Assert.Equal(AcpComponentAvailability.Undetermined, wizard.Agents[0].Availability);
+        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.True(wizard.IsOnAgentSelection);
+        Assert.False(wizard.GoBackCommand.CanExecute(null));
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DetectAgents_AppliesProbeResults_WithVersion()
+    {
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.2.3");
+        var wizard = CreateWizard(probe);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Equal(AcpComponentAvailability.Installed, wizard.Agents[0].Availability);
+        Assert.True(wizard.Agents[0].HasVersion);
+        Assert.Equal("1.2.3", wizard.Agents[0].Version);
+    }
+
+    [Fact]
+    public async Task DetectAgents_MissingRuntime_BlocksAdvancementUntilSelected()
+    {
+        var wizard = CreateWizard(new StubExecutableProbe());
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Equal(AcpComponentAvailability.Missing, wizard.Agents[0].Availability);
+        // Agent absence must not be reported as adapter absence: the adapter was never probed.
+        Assert.False(wizard.IsAdapterMissing);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DetectAgents_UndeterminedProbe_DoesNotBlockAdvancement()
+    {
+        // No process probing on this platform: the runtime is unknown, not absent.
+        var probe = new StubExecutableProbe { SupportsProcessProbing = false };
+        var wizard = CreateWizard(probe);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Equal(AcpComponentAvailability.Undetermined, wizard.Agents[0].Availability);
+        wizard.SelectedAgent = wizard.Agents[0];
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task GoNext_FromAgentSelection_PreselectsRecommendedAdapter_AndProbesIt()
+    {
+        var (wizard, _, _) = await WalkToComponentSetupAsync(
+            configureProbe: probe =>
+            {
+                probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, true);
+                return probe;
+            });
+
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+        Assert.Equal(2, wizard.Adapters.Count);
+        // The built-in adapter ships with the agent, so the recommendation lands there first.
+        Assert.Equal("adapter.builtin", wizard.SelectedAdapter?.Component.Id);
+        Assert.NotNull(wizard.AdapterProbe);
+        Assert.True(wizard.IsAdapterUsable);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ComponentSetup_MissingAdapterBlocksWalk_InstallReprobesAndReopens()
+    {
+        // The runtime is healthy; only the packaged adapter is absent, so its absence is what
+        // blocks the walk. Package probing gates on its launcher being present too.
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable("npx", "/usr/bin/npx");
+        var adapter = AcpSetupWizardFixtures.PackagedAdapter();
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizardFor(agent, probe, installer, localizer: null);
+        probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, false);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup + auto adapter probe
+
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+
+        // Installing flips the package answer; the orchestrator re-probes after the install.
+        installer.OnInstall = _ => probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, true);
+
+        await wizard.InstallAdapterCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterUsable);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Parameters_BuildsRowsFromTemplate_PreviewsCommandLine()
+    {
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", defaultValue: "sonnet");
+        var (wizard, _, _) = await WalkToParametersAsync(parameters: new[] { parameter });
+
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
+        var row = Assert.Single(wizard.Parameters);
+        Assert.Equal("--model", row.Key);
+        Assert.Equal("sonnet", row.Value);
+
+        Assert.Contains("--model", wizard.LaunchCommandPreview, StringComparison.Ordinal);
+        Assert.Contains("sonnet", wizard.LaunchCommandPreview, StringComparison.Ordinal);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Parameters_MissingRequiredValue_StaysOnStepWithoutTesting()
+    {
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", isRequired: true);
+        var (wizard, tester, _) = await WalkToParametersAsync(parameters: new[] { parameter });
+        var row = Assert.Single(wizard.Parameters);
+        Assert.Empty(row.Value);
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
+        Assert.True(row.HasValidationMessage);
+        Assert.Equal(0, tester.TestCount);
+    }
+
+    [Fact]
+    public async Task GoBack_RewindsOneStepAtATime_AndClearsErrorSurface()
+    {
+        var (wizard, tester, configuration) = await WalkToTestAsync();
+
+        wizard.ErrorMessage = "boom";
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
+        Assert.False(wizard.HasErrorMessage);
+
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.False(wizard.GoBackCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Test_SuccessfulHandshake_UnlocksSaveAndCarriesPlan()
+    {
+        var (wizard, tester, configuration) = await WalkToTestStepAsync();
+
+        await wizard.TestCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsTestSuccessful);
+        Assert.Equal(1, tester.TestCount);
+        // The walk adapter is npx-packaged, so the plan launches through npx.
+        Assert.NotNull(tester.LastPlan);
+        Assert.Equal("npx", tester.LastPlan!.Command);
+        Assert.Contains(AcpSetupWizardFixtures.AdapterPackage, tester.LastPlan!.Arguments, StringComparer.Ordinal);
+        // The name is still empty at this point, so save stays locked until the user names it.
+        Assert.False(wizard.SaveCommand.CanExecute(null));
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Test_HandshakeFailure_ShowsLocalizedStageAndRemediation_ThenRetestSucceeds()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", StageHandshakeKey, "握手阶段");
+        localizer.Set("zh-Hans", HandshakeRemediationKey, "请确认 agent 支持 ACP 协议");
+        var (wizard, tester, _) = await WalkToTestAsync(localizer: localizer);
+        tester.SetResult(AcpSetupTestResult.Failure(
+            AcpSetupTestStage.Handshake,
+            errorDetail: "agent closed the stream",
+            remediationKey: HandshakeRemediationKey));
+
+        await wizard.TestCommand.ExecuteAsync(null);
+
+        Assert.False(wizard.IsTestSuccessful);
+        Assert.Equal("握手阶段", wizard.TestFailureStageText);
+        Assert.Equal("请确认 agent 支持 ACP 协议", wizard.TestRemediationText);
+        Assert.False(wizard.SaveCommand.CanExecute(null));
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+
+        // Re-testing after a fix succeeds and clears the failure surface.
+        tester.SetResult(AcpSetupWizardFixtures.WellKnownResults.Success());
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.True(wizard.IsTestSuccessful);
+        Assert.Equal(string.Empty, wizard.TestFailureStageText);
+    }
+
+    [Fact]
+    public async Task Test_ValidationStageFailure_MirrorsOntoParameterRow()
+    {
+        var required = AcpSetupWizardFixtures.Parameter("--model", isRequired: true);
+        var (wizard, tester, _) = await WalkToParametersAsync(parameters: new[] { required });
+        var row = Assert.Single(wizard.Parameters);
+        Assert.Empty(row.Value);
+
+        // Testing straight from the form: the orchestrator validates before any process starts,
+        // and the failure is mirrored onto the offending row instead of the test panel alone.
+        await wizard.TestCommand.ExecuteAsync(null);
+
+        Assert.False(wizard.IsTestSuccessful);
+        Assert.True(row.HasValidationMessage);
+        Assert.Equal(0, tester.TestCount);
+    }
+
+    [Fact]
+    public async Task Save_AfterSuccessfulTest_PersistsStdioProfileShape()
+    {
+        var (wizard, tester, configuration) = await WalkToTestAsync();
+
+        await wizard.GoNextCommand.ExecuteAsync(null); // → Save; name prefilled from the agent
+        Assert.Equal("Test Agent", wizard.ProfileName);
+
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        var saved = Assert.Single(configuration.Saved);
+        Assert.Same(saved, wizard.SavedProfile);
+        Assert.Equal("Test Agent", saved.Name);
+        Assert.Equal(TransportType.Stdio, saved.Transport);
+        Assert.Equal("npx", saved.StdioCommand);
+        Assert.Contains(AcpSetupWizardFixtures.AdapterPackage, saved.StdioArguments!, StringComparer.Ordinal);
+        Assert.True(wizard.IsOnSave);
+    }
+
+    [Fact]
+    public async Task Save_RequiresSuccessfulTest_EvenWhenInvokedDirectly()
+    {
+        var (wizard, tester, configuration) = await WalkToTestStepAsync();
+
+        Assert.False(wizard.SaveCommand.CanExecute(null), "an untested draft must not be savable");
+
+        // Direct invocation bypasses CanExecute, so the handler itself must hold the line too.
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        Assert.Empty(configuration.Saved);
+        Assert.Equal(0, tester.TestCount);
+    }
+
+    [Fact]
+    public async Task Save_TrimsUserProvidedProfileName()
+    {
+        var (wizard, tester, configuration) = await WalkToTestAsync();
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        wizard.ProfileName = "  我的工作台  ";
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        Assert.Equal("我的工作台", Assert.Single(configuration.Saved).Name);
+    }
+
+    [Fact]
+    public async Task InstallRuntime_FailedInstall_SurfacesInstallerDetail()
+    {
+        var installer = new StubComponentInstaller(component =>
+            AcpComponentInstallResult.Failure(component.Id, 1, output: null, "network down"));
+        var wizard = CreateWizard(ProbeForInstalledRuntime(), installer);
+        wizard.SelectedAgent = wizard.Agents[0];
+
+        await wizard.InstallRuntimeCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            new[] { AcpSetupWizardFixtures.Runtime().Id },
+            installer.InstalledComponentIds.ToArray());
+        Assert.True(wizard.HasErrorMessage);
+        Assert.Equal("network down", wizard.ErrorMessage);
+    }
+
+    // ── Shared walk helpers ─────────────────────────────────────────────────
+
+    /// <summary>Detects the runtime, selects it, and walks to ComponentSetup with the adapter probed.</summary>
+    private static Task<(AcpSetupWizardViewModel Wizard, StubComponentInstaller Installer, RecordingConfigurationService Configuration)> WalkToComponentSetupAsync(
+        Func<StubExecutableProbe, StubExecutableProbe>? configureProbe = null,
+        MutableTestCoreStringLocalizer? localizer = null)
+    {
+        var probe = ProbeForInstalledRuntime();
+        if (configureProbe is not null)
+        {
+            configureProbe(probe);
+        }
+
+        return WalkWith(probe, localizer);
+    }
+
+    private static async Task<(AcpSetupWizardViewModel Wizard, StubComponentInstaller Installer, RecordingConfigurationService Configuration)> WalkWith(
+        StubExecutableProbe probe,
+        MutableTestCoreStringLocalizer? localizer)
+    {
+        var agent = AcpSetupWizardFixtures.Agent(
+            adapters: new[] { AcpSetupWizardFixtures.BuiltInAdapter(), AcpSetupWizardFixtures.PackagedAdapter() });
+        var installer = new StubComponentInstaller();
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(agent, probe, installer, localizer, configuration: configuration);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup + auto adapter probe
+        return (wizard, installer, configuration);
+    }
+
+    private static Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToParametersAsync(
+        AcpSetupParameterDefinition[]? parameters = null,
+        MutableTestCoreStringLocalizer? localizer = null)
+    {
+        var probe = ProbeForInstalledRuntime();
+        var packagedAdapter = AcpSetupWizardFixtures.PackagedAdapter(
+            parameters: parameters ?? Array.Empty<AcpSetupParameterDefinition>());
+        return WalkToParametersAsync(probe, packagedAdapter, localizer);
+    }
+
+    private static async Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToParametersAsync(
+        StubExecutableProbe probe,
+        AcpAdapterDescriptor adapter,
+        MutableTestCoreStringLocalizer? localizer)
+    {
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var tester = new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success());
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(
+            agent, probe, new StubComponentInstaller(), localizer, tester, configuration);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup
+        await wizard.GoNextCommand.ExecuteAsync(null); // → Parameters
+        return (wizard, tester, configuration);
+    }
+
+    /// <summary>Walks to the Test step without running the test.</summary>
+    private static async Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToTestStepAsync(
+        AcpSetupParameterDefinition[]? parameters = null,
+        MutableTestCoreStringLocalizer? localizer = null)
+    {
+        var (wizard, tester, configuration) = await WalkToParametersAsync(parameters, localizer);
+        await wizard.GoNextCommand.ExecuteAsync(null); // → Test
+        return (wizard, tester, configuration);
+    }
+
+    /// <summary>
+    /// Walks to the Test step and completes one successful handshake, so save-step tests start from
+    /// a verified configuration.
+    /// </summary>
+    private static async Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToTestAsync(
+        AcpSetupParameterDefinition[]? parameters = null,
+        MutableTestCoreStringLocalizer? localizer = null)
+    {
+        var walked = await WalkToTestStepAsync(parameters, localizer);
+        await walked.Wizard.TestCommand.ExecuteAsync(null);
+        return walked;
+    }
+
+    private static StubExecutableProbe ProbeForInstalledRuntime()
+    {
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        return probe;
+    }
+
+    private static AcpSetupWizardViewModel CreateWizard(
+        StubExecutableProbe? probe = null,
+        StubComponentInstaller? installer = null,
+        MutableTestCoreStringLocalizer? localizer = null)
+        => CreateWizardFor(AcpSetupWizardFixtures.Agent(), probe ?? ProbeForInstalledRuntime(), installer ?? new StubComponentInstaller(), localizer);
+
+    private static AcpSetupWizardViewModel CreateWizardFor(
+        AcpAgentDescriptor agent,
+        StubExecutableProbe probe,
+        StubComponentInstaller installer,
+        MutableTestCoreStringLocalizer? localizer,
+        StubConnectivityTester? tester = null,
+        RecordingConfigurationService? configuration = null)
+        => AcpSetupWizardFixtures.CreateWizard(
+            new StubAgentCatalog(agent),
+            probe,
+            installer,
+            tester ?? new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success()),
+            configuration ?? new RecordingConfigurationService(),
+            localizer);
+}

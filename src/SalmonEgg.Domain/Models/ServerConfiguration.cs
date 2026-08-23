@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace SalmonEgg.Domain.Models
@@ -38,6 +39,16 @@ namespace SalmonEgg.Domain.Models
         /// Stdio 参数（仅当 Transport=Stdio 时使用）
         /// </summary>
         public List<string> StdioArguments { get; set; } = new();
+
+        /// <summary>
+        /// Stdio 进程环境变量（仅当 Transport=Stdio 时使用）。
+        /// 部分 ACP agent 只从环境变量读取模型选择与凭据，无法用命令行参数表达。
+        /// </summary>
+        /// <remarks>
+        /// 值随 YAML 明文持久化，因此只用于非敏感运行配置；凭据必须走
+        /// <see cref="Authentication"/> 并落入安全存储。
+        /// </remarks>
+        public Dictionary<string, string> StdioEnvironment { get; set; } = new(StringComparer.Ordinal);
 
         /// <summary>
         /// 传输类型
