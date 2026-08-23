@@ -26,6 +26,17 @@ namespace SalmonEgg.Application.Services.Chat
         // 保护下列四个共享可变态的所有读写:pump 线程(传输读线程续体)与请求-响应续体
         // (线程池)并发触碰它们。锁内只做同步内存读写与 HashSet 操作,绝不跨 await、
         // 绝不在锁内做协议 I/O 或调用可能重入的 _sessionManager 路径。
+        /// <summary>
+        /// 用户取消时写入指标 <c>error.type</c> 的值。
+        /// </summary>
+        /// <remarks>
+        /// 用固定字符串而非 <c>ex.GetType().FullName</c>：取消路径可能抛
+        /// <c>OperationCanceledException</c> 或其派生的 <c>TaskCanceledException</c>，
+        /// 两者混在一起会让「取消」在指标里裂成两个维度值。规范要求 <c>error.type</c>
+        /// 低基数且可枚举，故归一成一个。
+        /// </remarks>
+        private const string OperationCanceledTypeName = "System.OperationCanceledException";
+
         private readonly object _stateGate = new();
         private readonly HashSet<string> _configAuthoritativeSessionIds = new(StringComparer.Ordinal);
         private string? _currentSessionId;
@@ -806,9 +817,21 @@ namespace SalmonEgg.Application.Services.Chat
 
         public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
         {
+            var agentInfo = _acpClient.AgentInfo;
+
             using var activity = ApplicationActivitySources.ChatService.StartActivity(
-                "chat.session.prompt",
-                ActivityKind.Internal);
+                BuildInvokeAgentSpanName(agentInfo),
+                ActivityKind.Client);
+
+            // 按 GenAI 语义约定标注这是一次 agent 调用。只发有真实数据源的键——
+            // gen_ai.provider.name 故意缺席，理由见 ApplyInvokeAgentAttributes。
+            ApplyInvokeAgentAttributes(activity, agentInfo, @params.SessionId);
+
+            // 耗时用 Stopwatch 而不是读 activity.Duration：采样丢弃该 span 时
+            // activity 为 null，指标却必须照常记录（指标是聚合值，不参与采样）。
+            var startTimestamp = Stopwatch.GetTimestamp();
+            string? errorType = null;
+
             try
             {
                 var response = await _acpClient.SendPromptAsync(@params, cancellationToken).ConfigureAwait(false);
@@ -817,10 +840,15 @@ namespace SalmonEgg.Application.Services.Chat
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // 用户主动取消不是故障，但仍要在指标里可分辨，否则取消会被算进
+                // 「成功」的耗时分布、把 P95 拖高。span 状态保持 Unset：规范只在
+                // 「操作失败」时才要求 Error。
+                errorType = OperationCanceledTypeName;
                 throw;
             }
             catch (Exception ex)
             {
+                errorType = ex.GetType().FullName;
                 activity?.SetErrorStatus(ex);
                 activity?.RecordException(ex);
                 var entry = new ErrorLogEntry(
@@ -832,6 +860,132 @@ namespace SalmonEgg.Application.Services.Chat
                     ex);
                 _errorLogger.LogError(entry);
                 throw;
+            }
+            finally
+            {
+                RecordInvokeAgentDuration(startTimestamp, agentInfo, errorType);
+            }
+        }
+
+        /// <summary>
+        /// <c>invoke_agent</c> span 的名称。
+        /// </summary>
+        /// <remarks>
+        /// 规范：<i>"SHOULD be <c>invoke_agent {gen_ai.agent.name}</c> if
+        /// <c>gen_ai.agent.name</c> is readily available. When not available, it SHOULD be
+        /// <c>invoke_agent</c>"</i>。agent 名来自 ACP <c>initialize</c> 响应，取值集合等于
+        /// 用户配置的 agent 数量，属低基数，可安全进 span 名。
+        /// </remarks>
+        private static string BuildInvokeAgentSpanName(AgentInfo? agentInfo)
+        {
+            var agentName = agentInfo?.Name;
+            return string.IsNullOrWhiteSpace(agentName)
+                ? ApplicationSemanticConventions.GenAi.InvokeAgentOperation
+                : $"{ApplicationSemanticConventions.GenAi.InvokeAgentOperation} {agentName}";
+        }
+
+        /// <summary>
+        /// 给 prompt span 打 GenAI 属性。
+        /// </summary>
+        /// <remarks>
+        /// span kind 是 <c>CLIENT</c>：ACP agent 跑在独立进程，规范对此明确
+        /// （<i>"RECOMMENDED to use CLIENT kind when the GenAI system being instrumented
+        /// usually runs in a different process than its client"</i>）。
+        ///
+        /// <b>为什么不发 <c>gen_ai.provider.name</c></b>：它在 <c>gen_ai.invoke_agent.client</c>
+        /// 上是 required，但取值是**封闭枚举**（openai / anthropic / gcp.gemini … 共 17 项，
+        /// 全为模型厂商），而 ACP 协议里没有任何 provider 或 model 字段——
+        /// <c>agentInfo</c> 只有 name / title / version。规范说该属性
+        /// <i>"acts as a discriminator that identifies the GenAI telemetry format flavor"</i>，
+        /// 猜一个填进去等于向后端声明「这条 span 是该厂商格式」，后端会据此去找对应的
+        /// <c>{provider}.*</c> 属性——那是**事实错误的遥测**，比缺字段更坏。
+        /// 因此本 span 有意不声明自己完全符合 <c>gen_ai.invoke_agent.client</c>，
+        /// 只发能被真实数据支撑的子集。若 ACP 将来暴露 provider，此处再补。
+        ///
+        /// 同理不发的键：<c>gen_ai.request.model</c>（ACP 无此字段）、
+        /// <c>gen_ai.agent.id</c>（规范要求是 provider 侧稳定资源 ID，且明确
+        /// <i>"NOT RECOMMENDED to record in-memory agent instance ids"</i>）、
+        /// <c>gen_ai.usage.*</c>（ACP 的 usage_update 是**上下文窗口占用量**的 gauge，
+        /// 不是本回合 token 收支；per-turn token 的 RFD 尚是 Draft）。
+        /// </remarks>
+        private static void ApplyInvokeAgentAttributes(Activity? activity, AgentInfo? agentInfo, string? sessionId)
+        {
+            if (activity is null)
+            {
+                return;
+            }
+
+            activity.SetTag(
+                ApplicationSemanticConventions.GenAi.OperationName,
+                ApplicationSemanticConventions.GenAi.InvokeAgentOperation);
+
+            if (!string.IsNullOrWhiteSpace(agentInfo?.Name))
+            {
+                activity.SetTag(ApplicationSemanticConventions.GenAi.AgentName, agentInfo.Name);
+            }
+
+            if (!string.IsNullOrWhiteSpace(agentInfo?.Version))
+            {
+                activity.SetTag(ApplicationSemanticConventions.GenAi.AgentVersion, agentInfo.Version);
+            }
+
+            // sessionId 缺失时一律不发：规范禁止用 UUID / traceId / 内容哈希兜底。
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                activity.SetTag(ApplicationSemanticConventions.GenAi.ConversationId, sessionId);
+            }
+        }
+
+        /// <summary>
+        /// 记录一次 agent 调用的耗时。
+        /// </summary>
+        /// <remarks>
+        /// 维度只有 <c>gen_ai.agent.name</c> 与 <c>error.type</c>——这正是规范为
+        /// <c>gen_ai.invoke_agent.duration</c> 指定的属性组
+        /// （<c>attributes.gen_ai.error</c> + <c>attributes.gen_ai.invoked_agent.internal.common</c>，
+        /// 不含要求 provider 的 <c>metric_attributes.gen_ai</c>）。两者都是低基数，
+        /// 不会打爆时间序列。
+        ///
+        /// 成功路径不发 <c>error.type</c>：规范是 <i>conditionally_required "If the
+        /// operation ended in an error"</i>，无条件发一个 "none" 之类的占位值会凭空多出
+        /// 一个维度值、并让「有没有出错」的查询失真。
+        /// </remarks>
+        private static void RecordInvokeAgentDuration(long startTimestamp, AgentInfo? agentInfo, string? errorType)
+        {
+            if (!ApplicationMeters.InvokeAgentDuration.Enabled)
+            {
+                return;
+            }
+
+            // 规范单位是秒（double），Stopwatch 提供的是高精度 TimeSpan。
+            var elapsedSeconds = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+
+            var agentName = agentInfo?.Name;
+            var hasAgentName = !string.IsNullOrWhiteSpace(agentName);
+            var hasErrorType = !string.IsNullOrWhiteSpace(errorType);
+
+            if (hasAgentName && hasErrorType)
+            {
+                ApplicationMeters.InvokeAgentDuration.Record(
+                    elapsedSeconds,
+                    new KeyValuePair<string, object?>(ApplicationSemanticConventions.GenAi.AgentName, agentName),
+                    new KeyValuePair<string, object?>(OtelErrorAttributes.Type, errorType));
+            }
+            else if (hasAgentName)
+            {
+                ApplicationMeters.InvokeAgentDuration.Record(
+                    elapsedSeconds,
+                    new KeyValuePair<string, object?>(ApplicationSemanticConventions.GenAi.AgentName, agentName));
+            }
+            else if (hasErrorType)
+            {
+                ApplicationMeters.InvokeAgentDuration.Record(
+                    elapsedSeconds,
+                    new KeyValuePair<string, object?>(OtelErrorAttributes.Type, errorType));
+            }
+            else
+            {
+                ApplicationMeters.InvokeAgentDuration.Record(elapsedSeconds);
             }
         }
 
