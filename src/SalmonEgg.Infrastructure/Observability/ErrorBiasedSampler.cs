@@ -11,9 +11,18 @@ namespace SalmonEgg.Infrastructure.Observability;
 /// <remarks>
 /// 为什么必须这样绕：采样决策发生在 span **开始**时，而 <c>SamplingParameters</c> 的全部
 /// 公开面只有 ParentContext / TraceId / Name / Kind / Tags / Links——**没有任何状态字段**。
-/// 那一刻错误尚未发生，因此「出错必留」不可能由采样器直接实现。OTel 为此提供的机制正是
-/// <c>RecordOnly</c>：记录但不导出，把导出决定推迟到 <c>BaseProcessor.OnEnd</c>，届时
-/// <see cref="Activity.Status"/> 已确定。
+/// 那一刻错误尚未发生，因此「出错必留」不可能由采样器直接实现。规范对此有明文：head sampling
+/// 下「cannot ensure that all traces with an error within them are sampled」。OTel 为此提供的
+/// 机制正是 <c>RecordOnly</c>：记录但不导出，把导出决定推迟到 <c>BaseProcessor.OnEnd</c>，
+/// 届时 <see cref="Activity.Status"/> 已确定。本组合与 opentelemetry-dotnet 仓库的
+/// <c>docs/trace/tail-based-sampling-span-level/</c> 示例同型。
+///
+/// 另一个副作用是必要的：<c>RecordOnly</c> 使 <c>Activity.IsAllDataRequested</c> 保持 true，
+/// 插装才会继续填属性——否则被降级的 span 即使最终被提升导出，内容也已是空的。
+///
+/// 注：完整的 whole-trace 错误偏置需要 Collector 端的 <c>tail_sampling</c> 处理器
+/// （policy <c>status_code: [ERROR]</c>）。客户端进程内只能做到 per-span 裁决，这是本方案
+/// 明确的能力边界，不是遗漏。
 ///
 /// 代价是被降级的 span 仍要付出记录开销（分配 tag / event），只省下了网络导出。对客户端
 /// 应用这是正确的取舍：省流量与后端成本是采样的真实目的，而低采样率下丢掉错误 trace 会
