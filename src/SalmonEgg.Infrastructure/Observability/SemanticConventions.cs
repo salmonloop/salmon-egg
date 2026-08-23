@@ -102,30 +102,12 @@ public static class SemanticConventions
         public const string Type = "error.type";
     }
 
-    /// <summary>
-    /// 应用自定义 Attributes。
-    ///
-    /// 归属规则：只定义 Infrastructure 层埋点实际使用的键。Chat 相关键归 Application
-    /// 层（ChatService 实现在那一层，见 <c>ApplicationSemanticConventions.Chat</c>），
-    /// 此处不重复定义，避免同一语义在两层各有一份常量而漂移。
-    ///
-    /// 未定义 Database 组：本项目使用文件 / IndexedDB 存储，没有 SQL 数据库，
-    /// 保留 <c>db.*</c> 常量只会诱导误用（且旧的 db.system / db.statement / db.name
-    /// 在规范中均已弃用，分别被 db.system.name / db.query.text / db.namespace 取代）。
-    /// </summary>
-    public static class SalmonEgg
-    {
-        // Session
-        public const string SessionId = "salmonegg.session.id";
-        public const string SessionName = "salmonegg.session.name";
-        public const string SessionAction = "salmonegg.session.action";
-
-        // Transport
-        public const string TransportType = "salmonegg.transport.type";
-        public const string TransportConnectionId = "salmonegg.transport.connection_id";
-
-        // Storage
-        public const string StorageKeyPrefix = "salmonegg.storage.key_prefix";
-        public const string StorageOperation = "salmonegg.storage.operation";
-    }
+    // 应用自定义 Attributes 组已整体移除：其中 Session/Transport/Storage 七个常量
+    // 自始至终没有任何埋点引用（死代码），保留只会诱导将来误用。若将来某处真的要发
+    // salmonegg.* 键，届时在**实际使用的层**定义——归属规则同前（Chat 相关键归
+    // Application 层，见 <c>ApplicationSemanticConventions</c>），避免两层各留一份漂移。
+    //
+    // Database 组同样不定义：本项目使用文件 / IndexedDB 存储，没有 SQL 数据库，
+    // 保留 <c>db.*</c> 常量只会诱导误用（且旧的 db.system / db.statement / db.name
+    // 在规范中均已弃用，分别被 db.system.name / db.query.text / db.namespace 取代）。
 }
