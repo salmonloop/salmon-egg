@@ -804,6 +804,39 @@
   <data name="AcpSetup_Back.Content" xml:space="preserve">
     <value>上一步</value>
   </data>
+  <data name="AcpSetup_Save.Content" xml:space="preserve">
+    <value>保存配置</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Title" xml:space="preserve">
+    <value>连接测试通过</value>
+  </data>
+  <data name="AcpSetup_TestSuccessBar.Message" xml:space="preserve">
+    <value>配置可用，可以保存为连接配置了。</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Title" xml:space="preserve">
+    <value>已保存</value>
+  </data>
+  <data name="AcpSetup_SavedBar.Message" xml:space="preserve">
+    <value>配置已加入连接列表，可返回使用。</value>
+  </data>
+  <data name="AcpSetup_ProfileName.Header" xml:space="preserve">
+    <value>配置名称</value>
+  </data>
+  <data name="AcpSetup_InstallAgentRow.Content" xml:space="preserve">
+    <value>安装</value>
+  </data>
+  <data name="AcpSetup_Working.Text" xml:space="preserve">
+    <value>正在处理，请稍候…</value>
+  </data>
+  <data name="AcpSetup_StatusInstalled.AutomationProperties.Name" xml:space="preserve">
+    <value>已安装</value>
+  </data>
+  <data name="AcpSetup_StatusMissing.AutomationProperties.Name" xml:space="preserve">
+    <value>未安装</value>
+  </data>
+  <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
+    <value>第 {0} 步，共 {1} 步</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>
   </data>
