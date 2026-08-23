@@ -502,6 +502,66 @@
   <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
     <value>刷新 Agent 配置失败，请稍后重试。</value>
   </data>
+  <data name="AcpSetup_Install_Failed" xml:space="preserve">
+    <value>安装失败。</value>
+  </data>
+  <data name="AcpSetup_Stage_Validation" xml:space="preserve">
+    <value>参数校验</value>
+  </data>
+  <data name="AcpSetup_Stage_CommandResolution" xml:space="preserve">
+    <value>命令解析</value>
+  </data>
+  <data name="AcpSetup_Stage_AdapterStartup" xml:space="preserve">
+    <value>适配器启动</value>
+  </data>
+  <data name="AcpSetup_Stage_Handshake" xml:space="preserve">
+    <value>协议握手</value>
+  </data>
+  <data name="AcpSetup_Stage_Completed" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
+    <value>找不到启动命令。请确认 Agent 运行时已安装并在 PATH 中，然后重新检测。</value>
+  </data>
+  <data name="AcpSetup_Remediation_AdapterStartup" xml:space="preserve">
+    <value>适配器无法启动。请查看安装输出中的错误详情，确认适配器与该 Agent 兼容。</value>
+  </data>
+  <data name="AcpSetup_Remediation_Handshake" xml:space="preserve">
+    <value>连接已建立但握手失败。请确认该 Agent 支持 ACP 协议，并检查启动参数是否正确。</value>
+  </data>
+  <data name="AcpSetup_Agent_ClaudeCode_Description" xml:space="preserve">
+    <value>Anthropic 的终端编码 Agent（Claude Code CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Codex_Description" xml:space="preserve">
+    <value>OpenAI 的终端编码 Agent（Codex CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Gemini_Description" xml:space="preserve">
+    <value>Google 的终端编码 Agent（Gemini CLI）。</value>
+  </data>
+  <data name="AcpSetup_Agent_GitHubCopilot_Description" xml:space="preserve">
+    <value>GitHub Copilot 命令行编码 Agent。</value>
+  </data>
+  <data name="AcpSetup_Agent_QwenCode_Description" xml:space="preserve">
+    <value>阿里云通义千问的终端编码 Agent（Qwen Code）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Cline_Description" xml:space="preserve">
+    <value>Cline 终端编码 Agent。</value>
+  </data>
+  <data name="AcpSetup_Agent_Auggie_Description" xml:space="preserve">
+    <value>Augment Code 的终端编码 Agent（Auggie）。</value>
+  </data>
+  <data name="AcpSetup_Agent_Goose_Description" xml:space="preserve">
+    <value>Block 的开源编码 Agent（Goose）。</value>
+  </data>
+  <data name="AcpSetup_Parameter_Model_Description" xml:space="preserve">
+    <value>模型名称，例如 sonnet、opus 或具体模型标识。留空则使用 Agent 默认模型。</value>
+  </data>
+  <data name="AcpSetup_Validation_MissingRequiredValue" xml:space="preserve">
+    <value>此参数为必填项，请填写后再继续。</value>
+  </data>
+  <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
+    <value>取值不在允许范围内，请从列表中选择。</value>
+  </data>
   <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
     <value>删除 Agent 配置失败，请稍后重试。</value>
   </data>

@@ -139,6 +139,14 @@ public sealed partial class AcpConnectionSettingsPage : SettingsPageBase
         }
     }
 
+    private void OnOpenSetupWizardClick(object sender, RoutedEventArgs e)
+    {
+        Frame?.Navigate(
+            typeof(AcpSetupWizardPage),
+            null,
+            UiMotionController.Current.CreateNavigationTransitionInfo());
+    }
+
     private void OnAddProfileClick(object sender, RoutedEventArgs e)
     {
         Frame?.Navigate(

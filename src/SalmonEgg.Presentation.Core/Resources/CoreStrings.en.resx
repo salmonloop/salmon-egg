@@ -500,6 +500,66 @@ Create the corresponding Markdown file in:
   <data name="AcpProfiles_RefreshFailed" xml:space="preserve">
     <value>Failed to refresh agent profiles. Please try again later.</value>
   </data>
+  <data name="AcpSetup_Install_Failed" xml:space="preserve">
+    <value>Installation failed.</value>
+  </data>
+  <data name="AcpSetup_Stage_Validation" xml:space="preserve">
+    <value>Parameter validation</value>
+  </data>
+  <data name="AcpSetup_Stage_CommandResolution" xml:space="preserve">
+    <value>Command resolution</value>
+  </data>
+  <data name="AcpSetup_Stage_AdapterStartup" xml:space="preserve">
+    <value>Adapter startup</value>
+  </data>
+  <data name="AcpSetup_Stage_Handshake" xml:space="preserve">
+    <value>Protocol handshake</value>
+  </data>
+  <data name="AcpSetup_Stage_Completed" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
+    <value>The launch command was not found. Make sure the agent runtime is installed and on PATH, then detect again.</value>
+  </data>
+  <data name="AcpSetup_Remediation_AdapterStartup" xml:space="preserve">
+    <value>The adapter failed to start. Check the install output for details and confirm the adapter supports this agent.</value>
+  </data>
+  <data name="AcpSetup_Remediation_Handshake" xml:space="preserve">
+    <value>The connection opened but the handshake failed. Confirm the agent supports the ACP protocol and check the launch parameters.</value>
+  </data>
+  <data name="AcpSetup_Agent_ClaudeCode_Description" xml:space="preserve">
+    <value>Anthropic's terminal coding agent (Claude Code CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_Codex_Description" xml:space="preserve">
+    <value>OpenAI's terminal coding agent (Codex CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_Gemini_Description" xml:space="preserve">
+    <value>Google's terminal coding agent (Gemini CLI).</value>
+  </data>
+  <data name="AcpSetup_Agent_GitHubCopilot_Description" xml:space="preserve">
+    <value>GitHub Copilot command-line coding agent.</value>
+  </data>
+  <data name="AcpSetup_Agent_QwenCode_Description" xml:space="preserve">
+    <value>Alibaba Qwen's terminal coding agent (Qwen Code).</value>
+  </data>
+  <data name="AcpSetup_Agent_Cline_Description" xml:space="preserve">
+    <value>Cline terminal coding agent.</value>
+  </data>
+  <data name="AcpSetup_Agent_Auggie_Description" xml:space="preserve">
+    <value>Augment Code's terminal coding agent (Auggie).</value>
+  </data>
+  <data name="AcpSetup_Agent_Goose_Description" xml:space="preserve">
+    <value>Block's open-source coding agent (Goose).</value>
+  </data>
+  <data name="AcpSetup_Parameter_Model_Description" xml:space="preserve">
+    <value>Model name, for example sonnet, opus, or a specific model identifier. Leave empty to use the agent's default.</value>
+  </data>
+  <data name="AcpSetup_Validation_MissingRequiredValue" xml:space="preserve">
+    <value>This parameter is required. Fill it in before continuing.</value>
+  </data>
+  <data name="AcpSetup_Validation_ValueNotAllowed" xml:space="preserve">
+    <value>Value not allowed. Pick one from the list.</value>
+  </data>
   <data name="AcpProfiles_DeleteFailed" xml:space="preserve">
     <value>Failed to delete the agent profile. Please try again later.</value>
   </data>
