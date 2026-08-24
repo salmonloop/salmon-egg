@@ -1,13 +1,26 @@
 export async function waitForBodyText(page, pattern, label, timeoutMs = 30_000) {
-  await page.waitForFunction(
-    source => new RegExp(source).test(document.body?.innerText ?? ""),
-    pattern.source,
-    { timeout: timeoutMs });
+  // `waitForFunction` confirms the pattern is in body text, then a *separate*
+  // `locator().innerText()` re-reads. Those two reads straddle the LoadAsync
+  // Clear-then-refill window (ObservableCollection Reset momentarily empties
+  // the body), so the re-read can come back empty despite the poll just
+  // succeeding. Retry the whole poll+read cycle until the re-read is stable.
+  const deadline = Date.now() + timeoutMs;
+  let lastBodyText = "";
+  while (Date.now() < deadline) {
+    await page.waitForFunction(
+      source => new RegExp(source).test(document.body?.innerText ?? ""),
+      pattern.source,
+      { timeout: Math.min(5_000, Math.max(250, deadline - Date.now())) });
 
-  const bodyText = await page.locator("body").innerText();
-  if (!pattern.test(bodyText)) {
-    throw new Error(`Expected ${label} text was not visible.`);
+    lastBodyText = await page.locator("body").innerText();
+    if (pattern.test(lastBodyText)) {
+      return;
+    }
+
+    await page.waitForTimeout(100);
   }
+
+  throw new Error(`Expected ${label} text was not visible. Last body: ${lastBodyText.slice(0, 500)}`);
 }
 
 export async function clickVisibleNavigationTargetUntilBodyText(page, options, pattern, label, activationOptions = {}) {
