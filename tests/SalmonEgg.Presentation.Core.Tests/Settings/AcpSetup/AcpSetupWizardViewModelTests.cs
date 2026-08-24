@@ -17,6 +17,7 @@ public sealed class AcpSetupWizardViewModelTests
 {
     private const string HandshakeRemediationKey = "AcpSetup_Remediation_Handshake";
     private const string StageHandshakeKey = "AcpSetup_Stage_Handshake";
+    private const string AgentDescriptionKey = "AcpSetup_Agent_Test_Description";
 
     [Fact]
     public void Constructor_SeedsCatalogRows_AsUndeterminedOnFirstStep()
@@ -29,6 +30,51 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.True(wizard.IsOnAgentSelection);
         Assert.False(wizard.GoBackCommand.CanExecute(null));
         Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// The catalog carries a resource key for each agent description, so the row must resolve it. A
+    /// view bound straight to the key renders the key — which is what shipped, and what no test caught
+    /// because nothing asserted on the text a user reads.
+    /// </summary>
+    [Fact]
+    public void AgentRow_ResolvesDescriptionKey_AgainstCoreStrings()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", AgentDescriptionKey, "\u7528\u4e8e\u6d4b\u8bd5\u7684 Agent\u3002");
+        var wizard = CreateWizard(localizer: localizer);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.Equal("\u7528\u4e8e\u6d4b\u8bd5\u7684 Agent\u3002", row.Description);
+        // The key itself must not survive to the surface the view binds.
+        Assert.NotEqual(AgentDescriptionKey, row.Description);
+    }
+
+    /// <summary>
+    /// With no localizer the row falls back to the key rather than an empty string: a blank caption is
+    /// indistinguishable from a layout bug, while the key is diagnosable.
+    /// </summary>
+    [Fact]
+    public void AgentRow_WithoutLocalizer_FallsBackToKey_NotEmpty()
+    {
+        var wizard = CreateWizard();
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.Equal(AgentDescriptionKey, row.Description);
+    }
+
+    [Fact]
+    public async Task ParameterRow_ResolvesDescriptionKey_AgainstCoreStrings()
+    {
+        const string descriptionKey = "AcpSetup_Parameter_Model_Description";
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", descriptionKey, "\u6a21\u578b\u540d\u79f0\u3002");
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", description: descriptionKey);
+        var (wizard, _, _) = await WalkToParametersAsync(new[] { parameter }, localizer);
+
+        var row = Assert.Single(wizard.Parameters);
+        Assert.Equal("\u6a21\u578b\u540d\u79f0\u3002", row.Description);
+        Assert.NotEqual(descriptionKey, row.Description);
     }
 
     [Fact]

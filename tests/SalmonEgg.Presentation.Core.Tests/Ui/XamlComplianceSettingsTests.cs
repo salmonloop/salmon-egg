@@ -97,6 +97,64 @@ public sealed class XamlComplianceSettingsTests
             .ToArray();
     }
 
+    /// <summary>
+    /// A localization <em>key</em> reaching a user-visible text attribute must pass through a converter
+    /// that resolves it. The wizard shipped binding <c>Text</c> straight to a <c>DescriptionKey</c>
+    /// property with no converter, so every agent row rendered the raw key. Nothing caught it: the
+    /// binding is valid, the build is clean, and the ViewModel tests asserted on availability flags
+    /// rather than on the text a user reads.
+    /// </summary>
+    /// <remarks>
+    /// Two resolution paths are legitimate and both are accepted: resolving in the ViewModel and binding
+    /// the resolved property (<c>CoreStringResolver</c>, required for keys that live only in
+    /// Presentation.Core's CoreStrings resources), or binding the key through a resolving converter
+    /// (<c>ResourceStringConverter</c>, used by the settings option pickers). Only a bare key binding
+    /// fails.
+    ///
+    /// Matching is restricted to <c>*ResourceKey</c> / <c>*DescriptionKey</c> / <c>*LocalizationKey</c>
+    /// suffixes rather than any <c>*Key</c>: names like <c>S3ObjectKey</c> are keys of a different kind
+    /// and resolving them as resources would be nonsense.
+    /// </remarks>
+    [Fact]
+    public void LocalizationKeyBindings_PassThroughAResolvingConverter()
+    {
+        var root = Path.Combine(FindRepoRoot(), "SalmonEgg", "SalmonEgg");
+        var textAttributes = new[] { "Text", "Content", "Header", "Message", "Title", "PlaceholderText" };
+        var keyBinding = new Regex(
+            @"\b(?<attribute>" + string.Join("|", textAttributes) + @")\s*=\s*""\{x:Bind\s+"
+            + @"(?<path>[A-Za-z0-9_.]*(?:Resource|Description|Localization)Key)\b(?<rest>[^}""]*)",
+            RegexOptions.Singleline);
+        var failures = new List<string>();
+
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var text = File.ReadAllText(xamlFile);
+            foreach (var match in keyBinding.Matches(text).Cast<Match>())
+            {
+                if (match.Groups["rest"].Value.Contains("Converter", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var line = text.Take(match.Index).Count(character => character == '\n') + 1;
+                failures.Add(
+                    $"{Path.GetRelativePath(FindRepoRoot(), xamlFile)}:{line}"
+                    + $" binds {match.Groups["attribute"].Value} to '{match.Groups["path"].Value}' with no"
+                    + " converter, so the key itself renders. Resolve it in the ViewModel"
+                    + " (CoreStringResolver.Resolve) and bind the resolved property, or bind through"
+                    + " ResourceStringConverter.");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
     [Fact]
     public void AcpEditors_ExposeStableAutomationIdsForEditableFields()
     {

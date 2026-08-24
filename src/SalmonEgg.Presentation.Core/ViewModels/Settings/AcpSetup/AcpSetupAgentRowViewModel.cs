@@ -1,6 +1,9 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models.AcpSetup;
+using SalmonEgg.Presentation.Core.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 
@@ -15,9 +18,14 @@ namespace SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 /// </remarks>
 public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
 {
-    public AcpSetupAgentRowViewModel(AcpAgentDescriptor agent)
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
+
+    public AcpSetupAgentRowViewModel(
+        AcpAgentDescriptor agent,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         Agent = agent ?? throw new ArgumentNullException(nameof(agent));
+        _localizer = localizer;
         _runtime = AcpComponentProbeResult.Undetermined(agent.Runtime.Id);
     }
 
@@ -27,8 +35,17 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
 
     public string DisplayName => Agent.DisplayName;
 
-    /// <summary>Localization key for the agent's one-line description.</summary>
-    public string DescriptionKey => Agent.Description;
+    /// <summary>
+    /// The agent's one-line description, already localized.
+    /// </summary>
+    /// <remarks>
+    /// The descriptor carries a resource key, not display text. Binding a view straight to that key
+    /// puts the key on screen, so resolution happens here rather than in the view: these keys live only
+    /// in this assembly's CoreStrings resources, which the UI layer's own <c>x:Uid</c> pipeline cannot
+    /// reach. Falls back to the key when no localizer is supplied, matching the wizard's own Localize
+    /// contract, so a missing resource degrades to a diagnosable string instead of an empty row.
+    /// </remarks>
+    public string Description => CoreStringResolver.Resolve(_localizer, Agent.Description, Agent.Description);
 
     /// <summary>Latest runtime probe. Replaced wholesale so every derived flag updates together.</summary>
     [ObservableProperty]
