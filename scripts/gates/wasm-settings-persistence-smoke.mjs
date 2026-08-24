@@ -485,6 +485,11 @@ async function verifyMcpSettings(page, suffix = "") {
     sections.mcp.target,
     sections.mcp.bodyPattern,
     `${sections.mcp.label} ${suffix}`.trim());
+  // The section's body pattern matches static chrome (the "New" button), so navigation reports success
+  // while the page's async load is still in flight. That load clears the row collection before refilling
+  // it, so the server name is briefly absent from the body text. Wait for the row control itself, the way
+  // the save path above does, before asserting on text.
+  await waitForControlState(page, controls.mcpServerEnabled, `MCP server row control ${suffix}`.trim());
   await waitForBodyText(page, /new-mcp-server/, `MCP server row ${suffix}`.trim());
   await expectToggleSwitchValue(page, controls.mcpServerEnabled, false, `MCP server enabled ${suffix}`.trim());
 }
