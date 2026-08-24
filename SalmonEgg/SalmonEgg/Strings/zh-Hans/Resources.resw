@@ -843,6 +843,21 @@
   <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
     <value>查看安装输出</value>
   </data>
+  <data name="AcpSetup_AdapterMissingBar.Title" xml:space="preserve">
+    <value>未检测到 ACP 适配器</value>
+  </data>
+  <data name="AcpSetup_AdapterMissingBar.Message" xml:space="preserve">
+    <value>这个 Agent 需要一个 ACP 适配器才能通话。可以让向导装一个，或者装好后重新检测。</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Title" xml:space="preserve">
+    <value>适配器已就绪</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Title" xml:space="preserve">
+    <value>无法确认适配器是否已安装</value>
+  </data>
+  <data name="AcpSetup_AdapterUndeterminedBar.Message" xml:space="preserve">
+    <value>检测没能得出结论，不代表适配器不存在。可以继续下一步，由连接测试来验证。</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>
   </data>

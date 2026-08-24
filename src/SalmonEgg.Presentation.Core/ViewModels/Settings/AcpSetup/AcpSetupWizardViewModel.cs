@@ -119,6 +119,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsAdapterMissing))]
     [NotifyPropertyChangedFor(nameof(IsAdapterUsable))]
     [NotifyPropertyChangedFor(nameof(IsAdapterUndetermined))]
+    [NotifyPropertyChangedFor(nameof(AdapterProbeDetail))]
+    [NotifyPropertyChangedFor(nameof(HasAdapterProbeDetail))]
     private AcpComponentProbeResult? _adapterProbe;
 
     [ObservableProperty]
@@ -184,6 +186,19 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     public bool IsAdapterUndetermined
         => AdapterProbe?.Availability == AcpComponentAvailability.Undetermined;
+
+    /// <summary>
+    /// Diagnostic detail from the adapter probe, empty when it reported none.
+    /// </summary>
+    /// <remarks>
+    /// The probe records why it reached its verdict — a missing launcher, an unsupported platform — and
+    /// that sentence is the difference between a red mark the user can act on and one they cannot. It is
+    /// shown alongside the state's own copy, never as the primary message, because the detail is
+    /// developer-facing English from the platform layer rather than localized guidance.
+    /// </remarks>
+    public string AdapterProbeDetail => AdapterProbe?.Detail ?? string.Empty;
+
+    public bool HasAdapterProbeDetail => !string.IsNullOrWhiteSpace(AdapterProbeDetail);
 
     public bool HasTestResult => TestResult is not null;
 
