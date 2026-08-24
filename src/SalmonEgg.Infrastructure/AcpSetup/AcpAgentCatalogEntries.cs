@@ -91,6 +91,15 @@ internal static class AcpAgentCatalogEntries
     /// Agent that speaks ACP itself: the runtime CLI is both the thing to install and the adapter, so
     /// the adapter is reported as built in.
     /// </summary>
+    /// <remarks>
+    /// The launch command is the same executable the runtime probe resolves, so the wizard starts what it
+    /// verified. Routing the launch through <c>npx &lt;package&gt;</c> instead would re-resolve the
+    /// package at every start: a second resolution path that can disagree with the probe, an extra
+    /// dependency on the Node launcher being reachable, and — with npx's auto-install behaviour — a
+    /// silent network fetch inside a transport the agent speaks over stdio. Every package in this
+    /// catalog publishes its CLI under exactly the name probed, so the two are equivalent when the
+    /// package is installed and only the direct form is honest when it is not.
+    /// </remarks>
     private static AcpAgentDescriptor CreateSelfHostedAgent(
         string agentId,
         string displayName,
@@ -134,7 +143,7 @@ internal static class AcpAgentCatalogEntries
                     },
                     LaunchTemplate = new AcpLaunchTemplate
                     {
-                        Command = NpxCommand,
+                        Command = probeCommand,
                         FixedArguments = launchArguments,
                         FixedEnvironment = fixedEnvironment
                             ?? new Dictionary<string, string>(StringComparer.Ordinal),
@@ -183,7 +192,7 @@ internal static class AcpAgentCatalogEntries
             probeCommand: "gemini",
             packageId: "@google/gemini-cli",
             documentation: new Uri("https://geminicli.com"),
-            launchArguments: new[] { "-y", "@google/gemini-cli", "--acp" },
+            launchArguments: new[] { "--acp" },
             parameters: new[]
             {
                 AcpSetupParameters.ModelEnvironment("GEMINI_MODEL", "gemini-2.5-pro")
@@ -197,7 +206,7 @@ internal static class AcpAgentCatalogEntries
             probeCommand: "copilot",
             packageId: "@github/copilot",
             documentation: new Uri("https://github.com/features/copilot/cli/"),
-            launchArguments: new[] { "-y", "@github/copilot", "--acp" },
+            launchArguments: new[] { "--acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateQwenCode()
@@ -208,7 +217,7 @@ internal static class AcpAgentCatalogEntries
             probeCommand: "qwen",
             packageId: "@qwen-code/qwen-code",
             documentation: new Uri("https://qwenlm.github.io/qwen-code-docs/en/users/overview"),
-            launchArguments: new[] { "-y", "@qwen-code/qwen-code", "--acp" },
+            launchArguments: new[] { "--acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateCline()
@@ -219,7 +228,7 @@ internal static class AcpAgentCatalogEntries
             probeCommand: "cline",
             packageId: "cline",
             documentation: new Uri("https://cline.bot/cli"),
-            launchArguments: new[] { "-y", "cline", "--acp" },
+            launchArguments: new[] { "--acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateAuggie()
@@ -230,7 +239,7 @@ internal static class AcpAgentCatalogEntries
             probeCommand: "auggie",
             packageId: "@augmentcode/auggie",
             documentation: new Uri("https://www.augmentcode.com/"),
-            launchArguments: new[] { "-y", "@augmentcode/auggie", "--acp" },
+            launchArguments: new[] { "--acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>(),
             // Registry declares this so the adapter does not self-update mid-session, which would
             // restart the process the ACP transport is attached to.
