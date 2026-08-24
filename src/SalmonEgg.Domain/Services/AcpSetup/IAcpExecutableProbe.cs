@@ -20,7 +20,28 @@ public interface IAcpExecutableProbe
     /// <summary>
     /// Resolves <paramref name="command"/> to an absolute path, or null when it is not on PATH.
     /// </summary>
+    /// <remarks>
+    /// Returns the first match, the way a shell would. Callers that need to know a second install exists
+    /// use <see cref="ResolveExecutableCandidatesAsync"/>; callers that only need something runnable
+    /// (installers, version reads) stay on this.
+    /// </remarks>
     Task<string?> ResolveExecutablePathAsync(string command, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves every distinct executable <paramref name="command"/> matches, in PATH precedence order.
+    /// </summary>
+    /// <remarks>
+    /// The first entry is what <see cref="ResolveExecutablePathAsync"/> returns and what a shell would
+    /// run; later entries are shadowed installs the user may have meant instead. Distinct means distinct
+    /// target: a PATH that lists one directory several times, or symlinks pointing at one file, yield one
+    /// candidate rather than several identical ones.
+    ///
+    /// Empty when the command resolves to nothing, so callers treat "not found" the same as they do for
+    /// the single-path overload.
+    /// </remarks>
+    Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Runs <paramref name="command"/> with <paramref name="versionArguments"/> and returns the first

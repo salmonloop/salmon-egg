@@ -76,22 +76,25 @@ public sealed class AcpComponentDetector
         CancellationToken cancellationToken)
     {
         var command = overrides.Resolve(component.ProbeCommand);
-        var executablePath = await _probe
-            .ResolveExecutablePathAsync(command, cancellationToken)
+        // Enumerated rather than resolved to a single path: a shadowed second install is invisible to a
+        // shell and to the launch plan, so the wizard has to be the thing that notices it exists.
+        var candidates = await _probe
+            .ResolveExecutableCandidatesAsync(command, cancellationToken)
             .ConfigureAwait(false);
 
-        if (string.IsNullOrWhiteSpace(executablePath))
+        if (candidates.Count == 0)
         {
             return AcpComponentProbeResult.Missing(component.Id, ExecutableMissingDetail(command));
         }
 
+        var executablePath = candidates[0];
         var version = component.ProbeVersionArguments.Count == 0
             ? null
             : await _probe
                 .ReadVersionAsync(command, component.ProbeVersionArguments, cancellationToken)
                 .ConfigureAwait(false);
 
-        return AcpComponentProbeResult.Installed(component.Id, executablePath, version);
+        return AcpComponentProbeResult.Installed(component.Id, executablePath, version, candidates);
     }
 
     /// <summary>
@@ -119,7 +122,12 @@ public sealed class AcpComponentDetector
         return isInstalled switch
         {
             true => AcpComponentProbeResult.Installed(component.Id, launcherPath, version: null),
-            false => AcpComponentProbeResult.Missing(component.Id),
+            // The launcher answered "no", which is only authoritative for the toolchain it belongs to.
+            // Naming that launcher is the difference between "not installed" and "not installed *here*",
+            // which is what a user with several toolchain versions needs to see.
+            false => AcpComponentProbeResult.Missing(
+                component.Id,
+                PackageAbsentDetail(component.PackageId, launcherPath)),
             null => AcpComponentProbeResult.Undetermined(component.Id)
         };
     }
@@ -129,4 +137,7 @@ public sealed class AcpComponentDetector
 
     private static string ExecutableMissingDetail(string command)
         => $"Command '{command}' was not found on PATH.";
+
+    private static string PackageAbsentDetail(string packageId, string launcherPath)
+        => $"'{launcherPath}' does not list '{packageId}' among its global packages.";
 }

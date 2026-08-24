@@ -888,6 +888,15 @@
   <data name="AcpSetup_AdapterPicker.Header" xml:space="preserve">
     <value>ACP 适配器</value>
   </data>
+  <data name="AcpSetup_MultipleCandidates.Text" xml:space="preserve">
+    <value>这台机器上有多份，当前用的是列表里第一个（和终端里的行为一致）。要换请点选另一份。</value>
+  </data>
+  <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
+    <value>选择要使用的一份</value>
+  </data>
+  <data name="AcpSetup_UseCandidate.Content" xml:space="preserve">
+    <value>用这一份</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>
   </data>

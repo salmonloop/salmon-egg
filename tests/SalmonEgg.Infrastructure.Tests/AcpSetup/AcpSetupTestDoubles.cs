@@ -15,6 +15,7 @@ namespace SalmonEgg.Infrastructure.Tests.AcpSetup;
 internal sealed class StubAcpExecutableProbe : IAcpExecutableProbe
 {
     private readonly Dictionary<string, string?> _resolvedPaths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
 
     public bool SupportsProcessProbing { get; init; } = true;
 
@@ -28,6 +29,28 @@ internal sealed class StubAcpExecutableProbe : IAcpExecutableProbe
     {
         ResolveRequests.Add(command);
         return Task.FromResult(_resolvedPaths.TryGetValue(command, out var path) ? path : null);
+    }
+
+    /// <summary>
+    /// Candidates default to the single resolved path, so a test that only cares about presence does not
+    /// have to set both. Tests about shadowed installs set this explicitly.
+    /// </summary>
+    public void SetCandidates(string command, params string[] candidates)
+        => _candidates[command] = candidates;
+
+    public Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default)
+    {
+        ResolveRequests.Add(command);
+        if (_candidates.TryGetValue(command, out var candidates))
+        {
+            return Task.FromResult<IReadOnlyList<string>>(candidates);
+        }
+
+        var resolved = _resolvedPaths.TryGetValue(command, out var path) ? path : null;
+        return Task.FromResult<IReadOnlyList<string>>(
+            resolved is null ? Array.Empty<string>() : new[] { resolved });
     }
 
     public Task<string?> ReadVersionAsync(

@@ -32,6 +32,14 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         return Task.FromResult(ResolveExecutablePath(command));
     }
 
+    public Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(ResolveExecutableCandidates(command));
+    }
+
     public async Task<string?> ReadVersionAsync(
         string command,
         IReadOnlyList<string> versionArguments,
@@ -59,7 +67,28 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     /// Asks npm for the global package list. <c>--depth 0</c> keeps the walk to top-level packages, and
     /// <c>--parseable</c> yields one path per line, which is stable across npm versions.
     /// </summary>
-    public Task<bool?> IsGlobalNodePackageInstalledAsync(
+    public async Task<bool?> IsGlobalNodePackageInstalledAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+        => (await LocateGlobalNodePackageAsync(packageId, cancellationToken).ConfigureAwait(false))
+            .IsInstalled;
+
+    public async Task<bool?> IsGlobalUvToolInstalledAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+        => (await LocateGlobalUvToolAsync(packageId, cancellationToken).ConfigureAwait(false))
+            .IsInstalled;
+
+    /// <summary>
+    /// Asks npm for the global package list and reports where the package was found.
+    /// </summary>
+    /// <remarks>
+    /// The location matters on machines with several toolchain versions installed: npm answers for the
+    /// Node version currently on PATH, so a package installed under a different version reads as absent
+    /// here. Reporting the path that answered lets the wizard show which toolchain it asked, instead of
+    /// leaving the user to guess why an install they remember doing is invisible.
+    /// </remarks>
+    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
         string packageId,
         CancellationToken cancellationToken = default)
         => QueryPackageListAsync(
@@ -68,7 +97,7 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
             packageId,
             cancellationToken);
 
-    public Task<bool?> IsGlobalUvToolInstalledAsync(
+    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
         string packageId,
         CancellationToken cancellationToken = default)
         => QueryPackageListAsync(
@@ -88,7 +117,7 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     /// instance) while still printing a usable list, so output that contains the package is trusted even
     /// on a non-zero exit. The reverse is not true: a failed run with no match stays unknown.
     /// </remarks>
-    private static async Task<bool?> QueryPackageListAsync(
+    private static async Task<AcpPackageQueryResult> QueryPackageListAsync(
         string launcher,
         IReadOnlyList<string> arguments,
         string packageId,
@@ -96,13 +125,13 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     {
         if (string.IsNullOrWhiteSpace(packageId))
         {
-            return null;
+            return AcpPackageQueryResult.Unknown();
         }
 
         var executable = ResolveExecutablePath(launcher);
         if (executable is null)
         {
-            return null;
+            return AcpPackageQueryResult.Unknown();
         }
 
         var result = await AcpSetupProcessRunner
@@ -111,22 +140,73 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
 
         if (!result.Started)
         {
-            return null;
+            return AcpPackageQueryResult.Unknown();
         }
 
         var packageName = StripVersionSuffix(packageId);
-        if (ContainsPackage(result.CombinedOutput, packageName))
+        if (FindPackageLocation(result.CombinedOutput, packageName) is { } location)
         {
-            return true;
+            return AcpPackageQueryResult.Found(location, executable);
         }
 
-        return result.Succeeded ? false : null;
+        return result.Succeeded ? AcpPackageQueryResult.Absent(executable) : AcpPackageQueryResult.Unknown();
     }
 
-    private static bool ContainsPackage(string output, string packageName)
-        => !string.IsNullOrWhiteSpace(output)
-            && !string.IsNullOrWhiteSpace(packageName)
-            && output.Contains(packageName, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Returns the line reporting <paramref name="packageName"/>, or null when no line reports it.
+    /// </summary>
+    /// <remarks>
+    /// The package name is matched as a whole trailing path segment, not as a substring of the output.
+    /// A substring test reports a package as installed whenever some unrelated package merely contains
+    /// its name — searching for <c>cline</c> matches <c>my-cline-fork</c> — and a false "installed" is the
+    /// worst of the three answers here: the wizard skips the install, advances, and fails at launch.
+    ///
+    /// <c>npm ls --parseable</c> prints one filesystem path per line ending in the package directory, and
+    /// <c>uv tool list</c> prints the tool name first on the line, so comparing the last path segment
+    /// covers both. Scoped names keep their <c>@scope/</c> prefix, which is itself a path separator on
+    /// disk, so the comparison is made against the last two segments when the name is scoped.
+    /// </remarks>
+    internal static string? FindPackageLocation(string output, string packageName)
+    {
+        if (string.IsNullOrWhiteSpace(output) || string.IsNullOrWhiteSpace(packageName))
+        {
+            return null;
+        }
+
+        var segmentCount = packageName.StartsWith('@') ? 2 : 1;
+
+        foreach (var rawLine in output.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            // uv reports "name version"; npm reports a path. Take the first token either way.
+            var token = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0]
+                .TrimEnd('/', '\\');
+            if (TrailingSegments(token, segmentCount) is { } tail
+                && string.Equals(tail, packageName, StringComparison.OrdinalIgnoreCase))
+            {
+                return token;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Returns the last <paramref name="count"/> path segments, or null when there are fewer.</summary>
+    private static string? TrailingSegments(string path, int count)
+    {
+        var segments = path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < count)
+        {
+            return null;
+        }
+
+        return string.Join('/', segments[^count..]);
+    }
 
     /// <summary>
     /// Drops a pinned version from a package coordinate, preserving the leading '@' of a scoped name.
@@ -198,6 +278,90 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Enumerates every distinct executable <paramref name="command"/> matches, in PATH order.
+    /// </summary>
+    /// <remarks>
+    /// Deduplicated by resolved target rather than by candidate string: PATH commonly lists the same
+    /// directory more than once, and per-user bin directories are often symlink farms pointing at one
+    /// real file. Without that, a machine with one install reports several identical candidates and the
+    /// UI offers a choice between a path and itself.
+    ///
+    /// An explicit path is returned as its single candidate, matching the single-path overload — there is
+    /// no PATH search to enumerate.
+    /// </remarks>
+    private static IReadOnlyList<string> ResolveExecutableCandidates(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return Array.Empty<string>();
+        }
+
+        var trimmed = command.Trim();
+        if (trimmed.IndexOfAny(new[] { '/', '\\' }) >= 0)
+        {
+            var explicitPath = ResolveExecutablePath(trimmed);
+            return explicitPath is null ? Array.Empty<string>() : new[] { explicitPath };
+        }
+
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var pathSeparator = isWindows ? ';' : ':';
+        var directories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(pathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var candidates = new List<string>();
+        var seenTargets = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var extension in ResolveExtensions(isWindows))
+        {
+            var candidateName = trimmed + extension;
+            foreach (var directory in directories)
+            {
+                string candidate;
+                try
+                {
+                    candidate = Path.Combine(directory, candidateName);
+                }
+                catch (ArgumentException)
+                {
+                    continue;
+                }
+
+                if (!File.Exists(candidate))
+                {
+                    continue;
+                }
+
+                if (seenTargets.Add(ResolveDeduplicationKey(candidate)))
+                {
+                    candidates.Add(candidate);
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// The identity two candidate paths are compared on: the symlink target when one can be read, the
+    /// full path otherwise.
+    /// </summary>
+    private static string ResolveDeduplicationKey(string candidate)
+    {
+        try
+        {
+            var info = new FileInfo(candidate);
+            return info.LinkTarget is null
+                ? info.FullName
+                : (info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? info.FullName);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // An unreadable candidate still counts as itself rather than collapsing into another entry.
+            return candidate;
+        }
     }
 
     private static IEnumerable<string> ResolveExtensions(bool isWindows)

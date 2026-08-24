@@ -52,6 +52,7 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
     private readonly Dictionary<string, string?> _versions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool?> _nodePackages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool?> _uvTools = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
 
     public bool SupportsProcessProbing { get; set; } = true;
 
@@ -67,6 +68,27 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
 
     public Task<string?> ResolveExecutablePathAsync(string command, CancellationToken cancellationToken = default)
         => Task.FromResult(_paths.TryGetValue(command, out var path) ? path : null);
+
+    /// <summary>
+    /// Declares several installs of one command, for the shadowed-install case. Unset commands answer
+    /// with their single resolved path, so existing tests need no changes.
+    /// </summary>
+    public void SetCandidates(string command, params string[] candidates)
+        => _candidates[command] = candidates;
+
+    public Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default)
+    {
+        if (_candidates.TryGetValue(command, out var candidates))
+        {
+            return Task.FromResult<IReadOnlyList<string>>(candidates);
+        }
+
+        var resolved = _paths.TryGetValue(command, out var path) ? path : null;
+        return Task.FromResult<IReadOnlyList<string>>(
+            resolved is null ? Array.Empty<string>() : new[] { resolved });
+    }
 
     public Task<string?> ReadVersionAsync(
         string command,
