@@ -309,6 +309,47 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Equal(customNpx, saved.StdioCommand);
     }
 
+    /// <summary>
+    /// Six of the eight shipped agents carry a built-in adapter, and the step rendered nothing at all for
+    /// them: a title over an empty panel, correct but indistinguishable from a page that failed to load.
+    /// Built-in is now its own state, separate from "installed", so the step can say why it is satisfied.
+    /// </summary>
+    [Fact]
+    public async Task BuiltInAdapter_ReportsBuiltIn_NotInstalled_AndAllowsAdvance()
+    {
+        var agent = AcpSetupWizardFixtures.Agent(adapters: AcpSetupWizardFixtures.BuiltInAdapter());
+        var wizard = CreateWizardFor(
+            agent,
+            ProbeForInstalledRuntime(),
+            new StubComponentInstaller(),
+            localizer: null);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterBuiltIn);
+        Assert.False(wizard.IsAdapterInstalled);
+        Assert.False(wizard.IsAdapterMissing);
+        Assert.False(wizard.IsAdapterUndetermined);
+        // A built-in adapter has no launcher to name, so the override disclosure stays hidden.
+        Assert.False(wizard.HasAdapterProbeCommand);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// A packaged adapter that npm reports present is "installed", not "built in": the two get different
+    /// copy because one required the user to have something and the other did not.
+    /// </summary>
+    [Fact]
+    public async Task PackagedAdapter_ReportsInstalled_NotBuiltIn()
+    {
+        var (wizard, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: true);
+
+        Assert.True(wizard.IsAdapterInstalled);
+        Assert.False(wizard.IsAdapterBuiltIn);
+        Assert.True(wizard.HasAdapterProbeCommand);
+    }
+
     [Fact]
     public async Task DetectAgents_AppliesProbeResults_WithVersion()
     {
