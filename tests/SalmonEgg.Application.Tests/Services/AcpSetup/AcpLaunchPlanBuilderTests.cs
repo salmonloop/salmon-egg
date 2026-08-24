@@ -164,4 +164,57 @@ public class AcpLaunchPlanBuilderTests
             DisplayName = key,
             Target = target
         };
+
+    /// <summary>
+    /// A path the user supplied for the launch command must reach the plan. The wizard offers the
+    /// override precisely because a desktop process cannot see the user's shell PATH; honouring it only
+    /// while probing would produce a profile that verifies and then fails at every launch.
+    /// </summary>
+    [Fact]
+    public void Build_AppliesACommandOverride_ToThePlansExecutable()
+    {
+        var template = new AcpLaunchTemplate
+        {
+            Command = "npx",
+            FixedArguments = new[] { "-y", "@agentclientprotocol/claude-agent-acp" }
+        };
+        var overrides = AcpCommandOverrides.Create(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["npx"] = "/home/user/.nvm/versions/node/v24/bin/npx"
+            });
+
+        var plan = AcpLaunchPlanBuilder.Build(template, parameterValues: null, overrides);
+
+        Assert.Equal("/home/user/.nvm/versions/node/v24/bin/npx", plan.Command);
+        // Arguments are the package coordinate, not a path, so an override must not touch them.
+        Assert.Equal(new[] { "-y", "@agentclientprotocol/claude-agent-acp" }, plan.Arguments);
+    }
+
+    [Fact]
+    public void Build_LeavesTheCommandAlone_WhenTheOverrideNamesADifferentCommand()
+    {
+        var template = new AcpLaunchTemplate { Command = "goose", FixedArguments = new[] { "acp" } };
+        var overrides = AcpCommandOverrides.Create(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["npx"] = "/usr/local/bin/npx" });
+
+        var plan = AcpLaunchPlanBuilder.Build(template, parameterValues: null, overrides);
+
+        Assert.Equal("goose", plan.Command);
+    }
+
+    /// <summary>
+    /// A blank path must clear rather than map the command to nothing: the user emptying the box means
+    /// "go back to PATH resolution", and an empty Command would produce an unlaunchable profile.
+    /// </summary>
+    [Fact]
+    public void Build_IgnoresBlankOverrides()
+    {
+        var template = new AcpLaunchTemplate { Command = "npx" };
+        var overrides = AcpCommandOverrides.Create(
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["npx"] = "   " });
+
+        Assert.True(overrides.IsEmpty);
+        Assert.Equal("npx", AcpLaunchPlanBuilder.Build(template, parameterValues: null, overrides).Command);
+    }
 }

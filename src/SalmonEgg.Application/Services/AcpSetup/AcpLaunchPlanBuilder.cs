@@ -31,9 +31,14 @@ public static class AcpLaunchPlanBuilder
     /// Builds the launch plan. Parameters with no value are omitted entirely rather than emitted as
     /// empty flags or empty environment variables, which agents reject.
     /// </summary>
+    /// <param name="overrides">
+    /// User-supplied paths for commands the catalog names by executable name. The same set is applied
+    /// during detection, so what the wizard verified is what the saved profile starts.
+    /// </param>
     public static AcpLaunchPlan Build(
         AcpLaunchTemplate template,
-        IReadOnlyDictionary<string, string>? parameterValues)
+        IReadOnlyDictionary<string, string>? parameterValues,
+        AcpCommandOverrides? overrides = null)
     {
         ArgumentNullException.ThrowIfNull(template);
 
@@ -75,7 +80,7 @@ public static class AcpLaunchPlanBuilder
 
         return new AcpLaunchPlan
         {
-            Command = template.Command,
+            Command = (overrides ?? AcpCommandOverrides.Empty).Resolve(template.Command),
             Arguments = arguments,
             Environment = environment
         };

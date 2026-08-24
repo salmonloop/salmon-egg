@@ -858,6 +858,27 @@
   <data name="AcpSetup_AdapterUndeterminedBar.Message" xml:space="preserve">
     <value>检测没能得出结论，不代表适配器不存在。可以继续下一步，由连接测试来验证。</value>
   </data>
+  <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
+    <value>检测的命令</value>
+  </data>
+  <data name="AcpSetup_WhyNotFound.Content" xml:space="preserve">
+    <value>为什么没检测到？</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
+    <value>自定义命令的完整路径</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.PlaceholderText" xml:space="preserve">
+    <value>例如 /home/you/.nvm/versions/node/v24/bin/npx</value>
+  </data>
+  <data name="AcpSetup_VerifyCustomCommand.Content" xml:space="preserve">
+    <value>用这个路径重新检测</value>
+  </data>
+  <data name="AcpSetup_PathHint.Text" xml:space="preserve">
+    <value>从桌面图标启动的应用读不到你在终端里配置的 PATH，所以 nvm、asdf、~/.local/bin 里的命令通常检测不到。填上完整路径即可，它会同时用于检测和保存后的启动。</value>
+  </data>
+  <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>已找到</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>
   </data>

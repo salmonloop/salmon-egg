@@ -22,11 +22,18 @@ public sealed class AcpComponentDetector
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
     }
 
+    /// <param name="overrides">
+    /// User-supplied paths for commands the catalog names by executable name. Applied here so a probe
+    /// answers about the executable the launch plan will actually run; see
+    /// <see cref="AcpCommandOverrides"/>.
+    /// </param>
     public async Task<AcpComponentProbeResult> DetectAsync(
         AcpComponentDescriptor component,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(component);
+        var effectiveOverrides = overrides ?? AcpCommandOverrides.Empty;
 
         if (component.DetectionMode is AcpComponentDetectionMode.None || component.IsBuiltIn)
         {
@@ -46,15 +53,17 @@ public sealed class AcpComponentDetector
         return component.DetectionMode switch
         {
             AcpComponentDetectionMode.ExecutableOnPath
-                => await DetectExecutableAsync(component, cancellationToken).ConfigureAwait(false),
+                => await DetectExecutableAsync(component, effectiveOverrides, cancellationToken).ConfigureAwait(false),
             AcpComponentDetectionMode.GlobalNodePackage
                 => await DetectPackageAsync(
                     component,
+                    effectiveOverrides,
                     _probe.IsGlobalNodePackageInstalledAsync,
                     cancellationToken).ConfigureAwait(false),
             AcpComponentDetectionMode.GlobalUvTool
                 => await DetectPackageAsync(
                     component,
+                    effectiveOverrides,
                     _probe.IsGlobalUvToolInstalledAsync,
                     cancellationToken).ConfigureAwait(false),
             _ => AcpComponentProbeResult.Undetermined(component.Id)
@@ -63,21 +72,23 @@ public sealed class AcpComponentDetector
 
     private async Task<AcpComponentProbeResult> DetectExecutableAsync(
         AcpComponentDescriptor component,
+        AcpCommandOverrides overrides,
         CancellationToken cancellationToken)
     {
+        var command = overrides.Resolve(component.ProbeCommand);
         var executablePath = await _probe
-            .ResolveExecutablePathAsync(component.ProbeCommand, cancellationToken)
+            .ResolveExecutablePathAsync(command, cancellationToken)
             .ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(executablePath))
         {
-            return AcpComponentProbeResult.Missing(component.Id);
+            return AcpComponentProbeResult.Missing(component.Id, ExecutableMissingDetail(command));
         }
 
         var version = component.ProbeVersionArguments.Count == 0
             ? null
             : await _probe
-                .ReadVersionAsync(component.ProbeCommand, component.ProbeVersionArguments, cancellationToken)
+                .ReadVersionAsync(command, component.ProbeVersionArguments, cancellationToken)
                 .ConfigureAwait(false);
 
         return AcpComponentProbeResult.Installed(component.Id, executablePath, version);
@@ -90,16 +101,18 @@ public sealed class AcpComponentDetector
     /// </summary>
     private async Task<AcpComponentProbeResult> DetectPackageAsync(
         AcpComponentDescriptor component,
+        AcpCommandOverrides overrides,
         Func<string, CancellationToken, Task<bool?>> queryPackageAsync,
         CancellationToken cancellationToken)
     {
+        var launcher = overrides.Resolve(component.ProbeCommand);
         var launcherPath = await _probe
-            .ResolveExecutablePathAsync(component.ProbeCommand, cancellationToken)
+            .ResolveExecutablePathAsync(launcher, cancellationToken)
             .ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(launcherPath))
         {
-            return AcpComponentProbeResult.Missing(component.Id, LauncherMissingDetail(component.ProbeCommand));
+            return AcpComponentProbeResult.Missing(component.Id, LauncherMissingDetail(launcher));
         }
 
         var isInstalled = await queryPackageAsync(component.PackageId, cancellationToken).ConfigureAwait(false);
@@ -113,4 +126,7 @@ public sealed class AcpComponentDetector
 
     private static string LauncherMissingDetail(string launcher)
         => $"Launcher '{launcher}' was not found on PATH.";
+
+    private static string ExecutableMissingDetail(string command)
+        => $"Command '{command}' was not found on PATH.";
 }

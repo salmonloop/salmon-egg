@@ -38,4 +38,12 @@ public sealed partial class AcpSetupWizardPage : SettingsPageBase
             row.RequestInstall();
         }
     }
+
+    private void OnVerifyAgentRowClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: AcpSetupAgentRowViewModel row })
+        {
+            row.RequestVerify();
+        }
+    }
 }

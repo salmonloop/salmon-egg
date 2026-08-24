@@ -52,6 +52,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         {
             var row = new AcpSetupAgentRowViewModel(agent, _localizer);
             row.InstallRequested += InstallAgentRow;
+            row.VerifyRequested += VerifyAgentRow;
             Agents.Add(row);
         }
     }
@@ -110,6 +111,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
+    [NotifyPropertyChangedFor(nameof(AdapterProbeCommand))]
+    [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
     private AcpAdapterDescriptor? _selectedAdapter;
 
     /// <summary>Latest adapter probe for the selected adapter, or null before it has been probed.</summary>
@@ -122,6 +125,22 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(AdapterProbeDetail))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeDetail))]
     private AcpComponentProbeResult? _adapterProbe;
+
+    /// <summary>
+    /// A path the user supplied for the adapter's launcher, empty when they supplied none.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the agent row's override because they name different commands: the row overrides the
+    /// runtime the agent ships (<c>claude</c>), this overrides the launcher the adapter runs through
+    /// (<c>npx</c>). For a packaged adapter that launcher is also the launch plan's executable, so this
+    /// is the entry that decides whether a saved profile can start at all.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAdapterCustomCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
+    private string _adapterCustomCommand = string.Empty;
+
+    public bool HasAdapterCustomCommand => !string.IsNullOrWhiteSpace(AdapterCustomCommand);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
@@ -198,6 +217,14 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// </remarks>
     public string AdapterProbeDetail => AdapterProbe?.Detail ?? string.Empty;
 
+    /// <summary>
+    /// The launcher the adapter is detected and started through, empty for a built-in adapter that needs
+    /// no external command.
+    /// </summary>
+    public string AdapterProbeCommand => SelectedAdapter?.Component.ProbeCommand ?? string.Empty;
+
+    public bool HasAdapterProbeCommand => !string.IsNullOrWhiteSpace(AdapterProbeCommand);
+
     public bool HasAdapterProbeDetail => !string.IsNullOrWhiteSpace(AdapterProbeDetail);
 
     public bool HasTestResult => TestResult is not null;
@@ -225,10 +252,37 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 MarkAgentsChecking();
-                var states = await _orchestrator.DetectAgentsAsync(token).ConfigureAwait(false);
+                var states = await _orchestrator
+                    .DetectAgentsAsync(CollectCommandOverrides(), token)
+                    .ConfigureAwait(false);
                 await _uiDispatcher.EnqueueAsync(() => ApplyRuntimeProbes(states)).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Re-probes one row after the user supplied a path for it.
+    /// </summary>
+    /// <remarks>
+    /// Scoped to the single row so confirming one path does not relaunch a process for every catalog
+    /// agent, and so the answer the user gets is unambiguously about the path they just typed.
+    /// </remarks>
+    private void VerifyAgentRow(AcpSetupAgentRowViewModel row)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        _ = RunOperationAsync(
+            async token =>
+            {
+                var probe = await _orchestrator
+                    .DetectComponentAsync(row.Agent.Runtime, CollectCommandOverrides(), token)
+                    .ConfigureAwait(false);
+                await _uiDispatcher.EnqueueAsync(() => row.Runtime = probe).ConfigureAwait(false);
+            },
+            CancellationToken.None);
     }
 
     [RelayCommand(CanExecute = nameof(CanDetectAdapter))]
@@ -244,7 +298,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 var probe = await _orchestrator
-                    .DetectComponentAsync(adapter.Component, token)
+                    .DetectComponentAsync(adapter.Component, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
                 await _uiDispatcher.EnqueueAsync(() => AdapterProbe = probe).ConfigureAwait(false);
             },
@@ -268,7 +322,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, token)
+                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
                 await _uiDispatcher
                     .EnqueueAsync(() =>
@@ -299,7 +353,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, token)
+                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
                 await _uiDispatcher
                     .EnqueueAsync(() =>
@@ -325,7 +379,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             async token =>
             {
                 var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(adapter.Component, AppendInstallOutput, token)
+                    .InstallComponentAsync(adapter.Component, AppendInstallOutput, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
                 await _uiDispatcher
                     .EnqueueAsync(() =>
@@ -544,6 +598,33 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Collects the paths the user supplied, keyed by the command name each one replaces.
+    /// </summary>
+    /// <remarks>
+    /// Gathered from every row rather than only the selected one, because one command can back several
+    /// agents: a path given for <c>npx</c> while looking at one agent is the same <c>npx</c> the next
+    /// agent's adapter launches.
+    /// </remarks>
+    private AcpCommandOverrides CollectCommandOverrides()
+    {
+        var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var row in Agents)
+        {
+            if (row.HasCustomCommand)
+            {
+                overrides[row.ProbeCommand] = row.CustomCommand;
+            }
+        }
+
+        if (HasAdapterCustomCommand && HasAdapterProbeCommand)
+        {
+            overrides[AdapterProbeCommand] = AdapterCustomCommand;
+        }
+
+        return AcpCommandOverrides.Create(overrides);
+    }
+
     private AcpSetupDraft? BuildDraft()
     {
         var agent = SelectedAgent?.Agent;
@@ -558,6 +639,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             Agent = agent,
             Adapter = adapter,
             ParameterValues = CollectParameterValues(),
+            CommandOverrides = CollectCommandOverrides(),
             ProfileName = string.IsNullOrWhiteSpace(ProfileName) ? agent.DisplayName : ProfileName.Trim()
         };
     }
@@ -585,7 +667,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         try
         {
             LaunchCommandPreview = AcpLaunchPlanBuilder
-                .Build(template, CollectParameterValues())
+                .Build(template, CollectParameterValues(), CollectCommandOverrides())
                 .CommandLineDisplay;
         }
         catch (InvalidOperationException ex)

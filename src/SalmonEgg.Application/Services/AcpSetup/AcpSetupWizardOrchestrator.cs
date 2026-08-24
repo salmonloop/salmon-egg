@@ -46,13 +46,16 @@ public sealed class AcpSetupWizardOrchestrator
     /// would multiply process launches for agents the user will never pick.
     /// </summary>
     public async Task<IReadOnlyList<AcpAgentDetectionState>> DetectAgentsAsync(
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         var states = new List<AcpAgentDetectionState>(_catalog.Agents.Count);
         foreach (var agent in _catalog.Agents)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var runtime = await _detector.DetectAsync(agent.Runtime, cancellationToken).ConfigureAwait(false);
+            var runtime = await _detector
+                .DetectAsync(agent.Runtime, overrides, cancellationToken)
+                .ConfigureAwait(false);
             states.Add(new AcpAgentDetectionState { Agent = agent, Runtime = runtime });
         }
 
@@ -61,8 +64,9 @@ public sealed class AcpSetupWizardOrchestrator
 
     public Task<AcpComponentProbeResult> DetectComponentAsync(
         AcpComponentDescriptor component,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
-        => _detector.DetectAsync(component, cancellationToken);
+        => _detector.DetectAsync(component, overrides, cancellationToken);
 
     /// <summary>
     /// Installs a component and re-probes it, so callers always see verified availability rather than
@@ -71,6 +75,7 @@ public sealed class AcpSetupWizardOrchestrator
     public async Task<(AcpComponentInstallResult Install, AcpComponentProbeResult Probe)> InstallComponentAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(component);
@@ -78,7 +83,9 @@ public sealed class AcpSetupWizardOrchestrator
         var install = await _installer
             .InstallAsync(component, onOutput, cancellationToken)
             .ConfigureAwait(false);
-        var probe = await _detector.DetectAsync(component, cancellationToken).ConfigureAwait(false);
+        var probe = await _detector
+            .DetectAsync(component, overrides, cancellationToken)
+            .ConfigureAwait(false);
         return (install, probe);
     }
 
