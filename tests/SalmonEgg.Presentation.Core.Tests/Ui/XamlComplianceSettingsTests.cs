@@ -155,6 +155,71 @@ public sealed class XamlComplianceSettingsTests
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 
+    /// <summary>
+    /// An InfoBar must carry text. The wizard shipped an adapter-missing bar holding only two buttons:
+    /// a bare warning stripe with no sentence saying what was wrong or why it mattered.
+    /// </summary>
+    /// <remarks>
+    /// Text can arrive as a literal, a binding, or an <c>x:Uid</c> supplying Title/Message from
+    /// resources, and the Uid case is the one the codebase uses — so a bar is accepted when it has an
+    /// <c>x:Uid</c> whose resources define a Title or Message, and rejected when it has neither those nor
+    /// an inline Title/Message.
+    /// </remarks>
+    [Fact]
+    public void InfoBars_CarryTitleOrMessage_NotOnlyButtons()
+    {
+        var repoRoot = FindRepoRoot();
+        var root = Path.Combine(repoRoot, "SalmonEgg", "SalmonEgg");
+        var resources = XDocument.Parse(LoadXaml(Path.Combine("SalmonEgg", "SalmonEgg", "Strings", "en-US", "Resources.resw")));
+        var resourceNames = resources.Root!
+            .Elements("data")
+            .Select(element => element.Attribute("name")?.Value ?? string.Empty)
+            .ToHashSet(StringComparer.Ordinal);
+        var failures = new List<string>();
+
+        foreach (var xamlFile in Directory.EnumerateFiles(root, "*.xaml", SearchOption.AllDirectories))
+        {
+            if (xamlFile.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                || xamlFile.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            XDocument document;
+            try
+            {
+                document = XDocument.Parse(File.ReadAllText(xamlFile));
+            }
+            catch (System.Xml.XmlException)
+            {
+                continue;
+            }
+
+            foreach (var bar in document.Descendants().Where(element => element.Name.LocalName == "InfoBar"))
+            {
+                if (HasAttributeByLocalName(bar, "Title") || HasAttributeByLocalName(bar, "Message"))
+                {
+                    continue;
+                }
+
+                var uid = GetAttributeByLocalName(bar, "Uid");
+                if (!string.IsNullOrEmpty(uid)
+                    && (resourceNames.Contains($"{uid}.Title") || resourceNames.Contains($"{uid}.Message")))
+                {
+                    continue;
+                }
+
+                var name = GetAttributeByLocalName(bar, "Name") ?? "(unnamed)";
+                failures.Add(
+                    $"{Path.GetRelativePath(repoRoot, xamlFile)}: InfoBar '{name}' has no Title or Message"
+                    + " and no x:Uid supplying either, so it renders as a coloured stripe with no"
+                    + " explanation. Give it copy, in resources when the text is user-visible.");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
     [Fact]
     public void AcpEditors_ExposeStableAutomationIdsForEditableFields()
     {

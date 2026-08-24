@@ -148,6 +148,72 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Contains(nameof(wizard.LatestInstallOutputLine), changed);
     }
 
+    /// <summary>
+    /// A packaged adapter that npm reports installed must read as usable, and exactly one of the three
+    /// state surfaces may be open at a time — the view binds each InfoBar to its own predicate, so two
+    /// true at once would stack contradictory bars.
+    /// </summary>
+    [Fact]
+    public async Task AdapterProbe_Installed_OpensOnlyTheReadySurface()
+    {
+        var (wizard, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: true);
+
+        Assert.True(wizard.IsAdapterUsable);
+        Assert.False(wizard.IsAdapterMissing);
+        Assert.False(wizard.IsAdapterUndetermined);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AdapterProbe_Missing_OpensOnlyTheMissingSurface_AndBlocksAdvance()
+    {
+        var (wizard, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: false);
+
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.False(wizard.IsAdapterUsable);
+        Assert.False(wizard.IsAdapterUndetermined);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// An unanswerable probe must not read as absence, and must not block: the wizard could not look, so
+    /// the connection test is the real gate. This is the state the desktop hits when npm is installed but
+    /// not on the launched process's PATH.
+    /// </summary>
+    [Fact]
+    public async Task AdapterProbe_Undetermined_DoesNotClaimMissing_AndAllowsAdvance()
+    {
+        var (wizard, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: null);
+
+        Assert.True(wizard.IsAdapterUndetermined);
+        Assert.False(wizard.IsAdapterMissing);
+        Assert.False(wizard.IsAdapterUsable);
+        Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// The probe records why it reached its verdict, and that sentence is the difference between a red
+    /// mark a user can act on and one they cannot. It shipped with zero consumers.
+    /// </summary>
+    [Fact]
+    public async Task AdapterProbe_SurfacesTheDiagnosticDetail_WhenTheLauncherIsAbsent()
+    {
+        var adapter = AcpSetupWizardFixtures.PackagedAdapter();
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        // npx itself is absent, which is what a desktop launch without the user's shell PATH looks like.
+        probe.SetExecutable("npx", path: null);
+        var wizard = CreateWizardFor(agent, probe, new StubComponentInstaller(), localizer: null);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.True(wizard.HasAdapterProbeDetail);
+        Assert.Contains("npx", wizard.AdapterProbeDetail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task DetectAgents_AppliesProbeResults_WithVersion()
     {
@@ -489,6 +555,27 @@ public sealed class AcpSetupWizardViewModelTests
         var walked = await WalkToTestStepAsync(parameters, localizer);
         await walked.Wizard.TestCommand.ExecuteAsync(null);
         return walked;
+    }
+
+    /// <summary>
+    /// Walks to the component step with a npx-packaged adapter whose package query answers
+    /// <paramref name="adapterInstalled"/> — true, false, or null for "could not tell".
+    /// </summary>
+    private static async Task<(AcpSetupWizardViewModel Wizard, StubComponentInstaller Installer)> WalkToComponentSetupWithPackagedAdapterAsync(
+        bool? adapterInstalled)
+    {
+        var adapter = AcpSetupWizardFixtures.PackagedAdapter();
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        probe.SetExecutable("npx", "/usr/bin/npx");
+        probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, adapterInstalled);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizardFor(agent, probe, installer, localizer: null);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        return (wizard, installer);
     }
 
     private static StubExecutableProbe ProbeForInstalledRuntime()
