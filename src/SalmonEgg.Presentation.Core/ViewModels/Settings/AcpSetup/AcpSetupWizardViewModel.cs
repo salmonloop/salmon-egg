@@ -65,7 +65,16 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// <summary>Editable launch parameters for the selected adapter.</summary>
     public ObservableCollection<AcpSetupParameterRowViewModel> Parameters { get; } = new();
 
-    /// <summary>Live installer output, capped so a chatty installer cannot grow without bound.</summary>
+    /// <summary>
+    /// Live installer output, capped so a chatty installer cannot grow without bound.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="LatestInstallOutputLine"/> and <see cref="HasInstallOutput"/> are computed from this
+    /// collection, and a collection's own change notifications say nothing about properties derived from
+    /// it. Every mutation therefore goes through <see cref="AppendInstallOutput"/> or
+    /// <see cref="ResetInstallOutput"/>, which raise those two — mutating this collection directly
+    /// leaves the surface bound to a stale value.
+    /// </remarks>
     public ObservableCollection<string> InstallOutput { get; } = new();
 
     /// <summary>True when this platform can install components rather than only linking documentation.</summary>
@@ -450,7 +459,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     {
         var agent = SelectedAgent?.Agent;
         Adapters.Clear();
-        InstallOutput.Clear();
+        ResetInstallOutput();
         AdapterProbe = null;
         if (agent is null)
         {
@@ -653,7 +662,22 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             {
                 InstallOutput.RemoveAt(0);
             }
+
+            NotifyInstallOutputChanged();
         });
+    }
+
+    /// <summary>Clears installer output so a new component's install does not inherit the last one's.</summary>
+    private void ResetInstallOutput()
+    {
+        InstallOutput.Clear();
+        NotifyInstallOutputChanged();
+    }
+
+    private void NotifyInstallOutputChanged()
+    {
+        OnPropertyChanged(nameof(LatestInstallOutputLine));
+        OnPropertyChanged(nameof(HasInstallOutput));
     }
 
     private void ReportInstallFailure(AcpComponentInstallResult install)
