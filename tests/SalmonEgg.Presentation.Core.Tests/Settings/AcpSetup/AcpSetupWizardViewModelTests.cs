@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Localization;
@@ -75,6 +76,76 @@ public sealed class AcpSetupWizardViewModelTests
         var row = Assert.Single(wizard.Parameters);
         Assert.Equal("\u6a21\u578b\u540d\u79f0\u3002", row.Description);
         Assert.NotEqual(descriptionKey, row.Description);
+    }
+
+    /// <summary>
+    /// The install surface is bound to properties computed from <c>InstallOutput</c>, and a collection's
+    /// own change notifications say nothing about properties derived from it. The wizard shipped without
+    /// raising them, so <c>HasInstallOutput</c> stayed false forever and the output panel never appeared —
+    /// the only progress feedback an install has. This asserts the notifications, not just the values.
+    /// </summary>
+    [Fact]
+    public async Task InstallAgentRow_StreamsOutput_AndNotifiesTheBoundSurface()
+    {
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var installer = new StubComponentInstaller();
+        installer.OutputLines.Add("added 1 package");
+        installer.OutputLines.Add("done in 2s");
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsMissing);
+
+        var changed = new List<string>();
+        wizard.PropertyChanged += (_, args) => changed.Add(args.PropertyName ?? string.Empty);
+
+        // Installing flips the probe's answer so the post-install re-probe reports the runtime present.
+        installer.OnInstall += _ =>
+            probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        row.RequestInstall();
+        // The install runs to completion inline here: the stub installer and the test dispatcher are
+        // both synchronous, so a settled busy flag is proof the whole chain finished rather than a race.
+        Assert.False(wizard.IsBusy);
+
+        Assert.Equal(new[] { "added 1 package", "done in 2s" }, wizard.InstallOutput);
+        Assert.True(wizard.HasInstallOutput);
+        Assert.Equal("done in 2s", wizard.LatestInstallOutputLine);
+        // Without these the bound Visibility and Text never update, which is the shipped defect.
+        Assert.Contains(nameof(wizard.HasInstallOutput), changed);
+        Assert.Contains(nameof(wizard.LatestInstallOutputLine), changed);
+    }
+
+    /// <summary>
+    /// Moving to a new component clears the previous install's log, and that clear must notify too or
+    /// the panel keeps showing output belonging to a component the user is no longer setting up.
+    /// </summary>
+    [Fact]
+    public async Task AdvancingToComponentSetup_ClearsInstallOutput_AndNotifies()
+    {
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var installer = new StubComponentInstaller();
+        installer.OutputLines.Add("added 1 package");
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        installer.OnInstall += _ =>
+            probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        row.RequestInstall();
+        Assert.False(wizard.IsBusy);
+        Assert.True(wizard.HasInstallOutput);
+
+        var changed = new List<string>();
+        wizard.PropertyChanged += (_, args) => changed.Add(args.PropertyName ?? string.Empty);
+        wizard.SelectedAgent = row;
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.Empty(wizard.InstallOutput);
+        Assert.False(wizard.HasInstallOutput);
+        Assert.Equal(string.Empty, wizard.LatestInstallOutputLine);
+        Assert.Contains(nameof(wizard.HasInstallOutput), changed);
+        Assert.Contains(nameof(wizard.LatestInstallOutputLine), changed);
     }
 
     [Fact]

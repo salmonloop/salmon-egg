@@ -837,6 +837,12 @@
   <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
     <value>第 {0} 步，共 {1} 步</value>
   </data>
+  <data name="AcpSetup_InstallOutput.Header" xml:space="preserve">
+    <value>安装输出</value>
+  </data>
+  <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
+    <value>查看安装输出</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>
   </data>

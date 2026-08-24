@@ -136,11 +136,42 @@
                                       DisplayMemberPath="Component.DisplayName"
                                       MinWidth="280"
                                       HorizontalAlignment="Left"/>
-                            <TextBox x:Name="AcpSetupInstallOutputBox"
-                                     Header=""
-                                     Text="{x:Bind ViewModel.LatestInstallOutputLine, Mode=OneWay}"
-                                     IsReadOnly="True"
-                                     Visibility="{x:Bind ViewModel.HasInstallOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <!-- Installer progress. The latest line stays visible while it runs; the
+                                 full log is one disclosure away because it only matters on failure. -->
+                            <StackPanel Spacing="8"
+                                        Visibility="{x:Bind ViewModel.HasInstallOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock x:Name="AcpSetupInstallOutputLatest"
+                                           Text="{x:Bind ViewModel.LatestInstallOutputLine, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           FontFamily="Consolas"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           AutomationProperties.AutomationId="AcpSetup.Install.LatestLine"/>
+                                <Expander x:Name="AcpSetupInstallOutputExpander"
+                                          IsExpanded="False"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock x:Uid="AcpSetup_InstallOutputToggle"/>
+                                    </Expander.Header>
+                                    <ListView x:Name="AcpSetupInstallOutputList"
+                                              ItemsSource="{x:Bind ViewModel.InstallOutput}"
+                                              SelectionMode="None"
+                                              MaxHeight="200"
+                                              AutomationProperties.AutomationId="AcpSetup.Install.Output">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <TextBlock Text="{x:Bind}"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           FontFamily="Consolas"
+                                                           IsTextSelectionEnabled="True"
+                                                           TextWrapping="Wrap"/>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Expander>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- ── Step 3: launch parameters ───────────────────── -->
