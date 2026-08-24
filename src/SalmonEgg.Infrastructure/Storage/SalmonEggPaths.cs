@@ -41,10 +41,4 @@ public static class SalmonEggPaths
     public static string GetServersDirectoryPath() => Path.Combine(GetConfigRootPath(), "servers");
 
     public static string GetAppYamlPath() => Path.Combine(GetConfigRootPath(), "app.yaml");
-
-    public static string GetConfigMigrationsDirectoryPath() =>
-        Path.Combine(GetAppDataRootPath(), "config-migrations");
-
-    public static string GetMigrationsLogPath() =>
-        Path.Combine(GetConfigMigrationsDirectoryPath(), "migrations.log");
 }
