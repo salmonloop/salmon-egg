@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using SalmonEgg.Application.Services.AcpSetup;
 using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.AcpSetup;
+using SalmonEgg.Presentation.Core.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 using SalmonEgg.Presentation.Core.Services;
 
@@ -49,7 +50,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
         foreach (var agent in _orchestrator.Agents)
         {
-            var row = new AcpSetupAgentRowViewModel(agent);
+            var row = new AcpSetupAgentRowViewModel(agent, _localizer);
             row.InstallRequested += InstallAgentRow;
             Agents.Add(row);
         }
@@ -478,7 +479,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
         foreach (var definition in template.Parameters)
         {
-            Parameters.Add(new AcpSetupParameterRowViewModel(definition, RefreshLaunchCommandPreview));
+            Parameters.Add(
+                new AcpSetupParameterRowViewModel(definition, RefreshLaunchCommandPreview, _localizer));
         }
 
         RefreshLaunchCommandPreview();
@@ -703,17 +705,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     }
 
     private string Localize(string key, string fallback)
-    {
-        if (_localizer is null || string.IsNullOrEmpty(key))
-        {
-            return fallback;
-        }
-
-        var localized = _localizer[key];
-        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
-            ? fallback
-            : localized.Value;
-    }
+        => CoreStringResolver.Resolve(_localizer, key, fallback);
 
     private const string InstallFailedKey = "AcpSetup_Install_Failed";
 

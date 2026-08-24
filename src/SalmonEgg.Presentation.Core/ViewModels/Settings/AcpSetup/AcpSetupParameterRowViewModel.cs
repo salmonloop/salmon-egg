@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models.AcpSetup;
+using SalmonEgg.Presentation.Core.Localization;
+using SalmonEgg.Presentation.Core.Resources;
 
 namespace SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 
@@ -13,13 +16,16 @@ namespace SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 public sealed partial class AcpSetupParameterRowViewModel : ObservableObject
 {
     private readonly Action? _onValueChanged;
+    private readonly IStringLocalizer<CoreStrings>? _localizer;
 
     public AcpSetupParameterRowViewModel(
         AcpSetupParameterDefinition definition,
-        Action? onValueChanged = null)
+        Action? onValueChanged = null,
+        IStringLocalizer<CoreStrings>? localizer = null)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         _onValueChanged = onValueChanged;
+        _localizer = localizer;
         _value = definition.DefaultValue;
         AllowedValues = new ReadOnlyCollection<string>(new List<string>(definition.AllowedValues));
     }
@@ -31,7 +37,13 @@ public sealed partial class AcpSetupParameterRowViewModel : ObservableObject
 
     public string DisplayName => Definition.DisplayName;
 
-    public string Description => Definition.Description;
+    /// <summary>
+    /// The parameter's explanation, already localized. The definition carries a resource key, so
+    /// resolution happens here rather than in the view; see
+    /// <see cref="AcpSetupAgentRowViewModel.Description"/> for why the view cannot resolve it.
+    /// </summary>
+    public string Description
+        => CoreStringResolver.Resolve(_localizer, Definition.Description, Definition.Description);
 
     public string Example => Definition.Example;
 

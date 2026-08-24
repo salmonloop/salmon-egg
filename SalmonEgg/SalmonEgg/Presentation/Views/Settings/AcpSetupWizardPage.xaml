@@ -83,8 +83,9 @@
                                                     <ProgressRing IsActive="{x:Bind IsChecking}" Width="16" Height="16"/>
                                                 </StackPanel>
                                             </Grid>
-                                            <TextBlock Text="{x:Bind DescriptionKey}"
+                                            <TextBlock Text="{x:Bind Description}"
                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                      TextWrapping="Wrap"
                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                             <StackPanel Orientation="Horizontal" Spacing="8"
                                                         Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibilityConverter}}">

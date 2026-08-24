@@ -268,12 +268,14 @@ internal static class AcpSetupWizardFixtures
         string key = "--model",
         bool isRequired = false,
         string defaultValue = "",
+        string description = "",
         params string[] allowedValues)
         => new()
         {
             Key = key,
             DisplayName = key,
             DefaultValue = defaultValue,
+            Description = description,
             IsRequired = isRequired,
             AllowedValues = allowedValues
         };
