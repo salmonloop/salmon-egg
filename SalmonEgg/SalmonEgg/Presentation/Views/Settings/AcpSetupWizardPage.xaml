@@ -102,6 +102,25 @@
                                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
                                             </StackPanel>
 
+                                            <!-- Shadowed installs. Absent on an ordinary machine: the
+                                                 whole block is gated on there actually being a choice,
+                                                 so a rare case costs nothing in the common one. -->
+                                            <StackPanel Spacing="6"
+                                                        Visibility="{x:Bind HasMultipleCandidates, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock x:Uid="AcpSetup_MultipleCandidates"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                <!-- Selection is native ComboBox state bound to the row,
+                                                     so no code-behind writes it back. -->
+                                                <ComboBox x:Uid="AcpSetup_CandidatePicker"
+                                                          IsFocusEngagementEnabled="True"
+                                                          ItemsSource="{x:Bind Candidates, Mode=OneWay}"
+                                                          SelectedItem="{x:Bind SelectedCandidate, Mode=TwoWay}"
+                                                          HorizontalAlignment="Stretch"
+                                                          AutomationProperties.AutomationId="AcpSetup.Agents.CandidatePicker"/>
+                                            </StackPanel>
+
                                             <!-- Not found: name the command that was looked for, then
                                                  keep the explanation and the fix one disclosure away so
                                                  a list of eight agents stays scannable. -->

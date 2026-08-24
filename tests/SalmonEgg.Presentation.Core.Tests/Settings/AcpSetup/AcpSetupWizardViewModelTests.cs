@@ -350,6 +350,71 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.True(wizard.HasAdapterProbeCommand);
     }
 
+    /// <summary>
+    /// One install is the ordinary case, and it must not present a choice: the picker is gated on there
+    /// actually being one, so a rare situation costs nothing in the common one.
+    /// </summary>
+    [Fact]
+    public async Task AgentRow_WithOneInstall_OffersNoChoice()
+    {
+        var wizard = CreateWizard();
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsInstalled);
+        Assert.False(row.HasMultipleCandidates);
+        Assert.Single(row.Candidates);
+    }
+
+    /// <summary>
+    /// Shadowed installs are reported in PATH order, and the first is the one in use — which is what a
+    /// shell would run. Without this the wizard silently picks one of several and never says so.
+    /// </summary>
+    [Fact]
+    public async Task AgentRow_WithSeveralInstalls_ReportsThemInOrder_AndUsesTheFirst()
+    {
+        const string preferred = "/usr/local/bin/test-agent";
+        const string shadowed = "/usr/bin/test-agent";
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, preferred, "1.0.0");
+        probe.SetCandidates(AcpSetupWizardFixtures.RuntimeCommand, preferred, shadowed);
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.HasMultipleCandidates);
+        Assert.Equal(new[] { preferred, shadowed }, row.Candidates);
+        Assert.Equal(preferred, row.ResolvedPath);
+        Assert.Equal(preferred, row.SelectedCandidate);
+    }
+
+    /// <summary>
+    /// Picking the shadowed install must travel the same route a hand-typed path does — into the command
+    /// overrides, and from there into the saved launch plan. A pick honoured only while probing would
+    /// verify one executable and then start a different one.
+    /// </summary>
+    [Fact]
+    public async Task AgentRow_PickingAShadowedInstall_BecomesTheCommandOverride()
+    {
+        const string preferred = "/usr/local/bin/test-agent";
+        const string shadowed = "/opt/homebrew/bin/test-agent";
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, preferred, "1.0.0");
+        probe.SetExecutable(shadowed, shadowed, "2.0.0");
+        probe.SetCandidates(AcpSetupWizardFixtures.RuntimeCommand, preferred, shadowed);
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+
+        row.SelectedCandidate = shadowed;
+
+        // Selecting re-probes the row, so the version shown is the one that install reports.
+        Assert.False(wizard.IsBusy);
+        Assert.Equal(shadowed, row.CustomCommand);
+        Assert.Equal(shadowed, row.SelectedCandidate);
+        Assert.Equal("2.0.0", row.Version);
+    }
+
     [Fact]
     public async Task DetectAgents_AppliesProbeResults_WithVersion()
     {

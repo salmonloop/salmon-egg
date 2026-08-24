@@ -122,4 +122,130 @@ public sealed class DesktopAcpExecutableProbeTests
     [InlineData("  spaced@0.1.0  ", "spaced")]
     public void StripVersionSuffix_ShouldDropVersionAndKeepScope(string packageId, string expected)
         => Assert.Equal(expected, DesktopAcpExecutableProbe.StripVersionSuffix(packageId));
+
+    /// <summary>
+    /// Several directories on PATH holding the same command name must all be reported, in PATH order.
+    /// A shell runs the first and never mentions the rest, so the wizard is the only thing that can tell
+    /// the user a second install exists.
+    /// </summary>
+    [Fact]
+    public async Task ResolveExecutableCandidatesAsync_WithSeveralInstalls_ShouldReturnAllInPathOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "acp-candidates-" + Guid.NewGuid().ToString("N"));
+        var first = Path.Combine(root, "first");
+        var second = Path.Combine(root, "second");
+        Directory.CreateDirectory(first);
+        Directory.CreateDirectory(second);
+        var command = "acp-fake-" + Guid.NewGuid().ToString("N");
+        var firstPath = Path.Combine(first, command);
+        var secondPath = Path.Combine(second, command);
+        await File.WriteAllTextAsync(firstPath, "#!/bin/sh\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(secondPath, "#!/bin/sh\n", TestContext.Current.CancellationToken);
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+
+        try
+        {
+            var separator = OperatingSystem.IsWindows() ? ';' : ':';
+            Environment.SetEnvironmentVariable("PATH", first + separator + second);
+
+            var candidates = await new DesktopAcpExecutableProbe()
+                .ResolveExecutableCandidatesAsync(command, TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, candidates.Count);
+            Assert.Equal(firstPath, candidates[0]);
+            Assert.Equal(secondPath, candidates[1]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// A PATH that lists one directory several times — which is ordinary, shell profiles append
+    /// repeatedly — must yield one candidate. Otherwise a machine with a single install is told it has a
+    /// choice between a path and itself.
+    /// </summary>
+    [Fact]
+    public async Task ResolveExecutableCandidatesAsync_WithRepeatedPathEntries_ShouldDeduplicate()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "acp-dupe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var command = "acp-fake-" + Guid.NewGuid().ToString("N");
+        var executable = Path.Combine(directory, command);
+        await File.WriteAllTextAsync(executable, "#!/bin/sh\n", TestContext.Current.CancellationToken);
+        var originalPath = Environment.GetEnvironmentVariable("PATH");
+
+        try
+        {
+            var separator = OperatingSystem.IsWindows() ? ';' : ':';
+            Environment.SetEnvironmentVariable(
+                "PATH",
+                string.Join(separator, directory, directory, directory));
+
+            var candidates = await new DesktopAcpExecutableProbe()
+                .ResolveExecutableCandidatesAsync(command, TestContext.Current.CancellationToken);
+
+            Assert.Equal(executable, Assert.Single(candidates));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveExecutableCandidatesAsync_WhenNothingMatches_ShouldReturnEmpty()
+    {
+        var candidates = await new DesktopAcpExecutableProbe()
+            .ResolveExecutableCandidatesAsync(
+                "acp-nonexistent-" + Guid.NewGuid().ToString("N"),
+                TestContext.Current.CancellationToken);
+
+        Assert.Empty(candidates);
+    }
+
+    /// <summary>
+    /// The package name is matched as a whole path segment. A substring test reports a package as
+    /// installed whenever an unrelated package merely contains its name, and a false "installed" is the
+    /// worst answer available: the wizard skips the install and fails at launch instead.
+    /// </summary>
+    [Theory]
+    // npm --parseable prints one path per line ending in the package directory.
+    [InlineData("/n/lib/node_modules/cline", "cline", true)]
+    [InlineData("/n/lib/node_modules/@agentclientprotocol/codex-acp", "@agentclientprotocol/codex-acp", true)]
+    // A different package that merely contains the name must not match.
+    [InlineData("/n/lib/node_modules/my-cline-fork", "cline", false)]
+    [InlineData("/n/lib/node_modules/claude-adapter", "claude", false)]
+    // A scoped package must not be matched by its bare name, nor by a different scope.
+    [InlineData("/n/lib/node_modules/@other/codex-acp", "@agentclientprotocol/codex-acp", false)]
+    // uv tool list prints "name version".
+    [InlineData("some-tool 1.2.3", "some-tool", true)]
+    [InlineData("some-tool-extended 1.2.3", "some-tool", false)]
+    public void FindPackageLocation_MatchesWholeSegments_NotSubstrings(
+        string output,
+        string packageName,
+        bool expectedMatch)
+    {
+        var location = DesktopAcpExecutableProbe.FindPackageLocation(output, packageName);
+
+        Assert.Equal(expectedMatch, location is not null);
+    }
+
+    [Fact]
+    public void FindPackageLocation_ReturnsTheMatchedPath_SoTheToolchainCanBeNamed()
+    {
+        const string output = """
+            /home/u/.nvm/versions/node/v24.14.1/lib
+            /home/u/.nvm/versions/node/v24.14.1/lib/node_modules/@agentclientprotocol/codex-acp
+            """;
+
+        var location = DesktopAcpExecutableProbe.FindPackageLocation(output, "@agentclientprotocol/codex-acp");
+
+        Assert.Equal(
+            "/home/u/.nvm/versions/node/v24.14.1/lib/node_modules/@agentclientprotocol/codex-acp",
+            location);
+    }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Localization;
 using SalmonEgg.Domain.Models.AcpSetup;
@@ -60,6 +61,9 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasProbeDetail))]
     [NotifyPropertyChangedFor(nameof(ResolvedPath))]
     [NotifyPropertyChangedFor(nameof(HasResolvedPath))]
+    [NotifyPropertyChangedFor(nameof(Candidates))]
+    [NotifyPropertyChangedFor(nameof(HasMultipleCandidates))]
+    [NotifyPropertyChangedFor(nameof(SelectedCandidate))]
     private AcpComponentProbeResult _runtime;
 
     public AcpComponentAvailability Availability => Runtime.Availability;
@@ -96,6 +100,46 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     public bool HasResolvedPath => !string.IsNullOrWhiteSpace(ResolvedPath);
 
     /// <summary>
+    /// Every distinct install the probed command matched, in the order a shell would find them.
+    /// </summary>
+    public IReadOnlyList<string> Candidates => Runtime.ExecutableCandidates;
+
+    /// <summary>
+    /// True only when the machine really has more than one install of this command.
+    /// </summary>
+    /// <remarks>
+    /// The picker this gates stays absent on an ordinary machine. Shadowed installs are rare, and a
+    /// permanent selector would charge every user for a case almost none of them have — so the choice
+    /// appears exactly when there is a choice to make.
+    /// </remarks>
+    public bool HasMultipleCandidates => Runtime.HasMultipleCandidates;
+
+    /// <summary>
+    /// The install the user picked from <see cref="Candidates"/>, or the resolved one before they pick.
+    /// </summary>
+    /// <remarks>
+    /// Setting this writes <see cref="CustomCommand"/>, so a pick travels the same route a hand-typed
+    /// path does — into the command overrides, and from there into both detection and the saved launch
+    /// plan. Reusing that one path is what keeps a picked candidate from being honoured during probing and
+    /// then silently dropped at launch.
+    /// </remarks>
+    public string? SelectedCandidate
+    {
+        get => HasCustomCommand ? CustomCommand : (Runtime.ExecutablePath ?? null);
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value) || string.Equals(value, SelectedCandidate, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            CustomCommand = value;
+            OnPropertyChanged();
+            RequestVerify();
+        }
+    }
+
+    /// <summary>
     /// A path the user supplied for <see cref="ProbeCommand"/>, empty when they supplied none.
     /// </summary>
     /// <remarks>
@@ -104,6 +148,7 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasCustomCommand))]
+    [NotifyPropertyChangedFor(nameof(SelectedCandidate))]
     private string _customCommand = string.Empty;
 
     public bool HasCustomCommand => !string.IsNullOrWhiteSpace(CustomCommand);

@@ -23,6 +23,11 @@ public sealed class UnsupportedAcpExecutableProbe : IAcpExecutableProbe
         CancellationToken cancellationToken = default)
         => Task.FromResult<string?>(null);
 
+    public Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+        string command,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
     public Task<string?> ReadVersionAsync(
         string command,
         IReadOnlyList<string> versionArguments,

@@ -963,6 +963,15 @@
   <data name="AcpSetup_AdapterPicker.Header" xml:space="preserve">
     <value>ACP adapter</value>
   </data>
+  <data name="AcpSetup_MultipleCandidates.Text" xml:space="preserve">
+    <value>This machine has more than one. The first is in use, which is what a terminal would run. Pick another to change it.</value>
+  </data>
+  <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
+    <value>Which one to use</value>
+  </data>
+  <data name="AcpSetup_UseCandidate.Content" xml:space="preserve">
+    <value>Use this one</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>Next</value>
   </data>
