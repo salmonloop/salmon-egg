@@ -124,6 +124,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsAdapterUndetermined))]
     [NotifyPropertyChangedFor(nameof(AdapterProbeDetail))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeDetail))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterBuiltIn))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterInstalled))]
     private AcpComponentProbeResult? _adapterProbe;
 
     /// <summary>
@@ -222,6 +224,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// no external command.
     /// </summary>
     public string AdapterProbeCommand => SelectedAdapter?.Component.ProbeCommand ?? string.Empty;
+
+    /// <summary>
+    /// True when the selected adapter ships inside the agent, so nothing has to be installed or found.
+    /// </summary>
+    /// <remarks>
+    /// Distinguished from a merely usable adapter so the step can say why it is already satisfied. Most
+    /// of the catalog is built-in, and without this the step rendered a title and an otherwise empty
+    /// panel: correct, but indistinguishable from a page that failed to load.
+    /// </remarks>
+    public bool IsAdapterBuiltIn
+        => AdapterProbe?.Availability == AcpComponentAvailability.BuiltIn;
+
+    /// <summary>True when the adapter is present as a separate component the user had to have.</summary>
+    public bool IsAdapterInstalled
+        => AdapterProbe?.Availability == AcpComponentAvailability.Installed;
 
     public bool HasAdapterProbeCommand => !string.IsNullOrWhiteSpace(AdapterProbeCommand);
 

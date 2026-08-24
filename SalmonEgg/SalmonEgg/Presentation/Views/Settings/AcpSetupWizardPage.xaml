@@ -201,7 +201,15 @@
 
                             <InfoBar x:Name="AcpSetupAdapterReadyBar"
                                      x:Uid="AcpSetup_AdapterReadyBar"
-                                     IsOpen="{x:Bind ViewModel.IsAdapterUsable, Mode=OneWay}"
+                                     IsOpen="{x:Bind ViewModel.IsAdapterInstalled, Mode=OneWay}"
+                                     Severity="Success"
+                                     IsClosable="False"/>
+
+                            <!-- Most of the catalog ships ACP itself. Saying so turns a step with
+                                 nothing to do into a step that confirms nothing needs doing. -->
+                            <InfoBar x:Name="AcpSetupAdapterBuiltInBar"
+                                     x:Uid="AcpSetup_AdapterBuiltInBar"
+                                     IsOpen="{x:Bind ViewModel.IsAdapterBuiltIn, Mode=OneWay}"
                                      Severity="Success"
                                      IsClosable="False"/>
 
@@ -272,7 +280,7 @@
                             </StackPanel>
 
                             <ComboBox x:Name="AcpSetupAdaptersPicker"
-                                      Header="{x:Null}"
+                                      x:Uid="AcpSetup_AdapterPicker"
                                       IsFocusEngagementEnabled="True"
                                       ItemsSource="{x:Bind ViewModel.Adapters}"
                                       SelectedItem="{x:Bind ViewModel.SelectedAdapter, Mode=TwoWay}"

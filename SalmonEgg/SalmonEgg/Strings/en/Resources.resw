@@ -1482,6 +1482,15 @@
   <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
     <value>Found at</value>
   </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Title" xml:space="preserve">
+    <value>This agent speaks ACP natively</value>
+  </data>
+  <data name="AcpSetup_AdapterBuiltInBar.Message" xml:space="preserve">
+    <value>No separate adapter is needed. You can continue.</value>
+  </data>
+  <data name="AcpSetup_AdapterPicker.Header" xml:space="preserve">
+    <value>ACP adapter</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>Next</value>
   </data>
