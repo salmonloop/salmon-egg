@@ -17,7 +17,7 @@ namespace SalmonEgg.Infrastructure.Storage;
 /// <c>EnumerateFiles(ConfigRootPath, "*", AllDirectories)</c> 通配打包。装机标识一旦落在
 /// 那里，用户开启同步后第二台设备会恢复出同一个值，两台机器从此上报相同标识——装机数与
 /// DAU 永久偏低，且数据侧完全看不出异常（无报错、无缺口）。因此本文件放在 app data **根**
-/// 目录下，与 <c>config-migrations</c> 同级，天然在同步范围之外。
+/// 目录下（与 <c>logs</c> 同级），天然在同步范围之外。
 ///
 /// 不复用 <c>AppSettings</c> 同理：那是 app.yaml 的内容，属于可携带配置。
 ///
