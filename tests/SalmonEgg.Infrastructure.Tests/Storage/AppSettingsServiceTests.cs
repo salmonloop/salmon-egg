@@ -93,7 +93,12 @@ public sealed class AppSettingsServiceTests : IDisposable
         var yaml = await File.ReadAllTextAsync(appYamlPath, TestContext.Current.CancellationToken);
         var loaded = await service.LoadAsync();
 
-        Assert.Contains("schema_version: 3", yaml, StringComparison.Ordinal);
+        // The service wrote this file, so the expected version follows its constant rather than a
+        // literal that would go stale on the next app.yaml schema bump.
+        Assert.Contains(
+            $"schema_version: {AppSettingsService.CurrentAppSettingsSchemaVersion}",
+            yaml,
+            StringComparison.Ordinal);
         Assert.True(loaded.CloudConfigSync.Enabled);
         Assert.Equal("onedrive", loaded.CloudConfigSync.ProviderId);
         Assert.True(loaded.CloudConfigSync.IncludeSecrets);

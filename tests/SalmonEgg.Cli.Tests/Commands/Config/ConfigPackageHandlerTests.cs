@@ -30,7 +30,14 @@ public sealed class ConfigPackageHandlerTests
 
         Assert.Equal(CliExitCodes.Success, exitCode);
         Assert.Contains(fixture.Output.Lines, line => line.StartsWith("app.yaml:", StringComparison.Ordinal) && line.Contains("ok", StringComparison.Ordinal));
-        Assert.Contains(fixture.Output.Lines, line => line.Contains("servers/alpha.yaml", StringComparison.Ordinal) && line.Contains("schema_version 2", StringComparison.Ordinal));
+        // The fixture seeds through the production writer, so the reported version is a function of
+        // the writer's constant. Asserting a literal here goes stale on every schema bump.
+        Assert.Contains(
+            fixture.Output.Lines,
+            line => line.Contains("servers/alpha.yaml", StringComparison.Ordinal)
+                && line.Contains(
+                    $"schema_version {ConfigurationManager.CurrentServerConfigurationSchemaVersion}",
+                    StringComparison.Ordinal));
         Assert.Empty(fixture.Output.Errors);
     }
 
