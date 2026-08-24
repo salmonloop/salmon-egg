@@ -87,17 +87,79 @@
                                                       Style="{StaticResource CaptionTextBlockStyle}"
                                                       TextWrapping="Wrap"
                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            <StackPanel Orientation="Horizontal" Spacing="8"
-                                                        Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <Button x:Name="InstallAgentInlineButton"
-                                                        x:Uid="AcpSetup_InstallAgentRow"
-                                                        Tag="{x:Bind}"
-                                                        Click="OnInstallAgentRowClick"
-                                                        AutomationProperties.AutomationId="AcpSetup.Agents.InstallRow"
-                                                        Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                <HyperlinkButton NavigateUri="{x:Bind InstallDocumentation}"
-                                                                 x:Uid="AcpSetup_InstallDocs"
-                                                                 Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                            <!-- Found: say where, so the user can tell which install
+                                                 of several the wizard picked. -->
+                                            <StackPanel Orientation="Horizontal" Spacing="6"
+                                                        Visibility="{x:Bind HasResolvedPath, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock x:Uid="AcpSetup_ResolvedPathLabel"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                <TextBlock Text="{x:Bind ResolvedPath, Mode=OneWay}"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           FontFamily="Consolas"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           IsTextSelectionEnabled="True"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                            </StackPanel>
+
+                                            <!-- Not found: name the command that was looked for, then
+                                                 keep the explanation and the fix one disclosure away so
+                                                 a list of eight agents stays scannable. -->
+                                            <StackPanel Spacing="6"
+                                                        Visibility="{x:Bind IsMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock x:Uid="AcpSetup_ProbeTargetLabel"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                        <TextBlock Text="{x:Bind ProbeCommand}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   FontFamily="Consolas"
+                                                                   IsTextSelectionEnabled="True"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                    </StackPanel>
+                                                    <Button x:Name="InstallAgentInlineButton"
+                                                            x:Uid="AcpSetup_InstallAgentRow"
+                                                            Tag="{x:Bind}"
+                                                            Click="OnInstallAgentRowClick"
+                                                            AutomationProperties.AutomationId="AcpSetup.Agents.InstallRow"
+                                                            Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <HyperlinkButton NavigateUri="{x:Bind InstallDocumentation}"
+                                                                     x:Uid="AcpSetup_InstallDocs"
+                                                                     Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                                </StackPanel>
+
+                                                <Expander x:Name="AgentProbeDiagnosticsExpander"
+                                                          IsExpanded="False"
+                                                          HorizontalAlignment="Stretch"
+                                                          HorizontalContentAlignment="Stretch">
+                                                    <Expander.Header>
+                                                        <TextBlock x:Uid="AcpSetup_WhyNotFound"/>
+                                                    </Expander.Header>
+                                                    <StackPanel Spacing="8">
+                                                        <TextBlock x:Uid="AcpSetup_PathHint"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                        <TextBlock Text="{x:Bind ProbeDetail, Mode=OneWay}"
+                                                                   Visibility="{x:Bind HasProbeDetail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                                   FontFamily="Consolas"
+                                                                   TextWrapping="Wrap"
+                                                                   IsTextSelectionEnabled="True"
+                                                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                        <TextBox x:Uid="AcpSetup_CustomCommand"
+                                                                 Text="{x:Bind CustomCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                 AutomationProperties.AutomationId="AcpSetup.Agents.CustomCommand"/>
+                                                        <Button x:Name="VerifyCustomCommandButton"
+                                                                x:Uid="AcpSetup_VerifyCustomCommand"
+                                                                Tag="{x:Bind}"
+                                                                Click="OnVerifyAgentRowClick"
+                                                                IsEnabled="{x:Bind HasCustomCommand, Mode=OneWay}"
+                                                                AutomationProperties.AutomationId="AcpSetup.Agents.VerifyCustomCommand"
+                                                                HorizontalAlignment="Left"/>
+                                                    </StackPanel>
+                                                </Expander>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
@@ -167,6 +229,47 @@
                                        IsTextSelectionEnabled="True"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        AutomationProperties.AutomationId="AcpSetup.Adapter.ProbeDetail"/>
+
+                            <!-- Same disclosure as the agent rows: name the launcher that was looked
+                                 for, and accept a path for it. For a packaged adapter this launcher is
+                                 also the saved profile's executable, so the override has to land here. -->
+                            <StackPanel Spacing="6"
+                                        Visibility="{x:Bind ViewModel.HasAdapterProbeCommand, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock x:Uid="AcpSetup_ProbeTargetLabel"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                    <TextBlock Text="{x:Bind ViewModel.AdapterProbeCommand, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               FontFamily="Consolas"
+                                               IsTextSelectionEnabled="True"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                </StackPanel>
+
+                                <Expander x:Name="AcpSetupAdapterDiagnosticsExpander"
+                                          IsExpanded="False"
+                                          HorizontalAlignment="Stretch"
+                                          HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock x:Uid="AcpSetup_WhyNotFound"/>
+                                    </Expander.Header>
+                                    <StackPanel Spacing="8">
+                                        <TextBlock x:Uid="AcpSetup_PathHint"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                        <TextBox x:Uid="AcpSetup_CustomCommand"
+                                                 Text="{x:Bind ViewModel.AdapterCustomCommand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 AutomationProperties.AutomationId="AcpSetup.Adapter.CustomCommand"/>
+                                        <Button x:Name="AcpSetupVerifyAdapterCommandButton"
+                                                x:Uid="AcpSetup_VerifyCustomCommand"
+                                                Command="{x:Bind ViewModel.DetectAdapterCommand}"
+                                                IsEnabled="{x:Bind ViewModel.HasAdapterCustomCommand, Mode=OneWay}"
+                                                AutomationProperties.AutomationId="AcpSetup.Adapter.VerifyCustomCommand"
+                                                HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
 
                             <ComboBox x:Name="AcpSetupAdaptersPicker"
                                       Header="{x:Null}"

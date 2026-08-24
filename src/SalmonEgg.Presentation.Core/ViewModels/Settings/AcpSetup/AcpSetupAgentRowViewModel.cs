@@ -56,6 +56,10 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsChecking))]
     [NotifyPropertyChangedFor(nameof(Version))]
     [NotifyPropertyChangedFor(nameof(HasVersion))]
+    [NotifyPropertyChangedFor(nameof(ProbeDetail))]
+    [NotifyPropertyChangedFor(nameof(HasProbeDetail))]
+    [NotifyPropertyChangedFor(nameof(ResolvedPath))]
+    [NotifyPropertyChangedFor(nameof(HasResolvedPath))]
     private AcpComponentProbeResult _runtime;
 
     public AcpComponentAvailability Availability => Runtime.Availability;
@@ -78,6 +82,32 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     /// <summary>Documentation to offer when automatic installation is unavailable or fails.</summary>
     public Uri? InstallDocumentation => Agent.Runtime.InstallDocumentation;
 
+    /// <summary>The command name the wizard probes for, so the row can say what it looked for.</summary>
+    public string ProbeCommand => Agent.Runtime.ProbeCommand;
+
+    /// <summary>Diagnostic detail from the last probe, empty when it reported none.</summary>
+    public string ProbeDetail => Runtime.Detail ?? string.Empty;
+
+    public bool HasProbeDetail => !string.IsNullOrWhiteSpace(ProbeDetail);
+
+    /// <summary>Absolute path where the probe found the runtime, empty when it did not.</summary>
+    public string ResolvedPath => Runtime.ExecutablePath ?? string.Empty;
+
+    public bool HasResolvedPath => !string.IsNullOrWhiteSpace(ResolvedPath);
+
+    /// <summary>
+    /// A path the user supplied for <see cref="ProbeCommand"/>, empty when they supplied none.
+    /// </summary>
+    /// <remarks>
+    /// Editing this does not re-probe. Probing costs a process launch, so it happens when the user asks
+    /// through <see cref="RequestVerify"/> rather than once per keystroke.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCustomCommand))]
+    private string _customCommand = string.Empty;
+
+    public bool HasCustomCommand => !string.IsNullOrWhiteSpace(CustomCommand);
+
     /// <summary>
     /// Raised when the user asks this row to be installed; the owning wizard subscribes because it
     /// owns the busy flag and the error surface. Null when nobody is listening.
@@ -85,4 +115,11 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     public event Action<AcpSetupAgentRowViewModel>? InstallRequested;
 
     public void RequestInstall() => InstallRequested?.Invoke(this);
+
+    /// <summary>
+    /// Raised when the user asks for this row to be probed again, after supplying a custom path.
+    /// </summary>
+    public event Action<AcpSetupAgentRowViewModel>? VerifyRequested;
+
+    public void RequestVerify() => VerifyRequested?.Invoke(this);
 }

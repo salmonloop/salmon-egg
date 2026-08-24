@@ -933,6 +933,27 @@
   <data name="AcpSetup_AdapterUndeterminedBar.Message" xml:space="preserve">
     <value>Detection reached no conclusion, which is not the same as the adapter being absent. You can continue; the connection test will verify it.</value>
   </data>
+  <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
+    <value>Looking for</value>
+  </data>
+  <data name="AcpSetup_WhyNotFound.Content" xml:space="preserve">
+    <value>Why was nothing found?</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
+    <value>Full path to the command</value>
+  </data>
+  <data name="AcpSetup_CustomCommand.PlaceholderText" xml:space="preserve">
+    <value>for example /home/you/.nvm/versions/node/v24/bin/npx</value>
+  </data>
+  <data name="AcpSetup_VerifyCustomCommand.Content" xml:space="preserve">
+    <value>Detect using this path</value>
+  </data>
+  <data name="AcpSetup_PathHint.Text" xml:space="preserve">
+    <value>An app started from a desktop icon does not inherit the PATH you set up in your shell, so commands installed through nvm, asdf, or ~/.local/bin are usually invisible to it. Give the full path instead; it is used both for detection and by the profile you save.</value>
+  </data>
+  <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
+    <value>Found at</value>
+  </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>Next</value>
   </data>

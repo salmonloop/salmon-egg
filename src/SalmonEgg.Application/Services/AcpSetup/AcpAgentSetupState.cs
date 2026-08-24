@@ -35,6 +35,17 @@ public sealed class AcpSetupDraft
     /// <summary>Profile name the configuration is saved under.</summary>
     public required string ProfileName { get; init; }
 
+    /// <summary>
+    /// User-supplied paths for commands the catalog names by executable name.
+    /// </summary>
+    /// <remarks>
+    /// Carried on the draft rather than applied only while probing, so the plan that is tested and the
+    /// plan that is persisted are the same one. An override honoured during detection alone would let a
+    /// profile pass its connection test and then fail every launch, which is worse than never having
+    /// offered the override.
+    /// </remarks>
+    public AcpCommandOverrides CommandOverrides { get; init; } = AcpCommandOverrides.Empty;
+
     public AcpLaunchPlan BuildLaunchPlan()
-        => AcpLaunchPlanBuilder.Build(Adapter.LaunchTemplate, ParameterValues);
+        => AcpLaunchPlanBuilder.Build(Adapter.LaunchTemplate, ParameterValues, CommandOverrides);
 }

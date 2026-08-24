@@ -214,6 +214,101 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Contains("npx", wizard.AdapterProbeDetail, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The row must say which command it looked for. Without it a red mark is unexplainable: the user
+    /// cannot tell whether the wizard wanted <c>claude</c>, <c>npx</c>, or something else.
+    /// </summary>
+    [Fact]
+    public void AgentRow_NamesTheCommandItProbes()
+    {
+        var wizard = CreateWizard();
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.Equal(AcpSetupWizardFixtures.RuntimeCommand, row.ProbeCommand);
+    }
+
+    /// <summary>
+    /// A path the user supplies is probed instead of the bare command name, so an executable that PATH
+    /// cannot see becomes findable. This is the whole point of the override: a desktop process does not
+    /// inherit the shell PATH where nvm and ~/.local/bin live.
+    /// </summary>
+    [Fact]
+    public async Task AgentRow_CustomCommand_IsProbedInsteadOfTheCatalogName()
+    {
+        const string customPath = "/home/user/.nvm/versions/node/v24/bin/test-agent";
+        var probe = new StubExecutableProbe();
+        // The catalog name resolves to nothing, exactly as it does under a desktop-launched PATH.
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        probe.SetExecutable(customPath, customPath, "9.9.9");
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsMissing);
+        Assert.True(row.HasProbeDetail);
+
+        row.CustomCommand = customPath;
+        row.RequestVerify();
+
+        Assert.False(wizard.IsBusy);
+        Assert.True(row.IsInstalled);
+        Assert.Equal("9.9.9", row.Version);
+        Assert.Equal(customPath, row.ResolvedPath);
+    }
+
+    /// <summary>
+    /// The override must reach the saved profile, not just detection. An override honoured only while
+    /// probing yields a profile that passes its connection test and then fails every launch — worse than
+    /// never offering the override.
+    /// </summary>
+    [Fact]
+    public async Task Save_CarriesTheCustomCommand_IntoThePersistedProfile()
+    {
+        const string customNpx = "/home/user/.nvm/versions/node/v24/bin/npx";
+        var adapter = AcpSetupWizardFixtures.PackagedAdapter();
+        var agent = AcpSetupWizardFixtures.Agent(
+            runtime: AcpSetupWizardFixtures.Runtime(),
+            adapters: adapter);
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        // Only the user's path resolves; the bare launcher name does not.
+        probe.SetExecutable(customNpx, customNpx);
+        probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, installed: true);
+        var tester = new StubConnectivityTester(StubConnectivityTester.SuccessfulHandshake());
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(
+            agent,
+            probe,
+            new StubComponentInstaller(),
+            localizer: null,
+            tester,
+            configuration);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        wizard.SelectedAgent = row;
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> ComponentSetup
+        // The launcher the plan runs is the adapter's, not the runtime's, so the override belongs here.
+        Assert.Equal("npx", wizard.AdapterProbeCommand);
+        wizard.AdapterCustomCommand = customNpx;
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Parameters
+
+        // The preview a user reviews before testing must already show the path they supplied.
+        Assert.StartsWith(customNpx, wizard.LaunchCommandPreview, StringComparison.Ordinal);
+
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Test
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.True(wizard.IsTestSuccessful);
+        // What was tested carries the override too, so the verdict is about the real command.
+        Assert.Equal(customNpx, tester.LastPlan!.Command);
+
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Save
+        wizard.ProfileName = "Overridden";
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        var saved = Assert.Single(configuration.Saved);
+        Assert.Equal(customNpx, saved.StdioCommand);
+    }
+
     [Fact]
     public async Task DetectAgents_AppliesProbeResults_WithVersion()
     {
