@@ -4,50 +4,50 @@ using SalmonEgg.Acp.Protocol;
 namespace SalmonEgg.Acp.Content
 {
     /// <summary>
-    /// 嵌入的资源对象。
-    /// 用于 ResourceContentBlock 中包含的实际资源数据。
+    /// An embedded resource object.
+    /// Carries the actual resource data contained in a ResourceContentBlock.
     /// </summary>
     public sealed record EmbeddedResource : AcpProtocolObject
     {
         /// <summary>
-        /// 资源的 URI 标识符。
+        /// The URI identifier of the resource.
         /// </summary>
         [JsonPropertyName("uri")]
         public string Uri { get; init; } = string.Empty;
 
         /// <summary>
-        /// 资源的 MIME 类型（例如 "text/plain", "application/json"）。
+        /// The MIME type of the resource (for example "text/plain", "application/json").
         /// </summary>
         [JsonPropertyName("mimeType")]
         public string MimeType { get; init; } = "text/plain";
 
         /// <summary>
-        /// 资源的文本内容（如果资源是文本类型）。
-        /// 与 Blob 互斥。
+        /// The textual content of the resource, when the resource is text.
+        /// Mutually exclusive with Blob.
         /// </summary>
         [JsonPropertyName("text")]
         public string? Text { get; init; }
 
         /// <summary>
-        /// 资源的二进制数据（Base64 编码，如果资源是二进制类型）。
-        /// 与 Text 互斥。
+        /// The binary data of the resource (Base64 encoded), when the resource is binary.
+        /// Mutually exclusive with Text.
         /// </summary>
         [JsonPropertyName("blob")]
         public string? Blob { get; init; }
 
         /// <summary>
-        /// 创建新的 EmbeddedResource 实例。
+        /// Creates a new EmbeddedResource instance.
         /// </summary>
         public EmbeddedResource()
         {
         }
 
         /// <summary>
-        /// 创建新的文本资源实例。
+        /// Creates a new text resource instance.
         /// </summary>
-        /// <param name="uri">资源 URI</param>
-        /// <param name="text">文本内容</param>
-        /// <param name="mimeType">MIME 类型</param>
+        /// <param name="uri">The resource URI</param>
+        /// <param name="text">The textual content</param>
+        /// <param name="mimeType">The MIME type</param>
         public EmbeddedResource(string uri, string text, string mimeType = "text/plain")
         {
             Uri = uri;
@@ -56,11 +56,11 @@ namespace SalmonEgg.Acp.Content
         }
 
         /// <summary>
-        /// 创建新的二进制资源实例。
+        /// Creates a new binary resource instance.
         /// </summary>
-        /// <param name="uri">资源 URI</param>
-        /// <param name="blob">Base64 编码的二进制数据</param>
-        /// <param name="mimeType">MIME 类型</param>
+        /// <param name="uri">The resource URI</param>
+        /// <param name="blob">The Base64 encoded binary data</param>
+        /// <param name="mimeType">The MIME type</param>
         public EmbeddedResource(string uri, string blob, string mimeType, bool isBinary)
         {
             Uri = uri;
@@ -69,36 +69,36 @@ namespace SalmonEgg.Acp.Content
         }
 
         /// <summary>
-        /// 静态辅助方法：创建文本资源。
+        /// Static helper method: creates a text resource.
         /// </summary>
-        /// <param name="uri">资源 URI</param>
-        /// <param name="text">文本内容</param>
-        /// <param name="mimeType">MIME 类型</param>
-        /// <returns>EmbeddedResource 实例</returns>
+        /// <param name="uri">The resource URI</param>
+        /// <param name="text">The textual content</param>
+        /// <param name="mimeType">The MIME type</param>
+        /// <returns>An EmbeddedResource instance</returns>
         public static EmbeddedResource CreateText(string uri, string text, string mimeType = "text/plain")
         {
             return new EmbeddedResource(uri, text, mimeType);
         }
 
         /// <summary>
-        /// 静态辅助方法：创建二进制资源。
+        /// Static helper method: creates a binary resource.
         /// </summary>
-        /// <param name="uri">资源 URI</param>
-        /// <param name="blob">Base64 编码的二进制数据</param>
-        /// <param name="mimeType">MIME 类型</param>
-        /// <returns>EmbeddedResource 实例</returns>
+        /// <param name="uri">The resource URI</param>
+        /// <param name="blob">The Base64 encoded binary data</param>
+        /// <param name="mimeType">The MIME type</param>
+        /// <returns>An EmbeddedResource instance</returns>
         public static EmbeddedResource CreateBinary(string uri, string blob, string mimeType)
         {
             return new EmbeddedResource(uri, blob, mimeType, true);
         }
 
         /// <summary>
-        /// 判断资源是否为文本类型。
+        /// Indicates whether the resource is a text resource.
         /// </summary>
         public bool IsText => !string.IsNullOrEmpty(Text);
 
         /// <summary>
-        /// 判断资源是否为二进制类型。
+        /// Indicates whether the resource is a binary resource.
         /// </summary>
         public bool IsBinary => !string.IsNullOrEmpty(Blob);
     }

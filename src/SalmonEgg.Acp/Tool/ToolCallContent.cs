@@ -10,12 +10,14 @@ namespace SalmonEgg.Acp.Tool
     /// <summary>
     /// Tool call content types.
     /// Represents different types of content that can be produced by a tool call.
-    /// 多态读写由 <see cref="ToolCallContentJsonConverter"/> 手动分发:已知 <c>type</c>
-    /// (content/diff/terminal) 映射到强类型子类;未知 <c>type</c> 按 spec「preserve the raw
-    /// payload」原样保留为 <see cref="CustomToolCallContent"/> 并可字节级 round-trip,由 Agent
-    /// 而非 client 决定语义(AGENTS.md「协议宽松度不得反向收紧」,与 McpServer 同一 RawPayload 范式)。
-    /// 不用 <see cref="JsonPolymorphicAttribute"/>+FallBackToBaseType:STJ 回落基类时会把判别值
-    /// <c>type</c> 当多态元数据消费掉,导致未知判别值无法 round-trip。
+    /// Polymorphic reading and writing is dispatched manually by <see cref="ToolCallContentJsonConverter"/>: a known
+    /// <c>type</c> (content/diff/terminal) maps to a strongly typed subtype; an unknown <c>type</c> is preserved
+    /// verbatim as <see cref="CustomToolCallContent"/> per the spec rule "preserve the raw payload" and can round-trip
+    /// byte for byte, leaving the semantics to the Agent rather than the client (AGENTS.md: protocol leniency must
+    /// never be tightened in reverse; the same RawPayload pattern as McpServer).
+    /// <see cref="JsonPolymorphicAttribute"/> plus FallBackToBaseType is not used: when STJ falls back to the base
+    /// type it consumes the <c>type</c> discriminator as polymorphic metadata, which makes unknown discriminator
+    /// values impossible to round-trip.
     /// </summary>
     [JsonConverter(typeof(ToolCallContentJsonConverter))]
     public abstract record ToolCallContent : AcpProtocolObject
@@ -123,21 +125,21 @@ namespace SalmonEgg.Acp.Tool
     }
 
     /// <summary>
-    /// 未知 <c>type</c> 的 tool call content 前向兼容载体。按 spec「preserve the raw payload」
-    /// 原样保留整个对象(含判别值与所有未知字段),由 Agent 而非 client 决定语义;client 不解释、
-    /// 不丢弃、不收紧。
+    /// Forward-compatible carrier for tool call content with an unknown <c>type</c>. Per the spec rule "preserve the
+    /// raw payload" the whole object is kept verbatim (including the discriminator and every unknown field), leaving
+    /// the semantics to the Agent rather than the client; the client does not interpret, discard, or tighten it.
     /// </summary>
     public sealed record CustomToolCallContent : ToolCallContent
     {
         /// <summary>
-        /// 原始 <c>type</c> 判别值。
+        /// The original <c>type</c> discriminator value.
         /// </summary>
         [JsonIgnore]
         public string Type { get; init; } = string.Empty;
 
         /// <summary>
-        /// 读入时保留的完整原始 payload,由 <see cref="ToolCallContentJsonConverter"/> 手动读写,
-        /// 是本载体的唯一权威事实源。
+        /// The complete raw payload preserved on read, read and written manually by
+        /// <see cref="ToolCallContentJsonConverter"/>; it is the single authoritative source of truth for this carrier.
         /// </summary>
         [JsonIgnore]
         public JsonElement RawPayload { get; init; }
@@ -152,8 +154,8 @@ namespace SalmonEgg.Acp.Tool
         /// <summary>
         /// Creates a new CustomToolCallContent instance.
         /// </summary>
-        /// <param name="type">原始 type 判别值</param>
-        /// <param name="rawPayload">完整原始 payload</param>
+        /// <param name="type">The original type discriminator value</param>
+        /// <param name="rawPayload">The complete raw payload</param>
         public CustomToolCallContent(string type, JsonElement rawPayload)
         {
             Type = type;
@@ -162,9 +164,10 @@ namespace SalmonEgg.Acp.Tool
     }
 
     /// <summary>
-    /// tool call content 的多态读写。已知 <c>type</c> 映射强类型子类;未知 <c>type</c> 保留
-    /// 完整 raw payload 到 <see cref="CustomToolCallContent"/> 并原样写回,保证未知判别值
-    /// 字节级 round-trip。缺失 <c>type</c> 按已知最宽松分支(content)处理,不抛错。
+    /// Polymorphic reading and writing for tool call content. A known <c>type</c> maps to a strongly typed subtype; an
+    /// unknown <c>type</c> keeps the complete raw payload in <see cref="CustomToolCallContent"/> and writes it back
+    /// verbatim, guaranteeing a byte-for-byte round-trip of unknown discriminator values. A missing <c>type</c> is
+    /// handled by the most lenient known branch (content) and does not throw.
     /// </summary>
     internal sealed class ToolCallContentJsonConverter : JsonConverter<ToolCallContent>
     {
@@ -187,7 +190,8 @@ namespace SalmonEgg.Acp.Tool
                 "content" => ReadContent(root, options),
                 "diff" => ReadDiff(root, options),
                 "terminal" => ReadTerminal(root, options),
-                // 未知或缺失判别值:保留 raw payload 前向透传,由 Agent 决定语义。
+                // Unknown or missing discriminator: keep the raw payload for forward passthrough and let the Agent
+                // decide the semantics.
                 _ => new CustomToolCallContent(type ?? string.Empty, root.Clone())
             };
         }
@@ -228,9 +232,11 @@ namespace SalmonEgg.Acp.Tool
                     writer.WriteEndObject();
                     break;
                 case CustomToolCallContent custom:
-                    // 前向兼容透传:原样写回读入时保留的 raw payload,不重排字段、不丢弃未知属性。
-                    // 用 WriteRawValue(GetRawText()) 实现字节级保真,与 McpServer 一致。
-                    // RawPayload 为空(手工构造)时退化为最小写出,仍携带原始 type 值。
+                    // Forward-compatible passthrough: write back the raw payload preserved on read verbatim, without
+                    // reordering fields or dropping unknown properties.
+                    // WriteRawValue(GetRawText()) is used for byte-for-byte fidelity, matching McpServer.
+                    // When RawPayload is empty (hand-constructed), fall back to a minimal write that still carries the
+                    // original type value.
                     if (custom.RawPayload.ValueKind == JsonValueKind.Object)
                     {
                         writer.WriteRawValue(custom.RawPayload.GetRawText());

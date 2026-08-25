@@ -7,42 +7,43 @@ using SalmonEgg.Acp.Mcp;
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Session/New 方法的请求参数。
-    /// 用于创建新的会话。
+    /// Request parameters for the Session/New method.
+    /// Used to create a new session.
     /// </summary>
     public sealed record SessionNewParams : AcpProtocolObject
     {
         /// <summary>
-        /// 会话的工作目录（必填）。
+        /// The working directory for the session (required).
         /// </summary>
         [JsonPropertyName("cwd")]
         public string Cwd { get; init; } = string.Empty;
 
         /// <summary>
-        /// MCP 服务器配置列表（必填，根据协议要求为数组）。
+        /// List of MCP server configurations (required; the protocol requires this value to be an array).
         /// </summary>
         [JsonPropertyName("mcpServers")]
         public List<McpServer> McpServers { get; init; } = new List<McpServer>();
 
         /// <summary>
-        /// 附加工作目录。非空时要求 Agent 声明 sessionCapabilities.additionalDirectories。
+        /// Additional working directories. When non-empty, the Agent is required to declare
+        /// sessionCapabilities.additionalDirectories.
         /// </summary>
         [JsonPropertyName("additionalDirectories")]
         public List<string>? AdditionalDirectories { get; init; }
 
         /// <summary>
-        /// 创建新的 SessionNewParams 实例。
+        /// Creates a new SessionNewParams instance.
         /// </summary>
         public SessionNewParams()
         {
         }
 
         /// <summary>
-        /// 创建新的 SessionNewParams 实例。
+        /// Creates a new SessionNewParams instance.
         /// </summary>
-        /// <param name="cwd">工作目录</param>
-        /// <param name="mcpServers">MCP 服务器配置</param>
-        /// <param name="additionalDirectories">附加工作目录</param>
+        /// <param name="cwd">The working directory</param>
+        /// <param name="mcpServers">MCP server configurations</param>
+        /// <param name="additionalDirectories">Additional working directories</param>
         public SessionNewParams(
             string cwd,
             List<McpServer>? mcpServers = null,
@@ -55,19 +56,19 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Session/New 方法的响应。
-    /// Agent 对创建会话请求的响应。
+    /// Response for the Session/New method.
+    /// The Agent's response to a session creation request.
     /// </summary>
     public sealed record SessionNewResponse : AcpProtocolObject
     {
         /// <summary>
-        /// 新创建的会话 ID。
+        /// The ID of the newly created session.
         /// </summary>
         [JsonPropertyName("sessionId")]
         public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 会话模式状态（可选，ACP 标准形态为 SessionModeState 对象）。
+        /// Session mode state (optional; the ACP standard shape is a SessionModeState object).
         /// </summary>
         [JsonPropertyName("modes")]
         [JsonConverter(typeof(SessionModesStateJsonConverter))]
@@ -75,25 +76,25 @@ namespace SalmonEgg.Acp.Protocol
 
 
         /// <summary>
-        /// 可用的配置选项列表（可选）。
+        /// List of available configuration options (optional).
         /// </summary>
         [JsonPropertyName("configOptions")]
         public List<ConfigOption>? ConfigOptions { get; init; }
 
 
         /// <summary>
-        /// 创建新的 SessionNewResponse 实例。
+        /// Creates a new SessionNewResponse instance.
         /// </summary>
         public SessionNewResponse()
         {
         }
 
         /// <summary>
-        /// 创建新的 SessionNewResponse 实例。
+        /// Creates a new SessionNewResponse instance.
         /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="modes">可用模式列表</param>
-        /// <param name="configOptions">配置选项</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="modes">The list of available modes</param>
+        /// <param name="configOptions">Configuration options</param>
         public SessionNewResponse(string sessionId, SessionModesState? modes = null, List<ConfigOption>? configOptions = null)
         {
             SessionId = sessionId;
@@ -103,19 +104,19 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话模式状态（用于 Session/New 响应）。
+    /// Session mode state (used in the Session/New response).
     /// https://agentclientprotocol.com/protocol/session-modes
     /// </summary>
     public sealed record SessionModesState : AcpProtocolObject
     {
         /// <summary>
-        /// 当前模式 ID。
+        /// The current mode ID.
         /// </summary>
         [JsonPropertyName("currentModeId")]
         public string CurrentModeId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 可用模式列表。
+        /// The list of available modes.
         /// </summary>
         [JsonPropertyName("availableModes")]
         public List<SessionMode> AvailableModes { get; init; } = new();

@@ -1,14 +1,14 @@
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// JSON-RPC 2.0 消息验证器实现。
-    /// 验证消息格式和必需字段的完整性。
+    /// JSON-RPC 2.0 message validator implementation.
+    /// Validates message shape and the presence of required fields.
     /// </summary>
     internal sealed class MessageValidator
     {
         /// <summary>
-        /// 验证请求消息的格式和必需字段。
-        /// 请求消息必须包含：jsonrpc, method, id
+        /// Validates the shape and required fields of a request message.
+        /// A request message must contain: jsonrpc, method, id
         /// </summary>
         public ValidationResult ValidateRequest(JsonRpcRequest request)
         {
@@ -21,22 +21,22 @@ namespace SalmonEgg.Acp.JsonRpc
 
             var errors = new System.Collections.Generic.List<string>();
 
-            // 验证 jsonrpc 字段
+            // Validate the jsonrpc field
             if (string.IsNullOrWhiteSpace(request.JsonRpc) || request.JsonRpc != "2.0")
             {
                 errors.Add("Invalid or missing 'jsonrpc' field. Must be '2.0'");
             }
 
-            // 验证 method 字段
+            // Validate the method field
             if (string.IsNullOrWhiteSpace(request.Method))
             {
                 errors.Add("Missing or empty 'method' field");
             }
 
-            // 验证 id 字段
+            // Validate the id field
             if (request.Id == null || request.Id.Equals(false))
             {
-                // id 可以是 null，但不能是布尔值 false
+                // id may be null, but it must not be the boolean value false
                 if (request.Id is bool)
                 {
                     errors.Add("Invalid 'id' field. Cannot be a boolean value");
@@ -58,9 +58,9 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 验证通知消息的格式和必需字段。
-        /// 通知消息必须包含：jsonrpc, method
-        /// 通知消息不能包含：id
+        /// Validates the shape and required fields of a notification message.
+        /// A notification message must contain: jsonrpc, method
+        /// A notification message must not contain: id
         /// </summary>
         public ValidationResult ValidateNotification(JsonRpcNotification notification)
         {
@@ -73,22 +73,22 @@ namespace SalmonEgg.Acp.JsonRpc
 
             var errors = new System.Collections.Generic.List<string>();
 
-            // 验证 jsonrpc 字段
+            // Validate the jsonrpc field
             if (string.IsNullOrWhiteSpace(notification.JsonRpc) || notification.JsonRpc != "2.0")
             {
                 errors.Add("Invalid or missing 'jsonrpc' field. Must be '2.0'");
             }
 
-            // 验证 method 字段
+            // Validate the method field
             if (string.IsNullOrWhiteSpace(notification.Method))
             {
                 errors.Add("Missing or empty 'method' field");
             }
 
-            // 验证没有 id 字段（通知不应有 id）
-            // 注意：在 C# 对象中我们无法直接检查 JSON 中是否存在某个字段，
-            // 这里假设如果 Id 被设置为默认值，则没有设置 id
-            // 实际验证需要在 JSON 层面进行
+            // Validate the absence of an id field (a notification should not carry an id)
+            // Note: in a C# object we cannot directly check whether a given field is present in the JSON,
+            // so here we assume that an Id left at its default value means no id was set.
+            // Real validation has to happen at the JSON level.
 
             if (errors.Count > 0)
             {
@@ -101,9 +101,9 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 验证响应消息的格式和必需字段。
-        /// 响应消息必须包含：jsonrpc, id
-        /// 响应消息必须恰好包含 result 或 error 之一
+        /// Validates the shape and required fields of a response message.
+        /// A response message must contain: jsonrpc, id
+        /// A response message must contain exactly one of result or error
         /// </summary>
         public ValidationResult ValidateResponse(JsonRpcResponse response)
         {
@@ -116,13 +116,13 @@ namespace SalmonEgg.Acp.JsonRpc
 
             var errors = new System.Collections.Generic.List<string>();
 
-            // 验证 jsonrpc 字段
+            // Validate the jsonrpc field
             if (string.IsNullOrWhiteSpace(response.JsonRpc) || response.JsonRpc != "2.0")
             {
                 errors.Add("Invalid or missing 'jsonrpc' field. Must be '2.0'");
             }
 
-            // 验证 id 字段
+            // Validate the id field
             if (response.Id == null || response.Id.Equals(false))
             {
                 if (response.Id is bool)
@@ -135,7 +135,7 @@ namespace SalmonEgg.Acp.JsonRpc
                 }
             }
 
-            // 验证恰好有 result 或 error 之一
+            // Validate that exactly one of result or error is present
             var hasResult = response.Result.HasValue;
             var hasError = response.Error != null;
 
@@ -148,23 +148,24 @@ namespace SalmonEgg.Acp.JsonRpc
                 errors.Add("Response must have either 'result' or 'error'");
             }
 
-            // 如果有 error，验证 error 对象的格式
+            // When an error is present, validate the shape of the error object
             if (hasError && response.Error != null)
             {
                 var error = response.Error;
 
-                // 验证 error.code 是数字
-                // 在 C# 中 Code 是 int 属性，所以总是数字
+                // Validate that error.code is a number
+                // In C#, Code is an int property, so it is always a number
 
-                // 验证 error.message 是非空字符串
+                // Validate that error.message is a non-empty string
                 if (string.IsNullOrWhiteSpace(error.Message))
                 {
                     errors.Add("Error 'message' field cannot be empty");
                 }
 
-                // 不校验错误码取值:JSON-RPC 2.0 只是把 -32768..-32000 保留给预定义语义,
-                // 应用可用范围外任意整数码;保留区间内未知码属未来规范由 Agent 决定,
-                // client 按码值拒绝响应即协议外反向收紧。
+                // Error code values are not validated: JSON-RPC 2.0 merely reserves -32768..-32000 for
+                // predefined semantics, and applications may use any integer code outside that range; unknown
+                // codes inside the reserved range belong to future spec revisions and are the Agent's call, so
+                // having the client reject a response based on its code would tighten the protocol from outside.
             }
 
             if (errors.Count > 0)
@@ -179,39 +180,39 @@ namespace SalmonEgg.Acp.JsonRpc
     }
 
     /// <summary>
-    /// JSON-RPC 消息验证结果。仅供 SDK 内部消息校验使用。
+    /// JSON-RPC message validation result. For SDK-internal message validation only.
     /// </summary>
     internal sealed class ValidationResult
     {
         /// <summary>
-        /// 验证是否通过。
+        /// Whether validation succeeded.
         /// </summary>
         public bool IsValid { get; init; }
 
         /// <summary>
-        /// 错误消息列表（当 <see cref="IsValid"/> 为 false 时包含错误）。
+        /// The list of error messages (populated when <see cref="IsValid"/> is false).
         /// </summary>
         public System.Collections.Generic.IReadOnlyList<string> Errors { get; init; }
             = System.Array.Empty<string>();
 
         /// <summary>
-        /// 错误码（如果验证失败）。
+        /// The error code (when validation failed).
         /// </summary>
         public int? ErrorCode { get; init; }
 
         /// <summary>
-        /// 创建成功的验证结果。
+        /// Creates a successful validation result.
         /// </summary>
         public static ValidationResult Success() => new() { IsValid = true };
 
         /// <summary>
-        /// 创建失败的验证结果。
+        /// Creates a failed validation result.
         /// </summary>
         public static ValidationResult Failure(int errorCode, System.Collections.Generic.IReadOnlyList<string> errors)
             => new() { IsValid = false, ErrorCode = errorCode, Errors = errors };
 
         /// <summary>
-        /// 创建失败的验证结果（单个错误）。
+        /// Creates a failed validation result (single error).
         /// </summary>
         public static ValidationResult Failure(int errorCode, string error)
             => new() { IsValid = false, ErrorCode = errorCode, Errors = new[] { error } };

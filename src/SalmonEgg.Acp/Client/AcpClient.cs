@@ -17,8 +17,8 @@ using SalmonEgg.Acp.Tool;
 namespace SalmonEgg.Acp.Client
 {
     /// <summary>
-    /// ACP 客户端核心实现。
-    /// 整合了消息层、协议层、传输层和安全层，提供完整的 ACP 客户端功能。
+    /// Core ACP client implementation.
+    /// Combines the message, protocol, transport, and security layers into a complete ACP client.
     /// </summary>
     public sealed class AcpClient : IAcpClient, IDisposable
     {
@@ -97,69 +97,69 @@ namespace SalmonEgg.Acp.Client
                 : _agentCapabilities?.SupportsLogout == true;
 
         /// <summary>
-        /// 初始化事件。
+        /// Raised when initialization completes.
         /// </summary>
         public event EventHandler<InitializeResponse>? Initialized;
 
         /// <summary>
-        /// 会话更新事件。
+        /// Raised when a session update is received.
         /// </summary>
         public event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
 
         /// <summary>
-        /// 权限请求事件。
+        /// Raised when a permission request is received.
         /// </summary>
         public event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
 
         /// <summary>
-        /// 文件系统请求事件。
+        /// Raised when a file system request is received.
         /// </summary>
         public event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
 
         /// <summary>
-        /// 终端请求事件。
+        /// Raised when a terminal request is received.
         /// </summary>
         public event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
 
         /// <summary>
-        /// 终端状态事件。
+        /// Raised when terminal state changes.
         /// </summary>
         public event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
 
         /// <summary>
-        /// Ask-user 请求事件。
+        /// Raised when an ask-user request is received.
         /// </summary>
         public event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
 
         /// <summary>
-        /// 连接错误事件。
+        /// Raised when a connection error occurs.
         /// </summary>
         public event EventHandler<string>? ErrorOccurred;
 
         /// <summary>
-        /// 判断客户端是否已初始化。
+        /// Gets a value indicating whether the client has been initialized.
         /// </summary>
         public bool IsInitialized => _isInitialized;
 
         /// <summary>
-        /// 判断是否已连接到 Agent。
+        /// Gets a value indicating whether the client is connected to the agent.
         /// </summary>
         public bool IsConnected => _transport.IsConnected;
 
         /// <summary>
-        /// 获取当前的 Agent 信息。
+        /// Gets the current agent information.
         /// </summary>
         public AgentInfo? AgentInfo => _agentInfo;
 
         /// <summary>
-        /// 获取当前的 Agent 能力。
+        /// Gets the current agent capabilities.
         /// </summary>
         public AgentCapabilities? AgentCapabilities => _agentCapabilities;
 
         /// <summary>
-        /// 创建新的 AcpClient 实例。
+        /// Creates a new <see cref="AcpClient"/> instance.
         /// </summary>
-        /// <param name="transport">传输层对象</param>
+        /// <param name="transport">The transport used to exchange messages with the agent.</param>
         public AcpClient(
             IAcpTransport transport,
             IAcpClientLogger? logger = null,
@@ -173,13 +173,13 @@ namespace SalmonEgg.Acp.Client
             _terminalSessionManager = terminalSessionManager ?? new UnsupportedAcpTerminalSessionManager();
             _logger = logger ?? new NullAcpClientLogger();
 
-            // 注册传输层事件
+            // Subscribe to transport events.
             _transport.MessageReceived += OnMessageReceived;
             _transport.ErrorOccurred += OnTransportError;
         }
 
         /// <summary>
-        /// 初始化与 Agent 的连接。
+        /// Initializes the connection to the agent.
         /// </summary>
         public async Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default)
         {
@@ -199,7 +199,7 @@ namespace SalmonEgg.Acp.Client
                 throw new InvalidOperationException("ACP client is already initialized.");
             }
 
-            // 确保传输层已连接
+            // Make sure the transport is connected.
             if (!_transport.IsConnected)
             {
                 ClearLastTransportError();
@@ -210,14 +210,14 @@ namespace SalmonEgg.Acp.Client
                 }
             }
 
-            // 发送 initialize 请求
+            // Send the initialize request.
             var request = new JsonRpcRequest(
                 Interlocked.Increment(ref _nextMessageId),
                 "initialize",
                 ToElement(@params, AcpJsonContext.Default.InitializeParams));
             var response = await SendRequestAsync(request, cancellationToken).ConfigureAwait(false);
 
-            // 验证响应
+            // Validate the response.
             var validationResult = _validator.ValidateResponse(response);
             if (!validationResult.IsValid)
             {
@@ -229,7 +229,7 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            // 解析响应
+            // Parse the response.
             var initializeResponse = FromElement(response.Result!.Value, AcpJsonContext.Default.InitializeResponse);
             if (initializeResponse == null)
             {
@@ -246,7 +246,7 @@ namespace SalmonEgg.Acp.Client
                     $"Protocol version mismatch. Expected by client: {clientVersion}, Server: {serverVersion}");
             }
 
-            // 存储 Agent 信息
+            // Store the agent information.
             _protocolVersion = serverVersion;
             _agentInfo = initializeResponse.AgentInfo;
             _agentCapabilities = initializeResponse.AgentCapabilities;
@@ -254,18 +254,18 @@ namespace SalmonEgg.Acp.Client
             _clientCapabilities = @params.ClientCapabilities;
             _isInitialized = true;
 
-            // 启动传输断连看门狗
+            // Start the transport disconnect watchdog.
             _messageLoopCts = new CancellationTokenSource();
             _ = MonitorTransportConnectionAsync(_messageLoopCts.Token);
 
-            // 触发事件
+            // Raise the event.
             Initialized?.Invoke(this, initializeResponse);
 
             return initializeResponse;
         }
 
         /// <summary>
-        /// 创建新的会话。
+        /// Creates a new session.
         /// </summary>
         public async Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params, CancellationToken cancellationToken = default)
         {
@@ -304,7 +304,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 加载已有的会话。
+        /// Loads an existing session.
         /// </summary>
         public async Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default)
         {
@@ -336,8 +336,9 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            // session/load 成功即代表 Agent 已确认该会话;注册进本地 store,否则后续
-            // session/prompt 的存在性快速失败会把官方 load→prompt 主流程本地拦截为 SessionNotFound。
+            // A successful session/load means the agent has acknowledged the session, so register it in
+            // the local store. Otherwise the existence fast-fail in session/prompt would locally reject
+            // the official load -> prompt flow as SessionNotFound.
             await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
 
             if (!response.Result.HasValue ||
@@ -352,8 +353,8 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 恢复已有会话。省略 <see cref="SessionResumeParams.ReplayFrom"/> 时不要求重放历史；
-        /// 设置 <c>replayFrom: { type: "start" }</c> 时请求完整历史重放（V2）。
+        /// Resumes an existing session. Omitting <see cref="SessionResumeParams.ReplayFrom"/> requests no
+        /// history replay; setting <c>replayFrom: { type: "start" }</c> requests a full history replay (V2).
         /// </summary>
         public async Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default)
         {
@@ -393,8 +394,9 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(response.Error!.Code, response.Error.Message, response.Error.Data);
             }
 
-            // Agent 已确认恢复该会话:注册本地追踪条目,使后续 session/prompt 的存在性
-            // 快速失败门(SendPromptAsync)不会把 resume→prompt 官方主流程误判为 SessionNotFound。
+            // The agent has acknowledged the resumed session, so register the local tracking entry. This
+            // keeps the existence fast-fail gate in SendPromptAsync from misreporting the official
+            // resume -> prompt flow as SessionNotFound.
             await RegisterSessionAsync(@params.SessionId, @params.Cwd).ConfigureAwait(false);
 
             if (!response.Result.HasValue ||
@@ -409,7 +411,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 关闭已有会话并释放 Agent 侧资源。
+        /// Closes an existing session and releases the resources held on the agent side.
         /// </summary>
         public async Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default)
         {
@@ -453,7 +455,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 删除远端 Agent 会话。
+        /// Deletes a session on the remote agent.
         /// </summary>
         public async Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default)
         {
@@ -496,7 +498,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 列出远端 Agent 支持的会话列表
+        /// Lists the sessions reported by the remote agent.
         /// </summary>
         public async Task<SessionListResponse> ListSessionsAsync(SessionListParams @params, CancellationToken cancellationToken = default)
         {
@@ -537,13 +539,13 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 向会话发送提示。
+        /// Sends a prompt to a session.
         /// </summary>
         public async Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
-            // 检查会话是否存在
+            // Check whether the session exists.
             if (!_sessionStore.ContainsSession(@params.SessionId))
             {
                 throw new AcpException(JsonRpcErrorCode.SessionNotFound, $"Session '{@params.SessionId}' not found");
@@ -574,10 +576,12 @@ namespace SalmonEgg.Acp.Client
             return promptResponse;
         }
 
-        // spec MUST:client 须按 initialize 协商的 promptCapabilities 限制发送的 content 类型
-        // (image→SupportsImage、audio→SupportsAudio、resource→SupportsEmbeddedContext)。
-        // text 与 resource_link 是无条件基线,始终允许;未知判别值走 passthrough 由 Agent 裁决,
-        // 不在此反向收紧。发送前快速失败,避免把 Agent 明确不支持的内容打到线上。
+        // spec MUST: the client must restrict the content types it sends to the promptCapabilities
+        // negotiated during initialize (image -> SupportsImage, audio -> SupportsAudio,
+        // resource -> SupportsEmbeddedContext). text and resource_link are the unconditional baseline and
+        // are always allowed; unknown discriminator values pass through for the agent to decide and are
+        // not tightened here. Failing fast before sending avoids putting content the agent explicitly
+        // does not support on the wire.
         private void EnsurePromptContentAllowed(SessionPromptParams @params)
         {
             var prompt = @params.Prompt;
@@ -607,7 +611,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 设置会话模式。
+        /// Sets the session mode.
         /// </summary>
         public async Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params, CancellationToken cancellationToken = default)
         {
@@ -631,14 +635,14 @@ namespace SalmonEgg.Acp.Client
                 throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse session/set_mode response");
             }
 
-            // 更新会话模式
+            // Update the cached session mode.
             _sessionStore.UpdateCurrentMode(@params.SessionId, @params.ModeId);
 
             return setModeResponse;
         }
 
         /// <summary>
-        /// 设置会话配置选项。
+        /// Sets a session configuration option.
         /// </summary>
         public async Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default)
         {
@@ -666,7 +670,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 取消会话。
+        /// Cancels a session.
         /// </summary>
         public async Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default)
         {
@@ -696,7 +700,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 执行认证。
+        /// Performs authentication.
         /// </summary>
         public async Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default)
         {
@@ -733,7 +737,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 登出当前认证状态。
+        /// Logs out of the current authenticated state.
         /// </summary>
         public async Task<LogoutResponse> LogoutAsync(LogoutParams @params, CancellationToken cancellationToken = default)
         {
@@ -771,7 +775,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 响应权限请求。
+        /// Responds to a permission request.
         /// </summary>
         public async Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null)
         {
@@ -779,7 +783,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 响应文件系统请求。
+        /// Responds to a file system request.
         /// </summary>
         public async Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null)
         {
@@ -787,7 +791,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 响应 ask-user 请求。
+        /// Responds to an ask-user request.
         /// </summary>
         public async Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers)
         {
@@ -907,7 +911,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 断开与 Agent 的连接。
+        /// Disconnects from the agent.
         /// </summary>
         public async Task<bool> DisconnectAsync()
         {
@@ -919,7 +923,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 发送请求并等待响应。
+        /// Sends a request and awaits its response.
         /// </summary>
 
         private async Task<JsonRpcResponse> SendRequestAsync(JsonRpcRequest request, CancellationToken cancellationToken)
@@ -989,9 +993,11 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 幂等注册本地会话追踪条目。session/new 与 session/load、session/resume 成功后都要登记,
-        /// 使 SendPromptAsync 的存在性快速失败门不会误拦官方 load/resume→prompt 主流程。
-        /// 本地条目只是可选的快速失败优化,存在性事实源仍在 Agent(未声明能力时不收紧)。
+        /// Idempotently registers the local session tracking entry. It is recorded after a successful
+        /// session/new, session/load, or session/resume so the existence fast-fail gate in
+        /// SendPromptAsync does not reject the official load/resume -> prompt flow.
+        /// The local entry is only an optional fast-fail optimization; the agent remains the source of
+        /// truth for session existence, and nothing is tightened when a capability is not advertised.
         /// </summary>
         private async Task RegisterSessionAsync(string sessionId, string cwd)
         {
@@ -1023,7 +1029,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 发送响应（用于通知请求的响应）。
+        /// Sends a response (used to answer inbound requests).
         /// </summary>
         private async Task<bool> SendResponseAsync(JsonRpcResponse response)
         {
@@ -1041,7 +1047,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理消息接收事件。
+        /// Handles the transport message-received event.
         /// </summary>
         private void OnMessageReceived(object? sender, AcpTransportMessageReceivedEventArgs e)
         {
@@ -1072,7 +1078,7 @@ namespace SalmonEgg.Acp.Client
                 if (message is JsonRpcResponse response)
                 {
                     var responseIdStr = response.Id?.ToString() ?? string.Empty;
-                    // 匹配 pending 请求
+                    // Match the pending request.
                     if (_pendingRequests.TryRemove(responseIdStr, out var tcs))
                     {
                         tcs.TrySetResult(response);
@@ -1086,7 +1092,7 @@ namespace SalmonEgg.Acp.Client
                 }
                 else if (message is JsonRpcNotification notification)
                 {
-                    // 处理通知
+                    // Handle the notification.
                     HandleNotification(notification);
                 }
             }
@@ -1129,7 +1135,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理通知消息。
+        /// Handles an inbound notification message.
         /// </summary>
         private void HandleNotification(JsonRpcNotification notification)
         {
@@ -1139,13 +1145,13 @@ namespace SalmonEgg.Acp.Client
                     HandleSessionUpdate(notification);
                     break;
                 default:
-                    // 未知通知类型
+                    // Unknown notification type.
                     break;
             }
         }
 
         /// <summary>
-        /// 处理请求消息（Agent -> Client，需要返回响应）。
+        /// Handles an inbound request message (agent -> client, a response is required).
         /// </summary>
         private void HandleRequest(JsonRpcRequest request)
         {
@@ -1255,7 +1261,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理会话更新通知。
+        /// Handles the session/update notification.
         /// </summary>
         private void HandleSessionUpdate(JsonRpcNotification notification)
         {
@@ -1280,7 +1286,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理权限请求通知。
+        /// Handles an inbound permission request.
         /// </summary>
         private void HandlePermissionRequest(JsonRpcRequest request)
         {
@@ -1395,7 +1401,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理文件系统请求通知。
+        /// Handles an inbound file system request.
         /// </summary>
         private void HandleFileSystemRequest(JsonRpcRequest request)
         {
@@ -1474,7 +1480,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理 ask-user 请求。
+        /// Handles an inbound ask-user request.
         /// </summary>
         private void HandleAskUserRequest(JsonRpcRequest request)
         {
@@ -1543,7 +1549,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理终端请求。
+        /// Handles an inbound terminal request.
         /// </summary>
         private async Task HandleTerminalRequestAsync(JsonRpcRequest request)
         {
@@ -1879,7 +1885,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 处理传输错误事件。
+        /// Handles the transport error event.
         /// </summary>
         private void OnTransportError(object? sender, AcpTransportErrorEventArgs e)
         {
@@ -1916,7 +1922,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 触发错误事件。
+        /// Raises the error event.
         /// </summary>
         private void OnErrorOccurred(string errorMessage)
         {
@@ -1980,9 +1986,10 @@ namespace SalmonEgg.Acp.Client
             => "ACP request failed because the transport disconnected: " + transportErrorMessage;
 
         /// <summary>
-        /// 监视传输连接状态。传输可能在不触发 ErrorOccurred 的情况下静默断开
-        /// (或在错误事件时刻仍短暂报告已连接),此看门狗兜底 fault 所有挂起请求,
-        /// 避免调用方在 <see cref="SendRequestAsync"/> 上永久悬挂。
+        /// Monitors the transport connection state. A transport can drop silently without raising
+        /// ErrorOccurred (or still briefly report itself as connected at the moment of the error event),
+        /// so this watchdog faults every pending request as a backstop and keeps callers from hanging
+        /// forever on <see cref="SendRequestAsync"/>.
         /// </summary>
         private async Task MonitorTransportConnectionAsync(CancellationToken cancellationToken)
         {
@@ -1995,7 +2002,7 @@ namespace SalmonEgg.Acp.Client
             }
             catch (OperationCanceledException)
             {
-                // 显式 DisconnectAsync 已负责取消挂起请求。
+                // An explicit DisconnectAsync already cancels the pending requests.
                 return;
             }
 
@@ -2006,7 +2013,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 确保客户端已初始化。
+        /// Ensures the client has been initialized.
         /// </summary>
         private void EnsureInitialized()
         {
@@ -2094,8 +2101,9 @@ namespace SalmonEgg.Acp.Client
 
         private JsonElement ToElement<T>(T value, JsonTypeInfo<T> typeInfo)
         {
-            // 沿调用流把协商后的协议版本传给内部 converter（如 McpServer 的版本分流写入）。
-            // set→SerializeToElement→restore 同步闭合，中间无 await，并发请求不会串版本。
+            // Carry the negotiated protocol version along the call flow to the internal converters (for
+            // example the version-specific McpServer write path). set -> SerializeToElement -> restore
+            // closes synchronously with no await in between, so concurrent requests cannot mix versions.
             using (AcpProtocolWriteContext.Enter(_protocolVersion))
             {
                 return JsonSerializer.SerializeToElement(value, typeInfo);
@@ -2112,7 +2120,7 @@ namespace SalmonEgg.Acp.Client
         }
 
         /// <summary>
-        /// 释放资源。
+        /// Releases the resources held by this client.
         /// </summary>
         public void Dispose()
         {
@@ -2124,23 +2132,27 @@ namespace SalmonEgg.Acp.Client
             _disposed = true;
             _messageLoopCts?.Cancel();
 
-            // 先解绑传输事件,避免 teardown 期间的回调重入已释放的处理器;
-            // 再 fault 所有挂起请求,否则正在 await tcs.Task 的调用方在 Dispose 路径
-            // 永久悬挂(看门狗的取消只覆盖显式 DisconnectAsync,Dispose 无人负责)。
+            // Detach the transport events first so callbacks during teardown cannot re-enter disposed
+            // handlers, then fault every pending request. Otherwise callers awaiting tcs.Task would hang
+            // forever on the Dispose path, because the watchdog's cancellation only covers an explicit
+            // DisconnectAsync and nothing covers Dispose.
             _transport.MessageReceived -= OnMessageReceived;
             _transport.ErrorOccurred -= OnTransportError;
             CancelPendingRequests(_lastTransportErrorMessage ?? "The ACP client was disposed.");
 
-            // 传输是本客户端独占的资源(进程/套接字/HttpClient/Rx subject),Dispose 是其
-            // 权威释放路径(优雅的协议级断连由显式 DisconnectAsync 负责,已在调用方先行 await)。
-            // 终端会话管理器是跨连接共享的单例,由 DI 容器拥有,本客户端不得释放它。
+            // The transport is owned exclusively by this client (process / socket / HttpClient / Rx
+            // subject), and Dispose is its authoritative release path; a graceful protocol-level
+            // disconnect is the job of an explicit DisconnectAsync, awaited by the caller beforehand.
+            // The terminal session manager is a singleton shared across connections and owned by the DI
+            // container, so this client must not dispose it.
             try
             {
                 _transport.Dispose();
             }
             catch (Exception ex)
             {
-                // 清理路径的释放失败不得逃逸,否则会顶替真正的业务异常并挂死调用栈。
+                // A disposal failure on the cleanup path must not escape, or it would replace the real
+                // business exception and wedge the call stack.
                 _logger.Log(
                     AcpClientLogLevel.Warning,
                     "TRANSPORT_DISPOSE_FAILED",

@@ -8,162 +8,163 @@ using SalmonEgg.Acp.Client;
 namespace SalmonEgg.Acp.Client
 {
     /// <summary>
-    /// ACP 客户端接口。
-    /// 定义了与 Agent 通信的核心方法。
-    /// 客户端独占其传输（进程/套接字/HttpClient）与消息循环 CTS，生命周期由持有者
-    /// （ChatService）拥有，故契约包含 <see cref="IDisposable"/>：断连只停止流量，
-    /// 释放才归还底层资源。
+    /// ACP client interface.
+    /// Defines the core methods for communicating with an Agent.
+    /// The client exclusively owns its transport (process/socket/HttpClient) and the message-loop CTS;
+    /// its lifetime is owned by the holder (ChatService), so the contract includes
+    /// <see cref="IDisposable"/>: disconnecting only stops traffic, whereas disposing returns the
+    /// underlying resources.
     /// </summary>
     public interface IAcpClient : IDisposable
     {
         /// <summary>
-        /// 初始化事件。当初始化完成时触发。
+        /// Initialization event. Raised when initialization completes.
         /// </summary>
         event EventHandler<InitializeResponse>? Initialized;
 
         /// <summary>
-        /// 会话更新事件。当收到会话更新通知时触发。
+        /// Session update event. Raised when a session update notification is received.
         /// </summary>
         event EventHandler<SessionUpdateEventArgs>? SessionUpdateReceived;
 
         /// <summary>
-        /// 权限请求事件。当收到权限请求时触发。
+        /// Permission request event. Raised when a permission request is received.
         /// </summary>
         event EventHandler<PermissionRequestEventArgs>? PermissionRequestReceived;
 
         /// <summary>
-        /// 文件系统请求事件。当收到文件系统操作请求时触发。
+        /// File system request event. Raised when a file system operation request is received.
         /// </summary>
         event EventHandler<FileSystemRequestEventArgs>? FileSystemRequestReceived;
 
         /// <summary>
-        /// 终端请求事件。当收到终端操作请求时触发。
+        /// Terminal request event. Raised when a terminal operation request is received.
         /// </summary>
         event EventHandler<TerminalRequestEventArgs>? TerminalRequestReceived;
 
         /// <summary>
-        /// 终端状态事件。当客户端执行 ACP terminal 请求并获得状态快照时触发。
+        /// Terminal state event. Raised when the client executes an ACP terminal request and obtains a state snapshot.
         /// </summary>
         event EventHandler<TerminalStateChangedEventArgs>? TerminalStateChangedReceived;
 
         /// <summary>
-        /// Ask-user 请求事件。当 Agent 需要用户结构化回答时触发。
+        /// Ask-user request event. Raised when the Agent needs a structured answer from the user.
         /// </summary>
         event EventHandler<AskUserRequestEventArgs>? AskUserRequestReceived;
 
         /// <summary>
-        /// 连接错误事件。当发生连接错误时触发。
+        /// Connection error event. Raised when a connection error occurs.
         /// </summary>
         event EventHandler<string>? ErrorOccurred;
 
         /// <summary>
-        /// 判断客户端是否已初始化。
+        /// Gets a value indicating whether the client has been initialized.
         /// </summary>
         bool IsInitialized { get; }
 
         /// <summary>
-        /// 判断是否已连接到 Agent。
+        /// Gets a value indicating whether the client is connected to the Agent.
         /// </summary>
         bool IsConnected { get; }
 
         /// <summary>
-        /// 获取当前的 Agent 信息。
+        /// Gets the current Agent information.
         /// </summary>
         AgentInfo? AgentInfo { get; }
 
         /// <summary>
-        /// 获取当前的 Agent 能力。
+        /// Gets the current Agent capabilities.
         /// </summary>
         AgentCapabilities? AgentCapabilities { get; }
 
         /// <summary>
-        /// 初始化与 Agent 的连接。
-        /// 发送 initialize 请求并等待 Agent 响应。
+        /// Initializes the connection to the Agent.
+        /// Sends an initialize request and waits for the Agent's response.
         /// </summary>
-        /// <param name="params">初始化参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>初始化响应</returns>
+        /// <param name="params">The initialization parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The initialization response</returns>
         Task<InitializeResponse> InitializeAsync(InitializeParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 创建新的会话。
-        /// 发送 session/new 请求并等待 Agent 响应。
+        /// Creates a new session.
+        /// Sends a session/new request and waits for the Agent's response.
         /// </summary>
-        /// <param name="params">创建会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>创建会话响应</returns>
+        /// <param name="params">The create-session parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The create-session response</returns>
         Task<SessionNewResponse> CreateSessionAsync(SessionNewParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 加载已有的会话。
-        /// 发送 session/load 请求并等待 Agent 通过 session/update 通知重放历史。
+        /// Loads an existing session.
+        /// Sends a session/load request and waits for the Agent to replay history through session/update notifications.
         /// </summary>
-        /// <param name="params">加载会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>加载会话响应</returns>
+        /// <param name="params">The load-session parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The load-session response</returns>
         Task<SessionLoadResponse> LoadSessionAsync(SessionLoadParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 恢复已有会话但不要求 Agent 重放历史。
-        /// 发送 session/resume 请求并等待 Agent 恢复运行上下文。
+        /// Resumes an existing session without requiring the Agent to replay history.
+        /// Sends a session/resume request and waits for the Agent to restore the run context.
         /// </summary>
-        /// <param name="params">恢复会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>恢复会话响应</returns>
+        /// <param name="params">The resume-session parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The resume-session response</returns>
         Task<SessionResumeResponse> ResumeSessionAsync(SessionResumeParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 关闭已有会话并释放 Agent 侧资源。
-        /// 发送 session/close 请求。
+        /// Closes an existing session and releases the Agent-side resources.
+        /// Sends a session/close request.
         /// </summary>
-        /// <param name="params">关闭会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>关闭会话响应</returns>
+        /// <param name="params">The close-session parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The close-session response</returns>
         Task<SessionCloseResponse> CloseSessionAsync(SessionCloseParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 删除远端 Agent 会话。
-        /// 发送 session/delete 请求。
+        /// Deletes a remote Agent session.
+        /// Sends a session/delete request.
         /// </summary>
-        /// <param name="params">删除会话参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>删除会话响应</returns>
+        /// <param name="params">The delete-session parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The delete-session response</returns>
         Task<SessionDeleteResponse> DeleteSessionAsync(SessionDeleteParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 列出远端 Agent 支持的会话列表。
-        /// 发送 session/list 请求并等待 Agent 响应。
+        /// Lists the sessions supported by the remote Agent.
+        /// Sends a session/list request and waits for the Agent's response.
         /// </summary>
-        /// <param name="params">列表参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>会话列表响应</returns>
+        /// <param name="params">The list parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The session list response</returns>
         Task<SessionListResponse> ListSessionsAsync(SessionListParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 向会话发送提示。
-        /// 发送 session/prompt 请求并等待 Agent 响应。
+        /// Sends a prompt to the session.
+        /// Sends a session/prompt request and waits for the Agent's response.
         /// </summary>
-        /// <param name="params">发送提示参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>发送提示响应</returns>
+        /// <param name="params">The send-prompt parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The send-prompt response</returns>
         Task<SessionPromptResponse> SendPromptAsync(SessionPromptParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 设置会话模式。
-        /// 发送 session/set_mode 请求。
+        /// Sets the session mode.
+        /// Sends a session/set_mode request.
         /// </summary>
-        /// <param name="params">设置模式参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>设置模式响应</returns>
+        /// <param name="params">The set-mode parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The set-mode response</returns>
         Task<SessionSetModeResponse> SetSessionModeAsync(SessionSetModeParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 设置会话配置选项。
-        /// 发送 session/set_config_option 请求。
+        /// Sets a session configuration option.
+        /// Sends a session/set_config_option request.
         /// </summary>
-        /// <param name="params">设置配置参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>设置配置响应</returns>
+        /// <param name="params">The set-config parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The set-config response</returns>
         Task<SessionSetConfigOptionResponse> SetSessionConfigOptionAsync(SessionSetConfigOptionParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -172,80 +173,80 @@ namespace SalmonEgg.Acp.Client
         Task CancelSessionAsync(SessionCancelParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 执行认证。
-        /// 发送 authenticate 请求。
+        /// Performs authentication.
+        /// Sends an authenticate request.
         /// </summary>
-        /// <param name="params">认证参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>认证响应</returns>
+        /// <param name="params">The authentication parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The authentication response</returns>
         Task<AuthenticateResponse> AuthenticateAsync(AuthenticateParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 登出当前认证状态。
-        /// 发送 logout 请求。
+        /// Logs out of the current authentication state.
+        /// Sends a logout request.
         /// </summary>
-        /// <param name="params">登出参数</param>
-        /// <param name="cancellationToken">取消令牌</param>
-        /// <returns>登出响应</returns>
+        /// <param name="params">The logout parameters</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The logout response</returns>
         Task<LogoutResponse> LogoutAsync(LogoutParams @params, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 响应权限请求。
-        /// 发送对之前权限请求的响应。
+        /// Responds to a permission request.
+        /// Sends the response to a previously received permission request.
         /// </summary>
-        /// <param name="messageId">原始请求的消息 ID</param>
-        /// <param name="outcome">结果（`selected` 或 `cancelled`）</param>
-        /// <param name="optionId">选中的选项 ID（可选）</param>
-        /// <returns>是否成功发送响应</returns>
+        /// <param name="messageId">The message ID of the original request</param>
+        /// <param name="outcome">The outcome (`selected` or `cancelled`)</param>
+        /// <param name="optionId">The ID of the selected option (optional)</param>
+        /// <returns>Whether the response was sent successfully</returns>
         Task<bool> RespondToPermissionRequestAsync(object messageId, string outcome, string? optionId = null);
 
         /// <summary>
-        /// 响应文件系统请求。
-        /// 发送对之前文件系统请求的响应。
+        /// Responds to a file system request.
+        /// Sends the response to a previously received file system request.
         /// </summary>
-        /// <param name="messageId">原始请求的消息 ID</param>
-        /// <param name="success">是否成功</param>
-        /// <param name="content">文件内容（读取操作）</param>
-        /// <param name="message">错误消息（如果失败）</param>
-        /// <returns>是否成功发送响应</returns>
+        /// <param name="messageId">The message ID of the original request</param>
+        /// <param name="success">Whether the operation succeeded</param>
+        /// <param name="content">The file content (read operations)</param>
+        /// <param name="message">The error message (when the operation failed)</param>
+        /// <returns>Whether the response was sent successfully</returns>
         Task<bool> RespondToFileSystemRequestAsync(object messageId, bool success, string? content = null, string? message = null);
 
         /// <summary>
-        /// 响应 ask-user 请求。
-        /// 发送对之前交互式提问请求的结构化答案。
+        /// Responds to an ask-user request.
+        /// Sends the structured answers for a previously received interactive question request.
         /// </summary>
-        /// <param name="messageId">原始请求的消息 ID</param>
-        /// <param name="answers">问题到答案的映射。</param>
-        /// <returns>是否成功发送响应</returns>
+        /// <param name="messageId">The message ID of the original request</param>
+        /// <param name="answers">A mapping from question to answer.</param>
+        /// <returns>Whether the response was sent successfully</returns>
         Task<bool> RespondToAskUserRequestAsync(object messageId, IReadOnlyDictionary<string, string> answers);
 
         /// <summary>
-        /// 断开与 Agent 的连接。
+        /// Disconnects from the Agent.
         /// </summary>
-        /// <returns>是否成功断开</returns>
+        /// <returns>Whether the disconnect succeeded</returns>
         Task<bool> DisconnectAsync();
     }
 
     /// <summary>
-    /// 会话更新事件参数。
+    /// Session update event arguments.
     /// </summary>
     public sealed class SessionUpdateEventArgs : EventArgs
     {
         /// <summary>
-        /// 会话 ID。
+        /// The session ID.
         /// </summary>
         public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 更新内容。
+        /// The update payload.
         /// </summary>
         public SessionUpdate? Update { get; init; }
 
         /// <summary>
-        /// 创建新的会话更新事件参数。
+        /// Creates new session update event arguments.
         /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="update">更新内容</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="update">The update payload</param>
         public SessionUpdateEventArgs(string sessionId, SessionUpdate? update)
         {
             SessionId = sessionId;
@@ -254,43 +255,43 @@ namespace SalmonEgg.Acp.Client
     }
 
     /// <summary>
-    /// 权限请求事件参数。
+    /// Permission request event arguments.
     /// </summary>
     public sealed class PermissionRequestEventArgs : EventArgs
     {
         /// <summary>
-        /// 原始请求的消息 ID。
+        /// The message ID of the original request.
         /// </summary>
         public object MessageId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 会话 ID。
+        /// The session ID.
         /// </summary>
         public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 工具调用数据。
+        /// The tool call data.
         /// </summary>
         public object? ToolCall { get; init; }
 
         /// <summary>
-        /// 可用的权限选项列表。
+        /// The list of available permission options.
         /// </summary>
         public List<PermissionOption> Options { get; init; } = new List<PermissionOption>();
 
         /// <summary>
-        /// 响应回调。
+        /// The response callback.
         /// </summary>
         public Func<string, string?, Task> Respond { get; init; } = null!;
 
         /// <summary>
-        /// 创建新的权限请求事件参数。
+        /// Creates new permission request event arguments.
         /// </summary>
-        /// <param name="messageId">消息 ID</param>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="toolCall">工具调用</param>
-        /// <param name="options">权限选项</param>
-        /// <param name="respond">响应回调</param>
+        /// <param name="messageId">The message ID</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="toolCall">The tool call</param>
+        /// <param name="options">The permission options</param>
+        /// <param name="respond">The response callback</param>
         public PermissionRequestEventArgs(
             object messageId,
             string sessionId,
@@ -313,61 +314,61 @@ namespace SalmonEgg.Acp.Client
     }
 
     /// <summary>
-    /// 文件系统请求事件参数。
+    /// File system request event arguments.
     /// </summary>
     public sealed class FileSystemRequestEventArgs : EventArgs
     {
         /// <summary>
-        /// 原始请求的消息 ID。
+        /// The message ID of the original request.
         /// </summary>
         public object MessageId { get; init; } = string.Empty;
 
         /// <summary>
-        /// 会话 ID。
+        /// The session ID.
         /// </summary>
         public string SessionId { get; init; } = string.Empty;
 
         /// <summary>
-        /// ACP 文件系统请求方法。
+        /// The ACP file system request method.
         /// </summary>
         public string Method { get; init; } = string.Empty;
 
         /// <summary>
-        /// 文件系统请求类型。
+        /// The file system request kind.
         /// </summary>
         public FileSystemRequestKind Kind { get; init; }
 
         /// <summary>
-        /// 文件路径。
+        /// The file path.
         /// </summary>
         public string Path { get; init; } = string.Empty;
 
         /// <summary>
-        /// 文件编码（读取操作）。
+        /// The file encoding (read operations).
         /// </summary>
         public string? Encoding { get; init; }
 
         /// <summary>
-        /// 文件内容（写入操作）。
+        /// The file content (write operations).
         /// </summary>
         public string? Content { get; init; }
 
         /// <summary>
-        /// 响应回调。
+        /// The response callback.
         /// </summary>
         public Func<bool, string?, string?, Task> Respond { get; init; } = null!;
 
         /// <summary>
-        /// 创建新的文件系统请求事件参数。
+        /// Creates new file system request event arguments.
         /// </summary>
-        /// <param name="messageId">消息 ID</param>
-        /// <param name="sessionId">会话 ID</param>
-        /// <param name="method">ACP 方法名</param>
-        /// <param name="kind">请求类型</param>
-        /// <param name="path">文件路径</param>
-        /// <param name="encoding">编码</param>
-        /// <param name="content">内容</param>
-        /// <param name="respond">响应回调</param>
+        /// <param name="messageId">The message ID</param>
+        /// <param name="sessionId">The session ID</param>
+        /// <param name="method">The ACP method name</param>
+        /// <param name="kind">The request kind</param>
+        /// <param name="path">The file path</param>
+        /// <param name="encoding">The encoding</param>
+        /// <param name="content">The content</param>
+        /// <param name="respond">The response callback</param>
         public FileSystemRequestEventArgs(
             object messageId,
             string sessionId,
