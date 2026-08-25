@@ -66,6 +66,24 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedCandidate))]
     private AcpComponentProbeResult _runtime;
 
+    private IReadOnlyList<string> _knownCandidates = Array.Empty<string>();
+
+    /// <summary>
+    /// Adopts a probe's candidate enumeration only when that probe actually searched PATH.
+    /// </summary>
+    /// <remarks>
+    /// A probe made while an override is in force resolved one absolute path, so its single-entry
+    /// enumeration says nothing about how many installs exist; adopting it would collapse the picker the
+    /// user just used. Clearing the override makes the next PATH search authoritative again.
+    /// </remarks>
+    partial void OnRuntimeChanged(AcpComponentProbeResult value)
+    {
+        if (!HasCustomCommand)
+        {
+            _knownCandidates = value.ExecutableCandidates;
+        }
+    }
+
     public AcpComponentAvailability Availability => Runtime.Availability;
 
     public bool IsInstalled => Runtime.IsUsable;
@@ -102,7 +120,13 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     /// <summary>
     /// Every distinct install the probed command matched, in the order a shell would find them.
     /// </summary>
-    public IReadOnlyList<string> Candidates => Runtime.ExecutableCandidates;
+    /// <remarks>
+    /// Held separately from the latest probe because the enumeration is a fact about the machine, not
+    /// about the last thing probed. Once the user picks a candidate it becomes an override, and probing
+    /// an absolute path yields exactly one candidate by definition — so reading this straight off the
+    /// probe would retract the choice the moment it was made, leaving no way back to the other installs.
+    /// </remarks>
+    public IReadOnlyList<string> Candidates => _knownCandidates;
 
     /// <summary>
     /// True only when the machine really has more than one install of this command.
@@ -112,7 +136,7 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
     /// permanent selector would charge every user for a case almost none of them have — so the choice
     /// appears exactly when there is a choice to make.
     /// </remarks>
-    public bool HasMultipleCandidates => Runtime.HasMultipleCandidates;
+    public bool HasMultipleCandidates => _knownCandidates.Count > 1;
 
     /// <summary>
     /// The install the user picked from <see cref="Candidates"/>, or the resolved one before they pick.
