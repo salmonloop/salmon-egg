@@ -919,23 +919,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private string Localize(string key, string fallback)
         => CoreStringResolver.Resolve(_localizer, key, fallback);
 
-    /// <summary>
-    /// Resolves a parameterized resource, formatting the arguments into whichever value wins.
-    /// Mirrors the resolver's contract: no localizer, missing key, or blank value all fall back,
-    /// so the caller never renders an empty slot where a sentence belongs.
-    /// </summary>
-    private string FormatLocalize(string key, string fallback, params object[] arguments)
-    {
-        if (_localizer is null)
-        {
-            return string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments);
-        }
-
-        var localized = _localizer[key, arguments];
-        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
-            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments)
-            : localized.Value;
-    }
+    private string FormatLocalize(string key, string fallbackFormat, params object[] arguments)
+        => CoreStringResolver.ResolveFormat(_localizer, key, fallbackFormat, arguments);
 
     private const string InstallFailedKey = "AcpSetup_Install_Failed";
 

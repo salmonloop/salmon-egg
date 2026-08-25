@@ -66,5 +66,4 @@ public sealed class AcpCommandOverrides
         => string.IsNullOrWhiteSpace(command)
             ? command
             : _overrides.TryGetValue(command, out var path) ? path : command;
-
 }

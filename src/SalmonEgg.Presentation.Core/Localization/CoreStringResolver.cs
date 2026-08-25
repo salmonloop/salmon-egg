@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Localization;
 using SalmonEgg.Presentation.Core.Resources;
 
@@ -33,6 +34,33 @@ public static class CoreStringResolver
         var localized = localizer[key];
         return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
             ? fallback
+            : localized.Value;
+    }
+
+    /// <summary>
+    /// Same contract as <see cref="Resolve"/> for a resource carrying <c>{0}</c>-style placeholders:
+    /// the arguments are formatted into whichever string wins, so the fallback is a format string too.
+    /// </summary>
+    /// <remarks>
+    /// Parameterized resolution lives here rather than at the call site because the unresolved cases
+    /// are the same three, and a second implementation of them drifts from this one the first time
+    /// either is corrected. Formatting uses the current culture, matching how the resource itself was
+    /// selected.
+    /// </remarks>
+    public static string ResolveFormat(
+        IStringLocalizer<CoreStrings>? localizer,
+        string? key,
+        string fallbackFormat,
+        params object[] arguments)
+    {
+        if (localizer is null || string.IsNullOrEmpty(key))
+        {
+            return string.Format(CultureInfo.CurrentCulture, fallbackFormat, arguments);
+        }
+
+        var localized = localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(CultureInfo.CurrentCulture, fallbackFormat, arguments)
             : localized.Value;
     }
 }
