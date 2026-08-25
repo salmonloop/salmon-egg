@@ -520,6 +520,9 @@
   <data name="AcpSetup_Stage_Completed" xml:space="preserve">
     <value>已完成</value>
   </data>
+  <data name="AcpSetup_Step_Position" xml:space="preserve">
+    <value>第 {0} 步，共 {1} 步</value>
+  </data>
   <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
     <value>找不到启动命令。请确认 Agent 运行时已安装并在 PATH 中，然后重新检测。</value>
   </data>

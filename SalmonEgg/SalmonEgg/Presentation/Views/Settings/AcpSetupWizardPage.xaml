@@ -67,20 +67,25 @@
                                             <Grid ColumnDefinitions="*,Auto">
                                                 <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold"/>
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{x:Bind Version}"
-                                                              Visibility="{x:Bind HasVersion, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    <!-- Every status affordance here reflects a probe that
+                                                         runs after the row is realized, so each binding is
+                                                         OneWay: a row starts Undetermined, which renders as
+                                                         none of these, and a OneTime binding would freeze it
+                                                         that way for the wizard's lifetime. -->
+                                                    <TextBlock Text="{x:Bind Version, Mode=OneWay}"
+                                                              Visibility="{x:Bind HasVersion, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                               Glyph="&#xE73E;"
                                                               x:Uid="AcpSetup_StatusInstalled"
                                                               FontSize="14"
-                                                              Visibility="{x:Bind IsInstalled, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                              Visibility="{x:Bind IsInstalled, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                     <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                                               Glyph="&#xE711;"
                                                               x:Uid="AcpSetup_StatusMissing"
                                                               FontSize="14"
-                                                              Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                                    <ProgressRing IsActive="{x:Bind IsChecking}" Width="16" Height="16"/>
+                                                              Visibility="{x:Bind IsMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <ProgressRing IsActive="{x:Bind IsChecking, Mode=OneWay}" Width="16" Height="16"/>
                                                 </StackPanel>
                                             </Grid>
                                             <TextBlock Text="{x:Bind Description}"
@@ -393,10 +398,14 @@
                                             <TextBlock Text="{x:Bind Description}"
                                                        Style="{StaticResource CaptionTextBlockStyle}"
                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                            <TextBlock Text="{x:Bind ValidationMessage}"
+                                            <!-- Written by validation after the user tries to advance, so
+                                                 OneWay. Bound OneTime this row stays blank and "Next"
+                                                 silently does nothing, with no statement of what to fix. -->
+                                            <TextBlock Text="{x:Bind ValidationMessage, Mode=OneWay}"
                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                       TextWrapping="Wrap"
                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                       Visibility="{x:Bind HasValidationMessage, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                       Visibility="{x:Bind HasValidationMessage, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
@@ -414,12 +423,28 @@
                                      IsOpen="{x:Bind ViewModel.IsTestSuccessful, Mode=OneWay}"
                                      Severity="Success"
                                      IsClosable="False"/>
+                            <!-- Bound to IsTestFailed, not HasTestResult: a passing test also
+                                 produces a result, and a success bar plus an error bar both
+                                 open is the bug this distinction exists to prevent. -->
                             <InfoBar x:Name="AcpSetupTestFailureBar"
-                                     IsOpen="{x:Bind ViewModel.HasTestResult, Mode=OneWay}"
+                                     IsOpen="{x:Bind ViewModel.IsTestFailed, Mode=OneWay}"
                                      Severity="Error"
                                      IsClosable="False"
                                      Title="{x:Bind ViewModel.TestFailureStageText, Mode=OneWay}"
                                      Message="{x:Bind ViewModel.TestRemediationText, Mode=OneWay}"/>
+                            <!-- Raw stderr excerpt / protocol error from the failed handshake.
+                                 Developer-facing English, so selectable for copying into an
+                                 issue; hidden entirely on success. -->
+                            <TextBlock Text="{x:Bind ViewModel.TestErrorDetail, Mode=OneWay}"
+                                       Visibility="{x:Bind ViewModel.HasTestErrorDetail, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                       FontFamily="Consolas"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="6"
+                                       IsTextSelectionEnabled="True"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
                             <Button x:Name="AcpSetupTestRunButton"
                                     x:Uid="AcpSetup_RunTest"
                                     Command="{x:Bind ViewModel.TestCommand}"/>

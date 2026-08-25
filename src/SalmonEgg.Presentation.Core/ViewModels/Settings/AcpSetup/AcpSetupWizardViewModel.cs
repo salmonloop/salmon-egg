@@ -148,6 +148,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasAdapterPackageLocation))]
     [NotifyPropertyChangedFor(nameof(IsAdapterBuiltIn))]
     [NotifyPropertyChangedFor(nameof(IsAdapterInstalled))]
+    [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
     private AcpComponentProbeResult? _adapterProbe;
 
     /// <summary>
@@ -176,8 +177,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(HasTestResult))]
     [NotifyPropertyChangedFor(nameof(IsTestSuccessful))]
+    [NotifyPropertyChangedFor(nameof(IsTestFailed))]
     [NotifyPropertyChangedFor(nameof(TestFailureStageText))]
     [NotifyPropertyChangedFor(nameof(TestRemediationText))]
+    [NotifyPropertyChangedFor(nameof(TestErrorDetail))]
+    [NotifyPropertyChangedFor(nameof(HasTestErrorDetail))]
     private AcpSetupTestResult? _testResult;
 
     /// <summary>Single-line rendering of the command the wizard will save, for user review.</summary>
@@ -213,11 +217,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     public bool IsOnSave => Step == AcpSetupWizardStep.Save;
 
     /// <summary>Human-readable step position ("Step 2 of 5"), so the walk's place is always stated.</summary>
-    public string StepPositionText => Localize(
+    public string StepPositionText => FormatLocalize(
         "AcpSetup_Step_Position",
-        $"Step {(int)Step + 1} of {TotalSteps}")
-        .Replace("{0}", ((int)Step + 1).ToString(System.Globalization.CultureInfo.CurrentCulture))
-        .Replace("{1}", TotalSteps.ToString(System.Globalization.CultureInfo.CurrentCulture));
+        "Step {0} of {1}",
+        (int)Step + 1,
+        TotalSteps);
 
     private const int TotalSteps = 5;
 
@@ -267,13 +271,33 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     public bool IsAdapterInstalled
         => AdapterProbe?.Availability == AcpComponentAvailability.Installed;
 
-    public bool HasAdapterProbeCommand => !string.IsNullOrWhiteSpace(AdapterProbeCommand);
+    /// <summary>
+    /// True when the custom-command override panel is worth showing: the launcher is named and the
+    /// probe did not already confirm the adapter present. An installed adapter has a launcher too,
+    /// so gating on the command alone would offer "why not found?" about a component that was found.
+    /// </summary>
+    public bool HasAdapterProbeCommand
+        => !string.IsNullOrWhiteSpace(AdapterProbeCommand) && !IsAdapterUsable;
 
     public bool HasAdapterProbeDetail => !string.IsNullOrWhiteSpace(AdapterProbeDetail);
 
     public bool HasTestResult => TestResult is not null;
 
     public bool IsTestSuccessful => TestResult?.IsSuccess == true;
+
+    /// <summary>True when the last test failed. Distinct from HasTestResult, which is also
+    /// true on success — the failure banner must not open on a passing test.</summary>
+    public bool IsTestFailed => TestResult is not null && !TestResult.IsSuccess;
+
+    /// <summary>Raw failure detail from the connectivity test (stderr excerpt, protocol error),
+    /// empty on success or before any test.</summary>
+    /// <remarks>
+    /// Developer-facing English from the platform layer, shown as the small print under the
+    /// localized remediation advice — same contract as AdapterProbeDetail.
+    /// </remarks>
+    public string TestErrorDetail => TestResult?.ErrorDetail ?? string.Empty;
+
+    public bool HasTestErrorDetail => !string.IsNullOrWhiteSpace(TestErrorDetail);
 
     /// <summary>Localized name of the stage a failed test reached, empty on success.</summary>
     public string TestFailureStageText
@@ -894,6 +918,24 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     private string Localize(string key, string fallback)
         => CoreStringResolver.Resolve(_localizer, key, fallback);
+
+    /// <summary>
+    /// Resolves a parameterized resource, formatting the arguments into whichever value wins.
+    /// Mirrors the resolver's contract: no localizer, missing key, or blank value all fall back,
+    /// so the caller never renders an empty slot where a sentence belongs.
+    /// </summary>
+    private string FormatLocalize(string key, string fallback, params object[] arguments)
+    {
+        if (_localizer is null)
+        {
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments);
+        }
+
+        var localized = _localizer[key, arguments];
+        return localized.ResourceNotFound || string.IsNullOrWhiteSpace(localized.Value)
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, fallback, arguments)
+            : localized.Value;
+    }
 
     private const string InstallFailedKey = "AcpSetup_Install_Failed";
 

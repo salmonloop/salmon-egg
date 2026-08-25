@@ -518,6 +518,9 @@ Create the corresponding Markdown file in:
   <data name="AcpSetup_Stage_Completed" xml:space="preserve">
     <value>Completed</value>
   </data>
+  <data name="AcpSetup_Step_Position" xml:space="preserve">
+    <value>Step {0} of {1}</value>
+  </data>
   <data name="AcpSetup_Remediation_CommandResolution" xml:space="preserve">
     <value>The launch command was not found. Make sure the agent runtime is installed and on PATH, then detect again.</value>
   </data>
