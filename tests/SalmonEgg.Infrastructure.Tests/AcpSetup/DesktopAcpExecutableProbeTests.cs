@@ -22,7 +22,8 @@ public sealed class DesktopAcpExecutableProbeTests
     [InlineData("   ")]
     public async Task ResolveExecutablePathAsync_WithBlankCommand_ShouldReturnNull(string command)
     {
-        var resolved = await new DesktopAcpExecutableProbe().ResolveExecutablePathAsync(command);
+        var resolved = await new DesktopAcpExecutableProbe()
+            .ResolveExecutablePathAsync(command, TestContext.Current.CancellationToken);
 
         Assert.Null(resolved);
     }
@@ -31,10 +32,11 @@ public sealed class DesktopAcpExecutableProbeTests
     public async Task ResolveExecutablePathAsync_WithExistingExplicitPath_ShouldReturnFullPath()
     {
         var file = Path.Combine(Path.GetTempPath(), $"acp-probe-{Guid.NewGuid():N}");
-        await File.WriteAllTextAsync(file, "#!/bin/sh\n");
+        await File.WriteAllTextAsync(file, "#!/bin/sh\n", TestContext.Current.CancellationToken);
         try
         {
-            var resolved = await new DesktopAcpExecutableProbe().ResolveExecutablePathAsync(file);
+            var resolved = await new DesktopAcpExecutableProbe()
+                .ResolveExecutablePathAsync(file, TestContext.Current.CancellationToken);
 
             Assert.Equal(Path.GetFullPath(file), resolved);
         }
@@ -49,7 +51,8 @@ public sealed class DesktopAcpExecutableProbeTests
     {
         var missing = Path.Combine(Path.GetTempPath(), $"acp-absent-{Guid.NewGuid():N}");
 
-        var resolved = await new DesktopAcpExecutableProbe().ResolveExecutablePathAsync(missing);
+        var resolved = await new DesktopAcpExecutableProbe()
+            .ResolveExecutablePathAsync(missing, TestContext.Current.CancellationToken);
 
         Assert.Null(resolved);
     }
@@ -58,7 +61,7 @@ public sealed class DesktopAcpExecutableProbeTests
     public async Task ResolveExecutablePathAsync_WithNameNotOnPath_ShouldReturnNull()
     {
         var resolved = await new DesktopAcpExecutableProbe()
-            .ResolveExecutablePathAsync($"acp-nonexistent-{Guid.NewGuid():N}");
+            .ResolveExecutablePathAsync($"acp-nonexistent-{Guid.NewGuid():N}", TestContext.Current.CancellationToken);
 
         Assert.Null(resolved);
     }
@@ -77,7 +80,7 @@ public sealed class DesktopAcpExecutableProbeTests
     public async Task ReadVersionAsync_WithUnresolvableCommand_ShouldReturnNull()
     {
         var version = await new DesktopAcpExecutableProbe()
-            .ReadVersionAsync($"acp-nonexistent-{Guid.NewGuid():N}", new[] { "--version" });
+            .ReadVersionAsync($"acp-nonexistent-{Guid.NewGuid():N}", new[] { "--version" }, TestContext.Current.CancellationToken);
 
         Assert.Null(version);
     }
@@ -85,7 +88,8 @@ public sealed class DesktopAcpExecutableProbeTests
     [Fact]
     public async Task ReadVersionAsync_WithNullArguments_ShouldReturnNull()
     {
-        var version = await new DesktopAcpExecutableProbe().ReadVersionAsync("npm", null!);
+        var version = await new DesktopAcpExecutableProbe()
+            .ReadVersionAsync("npm", null!, TestContext.Current.CancellationToken);
 
         Assert.Null(version);
     }
@@ -99,7 +103,8 @@ public sealed class DesktopAcpExecutableProbeTests
     [InlineData("   ")]
     public async Task LocateGlobalNodePackageAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe().LocateGlobalNodePackageAsync(packageId);
+        var installed = await new DesktopAcpExecutableProbe()
+            .LocateGlobalNodePackageAsync(packageId, TestContext.Current.CancellationToken);
 
         Assert.Null(installed.IsInstalled);
     }
@@ -109,7 +114,8 @@ public sealed class DesktopAcpExecutableProbeTests
     [InlineData("   ")]
     public async Task LocateGlobalUvToolAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe().LocateGlobalUvToolAsync(packageId);
+        var installed = await new DesktopAcpExecutableProbe()
+            .LocateGlobalUvToolAsync(packageId, TestContext.Current.CancellationToken);
 
         Assert.Null(installed.IsInstalled);
     }
