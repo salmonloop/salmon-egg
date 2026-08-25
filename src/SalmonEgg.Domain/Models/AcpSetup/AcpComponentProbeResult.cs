@@ -33,6 +33,9 @@ public sealed class AcpComponentProbeResult
     /// <summary>Version string as reported by the component, when it could be read.</summary>
     public string? Version { get; init; }
 
+    /// <summary>Package-manager location when this component was found as a package.</summary>
+    public string? PackageLocation { get; init; }
+
     /// <summary>
     /// Diagnostic detail for <see cref="AcpComponentAvailability.Missing"/> and
     /// <see cref="AcpComponentAvailability.Undetermined"/>. Never surfaced as the primary message.
@@ -55,13 +58,15 @@ public sealed class AcpComponentProbeResult
         string componentId,
         string? executablePath,
         string? version,
-        IReadOnlyList<string>? candidates = null)
+        IReadOnlyList<string>? candidates = null,
+        string? packageLocation = null)
         => new()
         {
             ComponentId = componentId,
             Availability = AcpComponentAvailability.Installed,
             ExecutablePath = executablePath,
             Version = version,
+            PackageLocation = packageLocation,
             ExecutableCandidates = candidates
                 ?? (executablePath is null ? Array.Empty<string>() : new[] { executablePath })
         };

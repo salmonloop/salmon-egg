@@ -67,7 +67,4 @@ public sealed class AcpCommandOverrides
             ? command
             : _overrides.TryGetValue(command, out var path) ? path : command;
 
-    /// <summary>True when the user supplied a path for <paramref name="command"/>.</summary>
-    public bool Has(string command)
-        => !string.IsNullOrWhiteSpace(command) && _overrides.ContainsKey(command);
 }

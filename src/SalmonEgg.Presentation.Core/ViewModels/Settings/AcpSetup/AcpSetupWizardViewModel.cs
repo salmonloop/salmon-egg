@@ -36,6 +36,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private readonly IUiDispatcher _uiDispatcher;
     private readonly IStringLocalizer<CoreStrings>? _localizer;
     private readonly ILogger<AcpSetupWizardViewModel> _logger;
+    private bool _suppressAdapterSelectionProbe;
 
     public AcpSetupWizardViewModel(
         AcpSetupWizardOrchestrator orchestrator,
@@ -115,6 +116,25 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
     private AcpAdapterDescriptor? _selectedAdapter;
 
+    /// <summary>
+    /// A verdict belongs to one adapter. Changing the picker therefore clears the previous verdict and
+    /// probes the newly selected adapter; otherwise a successful adapter A probe could incorrectly let
+    /// adapter B proceed to the launch step.
+    /// </summary>
+    partial void OnSelectedAdapterChanged(AcpAdapterDescriptor? value)
+    {
+        AdapterProbe = null;
+        TestResult = null;
+        Parameters.Clear();
+        LaunchCommandPreview = string.Empty;
+        AdapterCustomCommand = string.Empty;
+
+        if (!_suppressAdapterSelectionProbe && value is not null && IsOnComponentSetup)
+        {
+            _ = DetectAdapterCommand.ExecuteAsync(null);
+        }
+    }
+
     /// <summary>Latest adapter probe for the selected adapter, or null before it has been probed.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
@@ -124,6 +144,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsAdapterUndetermined))]
     [NotifyPropertyChangedFor(nameof(AdapterProbeDetail))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeDetail))]
+    [NotifyPropertyChangedFor(nameof(AdapterPackageLocation))]
+    [NotifyPropertyChangedFor(nameof(HasAdapterPackageLocation))]
     [NotifyPropertyChangedFor(nameof(IsAdapterBuiltIn))]
     [NotifyPropertyChangedFor(nameof(IsAdapterInstalled))]
     private AcpComponentProbeResult? _adapterProbe;
@@ -218,6 +240,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// developer-facing English from the platform layer rather than localized guidance.
     /// </remarks>
     public string AdapterProbeDetail => AdapterProbe?.Detail ?? string.Empty;
+
+    /// <summary>Package directory reported by the package manager when the adapter was found.</summary>
+    public string AdapterPackageLocation => AdapterProbe?.PackageLocation ?? string.Empty;
+
+    public bool HasAdapterPackageLocation => !string.IsNullOrWhiteSpace(AdapterPackageLocation);
 
     /// <summary>
     /// The launcher the adapter is detected and started through, empty for a built-in adapter that needs
@@ -317,7 +344,18 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 var probe = await _orchestrator
                     .DetectComponentAsync(adapter.Component, CollectCommandOverrides(), token)
                     .ConfigureAwait(false);
-                await _uiDispatcher.EnqueueAsync(() => AdapterProbe = probe).ConfigureAwait(false);
+                await _uiDispatcher
+                    .EnqueueAsync(() =>
+                    {
+                        // A user can change the native ComboBox while the process probe is running.
+                        // The late result belongs to the captured adapter, never automatically to the
+                        // newer selection.
+                        if (ReferenceEquals(SelectedAdapter, adapter))
+                        {
+                            AdapterProbe = probe;
+                        }
+                    })
+                    .ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -401,8 +439,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
-                        AdapterProbe = probe;
-                        ReportInstallFailure(install);
+                        if (ReferenceEquals(SelectedAdapter, adapter))
+                        {
+                            AdapterProbe = probe;
+                            ReportInstallFailure(install);
+                        }
                     })
                     .ConfigureAwait(false);
             },
@@ -519,6 +560,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         AcpSetupWizardStep.ComponentSetup =>
             SelectedAdapter is not null
                 && SelectedAgent?.IsMissing != true
+                && AdapterProbe is not null
                 && !IsAdapterMissing,
         AcpSetupWizardStep.Parameters => true,
         AcpSetupWizardStep.Test => IsTestSuccessful,
@@ -558,7 +600,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             Adapters.Add(adapter);
         }
 
-        SelectedAdapter = agent.ResolveRecommendedAdapter();
+        _suppressAdapterSelectionProbe = true;
+        try
+        {
+            SelectedAdapter = agent.ResolveRecommendedAdapter();
+        }
+        finally
+        {
+            _suppressAdapterSelectionProbe = false;
+        }
     }
 
     private void PrepareParameters()

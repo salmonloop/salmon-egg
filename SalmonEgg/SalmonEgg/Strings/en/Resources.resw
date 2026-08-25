@@ -1482,6 +1482,9 @@
   <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
     <value>Found at</value>
   </data>
+  <data name="AcpSetup_PackageLocationLabel.Text" xml:space="preserve">
+    <value>Adapter package location</value>
+  </data>
   <data name="AcpSetup_AdapterBuiltInBar.Title" xml:space="preserve">
     <value>This agent speaks ACP natively</value>
   </data>

@@ -26,8 +26,8 @@ public sealed class UnsupportedAcpSetupTests
 
         Assert.Null(await probe.ResolveExecutablePathAsync("npx"));
         Assert.Null(await probe.ReadVersionAsync("npx", new[] { "--version" }));
-        Assert.Null(await probe.IsGlobalNodePackageInstalledAsync("@scope/pkg"));
-        Assert.Null(await probe.IsGlobalUvToolInstalledAsync("tool"));
+        Assert.Null((await probe.LocateGlobalNodePackageAsync("@scope/pkg")).IsInstalled);
+        Assert.Null((await probe.LocateGlobalUvToolAsync("tool")).IsInstalled);
     }
 
     [Fact]

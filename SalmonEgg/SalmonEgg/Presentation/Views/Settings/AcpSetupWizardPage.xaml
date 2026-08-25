@@ -245,6 +245,20 @@
                                 </InfoBar.ActionButton>
                             </InfoBar>
 
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="6"
+                                        Visibility="{x:Bind ViewModel.HasAdapterPackageLocation, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock x:Uid="AcpSetup_PackageLocationLabel"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                <TextBlock Text="{x:Bind ViewModel.AdapterPackageLocation, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           FontFamily="Consolas"
+                                           TextTrimming="CharacterEllipsis"
+                                           IsTextSelectionEnabled="True"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                            </StackPanel>
+
                             <!-- Why the probe reached its verdict. Platform-layer English, so it sits
                                  below the localized copy rather than replacing it. -->
                             <TextBlock x:Name="AcpSetupAdapterProbeDetail"

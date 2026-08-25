@@ -879,6 +879,9 @@
   <data name="AcpSetup_ResolvedPathLabel.Text" xml:space="preserve">
     <value>已找到</value>
   </data>
+  <data name="AcpSetup_PackageLocationLabel.Text" xml:space="preserve">
+    <value>适配器安装位置</value>
+  </data>
   <data name="AcpSetup_AdapterBuiltInBar.Title" xml:space="preserve">
     <value>这个 Agent 自带 ACP</value>
   </data>
