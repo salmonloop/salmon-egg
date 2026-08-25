@@ -4,8 +4,8 @@ using System.Text.Json.Serialization;
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Authenticate 方法的请求参数。
-    /// 用于向 Agent 发起认证请求。
+    /// Request parameters for the <c>authenticate</c> method.
+    /// Used to initiate an authentication request against the Agent.
     /// </summary>
     public sealed record AuthenticateParams : AcpProtocolObject
     {
@@ -29,21 +29,21 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Authenticate 方法的响应。
+    /// Response for the <c>authenticate</c> method.
     /// </summary>
     public sealed record AuthenticateResponse : AcpProtocolObject
     {
     }
 
     /// <summary>
-    /// Logout 方法的请求参数。
+    /// Request parameters for the <c>logout</c> method.
     /// </summary>
     public sealed record LogoutParams : AcpProtocolObject
     {
     }
 
     /// <summary>
-    /// Logout 方法的响应。
+    /// Response for the <c>logout</c> method.
     /// </summary>
     public sealed record LogoutResponse : AcpProtocolObject
     {
@@ -51,22 +51,22 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 认证方法枚举。
+    /// Authentication methods.
     /// </summary>
     public enum AuthMethod
     {
         /// <summary>
-        /// Bearer Token 认证。
+        /// Bearer token authentication.
         /// </summary>
         Bearer,
 
         /// <summary>
-        /// API Key 认证。
+        /// API key authentication.
         /// </summary>
         ApiKey,
 
         /// <summary>
-        /// 其他认证方法。
+        /// Any other authentication method.
         /// </summary>
         Other
     }

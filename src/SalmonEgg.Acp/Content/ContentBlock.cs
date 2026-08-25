@@ -7,8 +7,8 @@ using SalmonEgg.Acp.Protocol;
 namespace SalmonEgg.Acp.Content
 {
     /// <summary>
-    /// 内容块的基类。
-    /// 用于表示会话中的各种类型的内容（文本、图片、音频、资源等）。
+    /// Base type for content blocks.
+    /// Represents the various kinds of content exchanged in a session (text, image, audio, resource, and so on).
     /// ContentBlock uses a dedicated converter so protocol fields retain their wire shape.
     /// </summary>
     [JsonConverter(typeof(ContentBlockJsonConverter))]
@@ -24,17 +24,18 @@ namespace SalmonEgg.Acp.Content
         internal string? UnknownTypeDiscriminator { get; init; }
 
         /// <summary>
-        /// 未知判别值内容块的原始 payload，原样保留以供无损透传。
-        /// spec 要求 client 对未知 content 类型保留原始形态，由 Agent 而非 client 决定接受或拒绝；
-        /// 已知类型（text/image/audio/resource/resource_link）不使用此字段。
-        /// 由 <see cref="ContentBlockJsonConverter"/> 手动读写，不经默认序列化。
+        /// Raw payload of a content block with an unknown type discriminator, kept verbatim for lossless passthrough.
+        /// The spec requires a client to preserve the original shape of unknown content types, leaving the decision
+        /// to accept or reject them to the Agent rather than the client; the known types
+        /// (text/image/audio/resource/resource_link) do not use this field.
+        /// Read and written manually by <see cref="ContentBlockJsonConverter"/>, bypassing default serialization.
         /// </summary>
         [JsonIgnore]
         internal JsonElement? RawPayload { get; init; }
 
         /// <summary>
-        /// 内容块的类型标识符。
-        /// 用于多态序列化和反序列化。
+        /// Type discriminator of the content block.
+        /// Used for polymorphic serialization and deserialization.
         /// </summary>
         [JsonIgnore]
         public virtual string Type => UnknownTypeDiscriminator ?? string.Empty;
@@ -190,9 +191,11 @@ namespace SalmonEgg.Acp.Content
 
         private static ContentBlock ReadUnknown(JsonElement root, string discriminator)
         {
-            // 未知判别值走 passthrough:spec 要求 receiver 对不认识的 content 类型保留 raw payload,
-            // 由 Agent 而非 client 决定接受或拒绝。原样保留整个 block object 以供无损 round-trip,
-            // 不丢弃 type/annotations/_meta 之外的字段(对照 McpServerJsonConverter 的 RawPayload 范式)。
+            // Unknown discriminators take the passthrough path: the spec requires a receiver to preserve the raw
+            // payload of content types it does not recognize, leaving the decision to accept or reject them to the
+            // Agent rather than the client. The whole block object is kept verbatim so the round-trip is lossless
+            // and fields beyond type/annotations/_meta are not dropped (mirrors the RawPayload pattern in
+            // McpServerJsonConverter).
             return new ContentBlock
             {
                 UnknownTypeDiscriminator = discriminator,
@@ -468,10 +471,12 @@ namespace SalmonEgg.Acp.Content
                 throw new JsonException("Unknown ContentBlock instances must preserve their original type discriminator.");
             }
 
-            // 无损透传:原样写回读入时保留的 raw payload,不重排字段、不丢弃未知属性。
-            // RawPayload 是未知 block 的唯一权威事实源(含其 annotations/_meta),故不叠加另写,
-            // 避免第二套状态 owner。用 WriteRawValue(GetRawText()) 保证字节级保真(对照 CustomMcpServer)。
-            // 若 RawPayload 为空(如手工构造的未知 block),退化为按已知字段最小写出,仍携带原始 type。
+            // Lossless passthrough: write back the raw payload captured on read, without reordering fields or
+            // dropping unknown properties. RawPayload is the single authoritative source of truth for an unknown
+            // block (including its annotations/_meta), so nothing else is written alongside it, which avoids a
+            // second state owner. WriteRawValue(GetRawText()) guarantees byte-level fidelity (mirrors
+            // CustomMcpServer). When RawPayload is absent (for example a hand-constructed unknown block), fall back
+            // to a minimal write of the known fields, still carrying the original type.
             if (value.RawPayload is { ValueKind: JsonValueKind.Object } rawPayload)
             {
                 writer.WriteRawValue(rawPayload.GetRawText());

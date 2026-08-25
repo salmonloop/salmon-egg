@@ -4,45 +4,45 @@ using System.Text.Json.Serialization;
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// JSON-RPC 2.0 请求消息。
-    /// 用于从客户端向服务器发送请求。
+    /// A JSON-RPC 2.0 request message.
+    /// Used to send a request from the client to the server.
     /// </summary>
     internal sealed class JsonRpcRequest : JsonRpcMessage
     {
         /// <summary>
-        /// 请求的唯一标识符。
-        /// 可以是字符串、数字、null，但不能是布尔值。
-        /// 服务器必须在响应中包含相同的 id。
+        /// The unique identifier of the request.
+        /// May be a string, a number, or null, but never a boolean.
+        /// The server must echo the same id back in its response.
         /// </summary>
         [JsonPropertyName("id")]
         public object Id { get; set; } = string.Empty;
 
         /// <summary>
-        /// 要调用的方法名。
+        /// The name of the method to invoke.
         /// </summary>
         [JsonPropertyName("method")]
         public string Method { get; set; } = string.Empty;
 
         /// <summary>
-        /// 方法的参数。
-        /// 可以是对象、数组、原始值或省略。
+        /// The parameters of the method.
+        /// May be an object, an array, a primitive value, or omitted entirely.
         /// </summary>
         [JsonPropertyName("params")]
         public JsonElement? Params { get; set; }
 
         /// <summary>
-        /// 创建一个新的 JsonRpcRequest 实例。
+        /// Creates a new JsonRpcRequest instance.
         /// </summary>
         public JsonRpcRequest()
         {
         }
 
         /// <summary>
-        /// 创建一个新的 JsonRpcRequest 实例。
+        /// Creates a new JsonRpcRequest instance.
         /// </summary>
-        /// <param name="id">请求 ID</param>
-        /// <param name="method">方法名</param>
-        /// <param name="params">方法参数</param>
+        /// <param name="id">The request id.</param>
+        /// <param name="method">The method name.</param>
+        /// <param name="params">The method parameters.</param>
         public JsonRpcRequest(object id, string method, JsonElement? @params = null)
         {
             Id = id;

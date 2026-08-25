@@ -3,70 +3,71 @@ using System.Text.Json.Serialization;
 namespace SalmonEgg.Acp.Content
 {
     /// <summary>
-    /// 资源链接内容块。
-    /// 用于表示对外部资源的引用（URI 链接）。
+    /// Resource link content block.
+    /// Represents a reference to an external resource (a URI link).
     /// </summary>
     public sealed record ResourceLinkContentBlock : ContentBlock
     {
         /// <summary>
-        /// 内容块类型标识符，固定为 "resource_link"。
-        /// 此属性被 [JsonIgnore] 忽略；wire 判别值由 ContentBlockJsonConverter 手写读写（保留未知类型 RawPayload 透传）。
+        /// Content block type identifier, always "resource_link".
+        /// This property is excluded by [JsonIgnore]; the wire discriminator is read and written by hand in
+        /// ContentBlockJsonConverter (which preserves RawPayload passthrough for unknown types).
         /// </summary>
         [JsonIgnore]
         public override string Type => "resource_link";
 
         /// <summary>
-        /// 资源的 URI 标识符。
+        /// URI identifying the resource.
         /// </summary>
         [JsonPropertyName("uri")]
         public string Uri { get; init; } = string.Empty;
 
         /// <summary>
-        /// 资源的名称（可选）。
+        /// Name of the resource (optional).
         /// </summary>
         [JsonPropertyName("name")]
         public string? Name { get; init; }
 
         /// <summary>
-        /// 资源的 MIME 类型（可选）。
+        /// MIME type of the resource (optional).
         /// </summary>
         [JsonPropertyName("mimeType")]
         public string? MimeType { get; init; }
 
         /// <summary>
-        /// 资源的标题（可选）。
+        /// Title of the resource (optional).
         /// </summary>
         [JsonPropertyName("title")]
         public string? Title { get; init; }
 
         /// <summary>
-        /// 资源的描述（可选）。
+        /// Description of the resource (optional).
         /// </summary>
         [JsonPropertyName("description")]
         public string? Description { get; init; }
 
         /// <summary>
-        /// 资源的大小（字节，可选）。
+        /// Size of the resource, in bytes (optional).
         /// </summary>
         [JsonPropertyName("size")]
         public long? Size { get; init; }
 
         /// <summary>
-        /// 创建新的资源链接内容块实例。
+        /// Creates a new resource link content block instance.
         /// </summary>
         public ResourceLinkContentBlock()
         {
         }
 
         /// <summary>
-        /// 创建新的资源链接内容块实例。
+        /// Creates a new resource link content block instance.
         /// </summary>
-        /// <param name="uri">资源 URI</param>
-        /// <param name="name">资源名称</param>
-        /// <param name="mimeType">MIME 类型</param>
-        /// <param name="title">标题</param>
-        /// <param name="description">描述</param>
-        /// <param name="size">大小（字节）</param>
+        /// <param name="uri">Resource URI</param>
+        /// <param name="name">Resource name</param>
+        /// <param name="mimeType">MIME type</param>
+        /// <param name="title">Title</param>
+        /// <param name="description">Description</param>
+        /// <param name="size">Size, in bytes</param>
         public ResourceLinkContentBlock(
             string uri,
             string? name = null,

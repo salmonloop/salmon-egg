@@ -36,7 +36,9 @@
     <RepositoryUrl>https://github.com/salmonloop/salmon-egg</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- Public surface XML docs are mixed language today; keep missing-doc noise from blocking AOT/warn-as-error. -->
+    <!-- Public surface docs are English, but many members are still undocumented. Suppressing the
+         missing-doc family keeps that backlog from blocking AOT/warn-as-error; it is not a licence
+         to ship undocumented new public API. -->
     <NoWarn>$(NoWarn);CS1591;CS1572;CS1573</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>

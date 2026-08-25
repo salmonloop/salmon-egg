@@ -7,15 +7,15 @@ using SalmonEgg.Acp.Protocol;
 namespace SalmonEgg.Acp.Plan
 {
     /// <summary>
-    /// 计划类。
-    /// 表示 Agent 的行动计划，包含一系列计划条目。
+    /// Plan.
+    /// Represents an agent's action plan, containing a sequence of plan entries.
     /// </summary>
     public sealed record Plan : AcpProtocolObject
     {
         private readonly List<PlanEntry> _entries = new();
 
         /// <summary>
-        /// 计划条目列表。
+        /// The list of plan entries.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("entries")]
@@ -26,23 +26,23 @@ namespace SalmonEgg.Acp.Plan
         }
 
         /// <summary>
-        /// 创建新的计划实例。
+        /// Creates a new plan instance.
         /// </summary>
         public Plan()
         {
         }
 
         /// <summary>
-        /// 创建新的计划实例。
+        /// Creates a new plan instance.
         /// </summary>
-        /// <param name="entries">计划条目列表</param>
+        /// <param name="entries">The list of plan entries</param>
         public Plan(List<PlanEntry> entries)
         {
             Entries = ValidateEntries(entries);
         }
 
         /// <summary>
-        /// 返回追加一条新计划条目后的计划快照（不修改当前实例）。
+        /// Returns a snapshot of the plan with one new entry appended (the current instance is not modified).
         /// </summary>
         public Plan WithEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
@@ -57,19 +57,19 @@ namespace SalmonEgg.Acp.Plan
         }
 
         /// <summary>
-        /// 获取所有待处理的条目。
+        /// Gets all pending entries.
         /// </summary>
         public List<PlanEntry> GetPendingEntries()
             => Entries.FindAll(e => e.Status == PlanEntryStatus.Pending);
 
         /// <summary>
-        /// 获取所有进行中的条目。
+        /// Gets all in-progress entries.
         /// </summary>
         public List<PlanEntry> GetInProgressEntries()
             => Entries.FindAll(e => e.Status == PlanEntryStatus.InProgress);
 
         /// <summary>
-        /// 获取所有已完成的条目。
+        /// Gets all completed entries.
         /// </summary>
         public List<PlanEntry> GetCompletedEntries()
             => Entries.FindAll(e => e.Status == PlanEntryStatus.Completed);
@@ -94,15 +94,15 @@ namespace SalmonEgg.Acp.Plan
     }
 
     /// <summary>
-    /// 计划条目类。
-    /// 表示计划中的一个具体任务或步骤。
+    /// Plan entry.
+    /// Represents a specific task or step within a plan.
     /// </summary>
     public sealed record PlanEntry : AcpProtocolObject
     {
         private readonly string _content = string.Empty;
 
         /// <summary>
-        /// 条目的内容描述。
+        /// The content description of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("content")]
@@ -113,32 +113,32 @@ namespace SalmonEgg.Acp.Plan
         }
 
         /// <summary>
-        /// 条目的当前状态。
+        /// The current status of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("status")]
         public PlanEntryStatus Status { get; init; } = PlanEntryStatus.Pending;
 
         /// <summary>
-        /// 条目的优先级。
+        /// The priority of the entry.
         /// </summary>
         [JsonRequired]
         [JsonPropertyName("priority")]
         public PlanEntryPriority Priority { get; init; } = PlanEntryPriority.Medium;
 
         /// <summary>
-        /// 创建新的计划条目实例。
+        /// Creates a new plan entry instance.
         /// </summary>
         public PlanEntry()
         {
         }
 
         /// <summary>
-        /// 创建新的计划条目实例。
+        /// Creates a new plan entry instance.
         /// </summary>
-        /// <param name="content">条目内容</param>
-        /// <param name="status">条目状态</param>
-        /// <param name="priority">条目优先级</param>
+        /// <param name="content">The entry content</param>
+        /// <param name="status">The entry status</param>
+        /// <param name="priority">The entry priority</param>
         public PlanEntry(string content, PlanEntryStatus? status = null, PlanEntryPriority? priority = null)
         {
             Content = content ?? throw new JsonException("Plan entry content must not be null.");
@@ -147,13 +147,13 @@ namespace SalmonEgg.Acp.Plan
         }
 
         /// <summary>
-        /// 返回标记为进行中的条目快照（不修改当前实例）。
+        /// Returns a snapshot of the entry marked as in progress (the current instance is not modified).
         /// </summary>
         public PlanEntry Started()
             => this with { Status = PlanEntryStatus.InProgress };
 
         /// <summary>
-        /// 返回标记为已完成的条目快照（不修改当前实例）。
+        /// Returns a snapshot of the entry marked as completed (the current instance is not modified).
         /// </summary>
         public PlanEntry Completed()
             => this with { Status = PlanEntryStatus.Completed };
@@ -161,13 +161,14 @@ namespace SalmonEgg.Acp.Plan
 
 
     /// <summary>
-    /// 计划条目状态。
+    /// The status of a plan entry.
     /// </summary>
     /// <remarks>
-    /// 建模为可扩展值类型而非封闭枚举，以便无损保留并 round-trip 未知的 wire 值，对齐权威
-    /// ACP schema（<c>PlanEntryStatus</c> 为 <c>#[non_exhaustive]</c> 且带 untagged
-    /// <c>Other(String)</c> 兜底）。依据 ACP 扩展契约，不以 <c>_</c> 开头的未知值保留给未来
-    /// ACP variant，client 不得拒绝。
+    /// Modeled as an extensible value type rather than a closed enum, so that unknown wire values are
+    /// preserved losslessly and round-trip intact, matching the authoritative ACP schema
+    /// (<c>PlanEntryStatus</c> is <c>#[non_exhaustive]</c> with an untagged <c>Other(String)</c> fallback).
+    /// Per the ACP extension contract, unknown values that do not start with <c>_</c> are reserved for future
+    /// ACP variants and must not be rejected by a client.
     /// </remarks>
     [JsonConverter(typeof(PlanEntryStatusJsonConverter))]
     public readonly struct PlanEntryStatus : IEquatable<PlanEntryStatus>
@@ -175,36 +176,36 @@ namespace SalmonEgg.Acp.Plan
         private readonly string? _value;
 
         /// <summary>
-        /// 以给定 wire 值创建计划条目状态。
+        /// Creates a plan entry status carrying the given wire value.
         /// </summary>
-        /// <param name="value">协议字符串值。</param>
+        /// <param name="value">The protocol string value.</param>
         public PlanEntryStatus(string value)
         {
             _value = value ?? throw new ArgumentNullException(nameof(value));
         }
 
         /// <summary>
-        /// 条目已创建但尚未开始。
+        /// The entry has been created but has not started yet.
         /// </summary>
         public static PlanEntryStatus Pending { get; } = new("pending");
 
         /// <summary>
-        /// 条目正在执行中。
+        /// The entry is currently in progress.
         /// </summary>
         public static PlanEntryStatus InProgress { get; } = new("in_progress");
 
         /// <summary>
-        /// 条目已成功完成。
+        /// The entry completed successfully.
         /// </summary>
         public static PlanEntryStatus Completed { get; } = new("completed");
 
         /// <summary>
-        /// 条目在完成前被取消。
+        /// The entry was cancelled before completion.
         /// </summary>
         public static PlanEntryStatus Cancelled { get; } = new("cancelled");
 
         /// <summary>
-        /// 此状态承载的 wire 值。
+        /// The wire value carried by this status.
         /// </summary>
         public string Value => _value ?? string.Empty;
 
@@ -218,12 +219,12 @@ namespace SalmonEgg.Acp.Plan
         public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
 
         /// <summary>
-        /// 判断两个状态是否承载相同 wire 值。
+        /// Determines whether two statuses carry the same wire value.
         /// </summary>
         public static bool operator ==(PlanEntryStatus left, PlanEntryStatus right) => left.Equals(right);
 
         /// <summary>
-        /// 判断两个状态是否承载不同 wire 值。
+        /// Determines whether two statuses carry different wire values.
         /// </summary>
         public static bool operator !=(PlanEntryStatus left, PlanEntryStatus right) => !left.Equals(right);
 
@@ -232,13 +233,14 @@ namespace SalmonEgg.Acp.Plan
     }
 
     /// <summary>
-    /// 计划条目优先级。
+    /// The priority of a plan entry.
     /// </summary>
     /// <remarks>
-    /// 建模为可扩展值类型而非封闭枚举，以便无损保留并 round-trip 未知的 wire 值，对齐权威
-    /// ACP schema（<c>PlanEntryPriority</c> 为 <c>#[non_exhaustive]</c> 且带 untagged
-    /// <c>Other(String)</c> 兜底）。依据 ACP 扩展契约，不以 <c>_</c> 开头的未知值保留给未来
-    /// ACP variant，client 不得拒绝。
+    /// Modeled as an extensible value type rather than a closed enum, so that unknown wire values are
+    /// preserved losslessly and round-trip intact, matching the authoritative ACP schema
+    /// (<c>PlanEntryPriority</c> is <c>#[non_exhaustive]</c> with an untagged <c>Other(String)</c> fallback).
+    /// Per the ACP extension contract, unknown values that do not start with <c>_</c> are reserved for future
+    /// ACP variants and must not be rejected by a client.
     /// </remarks>
     [JsonConverter(typeof(PlanEntryPriorityJsonConverter))]
     public readonly struct PlanEntryPriority : IEquatable<PlanEntryPriority>
@@ -246,31 +248,31 @@ namespace SalmonEgg.Acp.Plan
         private readonly string? _value;
 
         /// <summary>
-        /// 以给定 wire 值创建计划条目优先级。
+        /// Creates a plan entry priority carrying the given wire value.
         /// </summary>
-        /// <param name="value">协议字符串值。</param>
+        /// <param name="value">The protocol string value.</param>
         public PlanEntryPriority(string value)
         {
             _value = value ?? throw new ArgumentNullException(nameof(value));
         }
 
         /// <summary>
-        /// 低优先级。
+        /// Low priority.
         /// </summary>
         public static PlanEntryPriority Low { get; } = new("low");
 
         /// <summary>
-        /// 中等优先级。
+        /// Medium priority.
         /// </summary>
         public static PlanEntryPriority Medium { get; } = new("medium");
 
         /// <summary>
-        /// 高优先级。
+        /// High priority.
         /// </summary>
         public static PlanEntryPriority High { get; } = new("high");
 
         /// <summary>
-        /// 此优先级承载的 wire 值。
+        /// The wire value carried by this priority.
         /// </summary>
         public string Value => _value ?? string.Empty;
 
@@ -284,12 +286,12 @@ namespace SalmonEgg.Acp.Plan
         public override int GetHashCode() => _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value);
 
         /// <summary>
-        /// 判断两个优先级是否承载相同 wire 值。
+        /// Determines whether two priorities carry the same wire value.
         /// </summary>
         public static bool operator ==(PlanEntryPriority left, PlanEntryPriority right) => left.Equals(right);
 
         /// <summary>
-        /// 判断两个优先级是否承载不同 wire 值。
+        /// Determines whether two priorities carry different wire values.
         /// </summary>
         public static bool operator !=(PlanEntryPriority left, PlanEntryPriority right) => !left.Equals(right);
 

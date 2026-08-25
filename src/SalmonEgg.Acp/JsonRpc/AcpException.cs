@@ -4,27 +4,27 @@ using System.Text.Json;
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// ACP 协议异常类。
-    /// 用于表示 JSON-RPC 2.0 协议级别的错误。
+    /// ACP protocol exception.
+    /// Represents an error at the JSON-RPC 2.0 protocol level.
     /// </summary>
     public sealed class AcpException : Exception
     {
         /// <summary>
-        /// JSON-RPC 2.0 错误码。
+        /// The JSON-RPC 2.0 error code.
         /// </summary>
         public int ErrorCode { get; }
 
         /// <summary>
-        /// 可选的附加错误数据。
+        /// Optional additional error data.
         /// </summary>
         public object? ErrorData { get; }
 
         /// <summary>
-        /// 创建新的 AcpException 实例。
+        /// Creates a new <see cref="AcpException"/> instance.
         /// </summary>
-        /// <param name="errorCode">JSON-RPC 2.0 错误码</param>
-        /// <param name="message">异常消息</param>
-        /// <param name="errorData">可选的附加数据</param>
+        /// <param name="errorCode">The JSON-RPC 2.0 error code.</param>
+        /// <param name="message">The exception message.</param>
+        /// <param name="errorData">Optional additional data.</param>
         public AcpException(int errorCode, string message, object? errorData = null)
             : base(FormatMessage(message, errorData))
         {
@@ -33,12 +33,12 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建新的 AcpException 实例。
+        /// Creates a new <see cref="AcpException"/> instance.
         /// </summary>
-        /// <param name="errorCode">JSON-RPC 2.0 错误码</param>
-        /// <param name="message">异常消息</param>
-        /// <param name="innerException">内部异常</param>
-        /// <param name="errorData">可选的附加数据</param>
+        /// <param name="errorCode">The JSON-RPC 2.0 error code.</param>
+        /// <param name="message">The exception message.</param>
+        /// <param name="innerException">The inner exception.</param>
+        /// <param name="errorData">Optional additional data.</param>
         public AcpException(int errorCode, string message, Exception innerException, object? errorData = null)
             : base(FormatMessage(message, errorData), innerException)
         {
@@ -47,10 +47,10 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个解析错误的异常。
+        /// Creates an exception representing a parse error.
         /// </summary>
-        /// <param name="innerException">解析异常</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="innerException">The parse exception.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateParseError(Exception innerException)
         {
             return new AcpException(
@@ -60,11 +60,11 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个无效请求的异常。
+        /// Creates an exception representing an invalid request.
         /// </summary>
-        /// <param name="message">错误消息</param>
-        /// <param name="data">可选的附加数据</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="message">The error message.</param>
+        /// <param name="data">Optional additional data.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInvalidRequest(string message, object? errorData = null)
         {
             return new AcpException(
@@ -74,10 +74,10 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个方法未找到的异常。
+        /// Creates an exception representing a method that was not found.
         /// </summary>
-        /// <param name="methodName">方法名</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="methodName">The method name.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateMethodNotFound(string methodName)
         {
             return new AcpException(
@@ -86,11 +86,11 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个参数无效的异常。
+        /// Creates an exception representing invalid parameters.
         /// </summary>
-        /// <param name="message">错误消息</param>
-        /// <param name="data">可选的附加数据</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="message">The error message.</param>
+        /// <param name="data">Optional additional data.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInvalidParams(string message, object? errorData = null)
         {
             return new AcpException(
@@ -100,12 +100,12 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个内部错误的异常。
+        /// Creates an exception representing an internal error.
         /// </summary>
-        /// <param name="message">错误消息</param>
-        /// <param name="innerException">内部异常</param>
-        /// <param name="data">可选的附加数据</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="message">The error message.</param>
+        /// <param name="innerException">The inner exception.</param>
+        /// <param name="data">Optional additional data.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInternalError(string message, Exception? innerException = null, object? errorData = null)
         {
             if (innerException != null)
@@ -124,9 +124,9 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个未初始化的异常（客户端本地状态）。
+        /// Creates an exception representing an uninitialized state (client-side local state).
         /// </summary>
-        /// <returns>AcpException 实例</returns>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateNotInitialized()
         {
             return new AcpException(
@@ -135,10 +135,10 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个会话未找到的异常。
+        /// Creates an exception representing a session that was not found.
         /// </summary>
-        /// <param name="sessionId">会话 ID</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="sessionId">The session ID.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateSessionNotFound(string sessionId)
         {
             return new AcpException(
@@ -147,11 +147,11 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个权限被拒绝的异常。
+        /// Creates an exception representing a denied permission.
         /// </summary>
-        /// <param name="operation">操作名称</param>
-        /// <param name="path">可选的路径</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="operation">The operation name.</param>
+        /// <param name="path">An optional path.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreatePermissionDenied(string operation, string? path = null)
         {
             var message = path != null
@@ -164,11 +164,11 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个协议版本不匹配的异常。
+        /// Creates an exception representing a protocol version mismatch.
         /// </summary>
-        /// <param name="expected">期望的版本</param>
-        /// <param name="actual">实际的版本</param>
-        /// <returns>AcpException 实例</returns>
+        /// <param name="expected">The expected version.</param>
+        /// <param name="actual">The actual version.</param>
+        /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateProtocolVersionMismatch(string expected, string actual)
         {
             return new AcpException(

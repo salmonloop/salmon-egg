@@ -7,20 +7,20 @@ using SalmonEgg.Acp.Serialization;
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// JSON-RPC 2.0 消息解析器实现。
-    /// 使用 System.Text.Json 进行消息的解析和序列化。
+    /// JSON-RPC 2.0 message parser implementation.
+    /// Uses System.Text.Json to parse and serialize messages.
     /// </summary>
     internal sealed class MessageParser
     {
         private readonly JsonSerializerOptions _options;
 
         /// <summary>
-        /// 获取 JsonSerializerOptions 实例供外部使用。
+        /// Gets the JsonSerializerOptions instance for external use.
         /// </summary>
         public JsonSerializerOptions Options => _options;
 
         /// <summary>
-        /// 创建新的 MessageParser 实例。
+        /// Creates a new MessageParser instance.
         /// </summary>
         public MessageParser()
         {
@@ -44,7 +44,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 解析 JSON 字符串为 JSON-RPC 消息。
+        /// Parses a JSON string into a JSON-RPC message.
         /// </summary>
         public JsonRpcMessage ParseMessage(string json)
         {
@@ -57,30 +57,30 @@ namespace SalmonEgg.Acp.JsonRpc
 
             try
             {
-                // 首先尝试作为基础对象解析以检测类型
+                // First parse as a plain document in order to detect the message type
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                // 检测消息类型
+                // Detect the message type
                 var hasId = root.TryGetProperty("id", out _);
                 var hasResult = root.TryGetProperty("result", out _);
                 var hasError = root.TryGetProperty("error", out _);
 
                 if (hasResult || hasError)
                 {
-                    // 响应消息
+                    // Response message
                     return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcResponse>())
                         ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse response");
                 }
                 else if (hasId)
                 {
-                    // 请求消息
+                    // Request message
                     return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcRequest>())
                         ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse request");
                 }
                 else
                 {
-                    // 通知消息（无 id）
+                    // Notification message (no id)
                     return JsonSerializer.Deserialize(json, GetTypeInfo<JsonRpcNotification>())
                         ?? throw new AcpException(JsonRpcErrorCode.ParseError, "Failed to parse notification");
                 }
@@ -106,7 +106,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 解析 JSON 字符串为请求消息。
+        /// Parses a JSON string into a request message.
         /// </summary>
         public JsonRpcRequest ParseRequest(string json)
         {
@@ -123,7 +123,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 解析 JSON 字符串为通知消息。
+        /// Parses a JSON string into a notification message.
         /// </summary>
         public JsonRpcNotification ParseNotification(string json)
         {
@@ -140,7 +140,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 解析 JSON 字符串为响应消息。
+        /// Parses a JSON string into a response message.
         /// </summary>
         public JsonRpcResponse ParseResponse(string json)
         {
@@ -157,7 +157,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 将 JSON-RPC 消息序列化为 JSON 字符串。
+        /// Serializes a JSON-RPC message into a JSON string.
         /// </summary>
         public string SerializeMessage(JsonRpcMessage message)
         {

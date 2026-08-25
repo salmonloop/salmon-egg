@@ -8,45 +8,45 @@ using SalmonEgg.Acp.Serialization;
 namespace SalmonEgg.Acp.Protocol
 {
     /// <summary>
-    /// Initialize 方法的请求参数。
-    /// 用于客户端向 Agent 发起初始化请求。
+    /// Request parameters for the Initialize method.
+    /// Used by the client to send an initialization request to the Agent.
     /// </summary>
     [JsonConverter(typeof(InitializeParamsJsonConverter))]
     public sealed record InitializeParams : AcpProtocolObject
     {
         /// <summary>
-        /// 协议版本号。必须是整数。
+        /// The protocol version number. Must be an integer.
         /// </summary>
         [JsonPropertyName("protocolVersion")]
         public int ProtocolVersion { get; init; } = AcpProtocolVersion.Default;
 
         /// <summary>
-        /// 客户端信息。
+        /// Client information.
         /// </summary>
         [JsonPropertyName("clientInfo")]
         public ClientInfo ClientInfo { get; init; } = new ClientInfo();
 
         /// <summary>
-        /// 客户端能力声明。
+        /// Client capability declaration.
         /// </summary>
         [JsonPropertyName("clientCapabilities")]
         public ClientCapabilities ClientCapabilities { get; init; } = new ClientCapabilities();
 
         /// <summary>
-        /// 扩展字段（_meta），用于协议可扩展性。
+        /// Extension field (_meta) used for protocol extensibility.
         /// </summary>
         /// <summary>
-        /// 创建新的 InitializeParams 实例。
+        /// Creates a new InitializeParams instance.
         /// </summary>
         public InitializeParams()
         {
         }
 
         /// <summary>
-        /// 创建新的 InitializeParams 实例。
+        /// Creates a new InitializeParams instance.
         /// </summary>
-        /// <param name="clientInfo">客户端信息</param>
-        /// <param name="clientCapabilities">客户端能力</param>
+        /// <param name="clientInfo">Client information</param>
+        /// <param name="clientCapabilities">Client capabilities</param>
         public InitializeParams(ClientInfo clientInfo, ClientCapabilities clientCapabilities)
         {
             ClientInfo = clientInfo;
@@ -55,42 +55,42 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 客户端信息类。
-    /// 包含客户端的名称、标题和版本信息。
+    /// Client information class.
+    /// Contains the name, title, and version information of the client.
     /// </summary>
     public sealed record ClientInfo : AcpProtocolObject
     {
         /// <summary>
-        /// 客户端的名称（标识符）。
+        /// The client name (identifier).
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; init; } = string.Empty;
 
         /// <summary>
-        /// 客户端的显示标题。
+        /// The client display title.
         /// </summary>
         [JsonPropertyName("title")]
         public string? Title { get; init; }
 
         /// <summary>
-        /// 客户端的版本号。
+        /// The client version.
         /// </summary>
         [JsonPropertyName("version")]
         public string Version { get; init; } = "1.0.0";
 
         /// <summary>
-        /// 创建新的 ClientInfo 实例。
+        /// Creates a new ClientInfo instance.
         /// </summary>
         public ClientInfo()
         {
         }
 
         /// <summary>
-        /// 创建新的 ClientInfo 实例。
+        /// Creates a new ClientInfo instance.
         /// </summary>
-        /// <param name="name">客户端名称</param>
-        /// <param name="version">版本号</param>
-        /// <param name="title">显示标题</param>
+        /// <param name="name">Client name</param>
+        /// <param name="version">Version</param>
+        /// <param name="title">Display title</param>
         [SetsRequiredMembers]
         public ClientInfo(string name, string version, string? title = null)
         {
@@ -101,46 +101,46 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 客户端能力声明类。
-    /// 声明客户端支持的功能。
+    /// Client capability declaration class.
+    /// Declares the features supported by the client.
     /// </summary>
     public sealed record ClientCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 文件系统能力。
+        /// File system capabilities.
         /// </summary>
         [JsonPropertyName("fs")]
         public FsCapability? Fs { get; init; }
 
         /// <summary>
-        /// 终端能力。
+        /// Terminal capability.
         /// </summary>
         [JsonPropertyName("terminal")]
         public bool? Terminal { get; init; }
 
         /// <summary>
-        /// 会话相关客户端能力。
+        /// Session-related client capabilities.
         /// </summary>
         [JsonPropertyName("session")]
         public ClientSessionCapabilities? Session { get; init; }
 
         /// <summary>
-        /// 扩展字段（_meta），用于声明自定义客户端能力。
+        /// Extension field (_meta) used to declare custom client capabilities.
         /// </summary>
         /// <summary>
-        /// 创建新的 ClientCapabilities 实例。
+        /// Creates a new ClientCapabilities instance.
         /// </summary>
         public ClientCapabilities()
         {
         }
 
         /// <summary>
-        /// 创建新的 ClientCapabilities 实例。
+        /// Creates a new ClientCapabilities instance.
         /// </summary>
-        /// <param name="fs">文件系统能力</param>
-        /// <param name="terminal">终端能力</param>
-        /// <param name="session">会话能力</param>
-        /// <param name="meta">扩展能力元数据</param>
+        /// <param name="fs">File system capabilities</param>
+        /// <param name="terminal">Terminal capability</param>
+        /// <param name="session">Session capabilities</param>
+        /// <param name="meta">Extension capability metadata</param>
         public ClientCapabilities(
             FsCapability? fs = null,
             bool? terminal = null,
@@ -154,10 +154,10 @@ namespace SalmonEgg.Acp.Protocol
         }
 
         /// <summary>
-        /// 判断是否声明支持指定的扩展能力。
+        /// Determines whether support for the specified extension capability is declared.
         /// </summary>
-        /// <param name="extensionName">扩展能力名称</param>
-        /// <returns>如果声明支持返回 true，否则返回 false</returns>
+        /// <param name="extensionName">Extension capability name</param>
+        /// <returns>true if support is declared; otherwise false</returns>
         public bool SupportsExtension(string extensionName)
         {
             if (string.IsNullOrWhiteSpace(extensionName)
@@ -199,7 +199,7 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 客户端会话能力。
+    /// Client session capabilities.
     /// </summary>
     public sealed record ClientSessionCapabilities : AcpProtocolObject
     {
@@ -209,7 +209,7 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 客户端会话配置选项能力。
+    /// Client session configuration option capabilities.
     /// </summary>
     public sealed record SessionConfigOptionsCapabilities : AcpProtocolObject
     {
@@ -222,34 +222,34 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 文件系统能力类。
+    /// File system capability class.
     /// </summary>
     public sealed record FsCapability : AcpProtocolObject
     {
         /// <summary>
-        /// 是否支持读取文本文件。
+        /// Whether reading text files is supported.
         /// </summary>
         [JsonPropertyName("readTextFile")]
         public bool ReadTextFile { get; init; } = true;
 
         /// <summary>
-        /// 是否支持写入文本文件。
+        /// Whether writing text files is supported.
         /// </summary>
         [JsonPropertyName("writeTextFile")]
         public bool WriteTextFile { get; init; } = true;
 
         /// <summary>
-        /// 创建新的 FsCapability 实例。
+        /// Creates a new FsCapability instance.
         /// </summary>
         public FsCapability()
         {
         }
 
         /// <summary>
-        /// 创建新的 FsCapability 实例。
+        /// Creates a new FsCapability instance.
         /// </summary>
-        /// <param name="readTextFile">是否支持读取</param>
-        /// <param name="writeTextFile">是否支持写入</param>
+        /// <param name="readTextFile">Whether reading is supported</param>
+        /// <param name="writeTextFile">Whether writing is supported</param>
         public FsCapability(bool readTextFile = true, bool writeTextFile = true)
         {
             ReadTextFile = readTextFile;
@@ -285,50 +285,50 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Initialize 方法的响应。
-    /// Agent 对初始化请求的响应。
+    /// Response for the Initialize method.
+    /// The Agent response to the initialization request.
     /// </summary>
     [JsonConverter(typeof(InitializeResponseJsonConverter))]
     public sealed record InitializeResponse : AcpProtocolObject
     {
         /// <summary>
-        /// 协议版本号。必须是整数。
+        /// The protocol version number. Must be an integer.
         /// </summary>
         [JsonPropertyName("protocolVersion")]
         public int ProtocolVersion { get; init; } = AcpProtocolVersion.Default;
 
         /// <summary>
-        /// Agent 信息。
+        /// Agent information.
         /// </summary>
         public AgentInfo AgentInfo { get; init; } = new AgentInfo();
 
         /// <summary>
-        /// Agent 能力声明。
+        /// Agent capability declaration.
         /// </summary>
         public AgentCapabilities AgentCapabilities { get; init; } = new AgentCapabilities();
 
         /// <summary>
-        /// 可选的认证方法列表（当 Agent 需要认证时提供）。
+        /// Optional list of authentication methods (provided when the Agent requires authentication).
         /// </summary>
         [JsonPropertyName("authMethods")]
         public List<AuthMethodDefinition>? AuthMethods { get; init; }
 
         /// <summary>
-        /// 扩展字段（_meta），用于协议可扩展性。
+        /// Extension field (_meta) used for protocol extensibility.
         /// </summary>
         /// <summary>
-        /// 创建新的 InitializeResponse 实例。
+        /// Creates a new InitializeResponse instance.
         /// </summary>
         public InitializeResponse()
         {
         }
 
         /// <summary>
-        /// 创建新的 InitializeResponse 实例。
+        /// Creates a new InitializeResponse instance.
         /// </summary>
-        /// <param name="protocolVersion">协议版本</param>
-        /// <param name="agentInfo">Agent 信息</param>
-        /// <param name="agentCapabilities">Agent 能力</param>
+        /// <param name="protocolVersion">Protocol version</param>
+        /// <param name="agentInfo">Agent information</param>
+        /// <param name="agentCapabilities">Agent capabilities</param>
         public InitializeResponse(int protocolVersion, AgentInfo agentInfo, AgentCapabilities agentCapabilities)
         {
             ProtocolVersion = protocolVersion;
@@ -338,42 +338,42 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Agent 信息类。
-    /// 包含 Agent 的名称、标题和版本信息。
+    /// Agent information class.
+    /// Contains the name, title, and version information of the Agent.
     /// </summary>
     public sealed record AgentInfo : AcpProtocolObject
     {
         /// <summary>
-        /// Agent 的名称（标识符）。
+        /// The Agent name (identifier).
         /// </summary>
         [JsonPropertyName("name")]
         public string Name { get; init; } = string.Empty;
 
         /// <summary>
-        /// Agent 的显示标题。
+        /// The Agent display title.
         /// </summary>
         [JsonPropertyName("title")]
         public string? Title { get; init; }
 
         /// <summary>
-        /// Agent 的版本号。
+        /// The Agent version.
         /// </summary>
         [JsonPropertyName("version")]
         public string Version { get; init; } = "1.0.0";
 
         /// <summary>
-        /// 创建新的 AgentInfo 实例。
+        /// Creates a new AgentInfo instance.
         /// </summary>
         public AgentInfo()
         {
         }
 
         /// <summary>
-        /// 创建新的 AgentInfo 实例。
+        /// Creates a new AgentInfo instance.
         /// </summary>
-        /// <param name="name">Agent 名称</param>
-        /// <param name="version">版本号</param>
-        /// <param name="title">显示标题</param>
+        /// <param name="name">Agent name</param>
+        /// <param name="version">Version</param>
+        /// <param name="title">Display title</param>
         [SetsRequiredMembers]
         public AgentInfo(string name, string version, string? title = null)
         {
@@ -384,56 +384,56 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Agent 能力声明类。
-    /// 声明 Agent 支持的功能。
+    /// Agent capability declaration class.
+    /// Declares the features supported by the Agent.
     /// </summary>
     public sealed record AgentCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 提示相关能力。
+        /// Prompt-related capabilities.
         /// </summary>
         [JsonPropertyName("promptCapabilities")]
         public PromptCapabilities? PromptCapabilities { get; init; }
 
         /// <summary>
-        /// 是否支持会话加载。
+        /// Whether session loading is supported.
         /// </summary>
         [JsonPropertyName("loadSession")]
         public bool? LoadSession { get; init; }
 
         /// <summary>
-        /// MCP 相关能力。
+        /// MCP-related capabilities.
         /// </summary>
         [JsonPropertyName("mcpCapabilities")]
         public McpCapabilities? McpCapabilities { get; init; }
 
         /// <summary>
-        /// 会话相关能力。
+        /// Session-related capabilities.
         /// </summary>
         [JsonPropertyName("sessionCapabilities")]
         public SessionCapabilities? SessionCapabilities { get; init; }
 
         /// <summary>
-        /// 认证相关能力。
+        /// Authentication-related capabilities.
         /// </summary>
         [JsonPropertyName("auth")]
         public AgentAuthCapabilities? Auth { get; init; }
 
         /// <summary>
-        /// 创建新的 AgentCapabilities 实例。
+        /// Creates a new AgentCapabilities instance.
         /// </summary>
         public AgentCapabilities()
         {
         }
 
         /// <summary>
-        /// 创建新的 AgentCapabilities 实例。
+        /// Creates a new AgentCapabilities instance.
         /// </summary>
-        /// <param name="promptCapabilities">提示能力</param>
-        /// <param name="loadSession">是否支持会话加载</param>
-        /// <param name="mcpCapabilities">MCP 能力</param>
-        /// <param name="sessionCapabilities">会话能力</param>
-        /// <param name="auth">认证能力</param>
+        /// <param name="promptCapabilities">Prompt capabilities</param>
+        /// <param name="loadSession">Whether session loading is supported</param>
+        /// <param name="mcpCapabilities">MCP capabilities</param>
+        /// <param name="sessionCapabilities">Session capabilities</param>
+        /// <param name="auth">Authentication capabilities</param>
         public AgentCapabilities(
             PromptCapabilities? promptCapabilities = null,
             bool? loadSession = null,
@@ -449,73 +449,73 @@ namespace SalmonEgg.Acp.Protocol
         }
 
         /// <summary>
-        /// 判断是否支持图片内容。
+        /// Gets a value indicating whether image content is supported.
         /// </summary>
         public bool SupportsImage => PromptCapabilities?.Image == true || SessionCapabilities?.Prompt?.Image == true;
 
         /// <summary>
-        /// 判断是否支持音频内容。
+        /// Gets a value indicating whether audio content is supported.
         /// </summary>
         public bool SupportsAudio => PromptCapabilities?.Audio == true || SessionCapabilities?.Prompt?.Audio == true;
 
         /// <summary>
-        /// 判断是否支持嵌入上下文。
+        /// Gets a value indicating whether embedded context is supported.
         /// </summary>
         public bool SupportsEmbeddedContext => PromptCapabilities?.EmbeddedContext == true || SessionCapabilities?.Prompt?.EmbeddedContext == true;
 
         /// <summary>
-        /// 判断是否支持会话加载。
+        /// Gets a value indicating whether session loading is supported.
         /// </summary>
         public bool SupportsSessionLoading => LoadSession ?? false;
 
         /// <summary>
-        /// 判断是否支持会话恢复。
+        /// Gets a value indicating whether session resumption is supported.
         /// </summary>
         public bool SupportsSessionResume => SessionCapabilities?.Resume != null;
 
         /// <summary>
-        /// 判断是否支持会话关闭。
+        /// Gets a value indicating whether closing a session is supported.
         /// </summary>
         public bool SupportsSessionClose => SessionCapabilities?.Close != null;
 
         /// <summary>
-        /// 判断是否支持会话删除。
+        /// Gets a value indicating whether deleting a session is supported.
         /// </summary>
         public bool SupportsSessionDelete => SessionCapabilities?.Delete != null;
 
         /// <summary>
-        /// 判断是否支持 additionalDirectories。
+        /// Gets a value indicating whether additionalDirectories is supported.
         /// </summary>
         public bool SupportsSessionAdditionalDirectories => SessionCapabilities?.AdditionalDirectories != null;
 
         /// <summary>
-        /// 判断是否支持会话列表。
+        /// Gets a value indicating whether listing sessions is supported.
         /// </summary>
         public bool SupportsSessionList => SessionCapabilities?.List != null;
 
         /// <summary>
-        /// 判断是否支持登出。
+        /// Gets a value indicating whether logout is supported.
         /// </summary>
         public bool SupportsLogout => Auth?.Logout != null;
 
         /// <summary>
-        /// 判断是否支持 HTTP 传输。
+        /// Gets a value indicating whether the HTTP transport is supported.
         /// </summary>
         public bool SupportsHttp => McpCapabilities?.Http == true || SessionCapabilities?.Mcp?.Http == true;
 
         /// <summary>
-        /// 判断是否支持 SSE 传输。
+        /// Gets a value indicating whether the SSE transport is supported.
         /// </summary>
         public bool SupportsSse => McpCapabilities?.Sse == true || SessionCapabilities?.Mcp?.Sse == true;
 
         /// <summary>
-        /// 判断是否支持 stdio 传输。
+        /// Gets a value indicating whether the stdio transport is supported.
         /// </summary>
         public bool SupportsStdio => SessionCapabilities?.Mcp?.SupportsStdio == true;
     }
 
     /// <summary>
-    /// Agent 认证能力。
+    /// Agent authentication capabilities.
     /// </summary>
     public sealed record AgentAuthCapabilities : AcpProtocolObject
     {
@@ -525,48 +525,48 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// Logout 方法能力。
+    /// Logout method capabilities.
     /// </summary>
     public sealed record LogoutCapabilities : AcpProtocolObject
     {
     }
 
     /// <summary>
-    /// 提示相关能力类。
+    /// Prompt-related capability class.
     /// </summary>
     public sealed record PromptCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 是否支持图片内容。
+        /// Whether image content is supported.
         /// </summary>
         [JsonPropertyName("image")]
         public bool Image { get; init; }
 
         /// <summary>
-        /// 是否支持音频内容。
+        /// Whether audio content is supported.
         /// </summary>
         [JsonPropertyName("audio")]
         public bool Audio { get; init; }
 
         /// <summary>
-        /// 是否支持嵌入上下文。
+        /// Whether embedded context is supported.
         /// </summary>
         [JsonPropertyName("embeddedContext")]
         public bool EmbeddedContext { get; init; }
 
         /// <summary>
-        /// 创建新的 PromptCapabilities 实例。
+        /// Creates a new PromptCapabilities instance.
         /// </summary>
         public PromptCapabilities()
         {
         }
 
         /// <summary>
-        /// 创建新的 PromptCapabilities 实例。
+        /// Creates a new PromptCapabilities instance.
         /// </summary>
-        /// <param name="image">是否支持图片</param>
-        /// <param name="audio">是否支持音频</param>
-        /// <param name="embeddedContext">是否支持嵌入上下文</param>
+        /// <param name="image">Whether images are supported</param>
+        /// <param name="audio">Whether audio is supported</param>
+        /// <param name="embeddedContext">Whether embedded context is supported</param>
         public PromptCapabilities(bool image = false, bool audio = false, bool embeddedContext = false)
         {
             Image = image;
@@ -576,38 +576,38 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// MCP 相关能力类。
+    /// MCP-related capability class.
     /// </summary>
     public sealed record McpCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 是否支持 HTTP 传输。
+        /// Whether the HTTP transport is supported.
         /// </summary>
         [JsonPropertyName("http")]
         public bool Http { get; init; }
 
         /// <summary>
-        /// 是否支持 SSE 传输。
+        /// Whether the SSE transport is supported.
         /// </summary>
         [JsonPropertyName("sse")]
         public bool Sse { get; init; }
 
         /// <summary>
-        /// ACP 保留的扩展元数据。
+        /// Extension metadata reserved by ACP.
         /// </summary>
         /// <summary>
-        /// 创建新的 McpCapabilities 实例。
+        /// Creates a new McpCapabilities instance.
         /// </summary>
         public McpCapabilities()
         {
         }
 
         /// <summary>
-        /// 创建新的 McpCapabilities 实例。
+        /// Creates a new McpCapabilities instance.
         /// </summary>
-        /// <param name="http">是否支持 HTTP</param>
-        /// <param name="sse">是否支持 SSE</param>
-        /// <param name="meta">扩展元数据</param>
+        /// <param name="http">Whether HTTP is supported</param>
+        /// <param name="sse">Whether SSE is supported</param>
+        /// <param name="meta">Extension metadata</param>
         public McpCapabilities(
             bool http = false,
             bool sse = false,
@@ -621,67 +621,67 @@ namespace SalmonEgg.Acp.Protocol
         }
 
         /// <summary>
-        /// 是否支持 stdio 传输。
-        /// v1 wire 不公开该字段，v2 wire 通过 session.mcp.stdio 公开。
+        /// Whether the stdio transport is supported.
+        /// The v1 wire does not expose this field; the v2 wire exposes it through session.mcp.stdio.
         /// </summary>
         [JsonIgnore]
         public bool? Stdio { get; init; }
 
         /// <summary>
-        /// 判断是否支持 stdio 传输。
+        /// Gets a value indicating whether the stdio transport is supported.
         /// </summary>
         public bool SupportsStdio => Stdio ?? false;
     }
 
     /// <summary>
-    /// 会话相关能力类。
+    /// Session-related capability class.
     /// </summary>
     public sealed record SessionCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 是否支持 prompt 扩展。
+        /// Whether prompt extensions are supported.
         /// </summary>
         [JsonPropertyName("prompt")]
         public PromptCapabilities? Prompt { get; init; }
 
         /// <summary>
-        /// 是否支持 MCP 传输。
+        /// Whether MCP transports are supported.
         /// </summary>
         [JsonPropertyName("mcp")]
         public McpCapabilities? Mcp { get; init; }
 
         /// <summary>
-        /// 是否支持会话列表功能。
+        /// Whether the session listing feature is supported.
         /// </summary>
         [JsonPropertyName("list")]
         public SessionListCapabilities? List { get; init; }
 
         /// <summary>
-        /// 是否支持会话恢复功能。
+        /// Whether the session resume feature is supported.
         /// </summary>
         [JsonPropertyName("resume")]
         public SessionResumeCapabilities? Resume { get; init; }
 
         /// <summary>
-        /// 是否支持会话关闭功能。
+        /// Whether the session close feature is supported.
         /// </summary>
         [JsonPropertyName("close")]
         public SessionCloseCapabilities? Close { get; init; }
 
         /// <summary>
-        /// 是否支持会话删除功能。
+        /// Whether the session delete feature is supported.
         /// </summary>
         [JsonPropertyName("delete")]
         public SessionDeleteCapabilities? Delete { get; init; }
 
         /// <summary>
-        /// 是否支持 additionalDirectories。
+        /// Whether additionalDirectories is supported.
         /// </summary>
         [JsonPropertyName("additionalDirectories")]
         public SessionAdditionalDirectoriesCapabilities? AdditionalDirectories { get; init; }
 
         /// <summary>
-        /// 创建新的 SessionCapabilities 实例。
+        /// Creates a new SessionCapabilities instance.
         /// </summary>
         public SessionCapabilities()
         {
@@ -689,12 +689,12 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话列表能力类。
+    /// Session listing capability class.
     /// </summary>
     public sealed record SessionListCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 创建新的 SessionListCapabilities 实例。
+        /// Creates a new SessionListCapabilities instance.
         /// </summary>
         public SessionListCapabilities()
         {
@@ -702,12 +702,12 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话恢复能力类。
+    /// Session resume capability class.
     /// </summary>
     public sealed record SessionResumeCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 创建新的 SessionResumeCapabilities 实例。
+        /// Creates a new SessionResumeCapabilities instance.
         /// </summary>
         public SessionResumeCapabilities()
         {
@@ -715,12 +715,12 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话关闭能力类。
+    /// Session close capability class.
     /// </summary>
     public sealed record SessionCloseCapabilities : AcpProtocolObject
     {
         /// <summary>
-        /// 创建新的 SessionCloseCapabilities 实例。
+        /// Creates a new SessionCloseCapabilities instance.
         /// </summary>
         public SessionCloseCapabilities()
         {
@@ -728,14 +728,14 @@ namespace SalmonEgg.Acp.Protocol
     }
 
     /// <summary>
-    /// 会话删除能力类。
+    /// Session delete capability class.
     /// </summary>
     public sealed record SessionDeleteCapabilities : AcpProtocolObject
     {
     }
 
     /// <summary>
-    /// additionalDirectories 能力类。
+    /// additionalDirectories capability class.
     /// </summary>
     public sealed record SessionAdditionalDirectoriesCapabilities : AcpProtocolObject
     {

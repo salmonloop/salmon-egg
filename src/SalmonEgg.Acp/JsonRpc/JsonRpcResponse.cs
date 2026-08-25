@@ -4,14 +4,14 @@ using System.Text.Json.Serialization;
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// JSON-RPC 2.0 响应消息。
-    /// 用于服务器对请求的响应。响应消息恰好包含 result 或 error 之一。
+    /// JSON-RPC 2.0 response message.
+    /// Sent by the server in reply to a request. A response carries exactly one of result or error.
     /// </summary>
     internal sealed class JsonRpcResponse : JsonRpcMessage
     {
         /// <summary>
-        /// 对应请求的唯一标识符。
-        /// 必须与请求消息中的 id 值相同。
+        /// The unique identifier of the request being answered.
+        /// Must match the id value carried by the request message.
         /// </summary>
         /// <remarks>
         /// Always serialized, overriding the envelope-wide WhenWritingNull policy. JSON-RPC 2.0
@@ -24,33 +24,33 @@ namespace SalmonEgg.Acp.JsonRpc
         public object? Id { get; set; }
 
         /// <summary>
-        /// 方法调用的结果。
-        /// 在成功时存在，error 为 null。
-        /// 可以是任何 JSON 值。
+        /// The result of the method invocation.
+        /// Present on success, in which case error is null.
+        /// May be any JSON value.
         /// </summary>
         [JsonPropertyName("result")]
         public JsonElement? Result { get; set; }
 
         /// <summary>
-        /// 错误信息。
-        /// 在失败时存在，result 为 null。
-        /// 如果响应成功，则为 null。
+        /// The error information.
+        /// Present on failure, in which case result is null.
+        /// Null when the response is successful.
         /// </summary>
         [JsonPropertyName("error")]
         public JsonRpcError? Error { get; set; }
 
         /// <summary>
-        /// 创建一个新的成功响应实例。
+        /// Creates a new successful response instance.
         /// </summary>
         public JsonRpcResponse()
         {
         }
 
         /// <summary>
-        /// 创建一个新的成功响应实例。
+        /// Creates a new successful response instance.
         /// </summary>
-        /// <param name="id">对应的请求 ID</param>
-        /// <param name="result">响应结果</param>
+        /// <param name="id">The ID of the corresponding request</param>
+        /// <param name="result">The response result</param>
         public JsonRpcResponse(object? id, JsonElement? result)
         {
             Id = id;
@@ -59,10 +59,10 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 创建一个新的错误响应实例。
+        /// Creates a new error response instance.
         /// </summary>
-        /// <param name="id">对应的请求 ID</param>
-        /// <param name="error">错误信息</param>
+        /// <param name="id">The ID of the corresponding request</param>
+        /// <param name="error">The error information</param>
         public JsonRpcResponse(object? id, JsonRpcError error)
         {
             Id = id;
@@ -71,7 +71,7 @@ namespace SalmonEgg.Acp.JsonRpc
         }
 
         /// <summary>
-        /// 判断响应是否成功。
+        /// Gets a value indicating whether the response is successful.
         /// </summary>
         /// <remarks>
         /// Local convenience only. A JSON-RPC 2.0 Response carries exactly jsonrpc/id/result/error,
@@ -81,7 +81,7 @@ namespace SalmonEgg.Acp.JsonRpc
         public bool IsSuccess => Error == null && Result.HasValue;
 
         /// <summary>
-        /// 判断响应是否失败。
+        /// Gets a value indicating whether the response is an error.
         /// </summary>
         /// <remarks>
         /// Local convenience only; see <see cref="IsSuccess"/>. Not part of the JSON-RPC envelope.

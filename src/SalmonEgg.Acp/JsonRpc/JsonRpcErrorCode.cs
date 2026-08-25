@@ -1,115 +1,117 @@
 namespace SalmonEgg.Acp.JsonRpc
 {
     /// <summary>
-    /// JSON-RPC 2.0 标准错误码常量。
-    /// 根据 JSON-RPC 2.0 规范定义的标准错误码。
+    /// Standard JSON-RPC 2.0 error code constants.
+    /// The error codes defined by the JSON-RPC 2.0 specification.
     /// </summary>
     public static class JsonRpcErrorCode
     {
-        #region JSON-RPC 2.0 标准错误码
+        #region Standard JSON-RPC 2.0 error codes
 
         /// <summary>
         /// -32700: Parse error
-        /// 无效的 JSON 或 JSON 解析错误。
+        /// Invalid JSON, or a JSON parsing failure.
         /// </summary>
         public const int ParseError = -32700;
 
         /// <summary>
         /// -32600: Invalid Request
-        /// 请求消息格式无效（缺少必需字段、字段类型错误等）。
+        /// The request message is malformed (a required field is missing, a field has the wrong type, and so on).
         /// </summary>
         public const int InvalidRequest = -32600;
 
         /// <summary>
         /// -32601: Method not found
-        /// 请求的方法不存在。
+        /// The requested method does not exist.
         /// </summary>
         public const int MethodNotFound = -32601;
 
         /// <summary>
         /// -32602: Invalid params
-        /// 方法参数无效（缺少必需参数、参数类型错误等）。
+        /// The method parameters are invalid (a required parameter is missing, a parameter has the wrong type,
+        /// and so on).
         /// </summary>
         public const int InvalidParams = -32602;
 
         /// <summary>
         /// -32603: Internal error
-        /// 服务器内部错误。
+        /// An internal server error.
         /// </summary>
         public const int InternalError = -32603;
 
         #endregion
 
-        #region ACP 扩展错误码
+        #region ACP extension error codes
 
         /// <summary>
         /// -32000: Authentication required
-        /// ACP：需要先进行认证（例如调用 authenticate 或完成外部登录流程）。
+        /// ACP: authentication is required first (for example, calling authenticate or completing an external
+        /// sign-in flow).
         /// </summary>
         public const int AuthenticationRequired = -32000;
 
         /// <summary>
         /// -32001: Permission denied
-        /// ACP：权限被拒绝。
+        /// ACP: permission was denied.
         /// </summary>
         public const int PermissionDenied = -32001;
 
         /// <summary>
         /// -32002: Resource not found
-        /// ACP：资源未找到（例如会话、文件等）。
+        /// ACP: the resource was not found (a session, a file, and so on).
         /// </summary>
         public const int ResourceNotFound = -32002;
 
         /// <summary>
-        /// 兼容别名：会话未找到（ACP schema 中归类为 Resource not found）。
+        /// Compatibility alias: session not found (classified as Resource not found in the ACP schema).
         /// </summary>
         public const int SessionNotFound = ResourceNotFound;
 
         /// <summary>
         /// -32003: Method not allowed
-        /// 方法不被允许（例如在未初始化的会话中调用）。
+        /// The method is not allowed (for example, calling it on a session that has not been initialized).
         /// </summary>
         public const int MethodNotAllowed = -32003;
 
         /// <summary>
         /// -32004: Protocol version mismatch
-        /// 协议版本不匹配。
+        /// The protocol version does not match.
         /// </summary>
         public const int ProtocolVersionMismatch = -32004;
 
         /// <summary>
         /// -32005: Capability not supported
-        /// 不支持的功能。
+        /// The capability is not supported.
         /// </summary>
         public const int CapabilityNotSupported = -32005;
 
         #endregion
 
         /// <summary>
-        /// 判断错误码是否为 JSON-RPC 2.0 标准错误码。
+        /// Determines whether an error code is a standard JSON-RPC 2.0 error code.
         /// </summary>
-        /// <param name="code">错误码</param>
-        /// <returns>如果是标准错误码返回 true</returns>
+        /// <param name="code">The error code.</param>
+        /// <returns>true if it is a standard error code.</returns>
         public static bool IsStandardErrorCode(int code)
         {
             return code >= -32700 && code <= -32603;
         }
 
         /// <summary>
-        /// 判断错误码是否为 ACP 扩展错误码。
+        /// Determines whether an error code is an ACP extension error code.
         /// </summary>
-        /// <param name="code">错误码</param>
-        /// <returns>如果是 ACP 扩展错误码返回 true</returns>
+        /// <param name="code">The error code.</param>
+        /// <returns>true if it is an ACP extension error code.</returns>
         public static bool IsAcpErrorCode(int code)
         {
             return code >= -32099 && code <= -32000;
         }
 
         /// <summary>
-        /// 获取错误码对应的标准错误消息。
+        /// Gets the standard error message for an error code.
         /// </summary>
-        /// <param name="code">错误码</param>
-        /// <returns>错误消息</returns>
+        /// <param name="code">The error code.</param>
+        /// <returns>The error message.</returns>
         public static string GetErrorMessage(int code)
         {
             return code switch
