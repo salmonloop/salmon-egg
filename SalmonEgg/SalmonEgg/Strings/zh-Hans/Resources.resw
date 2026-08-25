@@ -837,9 +837,6 @@
   <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
     <value>第 {0} 步，共 {1} 步</value>
   </data>
-  <data name="AcpSetup_InstallOutput.Header" xml:space="preserve">
-    <value>安装输出</value>
-  </data>
   <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
     <value>查看安装输出</value>
   </data>
@@ -851,6 +848,9 @@
   </data>
   <data name="AcpSetup_AdapterReadyBar.Title" xml:space="preserve">
     <value>适配器已就绪</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Message" xml:space="preserve">
+    <value>已找到独立的适配器，可以直接进入下一步。</value>
   </data>
   <data name="AcpSetup_AdapterUndeterminedBar.Title" xml:space="preserve">
     <value>无法确认适配器是否已安装</value>
@@ -896,9 +896,6 @@
   </data>
   <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
     <value>选择要使用的一份</value>
-  </data>
-  <data name="AcpSetup_UseCandidate.Content" xml:space="preserve">
-    <value>用这一份</value>
   </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>下一步</value>

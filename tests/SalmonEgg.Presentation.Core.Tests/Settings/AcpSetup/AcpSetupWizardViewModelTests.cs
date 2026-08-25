@@ -338,7 +338,8 @@ public sealed class AcpSetupWizardViewModelTests
 
     /// <summary>
     /// A packaged adapter that npm reports present is "installed", not "built in": the two get different
-    /// copy because one required the user to have something and the other did not.
+    /// copy because one required the user to have something and the other did not. Installed also means
+    /// found, so the "why wasn't it found?" override panel stays hidden — it exists for the missing case.
     /// </summary>
     [Fact]
     public async Task PackagedAdapter_ReportsInstalled_NotBuiltIn()
@@ -347,7 +348,7 @@ public sealed class AcpSetupWizardViewModelTests
 
         Assert.True(wizard.IsAdapterInstalled);
         Assert.False(wizard.IsAdapterBuiltIn);
-        Assert.True(wizard.HasAdapterProbeCommand);
+        Assert.False(wizard.HasAdapterProbeCommand); // Found: no override panel about not finding it.
     }
 
     /// <summary>
@@ -532,6 +533,24 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.False(wizard.GoNextCommand.CanExecute(null));
     }
 
+    /// <summary>
+    /// The step position resolves a parameterized resource. The key lives in CoreStrings (the layer
+    /// view models localize against); before this test the value was assembled by string surgery on
+    /// a UI-layer key the resolver could never find, so every language silently showed English.
+    /// </summary>
+    [Fact]
+    public async Task StepPositionText_ResolvesParameterizedKey_PerLanguage()
+    {
+        var zh = new MutableTestCoreStringLocalizer();
+        zh.Set("zh-Hans", "AcpSetup_Step_Position", "第 {0} 步，共 {1} 步");
+        var (wizardZh, _, _) = await WalkToComponentSetupAsync(localizer: zh);
+        Assert.Equal("第 2 步，共 5 步", wizardZh.StepPositionText);
+
+        // Without a localizer the fallback template formats, so the position is still stated.
+        var (wizardFallback, _, _) = await WalkToComponentSetupAsync(localizer: null);
+        Assert.Equal("Step 2 of 5", wizardFallback.StepPositionText);
+    }
+
     [Fact]
     public async Task ComponentSetup_MissingAdapterBlocksWalk_InstallReprobesAndReopens()
     {
@@ -656,6 +675,83 @@ public sealed class AcpSetupWizardViewModelTests
         await wizard.TestCommand.ExecuteAsync(null);
         Assert.True(wizard.IsTestSuccessful);
         Assert.Equal(string.Empty, wizard.TestFailureStageText);
+    }
+
+    /// <summary>
+    /// The failure banner binds to IsTestFailed, not HasTestResult: a passing test also produces a
+    /// result, so a banner keyed on "a result exists" opens on success too. Both directions are
+    /// asserted because the bug is symmetric — the banner must be shut when the test passes.
+    /// </summary>
+    [Fact]
+    public async Task IsTestFailed_TracksFailureOnly_AndClearsOnRetest()
+    {
+        var (wizard, tester, _) = await WalkToTestStepAsync();
+
+        // Before any test there is neither a result nor a verdict.
+        Assert.False(wizard.HasTestResult);
+        Assert.False(wizard.IsTestFailed);
+
+        tester.SetResult(AcpSetupWizardFixtures.WellKnownResults.Success());
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.True(wizard.IsTestSuccessful);
+        Assert.True(wizard.HasTestResult);
+        Assert.False(wizard.IsTestFailed); // The regression this pins: success must not open the error bar.
+
+        tester.SetResult(AcpSetupTestResult.Failure(
+            AcpSetupTestStage.Handshake,
+            errorDetail: "agent closed the stream",
+            remediationKey: HandshakeRemediationKey));
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.False(wizard.IsTestSuccessful);
+        Assert.True(wizard.IsTestFailed);
+    }
+
+    /// <summary>
+    /// ErrorDetail is raw platform English (stderr excerpt, protocol error). It reaches the screen as
+    /// small print under the localized advice, so it must pass through on failure and vanish on
+    /// success — a stale excerpt lingering after a passing retest would describe a problem that is gone.
+    /// </summary>
+    [Fact]
+    public async Task TestErrorDetail_CarriesRawFailureDetail_AndEmptiesOnSuccess()
+    {
+        var (wizard, tester, _) = await WalkToTestStepAsync();
+
+        Assert.Equal(string.Empty, wizard.TestErrorDetail);
+        Assert.False(wizard.HasTestErrorDetail);
+
+        const string detail = "agent closed the stream";
+        tester.SetResult(AcpSetupTestResult.Failure(
+            AcpSetupTestStage.Handshake,
+            errorDetail: detail,
+            remediationKey: HandshakeRemediationKey));
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.Equal(detail, wizard.TestErrorDetail);
+        Assert.True(wizard.HasTestErrorDetail);
+
+        tester.SetResult(AcpSetupWizardFixtures.WellKnownResults.Success());
+        await wizard.TestCommand.ExecuteAsync(null);
+        Assert.Equal(string.Empty, wizard.TestErrorDetail);
+        Assert.False(wizard.HasTestErrorDetail);
+    }
+
+    /// <summary>
+    /// An installed adapter has a launcher just like a missing one does, but offering "why wasn't it
+    /// found?" about a component that was found is noise. The override panel gates on the probe having
+    /// failed to confirm presence, not merely on a launcher existing.
+    /// </summary>
+    [Fact]
+    public async Task HasAdapterProbeCommand_IsFalse_WhenAdapterIsAlreadyUsable()
+    {
+        // Installed adapter: launcher named ("npx") yet present, so no override panel.
+        var (installed, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: true);
+        Assert.Equal("npx", installed.AdapterProbeCommand);
+        Assert.True(installed.IsAdapterUsable);
+        Assert.False(installed.HasAdapterProbeCommand);
+
+        // Missing adapter: same launcher shape, but nothing found, so the panel appears.
+        var (missing, _) = await WalkToComponentSetupWithPackagedAdapterAsync(adapterInstalled: false);
+        Assert.False(missing.IsAdapterUsable);
+        Assert.True(missing.HasAdapterProbeCommand);
     }
 
     [Fact]

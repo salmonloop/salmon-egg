@@ -1440,9 +1440,6 @@
   <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
     <value>Step {0} of {1}</value>
   </data>
-  <data name="AcpSetup_InstallOutput.Header" xml:space="preserve">
-    <value>Installer output</value>
-  </data>
   <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
     <value>View installer output</value>
   </data>
@@ -1454,6 +1451,9 @@
   </data>
   <data name="AcpSetup_AdapterReadyBar.Title" xml:space="preserve">
     <value>Adapter ready</value>
+  </data>
+  <data name="AcpSetup_AdapterReadyBar.Message" xml:space="preserve">
+    <value>A separate adapter was found. You can continue.</value>
   </data>
   <data name="AcpSetup_AdapterUndeterminedBar.Title" xml:space="preserve">
     <value>Could not confirm the adapter</value>
@@ -1499,9 +1499,6 @@
   </data>
   <data name="AcpSetup_CandidatePicker.Header" xml:space="preserve">
     <value>Which one to use</value>
-  </data>
-  <data name="AcpSetup_UseCandidate.Content" xml:space="preserve">
-    <value>Use this one</value>
   </data>
   <data name="AcpSetup_Next.Content" xml:space="preserve">
     <value>Next</value>
