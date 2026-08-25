@@ -95,7 +95,6 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
-    [NotifyCanExecuteChangedFor(nameof(InstallRuntimeCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAgentsCommand))]
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
@@ -105,7 +104,6 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoNextCommand))]
-    [NotifyCanExecuteChangedFor(nameof(InstallRuntimeCommand))]
     private AcpSetupAgentRowViewModel? _selectedAgent;
 
     [ObservableProperty]
@@ -388,42 +386,20 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     // ── Installation ────────────────────────────────────────────────────────
 
-    [RelayCommand(CanExecute = nameof(CanInstallRuntime))]
-    private async Task InstallRuntimeAsync(CancellationToken cancellationToken)
-    {
-        var row = SelectedAgent;
-        if (row is null)
-        {
-            return;
-        }
-
-        await RunOperationAsync(
-            async token =>
-            {
-                var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, CollectCommandOverrides(), token)
-                    .ConfigureAwait(false);
-                await _uiDispatcher
-                    .EnqueueAsync(() =>
-                    {
-                        row.Runtime = probe;
-                        ReportInstallFailure(install);
-                    })
-                    .ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private bool CanInstallRuntime()
-        => !IsBusy
-            && SelectedAgent is not null
-            && SupportsAutomaticInstall
-            && SelectedAgent.SupportsAutomaticInstall;
-
-    /// <summary>Per-row install entry point; keeps busy/error handling in one place.</summary>
+    /// <summary>
+    /// Installs one agent's runtime on that row's own request. This is the only runtime-install entry
+    /// point: the row's button raises <see cref="AcpSetupAgentRowViewModel.InstallRequested"/> rather
+    /// than binding a command, because the button lives in an ItemTemplate and acts on its own item.
+    /// </summary>
+    /// <remarks>
+    /// Both capability checks belong here rather than in the row's button visibility. The row can only
+    /// see whether its own component is installable; whether this platform installs anything at all is
+    /// the orchestrator's answer, and a platform that declines every request would otherwise be handed
+    /// one and report its refusal as a failure the user is invited to retry.
+    /// </remarks>
     private void InstallAgentRow(AcpSetupAgentRowViewModel row)
     {
-        if (IsBusy)
+        if (IsBusy || !SupportsAutomaticInstall || !row.SupportsAutomaticInstall)
         {
             return;
         }

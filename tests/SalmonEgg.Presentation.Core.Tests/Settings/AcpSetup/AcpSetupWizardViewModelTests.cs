@@ -817,20 +817,45 @@ public sealed class AcpSetupWizardViewModelTests
     }
 
     [Fact]
-    public async Task InstallRuntime_FailedInstall_SurfacesInstallerDetail()
+    public async Task InstallAgentRow_FailedInstall_SurfacesInstallerDetail()
     {
         var installer = new StubComponentInstaller(component =>
             AcpComponentInstallResult.Failure(component.Id, 1, output: null, "network down"));
         var wizard = CreateWizard(ProbeForInstalledRuntime(), installer);
-        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
 
-        await wizard.InstallRuntimeCommand.ExecuteAsync(null);
+        Assert.Single(wizard.Agents).RequestInstall();
 
         Assert.Equal(
             new[] { AcpSetupWizardFixtures.Runtime().Id },
             installer.InstalledComponentIds.ToArray());
         Assert.True(wizard.HasErrorMessage);
         Assert.Equal("network down", wizard.ErrorMessage);
+    }
+
+    /// <summary>
+    /// A row offers its install button on the component's own <c>SupportsAutomaticInstall</c>, which says
+    /// nothing about whether this platform can install anything at all. On a platform whose installer
+    /// declines every request, the request must be refused before it reaches the installer — otherwise
+    /// the wizard runs an install it knows cannot work and reports the installer's refusal as a failure
+    /// the user is invited to retry.
+    /// </summary>
+    [Fact]
+    public async Task InstallAgentRow_WhenPlatformCannotInstall_IsRefusedWithoutCallingTheInstaller()
+    {
+        var installer = new StubComponentInstaller(supportsAutomaticInstall: false);
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsMissing);
+
+        row.RequestInstall();
+
+        Assert.Empty(installer.InstalledComponentIds);
+        Assert.False(wizard.IsBusy);
+        Assert.False(wizard.HasInstallOutput);
     }
 
     // ── Shared walk helpers ─────────────────────────────────────────────────
