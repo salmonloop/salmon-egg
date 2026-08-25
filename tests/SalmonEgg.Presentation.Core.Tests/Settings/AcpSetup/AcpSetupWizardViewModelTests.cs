@@ -415,6 +415,40 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Equal("2.0.0", row.Version);
     }
 
+    /// <summary>
+    /// Picking a candidate must not retract the choice: the picker has to survive being used, or the
+    /// user gets exactly one switch and no way back.
+    /// </summary>
+    /// <remarks>
+    /// The pick becomes an override, and re-probing an absolute path resolves one candidate by
+    /// definition — so a row reading its candidate list straight off the latest probe drops to a single
+    /// entry and hides the picker that produced the choice.
+    /// </remarks>
+    [Fact]
+    public async Task AgentRow_PickingAShadowedInstall_KeepsTheChoiceAvailable()
+    {
+        const string preferred = "/usr/local/bin/test-agent";
+        const string shadowed = "/opt/homebrew/bin/test-agent";
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, preferred, "1.0.0");
+        probe.SetExecutable(shadowed, shadowed, "2.0.0");
+        probe.SetCandidates(AcpSetupWizardFixtures.RuntimeCommand, preferred, shadowed);
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+
+        row.SelectedCandidate = shadowed;
+
+        Assert.True(row.HasMultipleCandidates);
+        Assert.Equal(new[] { preferred, shadowed }, row.Candidates);
+
+        // And the switch is reversible, which is the point of keeping the list.
+        row.SelectedCandidate = preferred;
+
+        Assert.Equal(preferred, row.SelectedCandidate);
+        Assert.True(row.HasMultipleCandidates);
+    }
+
     [Fact]
     public async Task DetectAgents_AppliesProbeResults_WithVersion()
     {
