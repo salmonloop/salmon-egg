@@ -1,0 +1,137 @@
+name: Release ACP SDK
+
+# The ACP SDK ships on its own cadence, so it gets its own tag namespace: `acp-sdk-v*`.
+# release-packaging.yml owns `v*` (the GUI/CLI release line). Sharing one prefix would make every SDK
+# release rebuild the desktop installers, and every app release look like an SDK release.
+on:
+  push:
+    tags: ["acp-sdk-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a publish in flight: a push to nuget.org is irreversible, and a half-published release
+# (package without symbols) cannot be fixed by re-running.
+concurrency:
+  group: release-acp-sdk-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: "10.0.3xx"
+  CONFIGURATION: "Release"
+  PACKAGE_OUTPUT: "artifacts/acp-sdk-pack"
+
+jobs:
+  pack:
+    name: Pack ACP SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # The same gates that guard every PR guard the release: format, analyzers, contract tests, pack.
+      # A release must not have a weaker bar than a pull request.
+      - name: Run ACP SDK gate script
+        env:
+          DOTNET_BIN: dotnet
+        run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
+
+      # Verify the rule itself before trusting it on an irreversible publish.
+      - name: Verify release tag/version gate rules
+        run: ./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
+
+      - name: Verify tag matches packed version
+        if: startsWith(github.ref, 'refs/tags/acp-sdk-v')
+        run: ./scripts/gates/run-acp-sdk-tag-version-gate.sh "${{ github.ref_name }}" "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Upload ACP SDK package
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: acp-sdk-release-package
+          path: |
+            ${{ env.PACKAGE_OUTPUT }}/*.nupkg
+            ${{ env.PACKAGE_OUTPUT }}/*.snupkg
+
+  consumer-integration:
+    name: ACP Consumer Integration
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download ACP SDK package
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: acp-sdk-release-package
+          path: artifacts/acp-sdk-package
+
+      # Publishing an unconsumable package is the failure this prevents: restore, build and run against
+      # the real nupkg before it reaches nuget.org, not after.
+      - name: Run package consumer smoke
+        env:
+          DOTNET_BIN: dotnet
+        run: ./scripts/gates/run-acp-consumer-package-smoke.sh artifacts/acp-sdk-package "${{ env.CONFIGURATION }}"
+
+  publish-nuget:
+    name: Publish to NuGet
+    needs: [pack, consumer-integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only a real tag publishes. workflow_dispatch stays available to rehearse pack + consumer smoke
+    # without pushing anything to nuget.org.
+    if: startsWith(github.ref, 'refs/tags/acp-sdk-v')
+    environment: nuget-publish
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Download ACP SDK package
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: acp-sdk-release-package
+          path: artifacts/acp-sdk-package
+
+      - name: Push package and symbols
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "NUGET_API_KEY secret is not configured; refusing to attempt a publish." >&2
+            exit 1
+          fi
+
+          # Push the .nupkg explicitly rather than globbing *.nupkg: the glob also matches .snupkg on
+          # some shells, and pushing symbols as a package is not something nuget.org lets you undo.
+          nupkg="$(find artifacts/acp-sdk-package -maxdepth 1 -type f -name 'SalmonEgg.Acp.*.nupkg' ! -name '*.snupkg')"
+          snupkg="$(find artifacts/acp-sdk-package -maxdepth 1 -type f -name 'SalmonEgg.Acp.*.snupkg')"
+
+          echo "Publishing $(basename "$nupkg")"
+          dotnet nuget push "$nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate
+
+          echo "Publishing $(basename "$snupkg")"
+          dotnet nuget push "$snupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate
