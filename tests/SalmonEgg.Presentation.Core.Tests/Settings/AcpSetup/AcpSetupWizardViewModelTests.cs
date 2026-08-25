@@ -510,6 +510,29 @@ public sealed class AcpSetupWizardViewModelTests
     }
 
     [Fact]
+    public async Task ComponentSetup_ChangingAdapter_ReprobesTheNewSelection()
+    {
+        var (wizard, _, _) = await WalkToComponentSetupAsync(
+            configureProbe: probe =>
+            {
+                probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, false);
+                return probe;
+            });
+
+        // The recommended built-in adapter was selected and is usable. Picking the packaged adapter
+        // must invalidate that verdict and use the package answer for the newly selected component.
+        wizard.SelectedAdapter = wizard.Adapters.Single(adapter => adapter.Component.Id == "adapter.packaged");
+        if (wizard.DetectAdapterCommand.ExecutionTask is { } execution)
+        {
+            await execution;
+        }
+
+        Assert.Equal("adapter.packaged", wizard.SelectedAdapter?.Component.Id);
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.False(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task ComponentSetup_MissingAdapterBlocksWalk_InstallReprobesAndReopens()
     {
         // The runtime is healthy; only the packaged adapter is absent, so its absence is what
@@ -527,6 +550,7 @@ public sealed class AcpSetupWizardViewModelTests
         await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup + auto adapter probe
 
         Assert.True(wizard.IsAdapterMissing);
+        Assert.Contains("/test/bin/npm", wizard.AdapterProbeDetail, StringComparison.Ordinal);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
 
         // Installing flips the package answer; the orchestrator re-probes after the install.
@@ -535,6 +559,8 @@ public sealed class AcpSetupWizardViewModelTests
         await wizard.InstallAdapterCommand.ExecuteAsync(null);
 
         Assert.True(wizard.IsAdapterUsable);
+        Assert.Equal("/test/node_modules", wizard.AdapterPackageLocation);
+        Assert.True(wizard.HasAdapterPackageLocation);
         Assert.True(wizard.GoNextCommand.CanExecute(null));
     }
 

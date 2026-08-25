@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Domain.Services.AcpSetup;
 
 namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
@@ -67,27 +68,6 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     /// Asks npm for the global package list. <c>--depth 0</c> keeps the walk to top-level packages, and
     /// <c>--parseable</c> yields one path per line, which is stable across npm versions.
     /// </summary>
-    public async Task<bool?> IsGlobalNodePackageInstalledAsync(
-        string packageId,
-        CancellationToken cancellationToken = default)
-        => (await LocateGlobalNodePackageAsync(packageId, cancellationToken).ConfigureAwait(false))
-            .IsInstalled;
-
-    public async Task<bool?> IsGlobalUvToolInstalledAsync(
-        string packageId,
-        CancellationToken cancellationToken = default)
-        => (await LocateGlobalUvToolAsync(packageId, cancellationToken).ConfigureAwait(false))
-            .IsInstalled;
-
-    /// <summary>
-    /// Asks npm for the global package list and reports where the package was found.
-    /// </summary>
-    /// <remarks>
-    /// The location matters on machines with several toolchain versions installed: npm answers for the
-    /// Node version currently on PATH, so a package installed under a different version reads as absent
-    /// here. Reporting the path that answered lets the wizard show which toolchain it asked, instead of
-    /// leaving the user to guess why an install they remember doing is invisible.
-    /// </remarks>
     public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
         string packageId,
         CancellationToken cancellationToken = default)
@@ -149,7 +129,9 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
             return AcpPackageQueryResult.Found(location, executable);
         }
 
-        return result.Succeeded ? AcpPackageQueryResult.Absent(executable) : AcpPackageQueryResult.Unknown();
+        return result.Succeeded
+            ? AcpPackageQueryResult.Absent(executable)
+            : AcpPackageQueryResult.Unknown(executable);
     }
 
     /// <summary>

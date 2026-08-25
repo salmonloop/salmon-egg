@@ -97,21 +97,21 @@ public sealed class DesktopAcpExecutableProbeTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task IsGlobalNodePackageInstalledAsync_WithBlankPackageId_ShouldReturnNull(string packageId)
+    public async Task LocateGlobalNodePackageAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe().IsGlobalNodePackageInstalledAsync(packageId);
+        var installed = await new DesktopAcpExecutableProbe().LocateGlobalNodePackageAsync(packageId);
 
-        Assert.Null(installed);
+        Assert.Null(installed.IsInstalled);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task IsGlobalUvToolInstalledAsync_WithBlankPackageId_ShouldReturnNull(string packageId)
+    public async Task LocateGlobalUvToolAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe().IsGlobalUvToolInstalledAsync(packageId);
+        var installed = await new DesktopAcpExecutableProbe().LocateGlobalUvToolAsync(packageId);
 
-        Assert.Null(installed);
+        Assert.Null(installed.IsInstalled);
     }
 
     [Theory]

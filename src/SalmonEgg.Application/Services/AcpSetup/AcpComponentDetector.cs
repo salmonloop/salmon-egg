@@ -58,13 +58,13 @@ public sealed class AcpComponentDetector
                 => await DetectPackageAsync(
                     component,
                     effectiveOverrides,
-                    _probe.IsGlobalNodePackageInstalledAsync,
+                    _probe.LocateGlobalNodePackageAsync,
                     cancellationToken).ConfigureAwait(false),
             AcpComponentDetectionMode.GlobalUvTool
                 => await DetectPackageAsync(
                     component,
                     effectiveOverrides,
-                    _probe.IsGlobalUvToolInstalledAsync,
+                    _probe.LocateGlobalUvToolAsync,
                     cancellationToken).ConfigureAwait(false),
             _ => AcpComponentProbeResult.Undetermined(component.Id)
         };
@@ -105,7 +105,7 @@ public sealed class AcpComponentDetector
     private async Task<AcpComponentProbeResult> DetectPackageAsync(
         AcpComponentDescriptor component,
         AcpCommandOverrides overrides,
-        Func<string, CancellationToken, Task<bool?>> queryPackageAsync,
+        Func<string, CancellationToken, Task<AcpPackageQueryResult>> queryPackageAsync,
         CancellationToken cancellationToken)
     {
         var launcher = overrides.Resolve(component.ProbeCommand);
@@ -118,17 +118,23 @@ public sealed class AcpComponentDetector
             return AcpComponentProbeResult.Missing(component.Id, LauncherMissingDetail(launcher));
         }
 
-        var isInstalled = await queryPackageAsync(component.PackageId, cancellationToken).ConfigureAwait(false);
-        return isInstalled switch
+        var packageQuery = await queryPackageAsync(component.PackageId, cancellationToken).ConfigureAwait(false);
+        return packageQuery.IsInstalled switch
         {
-            true => AcpComponentProbeResult.Installed(component.Id, launcherPath, version: null),
+            true => AcpComponentProbeResult.Installed(
+                component.Id,
+                launcherPath,
+                version: null,
+                packageLocation: packageQuery.Location),
             // The launcher answered "no", which is only authoritative for the toolchain it belongs to.
             // Naming that launcher is the difference between "not installed" and "not installed *here*",
             // which is what a user with several toolchain versions needs to see.
             false => AcpComponentProbeResult.Missing(
                 component.Id,
-                PackageAbsentDetail(component.PackageId, launcherPath)),
-            null => AcpComponentProbeResult.Undetermined(component.Id)
+                PackageAbsentDetail(component.PackageId, packageQuery.QueryExecutablePath)),
+            null => AcpComponentProbeResult.Undetermined(
+                component.Id,
+                PackageQueryUnknownDetail(component.PackageId, packageQuery.QueryExecutablePath))
         };
     }
 
@@ -138,6 +144,13 @@ public sealed class AcpComponentDetector
     private static string ExecutableMissingDetail(string command)
         => $"Command '{command}' was not found on PATH.";
 
-    private static string PackageAbsentDetail(string packageId, string launcherPath)
-        => $"'{launcherPath}' does not list '{packageId}' among its global packages.";
+    private static string PackageAbsentDetail(string packageId, string? queryExecutablePath)
+        => queryExecutablePath is null
+            ? $"The package manager does not list '{packageId}' among its global packages."
+            : $"'{queryExecutablePath}' does not list '{packageId}' among its global packages.";
+
+    private static string PackageQueryUnknownDetail(string packageId, string? queryExecutablePath)
+        => queryExecutablePath is null
+            ? $"Could not run the package manager needed to look for '{packageId}'."
+            : $"Could not determine whether '{packageId}' is installed through '{queryExecutablePath}'.";
 }

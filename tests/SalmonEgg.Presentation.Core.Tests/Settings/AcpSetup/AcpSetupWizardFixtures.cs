@@ -96,11 +96,31 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
         CancellationToken cancellationToken = default)
         => Task.FromResult(_versions.TryGetValue(command, out var version) ? version : null);
 
-    public Task<bool?> IsGlobalNodePackageInstalledAsync(string packageId, CancellationToken cancellationToken = default)
-        => Task.FromResult(_nodePackages.TryGetValue(packageId, out var installed) ? installed : null);
+    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(
+            _nodePackages.TryGetValue(packageId, out var installed)
+                ? installed switch
+                {
+                    true => AcpPackageQueryResult.Found("/test/node_modules", "/test/bin/npm"),
+                    false => AcpPackageQueryResult.Absent("/test/bin/npm"),
+                    null => AcpPackageQueryResult.Unknown()
+                }
+                : AcpPackageQueryResult.Unknown());
 
-    public Task<bool?> IsGlobalUvToolInstalledAsync(string packageId, CancellationToken cancellationToken = default)
-        => Task.FromResult(_uvTools.TryGetValue(packageId, out var installed) ? installed : null);
+    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(
+            _uvTools.TryGetValue(packageId, out var installed)
+                ? installed switch
+                {
+                    true => AcpPackageQueryResult.Found("/test/uv-tools", "/test/bin/uv"),
+                    false => AcpPackageQueryResult.Absent("/test/bin/uv"),
+                    null => AcpPackageQueryResult.Unknown()
+                }
+                : AcpPackageQueryResult.Unknown());
 }
 
 /// <summary>

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.AcpSetup;
 
 namespace SalmonEgg.Domain.Services.AcpSetup;
 
@@ -53,18 +54,21 @@ public interface IAcpExecutableProbe
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// True when <paramref name="packageId"/> is installed as a Node global package. Null when the
-    /// query itself could not run, which callers must not read as "absent".
+    /// Asks whether <paramref name="packageId"/> is installed as a Node global package, and where.
     /// </summary>
-    Task<bool?> IsGlobalNodePackageInstalledAsync(
+    /// <remarks>
+    /// Answers where rather than only whether, because a package manager answers for the toolchain
+    /// currently on PATH: the location is what lets the wizard say which one it asked. An unanswerable
+    /// query reports unknown, which callers must not read as absent.
+    /// </remarks>
+    Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
         string packageId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// True when <paramref name="packageId"/> is installed as a uv tool. Null when the query itself
-    /// could not run.
+    /// Asks whether <paramref name="packageId"/> is installed as a uv tool, and where.
     /// </summary>
-    Task<bool?> IsGlobalUvToolInstalledAsync(
+    Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
         string packageId,
         CancellationToken cancellationToken = default);
 }

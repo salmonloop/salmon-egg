@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Domain.Services.AcpSetup;
 
 namespace SalmonEgg.Infrastructure.AcpSetup;
@@ -34,13 +35,13 @@ public sealed class UnsupportedAcpExecutableProbe : IAcpExecutableProbe
         CancellationToken cancellationToken = default)
         => Task.FromResult<string?>(null);
 
-    public Task<bool?> IsGlobalNodePackageInstalledAsync(
+    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
         string packageId,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<bool?>(null);
+        => Task.FromResult(AcpPackageQueryResult.Unknown());
 
-    public Task<bool?> IsGlobalUvToolInstalledAsync(
+    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
         string packageId,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<bool?>(null);
+        => Task.FromResult(AcpPackageQueryResult.Unknown());
 }
