@@ -11,6 +11,14 @@
     <IsAotCompatible>true</IsAotCompatible>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- Baseline validation diffs the public surface against the last shipped package, so it can only
+         run once something has shipped. 1.0.0 is the first release and has no predecessor on
+         nuget.org; hardcoding a baseline there fails restore with NU1101. Deriving it from
+         AcpPackageBaselineVersion keeps the first release packable while forcing every later version
+         to diff against a real published package instead of silently validating nothing. The
+         AcpBaselineRequired target below turns a missing baseline into a build error. -->
+    <AcpPackageFirstReleasedVersion>1.0.0</AcpPackageFirstReleasedVersion>
+    <PackageValidationBaselineVersion Condition="'$(Version)' != '$(AcpPackageFirstReleasedVersion)'">$(AcpPackageBaselineVersion)</PackageValidationBaselineVersion>
 
     <PackageId>SalmonEgg.Acp</PackageId>
     <Version>1.0.0</Version>
@@ -41,6 +49,14 @@
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <!-- Fail closed on a missing baseline. Without this, bumping Version past the first release while
+       forgetting AcpPackageBaselineVersion leaves PackageValidationBaselineVersion empty, and package
+       validation silently degrades to comparing nothing - a green build that checks no compatibility. -->
+  <Target Name="AcpBaselineRequired" BeforeTargets="Build">
+    <Error Condition="'$(Version)' != '$(AcpPackageFirstReleasedVersion)' AND '$(PackageValidationBaselineVersion)' == ''"
+           Text="SalmonEgg.Acp $(Version) is past the first release $(AcpPackageFirstReleasedVersion), so package validation needs a published baseline. Pass -p:AcpPackageBaselineVersion=&lt;last published version&gt;." />
+  </Target>
 
   <!-- Internals remain available to first-party contract tests. External consumers use the public surface. -->
   <ItemGroup>
