@@ -429,13 +429,35 @@ SDK 与应用是两条独立的发布线，各有自己的 tag 命名空间与�
 
 两者必须保持分离：共用 `v*` 会让每次 SDK 发布都重建桌面安装包，也会让应用发版误触发 NuGet 推送。
 
-### 一次性准备
+### 一次性准备（受信任发布 / Trusted Publishing）
 
-1. 在 nuget.org 生成 API key，作用域限定为推送 `SalmonEgg.Acp`。
-2. 在仓库中创建名为 `NUGET_API_KEY` 的 secret。
-3. 创建名为 `nuget-publish` 的 GitHub Environment；`publish-nuget` job 绑定该环境，可在此挂必要的审批人。
+通道不存长期 API key。`publish-nuget` job 用 GitHub OIDC 向 nuget.org 换一枚有效期 1 小时的临时 key，用完即弃。
 
-未配置 `NUGET_API_KEY` 时 `publish-nuget` 会显式失败而非静默跳过 —— 一次"绿灯但什么都没发布"的运行比失败更难发现。
+1. 登录 nuget.org → 点用户名 → **Trusted Publishing** → 新建策略：
+
+    | 字段 | 值 |
+    |---|---|
+    | Package owner | `Salmon` |
+    | Scopes | Push new packages and package versions |
+    | Glob Patterns and Packages | `SalmonEgg.Acp` |
+    | Repository Owner | `salmonloop` |
+    | Repository | `salmon-egg` |
+    | Workflow File | `release-acp-sdk.yml` |
+    | Environment | `nuget-publish` |
+
+    Workflow File 只填文件名，**不要带** `.github/workflows/` 路径。Environment 必须与 workflow 里的 `environment:` 完全一致，否则令牌交换会被拒。Scopes 必须包含 "new packages"：首发时包还不存在，只给 "new versions" 会推不上去。
+
+    填表时请关闭浏览器页面翻译。`salmon-egg` 被译成中文后写入策略，与 GitHub 令牌里的原始仓库名不匹配，交换同样会失败。
+
+2. 策略的 **Package owner** 决定它归谁名下，并对该 owner 名下**所有**包生效，因此不要求 `SalmonEgg.Acp` 事先存在。选个人比选组织稳：策略归组织名下时，创建者若离开该组织，策略会失效。
+
+3. 创建名为 `nuget-publish` 的 GitHub Environment；`publish-nuget` job 绑定该环境，可在此挂必要的审批人。策略若限定了 environment，该环境就是鉴权边界的一部分，不是装饰。
+
+4. 在 `Settings → Secrets and variables → Actions → Variables` 添加变量 `NUGET_USER`，值为 nuget.org 的**用户名（profile name），不是邮箱**。它不是机密，但也不该硬编码进 workflow：fork 会连同用户名一起继承。
+
+新建策略会先带一个 7 天临时有效期，即使仓库是公开的也会看到。nuget.org 需要 GitHub 仓库与所有者的**数字 ID** 才能把策略永久锁定到本仓库（防止有人删库、重建同名仓库后冒名发布），而这些 ID 只随一次成功发布的 OIDC 令牌送达。7 天内未发布则转为 inactive，可随时重启该窗口。
+
+OIDC 交换未产出 key 时 `publish-nuget` 会显式失败而非静默跳过 —— 一次"绿灯但什么都没发布"的运行比失败更难发现。
 
 ### 发布步骤
 
@@ -482,5 +504,5 @@ nuget.org 的推送无法撤回，也无法覆盖同版本号。因此：
 - [ ] `run-acp-sdk-tag-version-gate.sh` 通过
 - [ ] `run-acp-consumer-package-smoke.sh` 通过（真实 nupkg restore + build + run）
 - [ ] tag 使用 `acp-sdk-v` 前缀，且与 `<Version>` 一致
-- [ ] `NUGET_API_KEY` secret 与 `nuget-publish` environment 已就绪
+- [ ] nuget.org 受信任发布策略、`NUGET_USER` 变量与 `nuget-publish` environment 均已就绪
 - [ ] 发布后在 nuget.org 确认包与符号均已上架
