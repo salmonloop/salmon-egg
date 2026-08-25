@@ -24,10 +24,10 @@ public sealed class UnsupportedAcpSetupTests
     {
         var probe = new UnsupportedAcpExecutableProbe();
 
-        Assert.Null(await probe.ResolveExecutablePathAsync("npx"));
-        Assert.Null(await probe.ReadVersionAsync("npx", new[] { "--version" }));
-        Assert.Null((await probe.LocateGlobalNodePackageAsync("@scope/pkg")).IsInstalled);
-        Assert.Null((await probe.LocateGlobalUvToolAsync("tool")).IsInstalled);
+        Assert.Null(await probe.ResolveExecutablePathAsync("npx", TestContext.Current.CancellationToken));
+        Assert.Null(await probe.ReadVersionAsync("npx", new[] { "--version" }, TestContext.Current.CancellationToken));
+        Assert.Null((await probe.LocateGlobalNodePackageAsync("@scope/pkg", TestContext.Current.CancellationToken)).IsInstalled);
+        Assert.Null((await probe.LocateGlobalUvToolAsync("tool", TestContext.Current.CancellationToken)).IsInstalled);
     }
 
     [Fact]
@@ -39,7 +39,8 @@ public sealed class UnsupportedAcpSetupTests
     {
         var component = AcpSetupFixtures.NpxComponent();
 
-        var result = await new UnsupportedAcpComponentInstaller().InstallAsync(component);
+        var result = await new UnsupportedAcpComponentInstaller()
+            .InstallAsync(component, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(component.Id, result.ComponentId);
@@ -55,7 +56,7 @@ public sealed class UnsupportedAcpSetupTests
     public async Task ConnectivityTester_ShouldFailAtCommandResolution()
     {
         var result = await new UnsupportedAcpSetupConnectivityTester()
-            .TestAsync(AcpSetupFixtures.Plan("npx", "@scope/adapter"));
+            .TestAsync(AcpSetupFixtures.Plan("npx", "@scope/adapter"), TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(AcpSetupTestStage.CommandResolution, result.Stage);
