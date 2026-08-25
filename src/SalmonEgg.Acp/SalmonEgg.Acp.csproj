@@ -22,8 +22,10 @@
     <PackageTags>acp;agent-client-protocol;json-rpc;sdk;aot</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageProjectUrl>https://agentclientprotocol.com/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/salmon-egg/salmon-egg</RepositoryUrl>
+    <!-- The package home is this repository. agentclientprotocol.com is the upstream spec, not
+         this project, and pointing ProjectUrl there would imply an official ACP package. -->
+    <PackageProjectUrl>https://github.com/salmonloop/salmon-egg</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/salmonloop/salmon-egg</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Public surface XML docs are mixed language today; keep missing-doc noise from blocking AOT/warn-as-error. -->
