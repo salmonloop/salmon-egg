@@ -1440,7 +1440,7 @@
   <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
     <value>Step {0} of {1}</value>
   </data>
-  <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
+  <data name="AcpSetup_InstallOutputToggle.Text" xml:space="preserve">
     <value>View installer output</value>
   </data>
   <data name="AcpSetup_AdapterMissingBar.Title" xml:space="preserve">
@@ -1464,7 +1464,7 @@
   <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
     <value>Looking for</value>
   </data>
-  <data name="AcpSetup_WhyNotFound.Content" xml:space="preserve">
+  <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
     <value>Why was nothing found?</value>
   </data>
   <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">

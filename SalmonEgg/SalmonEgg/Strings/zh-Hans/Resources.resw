@@ -837,7 +837,7 @@
   <data name="AcpSetup_Step_Position.Text" xml:space="preserve">
     <value>第 {0} 步，共 {1} 步</value>
   </data>
-  <data name="AcpSetup_InstallOutputToggle.Content" xml:space="preserve">
+  <data name="AcpSetup_InstallOutputToggle.Text" xml:space="preserve">
     <value>查看安装输出</value>
   </data>
   <data name="AcpSetup_AdapterMissingBar.Title" xml:space="preserve">
@@ -861,7 +861,7 @@
   <data name="AcpSetup_ProbeTargetLabel.Text" xml:space="preserve">
     <value>检测的命令</value>
   </data>
-  <data name="AcpSetup_WhyNotFound.Content" xml:space="preserve">
+  <data name="AcpSetup_WhyNotFound.Text" xml:space="preserve">
     <value>为什么没检测到？</value>
   </data>
   <data name="AcpSetup_CustomCommand.Header" xml:space="preserve">
