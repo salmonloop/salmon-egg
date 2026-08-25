@@ -415,3 +415,72 @@ dotnet publish SalmonEgg/SalmonEgg/SalmonEgg.csproj -f net10.0-browserwasm -c Re
 - [Uno Platform 文档](https://platform.uno/docs/)
 - [.NET 发布指南](https://docs.microsoft.com/dotnet/core/deploying/)
 - [GitHub Issues](https://github.com/salmonloop/salmon-egg/issues)
+
+---
+
+## ACP SDK（`SalmonEgg.Acp`）发布
+
+SDK 与应用是两条独立的发布线，各有自己的 tag 命名空间与版本号：
+
+| | tag | 版本来源 | workflow |
+|---|---|---|---|
+| GUI / CLI | `v*` | 根 `Directory.Build.props` 的 `SalmonEggDisplayVersion` | `release-packaging.yml` |
+| ACP SDK | `acp-sdk-v*` | `src/SalmonEgg.Acp/SalmonEgg.Acp.csproj` 的 `<Version>` | `release-acp-sdk.yml` |
+
+两者必须保持分离：共用 `v*` 会让每次 SDK 发布都重建桌面安装包，也会让应用发版误触发 NuGet 推送。
+
+### 一次性准备
+
+1. 在 nuget.org 生成 API key，作用域限定为推送 `SalmonEgg.Acp`。
+2. 在仓库中创建名为 `NUGET_API_KEY` 的 secret。
+3. 创建名为 `nuget-publish` 的 GitHub Environment；`publish-nuget` job 绑定该环境，可在此挂必要的审批人。
+
+未配置 `NUGET_API_KEY` 时 `publish-nuget` 会显式失败而非静默跳过 —— 一次"绿灯但什么都没发布"的运行比失败更难发现。
+
+### 发布步骤
+
+```bash
+# 1. 更新 SDK 版本（首发之后必须同时提供上一个已发布版本作为兼容性基线）
+#    src/SalmonEgg.Acp/SalmonEgg.Acp.csproj: <Version>1.0.1</Version>
+
+# 2. 本地跑完整门禁 + 真实包消费验证
+./scripts/gates/run-acp-sdk-gates.sh Release artifacts/acp-sdk-pack
+./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
+./scripts/gates/run-acp-sdk-tag-version-gate.sh acp-sdk-v1.0.1 artifacts/acp-sdk-pack
+./scripts/gates/run-acp-consumer-package-smoke.sh artifacts/acp-sdk-pack Release
+
+# 3. 打 tag 推送，workflow 接管 pack -> consumer smoke -> nuget push
+git tag acp-sdk-v1.0.1
+git push origin acp-sdk-v1.0.1
+```
+
+### 兼容性基线
+
+`EnablePackageValidation` 需要一个已发布版本作为对比基线才有意义。首发版本（`AcpPackageFirstReleasedVersion`，当前 `1.0.0`）在 nuget.org 上没有前身，写死基线会导致 restore 报 `NU1101`，因此该版本不启用基线比对。
+
+`<Version>` 一旦超过首发版本，构建就要求显式传入基线，否则 `AcpBaselineRequired` 直接报错：
+
+```bash
+dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj -c Release -p:AcpPackageBaselineVersion=1.0.0
+```
+
+这条门禁是 fail-closed 的：忘记传基线会构建失败，而不是让包验证退化成"什么都不比"的假绿。
+
+### 不可逆性
+
+nuget.org 的推送无法撤回，也无法覆盖同版本号。因此：
+
+- `run-acp-sdk-tag-version-gate.sh` 在推送前校验 tag 版本与产物版本一致、`.nupkg` 与 `.snupkg` 各恰好一个；
+- `concurrency` 不取消进行中的发布，避免出现"包已推、符号未推"的半成品；
+- `.snupkg` 与 `.nupkg` 分别显式推送，不用通配符（glob 会连带匹配 `.snupkg`）。
+
+### SDK 发布清单
+
+- [ ] `<Version>` 已更新，且非首发版本时已确定 `AcpPackageBaselineVersion`
+- [ ] `run-acp-sdk-gates.sh` 全绿（format / analyzer / 契约测试 / pack）
+- [ ] `run-acp-sdk-tag-version-gate-selftest.sh` 通过（门禁规则本身的正反例）
+- [ ] `run-acp-sdk-tag-version-gate.sh` 通过
+- [ ] `run-acp-consumer-package-smoke.sh` 通过（真实 nupkg restore + build + run）
+- [ ] tag 使用 `acp-sdk-v` 前缀，且与 `<Version>` 一致
+- [ ] `NUGET_API_KEY` secret 与 `nuget-publish` environment 已就绪
+- [ ] 发布后在 nuget.org 确认包与符号均已上架
