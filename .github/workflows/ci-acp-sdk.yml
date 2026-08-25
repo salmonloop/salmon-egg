@@ -9,6 +9,8 @@ on:
       - "tests/SalmonEgg.Acp.Tests/**"
       - "scripts/gates/run-acp-sdk-gates.*"
       - "scripts/gates/run-acp-consumer-package-smoke.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh"
       - ".github/workflows/ci-acp-sdk.yml"
       - "Directory.Build.props"
       - "NuGet.config"
@@ -21,6 +23,8 @@ on:
       - "tests/SalmonEgg.Acp.Tests/**"
       - "scripts/gates/run-acp-sdk-gates.*"
       - "scripts/gates/run-acp-consumer-package-smoke.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate.sh"
+      - "scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh"
       - ".github/workflows/ci-acp-sdk.yml"
       - "Directory.Build.props"
       - "NuGet.config"
@@ -60,6 +64,9 @@ jobs:
         env:
           DOTNET_BIN: dotnet
         run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Verify release tag/version gate rules
+        run: ./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
 
       - name: Upload ACP SDK package
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
