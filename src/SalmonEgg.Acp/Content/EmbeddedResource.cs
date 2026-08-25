@@ -61,6 +61,7 @@ namespace SalmonEgg.Acp.Content
         /// <param name="uri">The resource URI</param>
         /// <param name="blob">The Base64 encoded binary data</param>
         /// <param name="mimeType">The MIME type</param>
+        /// <param name="isBinary">Unused; distinguishes this overload from the text constructor</param>
         public EmbeddedResource(string uri, string blob, string mimeType, bool isBinary)
         {
             Uri = uri;

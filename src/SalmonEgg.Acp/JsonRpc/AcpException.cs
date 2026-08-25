@@ -63,7 +63,7 @@ namespace SalmonEgg.Acp.JsonRpc
         /// Creates an exception representing an invalid request.
         /// </summary>
         /// <param name="message">The error message.</param>
-        /// <param name="data">Optional additional data.</param>
+        /// <param name="errorData">Optional additional data.</param>
         /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInvalidRequest(string message, object? errorData = null)
         {
@@ -89,7 +89,7 @@ namespace SalmonEgg.Acp.JsonRpc
         /// Creates an exception representing invalid parameters.
         /// </summary>
         /// <param name="message">The error message.</param>
-        /// <param name="data">Optional additional data.</param>
+        /// <param name="errorData">Optional additional data.</param>
         /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInvalidParams(string message, object? errorData = null)
         {
@@ -104,7 +104,7 @@ namespace SalmonEgg.Acp.JsonRpc
         /// </summary>
         /// <param name="message">The error message.</param>
         /// <param name="innerException">The inner exception.</param>
-        /// <param name="data">Optional additional data.</param>
+        /// <param name="errorData">Optional additional data.</param>
         /// <returns>An <see cref="AcpException"/> instance.</returns>
         public static AcpException CreateInternalError(string message, Exception? innerException = null, object? errorData = null)
         {

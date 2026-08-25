@@ -160,6 +160,9 @@ namespace SalmonEgg.Acp.Client
         /// Creates a new <see cref="AcpClient"/> instance.
         /// </summary>
         /// <param name="transport">The transport used to exchange messages with the agent.</param>
+        /// <param name="logger">Optional logger for client diagnostics.</param>
+        /// <param name="sessionStore">Optional store consulted for session state.</param>
+        /// <param name="terminalSessionManager">Optional manager that services terminal requests.</param>
         public AcpClient(
             IAcpTransport transport,
             IAcpClientLogger? logger = null,

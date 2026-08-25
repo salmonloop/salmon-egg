@@ -608,6 +608,7 @@ namespace SalmonEgg.Acp.Protocol
         /// <param name="http">Whether HTTP is supported</param>
         /// <param name="sse">Whether SSE is supported</param>
         /// <param name="meta">Extension metadata</param>
+        /// <param name="stdio">Whether stdio is supported; null when the wire did not carry the field</param>
         public McpCapabilities(
             bool http = false,
             bool sse = false,
