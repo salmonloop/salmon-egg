@@ -94,7 +94,16 @@ jobs:
     # Only a real tag publishes. workflow_dispatch stays available to rehearse pack + consumer smoke
     # without pushing anything to nuget.org.
     if: startsWith(github.ref, 'refs/tags/acp-sdk-v')
+    # The trusted publishing policy on nuget.org names this environment. Keeping it here is not
+    # decoration: if the policy is scoped to `nuget-publish`, a job running outside that environment
+    # cannot exchange its OIDC token, so the environment is part of the auth boundary.
     environment: nuget-publish
+    permissions:
+      contents: read
+      # Trusted publishing needs GitHub to mint an OIDC token for this job. Without this the
+      # NuGet/login step has no token to exchange. Scoped to this job only - no other job here
+      # should be able to request an identity token.
+      id-token: write
     steps:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -107,15 +116,54 @@ jobs:
           name: acp-sdk-release-package
           path: artifacts/acp-sdk-package
 
-      - name: Push package and symbols
+      # The nuget.org profile name that owns the trusted publishing policy. It is not a secret, but
+      # it is a repository variable rather than a literal: a fork inherits this workflow, and a
+      # hardcoded account name there would point a fork's publish attempts at this account.
+      #
+      # Check it here instead of letting NuGet/login receive an empty user. An empty `user` fails
+      # inside the action with a token-exchange error that reads like a policy mismatch, which sends
+      # you auditing the nuget.org policy for a problem that is actually a missing variable.
+      - name: Verify the trusted publishing account is configured
         shell: bash
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_USER: ${{ vars.NUGET_USER }}
         run: |
           set -euo pipefail
 
+          if [ -z "${NUGET_USER:-}" ]; then
+            echo "The repository variable NUGET_USER is not set." >&2
+            echo "Set it to the nuget.org profile name (not an email) that owns the" >&2
+            echo "SalmonEgg.Acp trusted publishing policy:" >&2
+            echo "  Settings -> Secrets and variables -> Actions -> Variables" >&2
+            exit 1
+          fi
+
+          echo "Publishing as nuget.org account: ${NUGET_USER}"
+
+      # Trusted publishing: exchange the job's short-lived GitHub OIDC token for a temporary
+      # nuget.org API key. Nothing long-lived is stored in this repository. The key nuget.org
+      # returns is valid for one hour, so this step sits immediately before the push rather than
+      # at the top of the job.
+      - name: NuGet login (OIDC to temporary API key)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push package and symbols
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Fail closed. A missing key here means the OIDC exchange silently produced nothing, and
+          # `dotnet nuget push` with an empty --api-key would report a confusing 401 instead of the
+          # real cause. Do not turn this into a warning: a publish that half-happens cannot be undone.
           if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "NUGET_API_KEY secret is not configured; refusing to attempt a publish." >&2
+            echo "Trusted publishing did not yield an API key." >&2
+            echo "Check that the nuget.org policy matches this repository, workflow file name," >&2
+            echo "and the '${GITHUB_JOB}' job's environment, and that the NUGET_USER variable is set." >&2
             exit 1
           fi
 
