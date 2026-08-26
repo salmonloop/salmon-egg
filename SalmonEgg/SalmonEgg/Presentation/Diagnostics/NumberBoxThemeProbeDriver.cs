@@ -184,12 +184,15 @@ internal static class NumberBoxThemeProbeDriver
             // without waiting samples a rect that still lies outside the render root, which yields
             // an empty region indistinguishable from an unreadable frame. Wait for the realized
             // geometry to land inside the render root before sampling pixels.
-            await WaitForSampleBoundsInsideRenderRootAsync(targets.NumberBox, targets.InputBox)
+            var boundsSettled = await WaitForSampleBoundsInsideRenderRootAsync(
+                    targets.NumberBox,
+                    targets.InputBox)
                 .ConfigureAwait(true);
             var snapshot = await CaptureSnapshotAsync(
                     targets.NumberBox,
                     targets.InputBox,
-                    unfocusedBeforeSample && inputFocused)
+                    unfocusedBeforeSample && inputFocused,
+                    boundsSettled)
                 .ConfigureAwait(true);
             if (snapshot.Foreground is null || snapshot.Background is null)
             {
@@ -236,7 +239,8 @@ internal static class NumberBoxThemeProbeDriver
     private static async Task<NumberBoxThemeProbeSnapshot> CaptureSnapshotAsync(
         NumberBox numberBox,
         TextBox inputBox,
-        bool focusTransitionSucceeded)
+        bool focusTransitionSucceeded,
+        bool boundsSettled)
     {
         var contentElement = FindDescendant<ScrollViewer>(
             inputBox,
@@ -280,6 +284,8 @@ internal static class NumberBoxThemeProbeDriver
             background,
             contrast,
             renderedColors.Attempts,
+            boundsSettled,
+            renderedColors.Diagnostic,
             passed);
     }
 
@@ -294,17 +300,32 @@ internal static class NumberBoxThemeProbeDriver
 
         Windows.UI.Color? background = null;
         Windows.UI.Color? foreground = null;
+        var diagnostic = "not-attempted";
+        string? firstFailure = null;
         for (var attempt = 1; attempt <= RenderCaptureAttemptCount; attempt++)
         {
             borderElement.UpdateLayout();
-            background = await TryCaptureRenderedBackgroundAsync(borderElement).ConfigureAwait(true);
+            var capture = await TryCaptureRenderedBackgroundAsync(borderElement).ConfigureAwait(true);
+            background = capture.Color;
+            diagnostic = capture.Diagnostic;
             foreground = background is null
                 ? null
                 : TryResolveEffectiveForeground(contentElement.Foreground, background.Value);
             if (background is not null && foreground is not null)
             {
-                return new RenderedColors(foreground, background, attempt);
+                return new RenderedColors(
+                    foreground,
+                    background,
+                    attempt,
+                    firstFailure is null ? diagnostic : $"{diagnostic} recoveredFrom=[{firstFailure}]");
             }
+
+            if (background is not null)
+            {
+                diagnostic = "foreground-brush-unreadable";
+            }
+
+            firstFailure ??= diagnostic;
 
             if (attempt < RenderCaptureAttemptCount)
             {
@@ -317,21 +338,27 @@ internal static class NumberBoxThemeProbeDriver
             }
         }
 
-        return new RenderedColors(foreground, background, RenderCaptureAttemptCount);
+        return new RenderedColors(foreground, background, RenderCaptureAttemptCount, diagnostic);
     }
 
-    private static async Task<Windows.UI.Color?> TryCaptureRenderedBackgroundAsync(
+    /// <summary>
+    /// Captures the rendered BorderElement background, or an unavailable sample that names the
+    /// reason. A bare <c>null</c> cannot distinguish an empty Skia frame from an off-viewport rect,
+    /// a translucent offscreen composition or an ambiguous cluster, so every exit reports its cause.
+    /// </summary>
+    private static async Task<BackgroundCapture> TryCaptureRenderedBackgroundAsync(
         Border borderElement)
     {
         if (borderElement.DispatcherQueue is null || !borderElement.DispatcherQueue.HasThreadAccess)
         {
-            return null;
+            return BackgroundCapture.Unavailable("no-dispatcher-access");
         }
 
         var renderRoot = FindVisualRoot(borderElement);
         if (renderRoot is null || renderRoot.RenderSize.Width <= 0 || renderRoot.RenderSize.Height <= 0)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"render-root-unmeasured root={FormatSize(renderRoot?.RenderSize)}");
         }
 
         // Skia Acrylic samples its ancestor backdrop. Rendering only BorderElement, or rebuilding
@@ -339,21 +366,26 @@ internal static class NumberBoxThemeProbeDriver
         var sampleBounds = TryResolveSampleBounds(borderElement, renderRoot);
         if (sampleBounds is null)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"sample-bounds-unresolved border={FormatSize(new Size(borderElement.ActualWidth, borderElement.ActualHeight))}");
         }
 
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(renderRoot);
         if (bitmap.PixelWidth <= 0 || bitmap.PixelHeight <= 0)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"render-empty bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight}"
+                + $" root={FormatSize(renderRoot.RenderSize)}");
         }
 
         var pixelBuffer = await bitmap.GetPixelsAsync();
         var expectedLength = checked(bitmap.PixelWidth * bitmap.PixelHeight * 4);
         if (pixelBuffer.Length != (uint)expectedLength)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"pixel-buffer-mismatch length={pixelBuffer.Length} expected={expectedLength}"
+                + $" bitmap={bitmap.PixelWidth}x{bitmap.PixelHeight}");
         }
 
         var pixels = new byte[expectedLength];
@@ -455,7 +487,7 @@ internal static class NumberBoxThemeProbeDriver
         return root;
     }
 
-    private static Windows.UI.Color? TrySampleOpaqueBackground(
+    private static BackgroundCapture TrySampleOpaqueBackground(
         byte[] pixels,
         int pixelWidth,
         int pixelHeight,
@@ -467,10 +499,13 @@ internal static class NumberBoxThemeProbeDriver
         var bottom = Math.Min(pixelHeight, (int)Math.Floor(sampleBounds.Y + sampleBounds.Height));
         if (right <= left || bottom <= top)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"sample-region-empty rect={FormatRect(sampleBounds)} bitmap={pixelWidth}x{pixelHeight}");
         }
 
-        var samples = new List<Windows.UI.Color>(checked((right - left) * (bottom - top)));
+        var regionPixelCount = checked((right - left) * (bottom - top));
+        var samples = new List<Windows.UI.Color>(regionPixelCount);
+        var translucentPixelCount = 0;
         for (var y = top; y < bottom; y++)
         {
             for (var x = left; x < right; x++)
@@ -478,7 +513,8 @@ internal static class NumberBoxThemeProbeDriver
                 var offset = ((y * pixelWidth) + x) * 4;
                 if (pixels[offset + 3] != byte.MaxValue)
                 {
-                    return null;
+                    translucentPixelCount++;
+                    continue;
                 }
 
                 samples.Add(Windows.UI.Color.FromArgb(
@@ -487,6 +523,16 @@ internal static class NumberBoxThemeProbeDriver
                     pixels[offset + 1],
                     pixels[offset]));
             }
+        }
+
+        // Preserved semantics: a partially transparent offscreen composition is not evidence of the
+        // realized background, so the sample stays unavailable. The counts identify how much of the
+        // region failed to composite, which a bare null could not.
+        if (translucentPixelCount > 0)
+        {
+            return BackgroundCapture.Unavailable(
+                $"sample-translucent translucent={translucentPixelCount}/{regionPixelCount}"
+                + $" rect={FormatRect(sampleBounds)}");
         }
 
         var reds = new List<byte>(samples.Count);
@@ -526,19 +572,33 @@ internal static class NumberBoxThemeProbeDriver
 
         if (inlierReds.Count * 3 < reds.Count * 2)
         {
-            return null;
+            return BackgroundCapture.Unavailable(
+                $"sample-cluster-ambiguous inliers={inlierReds.Count}/{reds.Count}"
+                + $" median=#{red:X2}{green:X2}{blue:X2}");
         }
 
         inlierReds.Sort();
         inlierGreens.Sort();
         inlierBlues.Sort();
         var inlierMedianIndex = inlierReds.Count / 2;
-        return Windows.UI.Color.FromArgb(
-            byte.MaxValue,
-            inlierReds[inlierMedianIndex],
-            inlierGreens[inlierMedianIndex],
-            inlierBlues[inlierMedianIndex]);
+        return BackgroundCapture.Available(
+            Windows.UI.Color.FromArgb(
+                byte.MaxValue,
+                inlierReds[inlierMedianIndex],
+                inlierGreens[inlierMedianIndex],
+                inlierBlues[inlierMedianIndex]),
+            $"ok inliers={inlierReds.Count}/{reds.Count} rect={FormatRect(sampleBounds)}");
     }
+
+    private static string FormatRect(Rect rect)
+        => string.Create(
+            CultureInfo.InvariantCulture,
+            $"{rect.X:F1},{rect.Y:F1}+{rect.Width:F1}x{rect.Height:F1}");
+
+    private static string FormatSize(Size? size)
+        => size is { } value
+            ? string.Create(CultureInfo.InvariantCulture, $"{value.Width:F1}x{value.Height:F1}")
+            : "<none>";
 
     private static Windows.UI.Color? TryResolveEffectiveForeground(
         Brush? foreground,
@@ -711,6 +771,8 @@ internal static class NumberBoxThemeProbeDriver
         Windows.UI.Color? Background,
         double Contrast,
         int CaptureAttempts,
+        bool BoundsSettled,
+        string CaptureDiagnostic,
         bool Passed)
     {
         public string Format(int sample)
@@ -720,14 +782,16 @@ internal static class NumberBoxThemeProbeDriver
                 + $" contentTheme={ContentTheme} borderTheme={BorderTheme}"
                 + $" foreground={FormatColor(Foreground)} background={FormatColor(Background)}"
                 + $" contrast={Contrast.ToString("F2", CultureInfo.InvariantCulture)}"
-                + $" captureAttempts={CaptureAttempts} passed={Passed}";
+                + $" captureAttempts={CaptureAttempts} boundsSettled={BoundsSettled}"
+                + $" passed={Passed} captureReason=[{CaptureDiagnostic}]";
 
         public string FormatUnavailable(int attempt)
             => $"NumberBoxThemeProbe: capture-unavailable attempt={attempt} visible={Visible}"
                 + $" focusTransition={FocusTransitionSucceeded} focused={Focused}"
                 + $" focusState={FocusState} numberBoxTheme={NumberBoxTheme} inputTheme={InputTheme}"
                 + $" contentTheme={ContentTheme} borderTheme={BorderTheme}"
-                + $" captureAttempts={CaptureAttempts}";
+                + $" captureAttempts={CaptureAttempts} boundsSettled={BoundsSettled}"
+                + $" captureReason=[{CaptureDiagnostic}]";
 
         private static string FormatColor(Windows.UI.Color? color)
             => color is { } value
@@ -743,9 +807,21 @@ internal static class NumberBoxThemeProbeDriver
     private readonly record struct RenderedColors(
         Windows.UI.Color? Foreground,
         Windows.UI.Color? Background,
-        int Attempts)
+        int Attempts,
+        string Diagnostic)
     {
-        public static RenderedColors Unavailable { get; } = new(null, null, 0);
+        public static RenderedColors Unavailable { get; } = new(null, null, 0, "template-parts-missing");
+    }
+
+    /// <summary>
+    /// A rendered background sample, or an unavailable one that names why it could not be read.
+    /// </summary>
+    private readonly record struct BackgroundCapture(Windows.UI.Color? Color, string Diagnostic)
+    {
+        public static BackgroundCapture Available(Windows.UI.Color color, string diagnostic)
+            => new(color, diagnostic);
+
+        public static BackgroundCapture Unavailable(string diagnostic) => new(null, diagnostic);
     }
 
     private readonly record struct ColorLayer(
