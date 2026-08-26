@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -521,9 +522,13 @@ public static class DependencyInjection
         services.AddSingleton<IAcpComponentInstaller, UnsupportedAcpComponentInstaller>();
         services.AddSingleton<IAcpSetupConnectivityTester, UnsupportedAcpSetupConnectivityTester>();
 #else
+        // Widens what the probe can find beyond the PATH this process inherited. A GUI-launched app gets
+        // the session PATH, not the one a shell profile builds, so a version-manager toolchain is
+        // invisible to it and every component would otherwise report as missing. The composition — which
+        // sources this installation can use, and in what order — belongs to AcpSearchPathSources.
         services.AddSingleton<IAcpExecutableProbe>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
-                ? new DesktopAcpExecutableProbe()
+                ? new DesktopAcpExecutableProbe(AcpSearchPathSources.Create())
                 : new UnsupportedAcpExecutableProbe());
         services.AddSingleton<IAcpComponentInstaller>(sp =>
             sp.GetRequiredService<IPlatformCapabilityService>().SupportsStdioTransport
