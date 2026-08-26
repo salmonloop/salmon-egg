@@ -24,7 +24,7 @@ public sealed class DesktopAcpComponentInstallerTests
     {
         var installer = new DesktopAcpComponentInstaller(new StubAcpExecutableProbe());
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => installer.InstallAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => installer.InstallAsync(null!, onOutput: null, overrides: null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class DesktopAcpComponentInstallerTests
         var probe = new StubAcpExecutableProbe();
         var installer = new DesktopAcpComponentInstaller(probe);
 
-        var result = await installer.InstallAsync(AcpSetupFixtures.BinaryComponent());
+        var result = await installer.InstallAsync(AcpSetupFixtures.BinaryComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Null(result.ExitCode);
@@ -48,7 +48,7 @@ public sealed class DesktopAcpComponentInstallerTests
         probe.SetResolvedPath("npm", null);
         var installer = new DesktopAcpComponentInstaller(probe);
 
-        var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent());
+        var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Null(result.ExitCode);
@@ -68,7 +68,7 @@ public sealed class DesktopAcpComponentInstallerTests
         probe.SetResolvedPath("npm", Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
         var installer = new DesktopAcpComponentInstaller(probe);
 
-        var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent());
+        var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "npx", "npm" }, probe.ResolveRequests);
         // The resolved path does not exist, so the attempt fails at start rather than reporting success.
@@ -83,7 +83,7 @@ public sealed class DesktopAcpComponentInstallerTests
         probe.SetResolvedPath("uv", null);
         var installer = new DesktopAcpComponentInstaller(probe);
 
-        var result = await installer.InstallAsync(AcpSetupFixtures.UvxComponent());
+        var result = await installer.InstallAsync(AcpSetupFixtures.UvxComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { "uvx", "uv" }, probe.ResolveRequests);
         Assert.False(result.IsSuccess);
@@ -112,7 +112,7 @@ public sealed class DesktopAcpComponentInstallerTests
             ["npx"] = toolchainBin + "/npx"
         });
 
-        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides);
+        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             new[] { toolchainBin + "/npx", toolchainBin + "/npm" },
@@ -136,7 +136,7 @@ public sealed class DesktopAcpComponentInstallerTests
             ["npm"] = "/elsewhere/bin/npm"
         });
 
-        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides);
+        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides, TestContext.Current.CancellationToken);
 
         Assert.Contains("/elsewhere/bin/npm", probe.ResolveRequests);
         Assert.DoesNotContain("/opt/node/bin/npm", probe.ResolveRequests);
@@ -155,7 +155,7 @@ public sealed class DesktopAcpComponentInstallerTests
         var probe = new StubAcpExecutableProbe();
         var installer = new DesktopAcpComponentInstaller(probe);
 
-        var result = await installer.InstallAsync(component);
+        var result = await installer.InstallAsync(component, onOutput: null, overrides: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Empty(probe.ResolveRequests);
