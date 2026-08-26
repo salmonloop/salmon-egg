@@ -365,17 +365,62 @@ public sealed class XamlComplianceMainNavigationTests
 
 
     [Fact]
-    public void DiscoverSessionsPage_ProfileTransportChipsUseFluentAccentThemePattern()
+    public void DiscoverSessionsPage_RowAccentsUseThemeBrushesWithoutOpacityScaling()
     {
         var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
 
-        // Profiles list and session rows share the Fluent soft-accent chip used on
-        // AcpConnectionSettingsPage (AccentFill + low Opacity + AccentBrush icon).
-        Assert.Contains("Background=\"{ThemeResource AccentFillColorDefaultBrush}\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Foreground=\"{ThemeResource AccentBrush}\"", xaml, StringComparison.Ordinal);
+        // Row leading icons tint with the Fluent accent *text* brush. The previous soft-accent badge
+        // (AccentFill + Opacity=0.18 + a Viewbox'd FontIcon) is deliberately gone: an opacity-scaled
+        // fill inside the DataTemplate sits above the container's own PointerOver/Selected fills, so
+        // it dulled every native row state. Opacity is not a theming mechanism here at all — any
+        // Opacity= in this file would mean chrome is being faked instead of themed.
+        Assert.Contains("Foreground=\"{ThemeResource AccentTextFillColorPrimaryBrush}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Opacity=", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("SystemControlBackgroundAccentBrush", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("TextOnAccentFillColorPrimaryBrush", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Opacity=\"0.8\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DiscoverSessionsPage_RowChromeBelongsToTheItemContainerNotTheDataTemplate()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Discover\DiscoverSessionsPage.xaml");
+
+        // ListViewItemPresenter renders PointerOver / Selected / Focus *beneath* the DataTemplate
+        // (WinUI "Item containers and templates"), so an opaque card Border at the template root
+        // masks every native row state — and then row spacing has to be faked with container
+        // Margin + Padding="0". Both container styles therefore carry the inset and corner radius,
+        // and no row template paints a card fill.
+        var sessionRowTemplate = ExtractSection(
+            xaml,
+            "<DataTemplate x:DataType=\"viewModels:DiscoverSessionItemViewModel\">",
+            "</DataTemplate>");
+        Assert.DoesNotContain("CardBackgroundFillColorSecondaryBrush", sessionRowTemplate, StringComparison.Ordinal);
+
+        Assert.Contains("Property=\"Padding\" Value=\"{StaticResource DiscoverSessionRowPadding}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"CornerRadius\" Value=\"{ThemeResource ControlCornerRadius}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"HorizontalContentAlignment\" Value=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemContainerStyle=\"{StaticResource DiscoverProfileItemStyle}\"", xaml, StringComparison.Ordinal);
+
+        // The spacing hacks that the masked states used to require.
+        Assert.DoesNotContain("Property=\"Padding\" Value=\"0\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Property=\"Margin\" Value=\"0,0,0,6\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Property=\"Margin\" Value=\"0,0,0,10\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Property=\"Margin\" Value=\"12,2,12,2\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionsListDialog_TrailingMetadataReachesTheRowEdge()
+    {
+        var xaml = LoadXaml(@"SalmonEgg\SalmonEgg\Presentation\Views\Navigation\SessionsListDialog.xaml");
+
+        // ListViewItem left-aligns its content by default, so a trailing timestamp column only
+        // reaches the row's right edge once the container stretches (WinUI item-container guidance).
+        Assert.Contains("Property=\"HorizontalContentAlignment\" Value=\"Stretch\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Property=\"Padding\" Value=\"{StaticResource SessionsDialogRowPadding}\"", xaml, StringComparison.Ordinal);
+        // Row inset comes from the container, and gaps from ColumnSpacing, not per-child margins.
+        Assert.DoesNotContain("Padding=\"12,8\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Margin=\"8,0,0,0\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Margin=\"12,0,0,0\"", xaml, StringComparison.Ordinal);
     }
 
 
