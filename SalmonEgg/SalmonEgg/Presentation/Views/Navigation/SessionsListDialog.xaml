@@ -16,6 +16,11 @@
     <ContentDialog.Resources>
         <Style TargetType="navViews:SessionsListDialog"
                BasedOn="{StaticResource DefaultContentDialogStyle}" />
+        <!-- Row and search metrics named as resources rather than inlined (coding-standards 5.2). -->
+        <Thickness x:Key="SessionsDialogRowPadding">12,8</Thickness>
+        <Thickness x:Key="SessionsDialogSearchMargin">0,0,0,12</Thickness>
+        <x:Double x:Key="SessionsDialogRowSpacing">12</x:Double>
+        <x:Double x:Key="SessionsDialogAttentionDotSize">8</x:Double>
     </ContentDialog.Resources>
 
     <Grid x:Name="SessionsDialogRoot"
@@ -46,34 +51,45 @@
         <TextBox x:Uid="SessionsDialogSearchBox"
                  AutomationProperties.AutomationId="SessionsDialog.SearchBox"
                  Text="{x:Bind FilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 Margin="0,0,0,12"/>
+                 Margin="{StaticResource SessionsDialogSearchMargin}"/>
 
+        <!-- Single-line list item: the row is the primary action (pick a session), so selection and
+             hover visuals stay with the container and the template only lays content out. Padding
+             lives on the container because ListViewItemPresenter template-binds it to ContentMargin. -->
         <ListView Grid.Row="1"
                   AutomationProperties.AutomationId="SessionsDialog.List"
                   ItemsSource="{x:Bind FilteredSessions, Mode=OneWay}"
                   IsItemClickEnabled="True"
                   ItemClick="OnSessionItemClick"
                   SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <!-- Stretch so the trailing timestamp reaches the row's right edge; without it
+                         ListViewItem left-aligns its content (WinUI item-container guidance). -->
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="{StaticResource SessionsDialogRowPadding}"/>
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="nav:SessionNavItemViewModel">
                     <Grid ColumnDefinitions="*,Auto,Auto"
-                          Padding="12,8"
+                          ColumnSpacing="{StaticResource SessionsDialogRowSpacing}"
                           AutomationProperties.AutomationId="{x:Bind navUi:MainNavigationAutomationIds.SessionsDialogItem(SessionId)}">
                         <TextBlock Text="{x:Bind Title, Mode=OneWay}"
                                    TextTrimming="CharacterEllipsis"
-                                   MaxLines="1"/>
+                                   MaxLines="1"
+                                   VerticalAlignment="Center"/>
                         <Ellipse Grid.Column="1"
-                                 Width="8"
-                                 Height="8"
-                                 Fill="{ThemeResource AccentBrush}"
-                                 Margin="8,0,0,0"
+                                 Width="{StaticResource SessionsDialogAttentionDotSize}"
+                                 Height="{StaticResource SessionsDialogAttentionDotSize}"
+                                 Fill="{ThemeResource AccentFillColorDefaultBrush}"
                                  VerticalAlignment="Center"
                                  Visibility="{x:Bind HasUnreadAttention, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                         <TextBlock Grid.Column="2"
                                    Text="{x:Bind RelativeTimeText, Mode=OneWay}"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Margin="12,0,0,0"/>
+                                   VerticalAlignment="Center"/>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
