@@ -23,22 +23,84 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     private static readonly TimeSpan VersionProbeTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PackageQueryTimeout = TimeSpan.FromSeconds(60);
 
-    public bool SupportsProcessProbing => true;
+    private readonly IReadOnlyList<IAcpSearchPathSource> _searchPathSources;
 
-    public Task<string?> ResolveExecutablePathAsync(
-        string command,
-        CancellationToken cancellationToken = default)
+    /// <param name="searchPathSources">
+    /// Sources of directories beyond the inherited PATH, consulted in order. None means PATH alone, which
+    /// is the correct behaviour for a process that already has the user's real environment.
+    /// </param>
+    public DesktopAcpExecutableProbe(IReadOnlyList<IAcpSearchPathSource>? searchPathSources = null)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(ResolveExecutablePath(command));
+        _searchPathSources = searchPathSources ?? Array.Empty<IAcpSearchPathSource>();
     }
 
-    public Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
+    public bool SupportsProcessProbing => true;
+
+    public async Task<string?> ResolveExecutablePathAsync(
+        string command,
+        CancellationToken cancellationToken = default)
+    {
+        var candidates = await ResolveExecutableCandidatesAsync(command, cancellationToken)
+            .ConfigureAwait(false);
+        return candidates.Count == 0 ? null : candidates[0];
+    }
+
+    public async Task<IReadOnlyList<string>> ResolveExecutableCandidatesAsync(
         string command,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(ResolveExecutableCandidates(command));
+
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return Array.Empty<string>();
+        }
+
+        var trimmed = command.Trim();
+        if (trimmed.IndexOfAny(new[] { '/', '\\' }) >= 0)
+        {
+            // An explicit path names one file; there is no search to widen.
+            return File.Exists(trimmed) ? new[] { Path.GetFullPath(trimmed) } : Array.Empty<string>();
+        }
+
+        var directories = await ResolveSearchDirectoriesAsync(cancellationToken).ConfigureAwait(false);
+        return FindCandidates(trimmed, directories);
+    }
+
+    /// <summary>
+    /// The directories to search: the inherited PATH first, then whatever the sources add.
+    /// </summary>
+    /// <remarks>
+    /// PATH leads because a command it can already resolve is the one this process — and anything it
+    /// starts — will actually run. The sources exist to find what PATH cannot see, not to displace it.
+    ///
+    /// A source that throws is skipped rather than failing the resolution: it is a widening, and losing it
+    /// leaves the probe exactly as capable as it was before the source existed.
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> ResolveSearchDirectoriesAsync(CancellationToken cancellationToken)
+    {
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var directories = new List<string>(
+            (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                .Split(
+                    isWindows ? ';' : ':',
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        foreach (var source in _searchPathSources)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                directories.AddRange(
+                    await source.GetSearchDirectoriesAsync(cancellationToken).ConfigureAwait(false));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // A source is additive; a broken one must not deny the search what PATH already offers.
+            }
+        }
+
+        return directories;
     }
 
     public async Task<string?> ReadVersionAsync(
@@ -232,9 +294,59 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     }
 
     /// <summary>
-    /// Resolves <paramref name="command"/> the way a shell would: an explicit path is used as given,
-    /// otherwise PATH is searched, applying PATHEXT on Windows so <c>npm</c> finds <c>npm.cmd</c>.
+    /// Finds every distinct executable named <paramref name="command"/> under
+    /// <paramref name="directories"/>, in order.
     /// </summary>
+    /// <remarks>
+    /// Deduplicated by resolved target rather than by candidate string: PATH commonly lists the same
+    /// directory more than once, and per-user bin directories are often symlink farms pointing at one real
+    /// file. Without that, a machine with one install reports several identical candidates and the UI
+    /// offers a choice between a path and itself.
+    ///
+    /// Extensions are the outer loop on Windows so PATHEXT precedence holds across the whole search, which
+    /// is how the shell resolves a bare name: an <c>.exe</c> late on PATH wins over a <c>.cmd</c> early on
+    /// it.
+    /// </remarks>
+    private static IReadOnlyList<string> FindCandidates(string command, IReadOnlyList<string> directories)
+    {
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var candidates = new List<string>();
+        var seenTargets = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var extension in ResolveExtensions(isWindows))
+        {
+            var candidateName = command + extension;
+            foreach (var directory in directories)
+            {
+                string candidate;
+                try
+                {
+                    candidate = Path.Combine(directory, candidateName);
+                }
+                catch (ArgumentException)
+                {
+                    // PATH entries can contain characters that are invalid for this platform's paths.
+                    continue;
+                }
+
+                if (File.Exists(candidate) && seenTargets.Add(ResolveDeduplicationKey(candidate)))
+                {
+                    candidates.Add(candidate);
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="command"/> against the inherited PATH only.
+    /// </summary>
+    /// <remarks>
+    /// Used by the paths that run a process they have already decided on. It stays synchronous and
+    /// PATH-only because those callers were handed a command that a source already resolved, or a bare name
+    /// whose own resolution is the caller's question rather than this method's.
+    /// </remarks>
     private static string? ResolveExecutablePath(string command)
     {
         if (string.IsNullOrWhiteSpace(command))
@@ -249,103 +361,18 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         }
 
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var pathSeparator = isWindows ? ';' : ':';
         var directories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(pathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split(
+                isWindows ? ';' : ':',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var extension in ResolveExtensions(isWindows))
-        {
-            var candidateName = trimmed + extension;
-            foreach (var directory in directories)
-            {
-                string candidate;
-                try
-                {
-                    candidate = Path.Combine(directory, candidateName);
-                }
-                catch (ArgumentException)
-                {
-                    // PATH entries can contain characters that are invalid for this platform's paths.
-                    continue;
-                }
-
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        return null;
+        var candidates = FindCandidates(trimmed, directories);
+        return candidates.Count == 0 ? null : candidates[0];
     }
 
     /// <summary>
-    /// Enumerates every distinct executable <paramref name="command"/> matches, in PATH order.
-    /// </summary>
-    /// <remarks>
-    /// Deduplicated by resolved target rather than by candidate string: PATH commonly lists the same
-    /// directory more than once, and per-user bin directories are often symlink farms pointing at one
-    /// real file. Without that, a machine with one install reports several identical candidates and the
-    /// UI offers a choice between a path and itself.
-    ///
-    /// An explicit path is returned as its single candidate, matching the single-path overload — there is
-    /// no PATH search to enumerate.
-    /// </remarks>
-    private static IReadOnlyList<string> ResolveExecutableCandidates(string command)
-    {
-        if (string.IsNullOrWhiteSpace(command))
-        {
-            return Array.Empty<string>();
-        }
-
-        var trimmed = command.Trim();
-        if (trimmed.IndexOfAny(new[] { '/', '\\' }) >= 0)
-        {
-            var explicitPath = ResolveExecutablePath(trimmed);
-            return explicitPath is null ? Array.Empty<string>() : new[] { explicitPath };
-        }
-
-        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var pathSeparator = isWindows ? ';' : ':';
-        var directories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(pathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var candidates = new List<string>();
-        var seenTargets = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var extension in ResolveExtensions(isWindows))
-        {
-            var candidateName = trimmed + extension;
-            foreach (var directory in directories)
-            {
-                string candidate;
-                try
-                {
-                    candidate = Path.Combine(directory, candidateName);
-                }
-                catch (ArgumentException)
-                {
-                    continue;
-                }
-
-                if (!File.Exists(candidate))
-                {
-                    continue;
-                }
-
-                if (seenTargets.Add(ResolveDeduplicationKey(candidate)))
-                {
-                    candidates.Add(candidate);
-                }
-            }
-        }
-
-        return candidates;
-    }
-
-    /// <summary>
-    /// The identity two candidate paths are compared on: the symlink target when one can be read, the
-    /// full path otherwise.
+    /// The identity two candidate paths are compared on: the symlink target when one can be read, the full
+    /// path otherwise.
     /// </summary>
     private static string ResolveDeduplicationKey(string candidate)
     {
