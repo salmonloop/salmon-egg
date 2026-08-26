@@ -157,11 +157,14 @@ public sealed class LoginShellSearchPathSourceTests : IDisposable
     {
         var path = Path.Combine(_root, "shell-" + Guid.NewGuid().ToString("N"));
         File.WriteAllText(path, "#!/bin/sh\nprintf '%s' \"$4\"\n");
-        File.SetUnixFileMode(
-            path,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
-                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
-                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                path,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                    | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                    | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
         return path;
     }
 

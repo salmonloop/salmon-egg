@@ -123,11 +123,17 @@ public sealed class AcpLauncherPathPropagationTests : IDisposable
         // The sibling "interpreter" the launcher reaches through `env`, mirroring how every Node CLI
         // finds `node`.
         var interpreter = Path.Combine(toolchain, "fake-interpreter");
-        await File.WriteAllTextAsync(interpreter, "#!/bin/sh\necho INTERPRETER-RAN\n");
+        await File.WriteAllTextAsync(
+            interpreter,
+            "#!/bin/sh\necho INTERPRETER-RAN\n",
+            TestContext.Current.CancellationToken);
         SetExecutable(interpreter);
 
         var launcher = Path.Combine(toolchain, "fake-launcher");
-        await File.WriteAllTextAsync(launcher, "#!/usr/bin/env fake-interpreter\n");
+        await File.WriteAllTextAsync(
+            launcher,
+            "#!/usr/bin/env fake-interpreter\n",
+            TestContext.Current.CancellationToken);
         SetExecutable(launcher);
 
         var originalPath = Environment.GetEnvironmentVariable("PATH");
