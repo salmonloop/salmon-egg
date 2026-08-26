@@ -116,6 +116,24 @@ public static class CliApplication
 
         var output = outputOverride ?? new TextCliOutput(stdout, stderr);
 
+        // Handled before the container exists and before startup recovery runs. This mode is invoked by
+        // the user's own login shell while the app is starting, purely to report the environment that
+        // shell produced; building the container or recovering transactions would turn an environment
+        // probe into a source of configuration side effects. See CliPrintEnvironment.
+        if (CliPrintEnvironment.TryGetMarker(args, out var environmentMarker))
+        {
+            try
+            {
+                return await CliPrintEnvironment
+                    .WriteAsync(environmentMarker, stdout, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return CliExitCodes.Failure;
+            }
+        }
+
         try
         {
             var fallbackWarningState = new CliFallbackSecureStorageWarningState();
