@@ -54,18 +54,8 @@ public sealed class AcpComponentDetector
         {
             AcpComponentDetectionMode.ExecutableOnPath
                 => await DetectExecutableAsync(component, effectiveOverrides, cancellationToken).ConfigureAwait(false),
-            AcpComponentDetectionMode.GlobalNodePackage
-                => await DetectPackageAsync(
-                    component,
-                    effectiveOverrides,
-                    _probe.LocateGlobalNodePackageAsync,
-                    cancellationToken).ConfigureAwait(false),
-            AcpComponentDetectionMode.GlobalUvTool
-                => await DetectPackageAsync(
-                    component,
-                    effectiveOverrides,
-                    _probe.LocateGlobalUvToolAsync,
-                    cancellationToken).ConfigureAwait(false),
+            AcpComponentDetectionMode.GlobalNodePackage or AcpComponentDetectionMode.GlobalUvTool
+                => await DetectPackageAsync(component, effectiveOverrides, cancellationToken).ConfigureAwait(false),
             _ => AcpComponentProbeResult.Undetermined(component.Id)
         };
     }
@@ -99,13 +89,19 @@ public sealed class AcpComponentDetector
 
     /// <summary>
     /// A package-manager component is only usable when its launcher exists too: <c>npx @scope/pkg</c>
-    /// cannot run without <c>npx</c> on PATH, however the package query answers. The query is passed as
-    /// a factory so it is never started — and never left unawaited — when the launcher is absent.
+    /// cannot run without <c>npx</c> on PATH, however the package query answers — so the launcher is
+    /// resolved first and the query is never started when it is absent.
     /// </summary>
+    /// <remarks>
+    /// The manager asked is the one belonging to the launcher that was just resolved, not a bare name the
+    /// inherited PATH resolves independently. Those differ exactly when the user overrode the launcher to
+    /// escape a PATH that cannot see their toolchain — which is the case this whole path exists for, and
+    /// where asking the wrong manager answers about a toolchain the user did not choose. See
+    /// <see cref="AcpPackageManagerCommand"/>.
+    /// </remarks>
     private async Task<AcpComponentProbeResult> DetectPackageAsync(
         AcpComponentDescriptor component,
         AcpCommandOverrides overrides,
-        Func<string, CancellationToken, Task<AcpPackageQueryResult>> queryPackageAsync,
         CancellationToken cancellationToken)
     {
         var launcher = overrides.Resolve(component.ProbeCommand);
@@ -118,7 +114,16 @@ public sealed class AcpComponentDetector
             return AcpComponentProbeResult.Missing(component.Id, LauncherMissingDetail(launcher));
         }
 
-        var packageQuery = await queryPackageAsync(component.PackageId, cancellationToken).ConfigureAwait(false);
+        // Derived from the resolved path rather than from the override text: an override may name a
+        // launcher by bare name or relative path, and the sibling lookup needs the real directory.
+        var packageManager = AcpPackageManagerCommand.Resolve(
+            component.Distribution,
+            launcherPath,
+            overrides);
+
+        var packageQuery = await _probe
+            .LocateGlobalPackageAsync(component.Distribution, component.PackageId, packageManager, cancellationToken)
+            .ConfigureAwait(false);
         return packageQuery.IsInstalled switch
         {
             true => AcpComponentProbeResult.Installed(

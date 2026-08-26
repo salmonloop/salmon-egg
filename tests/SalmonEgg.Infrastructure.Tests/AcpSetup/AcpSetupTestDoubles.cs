@@ -59,13 +59,10 @@ internal sealed class StubAcpExecutableProbe : IAcpExecutableProbe
         CancellationToken cancellationToken = default)
         => Task.FromResult<string?>(null);
 
-    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
+    public Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
+        AcpDistributionKind distribution,
         string packageId,
-        CancellationToken cancellationToken = default)
-        => Task.FromResult(AcpPackageQueryResult.Unknown());
-
-    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
-        string packageId,
+        AcpPackageManagerCandidates packageManager,
         CancellationToken cancellationToken = default)
         => Task.FromResult(AcpPackageQueryResult.Unknown());
 }

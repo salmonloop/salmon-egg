@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Infrastructure.Desktop.AcpSetup;
 using Xunit;
 
@@ -101,10 +102,13 @@ public sealed class DesktopAcpExecutableProbeTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task LocateGlobalNodePackageAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
+    public async Task LocateGlobalPackageAsync_WithBlankNodePackageId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe()
-            .LocateGlobalNodePackageAsync(packageId, TestContext.Current.CancellationToken);
+        var installed = await new DesktopAcpExecutableProbe().LocateGlobalPackageAsync(
+            AcpDistributionKind.Npx,
+            packageId,
+            AcpPackageManagerCandidates.Exact("npm"),
+            TestContext.Current.CancellationToken);
 
         Assert.Null(installed.IsInstalled);
     }
@@ -112,10 +116,32 @@ public sealed class DesktopAcpExecutableProbeTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task LocateGlobalUvToolAsync_WithBlankPackageId_ShouldReturnUnknown(string packageId)
+    public async Task LocateGlobalPackageAsync_WithBlankUvToolId_ShouldReturnUnknown(string packageId)
     {
-        var installed = await new DesktopAcpExecutableProbe()
-            .LocateGlobalUvToolAsync(packageId, TestContext.Current.CancellationToken);
+        var installed = await new DesktopAcpExecutableProbe().LocateGlobalPackageAsync(
+            AcpDistributionKind.Uvx,
+            packageId,
+            AcpPackageManagerCandidates.Exact("uv"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(installed.IsInstalled);
+    }
+
+    /// <summary>
+    /// A distribution with no package manager has nothing to ask, so the query is unanswerable rather
+    /// than absent — the same rule that keeps an unreachable manager from reading as "not installed".
+    /// </summary>
+    [Theory]
+    [InlineData(AcpDistributionKind.BuiltIn)]
+    [InlineData(AcpDistributionKind.Binary)]
+    public async Task LocateGlobalPackageAsync_WithNonPackageDistribution_ShouldReturnUnknown(
+        AcpDistributionKind distribution)
+    {
+        var installed = await new DesktopAcpExecutableProbe().LocateGlobalPackageAsync(
+            distribution,
+            "some-package",
+            AcpPackageManagerCandidates.Exact("npm"),
+            TestContext.Current.CancellationToken);
 
         Assert.Null(installed.IsInstalled);
     }

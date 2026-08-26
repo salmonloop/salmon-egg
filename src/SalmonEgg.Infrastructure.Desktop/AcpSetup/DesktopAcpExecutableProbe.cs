@@ -65,55 +65,72 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     }
 
     /// <summary>
-    /// Asks npm for the global package list. <c>--depth 0</c> keeps the walk to top-level packages, and
-    /// <c>--parseable</c> yields one path per line, which is stable across npm versions.
+    /// Asks the caller-chosen package manager for its global list.
     /// </summary>
-    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
+    /// <remarks>
+    /// For npm, <c>--depth 0</c> keeps the walk to top-level packages and <c>--parseable</c> yields one
+    /// path per line, which is stable across npm versions.
+    ///
+    /// Candidates are tried in order and the first one that resolves is asked. Only resolution is retried,
+    /// never a manager's answer: a manager that ran and said "no" has answered for the toolchain the
+    /// caller chose, and trying the next candidate would replace that answer with one about a different
+    /// toolchain.
+    /// </remarks>
+    public async Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
+        AcpDistributionKind distribution,
         string packageId,
+        AcpPackageManagerCandidates packageManager,
         CancellationToken cancellationToken = default)
-        => QueryPackageListAsync(
-            launcher: "npm",
-            arguments: new[] { "ls", "--global", "--depth", "0", "--parseable" },
-            packageId,
-            cancellationToken);
+    {
+        ArgumentNullException.ThrowIfNull(packageManager);
 
-    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
-        string packageId,
-        CancellationToken cancellationToken = default)
-        => QueryPackageListAsync(
-            launcher: "uv",
-            arguments: new[] { "tool", "list" },
-            packageId,
-            cancellationToken);
+        if (string.IsNullOrWhiteSpace(packageId) || ResolveListArguments(distribution) is not { } arguments)
+        {
+            return AcpPackageQueryResult.Unknown();
+        }
+
+        foreach (var candidate in packageManager.Commands)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ResolveExecutablePath(candidate) is { } executable)
+            {
+                return await QueryPackageListAsync(executable, arguments, packageId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return AcpPackageQueryResult.Unknown();
+    }
+
+    /// <summary>
+    /// The list-installed invocation for <paramref name="distribution"/>, or null when it has no package
+    /// manager to ask.
+    /// </summary>
+    private static IReadOnlyList<string>? ResolveListArguments(AcpDistributionKind distribution)
+        => distribution switch
+        {
+            AcpDistributionKind.Npx => new[] { "ls", "--global", "--depth", "0", "--parseable" },
+            AcpDistributionKind.Uvx => new[] { "tool", "list" },
+            _ => null
+        };
 
     /// <summary>
     /// Runs a package-list command and looks for the package name in its output.
     /// </summary>
     /// <remarks>
-    /// Returns null — not false — when the launcher is missing or the command fails, because an
-    /// unanswerable query must not be reported as a definitive absence.
+    /// Returns null — not false — when the command fails to run at all, because an unanswerable query
+    /// must not be reported as a definitive absence.
     ///
     /// npm exits non-zero for unrelated reasons (peer-dependency complaints in the global root, for
     /// instance) while still printing a usable list, so output that contains the package is trusted even
     /// on a non-zero exit. The reverse is not true: a failed run with no match stays unknown.
     /// </remarks>
     private static async Task<AcpPackageQueryResult> QueryPackageListAsync(
-        string launcher,
+        string executable,
         IReadOnlyList<string> arguments,
         string packageId,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            return AcpPackageQueryResult.Unknown();
-        }
-
-        var executable = ResolveExecutablePath(launcher);
-        if (executable is null)
-        {
-            return AcpPackageQueryResult.Unknown();
-        }
-
         var result = await AcpSetupProcessRunner
             .RunAsync(executable, arguments, PackageQueryTimeout, onOutputLine: null, cancellationToken)
             .ConfigureAwait(false);

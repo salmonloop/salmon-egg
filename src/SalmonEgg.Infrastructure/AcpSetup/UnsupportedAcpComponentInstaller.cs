@@ -21,6 +21,7 @@ public sealed class UnsupportedAcpComponentInstaller : IAcpComponentInstaller
     public Task<AcpComponentInstallResult> InstallAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(component);

@@ -33,6 +33,7 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
     public async Task<AcpComponentInstallResult> InstallAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(component);
@@ -46,7 +47,17 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
                 errorDetail: $"'{component.DisplayName}' must be installed manually.");
         }
 
-        var (launcher, arguments) = ResolveInstallCommand(component);
+        // The component's own launcher is resolved first so the manager can be derived from a real
+        // directory: an override may name it by bare name or relative path, which no sibling lookup can
+        // use. A launcher that does not resolve is not fatal here — the manager may still be on PATH —
+        // so this only sharpens the derivation.
+        var resolvedLauncher = await _probe
+            .ResolveExecutablePathAsync(
+                (overrides ?? AcpCommandOverrides.Empty).Resolve(component.ProbeCommand),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var (launcher, arguments) = ResolveInstallCommand(component, resolvedLauncher, overrides);
         var launcherPath = await _probe
             .ResolveExecutablePathAsync(launcher, cancellationToken)
             .ConfigureAwait(false);
@@ -83,14 +94,28 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
     /// The package coordinate is passed verbatim, including any pinned version: the catalog decides
     /// which version the wizard installs, and rewriting it here would silently disagree with what the
     /// launch command later resolves.
+    ///
+    /// The package manager is resolved through the same rule detection uses, so an install lands in the
+    /// toolchain the wizard asked about. Installing into a different one would report success and leave
+    /// the next probe — and the launch — looking at a toolchain that still does not have the package.
+    /// Only the preferred candidate is used: an install has to choose one toolchain, and falling back to
+    /// a bare name would write into whichever one PATH happens to resolve.
     /// </remarks>
     private static (string Launcher, IReadOnlyList<string> Arguments) ResolveInstallCommand(
-        AcpComponentDescriptor component)
-        => component.Distribution switch
+        AcpComponentDescriptor component,
+        string? resolvedLauncherPath,
+        AcpCommandOverrides? overrides)
+    {
+        var launcher = AcpPackageManagerCommand
+            .Resolve(component.Distribution, resolvedLauncherPath, overrides)
+            .Preferred;
+
+        return component.Distribution switch
         {
-            AcpDistributionKind.Npx => ("npm", new[] { "install", "--global", component.PackageId }),
-            AcpDistributionKind.Uvx => ("uv", new[] { "tool", "install", component.PackageId }),
+            AcpDistributionKind.Npx => (launcher, new[] { "install", "--global", component.PackageId }),
+            AcpDistributionKind.Uvx => (launcher, new[] { "tool", "install", component.PackageId }),
             _ => throw new NotSupportedException(
                 $"Distribution '{component.Distribution}' has no automatic install path.")
         };
+    }
 }

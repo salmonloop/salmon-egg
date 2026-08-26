@@ -21,8 +21,14 @@ public interface IAcpComponentInstaller
     /// Installs <paramref name="component"/>, reporting installer output lines through
     /// <paramref name="onOutput"/> as they arrive so the UI can show progress.
     /// </summary>
+    /// <param name="overrides">
+    /// Paths the user supplied for commands the catalog names by bare name. Applied so the install runs
+    /// through the same toolchain detection asked about — installing into a different one leaves the
+    /// component invisible to the next probe and absent at launch.
+    /// </param>
     Task<AcpComponentInstallResult> InstallAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default);
 }
