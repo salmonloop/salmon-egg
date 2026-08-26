@@ -54,21 +54,22 @@ public interface IAcpExecutableProbe
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Asks whether <paramref name="packageId"/> is installed as a Node global package, and where.
+    /// Asks whether <paramref name="packageId"/> is installed globally for
+    /// <paramref name="distribution"/>, and where.
     /// </summary>
+    /// <param name="packageManager">
+    /// The package-manager commands to try, in order — see <see cref="AcpPackageManagerCandidates"/>.
+    /// Supplied by the caller rather than chosen here, because which manager is the right one depends on
+    /// which toolchain the user selected, and only the caller knows that.
+    /// </param>
     /// <remarks>
-    /// Answers where rather than only whether, because a package manager answers for the toolchain
-    /// currently on PATH: the location is what lets the wizard say which one it asked. An unanswerable
-    /// query reports unknown, which callers must not read as absent.
+    /// Answers where rather than only whether, because a package manager answers for one toolchain: the
+    /// location is what lets the wizard say which one it asked. An unanswerable query reports unknown,
+    /// which callers must not read as absent.
     /// </remarks>
-    Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
+    Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
+        AcpDistributionKind distribution,
         string packageId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Asks whether <paramref name="packageId"/> is installed as a uv tool, and where.
-    /// </summary>
-    Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
-        string packageId,
+        AcpPackageManagerCandidates packageManager,
         CancellationToken cancellationToken = default);
 }

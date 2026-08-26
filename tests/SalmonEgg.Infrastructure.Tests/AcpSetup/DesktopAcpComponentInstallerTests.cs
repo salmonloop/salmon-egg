@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using SalmonEgg.Domain.Models.AcpSetup;
@@ -55,8 +56,13 @@ public sealed class DesktopAcpComponentInstallerTests
         Assert.Contains("PATH", result.ErrorDetail);
     }
 
+    /// <summary>
+    /// The component's own launcher is resolved before the manager, because the manager is derived from
+    /// the launcher's directory: a user who names <c>npx</c> has named which toolchain's <c>npm</c> to
+    /// install through, and deriving that needs the launcher's real path.
+    /// </summary>
     [Fact]
-    public async Task InstallAsync_ForNpxDistribution_ShouldResolveNpmLauncher()
+    public async Task InstallAsync_ForNpxDistribution_ShouldResolveTheLauncherThenNpm()
     {
         var probe = new StubAcpExecutableProbe();
         probe.SetResolvedPath("npm", Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
@@ -64,14 +70,14 @@ public sealed class DesktopAcpComponentInstallerTests
 
         var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent());
 
-        Assert.Equal(new[] { "npm" }, probe.ResolveRequests);
+        Assert.Equal(new[] { "npx", "npm" }, probe.ResolveRequests);
         // The resolved path does not exist, so the attempt fails at start rather than reporting success.
         Assert.False(result.IsSuccess);
         Assert.NotNull(result.ErrorDetail);
     }
 
     [Fact]
-    public async Task InstallAsync_ForUvxDistribution_ShouldResolveUvLauncher()
+    public async Task InstallAsync_ForUvxDistribution_ShouldResolveTheLauncherThenUv()
     {
         var probe = new StubAcpExecutableProbe();
         probe.SetResolvedPath("uv", null);
@@ -79,8 +85,61 @@ public sealed class DesktopAcpComponentInstallerTests
 
         var result = await installer.InstallAsync(AcpSetupFixtures.UvxComponent());
 
-        Assert.Equal(new[] { "uv" }, probe.ResolveRequests);
+        Assert.Equal(new[] { "uvx", "uv" }, probe.ResolveRequests);
         Assert.False(result.IsSuccess);
+    }
+
+    /// <summary>
+    /// The install must run through the toolchain the user named, not through whatever bare <c>npm</c>
+    /// the inherited PATH resolves.
+    /// </summary>
+    /// <remarks>
+    /// Installing into the wrong toolchain is worse than failing: npm reports success, and the component
+    /// lands where the next probe and the saved profile will never look — so the wizard advances on a
+    /// success that guarantees a launch failure. A GUI process is exactly where the two diverge, since it
+    /// cannot see the PATH a shell profile builds.
+    /// </remarks>
+    [Fact]
+    public async Task InstallAsync_WithOverriddenLauncher_ShouldInstallThroughThatToolchainsNpm()
+    {
+        const string toolchainBin = "/opt/toolchain/node/bin";
+        var probe = new StubAcpExecutableProbe();
+        probe.SetResolvedPath(toolchainBin + "/npx", toolchainBin + "/npx");
+        probe.SetResolvedPath(toolchainBin + "/npm", toolchainBin + "/npm");
+        var installer = new DesktopAcpComponentInstaller(probe);
+        var overrides = AcpCommandOverrides.Create(new Dictionary<string, string>
+        {
+            ["npx"] = toolchainBin + "/npx"
+        });
+
+        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides);
+
+        Assert.Equal(
+            new[] { toolchainBin + "/npx", toolchainBin + "/npm" },
+            probe.ResolveRequests);
+    }
+
+    /// <summary>
+    /// An explicit manager override wins over the sibling derivation, since the derivation exists to
+    /// spare the user a second answer rather than to overrule one they gave.
+    /// </summary>
+    [Fact]
+    public async Task InstallAsync_WithExplicitManagerOverride_ShouldPreferItOverTheSibling()
+    {
+        var probe = new StubAcpExecutableProbe();
+        probe.SetResolvedPath("/opt/node/bin/npx", "/opt/node/bin/npx");
+        probe.SetResolvedPath("/elsewhere/bin/npm", "/elsewhere/bin/npm");
+        var installer = new DesktopAcpComponentInstaller(probe);
+        var overrides = AcpCommandOverrides.Create(new Dictionary<string, string>
+        {
+            ["npx"] = "/opt/node/bin/npx",
+            ["npm"] = "/elsewhere/bin/npm"
+        });
+
+        await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides);
+
+        Assert.Contains("/elsewhere/bin/npm", probe.ResolveRequests);
+        Assert.DoesNotContain("/opt/node/bin/npm", probe.ResolveRequests);
     }
 
     [Fact]

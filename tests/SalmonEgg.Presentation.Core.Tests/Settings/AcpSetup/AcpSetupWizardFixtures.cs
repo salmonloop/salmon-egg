@@ -96,31 +96,33 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
         CancellationToken cancellationToken = default)
         => Task.FromResult(_versions.TryGetValue(command, out var version) ? version : null);
 
-    public Task<AcpPackageQueryResult> LocateGlobalNodePackageAsync(
-        string packageId,
-        CancellationToken cancellationToken = default)
-        => Task.FromResult(
-            _nodePackages.TryGetValue(packageId, out var installed)
-                ? installed switch
-                {
-                    true => AcpPackageQueryResult.Found("/test/node_modules", "/test/bin/npm"),
-                    false => AcpPackageQueryResult.Absent("/test/bin/npm"),
-                    null => AcpPackageQueryResult.Unknown()
-                }
-                : AcpPackageQueryResult.Unknown());
+    /// <summary>The package manager each query was asked through, in call order.</summary>
+    public List<string> QueriedPackageManagers { get; } = new();
 
-    public Task<AcpPackageQueryResult> LocateGlobalUvToolAsync(
+    public Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
+        AcpDistributionKind distribution,
         string packageId,
+        AcpPackageManagerCandidates packageManager,
         CancellationToken cancellationToken = default)
-        => Task.FromResult(
-            _uvTools.TryGetValue(packageId, out var installed)
+    {
+        QueriedPackageManagers.Add(packageManager.Preferred);
+
+        var (catalog, location, manager) = distribution switch
+        {
+            AcpDistributionKind.Uvx => (_uvTools, "/test/uv-tools", "/test/bin/uv"),
+            _ => (_nodePackages, "/test/node_modules", "/test/bin/npm")
+        };
+
+        return Task.FromResult(
+            catalog.TryGetValue(packageId, out var installed)
                 ? installed switch
                 {
-                    true => AcpPackageQueryResult.Found("/test/uv-tools", "/test/bin/uv"),
-                    false => AcpPackageQueryResult.Absent("/test/bin/uv"),
+                    true => AcpPackageQueryResult.Found(location, manager),
+                    false => AcpPackageQueryResult.Absent(manager),
                     null => AcpPackageQueryResult.Unknown()
                 }
                 : AcpPackageQueryResult.Unknown());
+    }
 }
 
 /// <summary>
@@ -152,12 +154,20 @@ internal sealed class StubComponentInstaller : IAcpComponentInstaller
 
     public List<string> OutputLines { get; } = new();
 
+    /// <summary>
+    /// The overrides each install was given, so a test can prove the install runs through the toolchain
+    /// the user named rather than whatever PATH resolves.
+    /// </summary>
+    public List<AcpCommandOverrides?> ReceivedOverrides { get; } = new();
+
     public Task<AcpComponentInstallResult> InstallAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
+        AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
     {
         InstalledComponentIds.Add(component.Id);
+        ReceivedOverrides.Add(overrides);
         foreach (var line in OutputLines)
         {
             onOutput?.Invoke(line);

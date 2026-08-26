@@ -80,8 +80,10 @@ public sealed class AcpSetupWizardOrchestrator
     {
         ArgumentNullException.ThrowIfNull(component);
 
+        // The same overrides govern the install and the re-probe, so the install lands in the toolchain
+        // the probe then asks about.
         var install = await _installer
-            .InstallAsync(component, onOutput, cancellationToken)
+            .InstallAsync(component, onOutput, overrides, cancellationToken)
             .ConfigureAwait(false);
         var probe = await _detector
             .DetectAsync(component, overrides, cancellationToken)
