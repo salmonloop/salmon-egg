@@ -666,12 +666,13 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Collects the paths the user supplied, keyed by the command name each one replaces.
+    /// Collects authoritative command paths, keyed by the catalog command each one replaces.
     /// </summary>
     /// <remarks>
-    /// Gathered from every row rather than only the selected one, because one command can back several
-    /// agents: a path given for <c>npx</c> while looking at one agent is the same <c>npx</c> the next
-    /// agent's adapter launches.
+    /// User choices outrank probe results. Otherwise, when an adapter launches the command it probed, the
+    /// resolved executable path is carried into the launch plan automatically. Search-path widening can
+    /// find an install outside the GUI process PATH; saving the bare command after that would discard the
+    /// fact detection just established and produce a profile that cannot start.
     /// </remarks>
     private AcpCommandOverrides CollectCommandOverrides()
     {
@@ -684,9 +685,19 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             }
         }
 
-        if (HasAdapterCustomCommand && HasAdapterProbeCommand)
+        if (!string.IsNullOrWhiteSpace(AdapterProbeCommand)
+            && string.Equals(
+                SelectedAdapter?.LaunchTemplate.Command,
+                AdapterProbeCommand,
+                StringComparison.Ordinal))
         {
-            overrides[AdapterProbeCommand] = AdapterCustomCommand;
+            var resolvedAdapterCommand = HasAdapterCustomCommand
+                ? AdapterCustomCommand
+                : AdapterProbe?.ExecutablePath;
+            if (!string.IsNullOrWhiteSpace(resolvedAdapterCommand))
+            {
+                overrides[AdapterProbeCommand] = resolvedAdapterCommand;
+            }
         }
 
         return AcpCommandOverrides.Create(overrides);

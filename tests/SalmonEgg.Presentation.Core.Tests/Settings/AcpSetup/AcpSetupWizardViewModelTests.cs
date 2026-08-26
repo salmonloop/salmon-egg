@@ -310,6 +310,54 @@ public sealed class AcpSetupWizardViewModelTests
     }
 
     /// <summary>
+    /// A package coordinate is one installation source, not adapter identity. Detection accepts the
+    /// adapter executable regardless of which package or vendor supplied it, and the resolved path must
+    /// be the command tested and persisted when the GUI process PATH cannot resolve the bare name.
+    /// </summary>
+    [Fact]
+    public async Task Save_WithExecutableAdapter_UsesTheResolvedCommandWithoutQueryingPackageIdentity()
+    {
+        const string resolvedAdapter = "/home/user/.nvm/versions/node/v24/bin/test-agent-acp";
+        var adapter = AcpSetupWizardFixtures.ExecutableAdapter();
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        probe.SetExecutable(AcpSetupWizardFixtures.AdapterCommand, resolvedAdapter);
+        var tester = new StubConnectivityTester(StubConnectivityTester.SuccessfulHandshake());
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(
+            agent,
+            probe,
+            new StubComponentInstaller(),
+            localizer: null,
+            tester,
+            configuration);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> ComponentSetup
+
+        Assert.True(wizard.IsAdapterUsable);
+        Assert.Empty(probe.QueriedPackageManagers);
+
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Parameters
+        Assert.StartsWith(resolvedAdapter, wizard.LaunchCommandPreview, StringComparison.Ordinal);
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Test
+        await wizard.TestCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsTestSuccessful);
+        Assert.Equal(resolvedAdapter, tester.LastPlan!.Command);
+
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Save
+        wizard.ProfileName = "Executable Adapter";
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        var saved = Assert.Single(configuration.Saved);
+        Assert.Equal(resolvedAdapter, saved.StdioCommand);
+        Assert.Empty(saved.StdioArguments!);
+    }
+
+    /// <summary>
     /// Six of the eight shipped agents carry a built-in adapter, and the step rendered nothing at all for
     /// them: a title over an empty panel, correct but indistinguishable from a page that failed to load.
     /// Built-in is now its own state, separate from "installed", so the step can say why it is satisfied.

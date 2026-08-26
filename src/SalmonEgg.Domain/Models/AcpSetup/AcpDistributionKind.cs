@@ -9,7 +9,7 @@ public enum AcpDistributionKind
     /// <summary>Shipped with the agent itself; nothing to install.</summary>
     BuiltIn,
 
-    /// <summary>Node package executed through <c>npx</c>.</summary>
+    /// <summary>Node package installed through npm; its declared executable may be launched directly.</summary>
     Npx,
 
     /// <summary>Python package executed through <c>uvx</c>.</summary>

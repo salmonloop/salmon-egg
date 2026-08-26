@@ -8,14 +8,11 @@ namespace SalmonEgg.Infrastructure.AcpSetup;
 /// Curated snapshot of the ACP agent registry (<c>cdn.agentclientprotocol.com/registry/v1</c>),
 /// limited to agents whose ACP entry point is a documented stdio command.
 ///
-/// Packages are intentionally unpinned: the launcher resolves the current release, so the wizard does
-/// not go stale when the registry advances. Pinning would freeze users to whatever version happened to
-/// ship with the app.
+/// Installation packages are intentionally unpinned so the wizard does not go stale when the registry
+/// advances. Pinning would freeze users to whatever version happened to ship with the app.
 /// </summary>
 internal static class AcpAgentCatalogEntries
 {
-    private const string NpxCommand = "npx";
-
     internal static IReadOnlyList<AcpAgentDescriptor> Create()
         => new[]
         {
@@ -30,8 +27,14 @@ internal static class AcpAgentCatalogEntries
         };
 
     /// <summary>
-    /// Agent fronted by a separate npx adapter: the runtime CLI is detected on PATH, the adapter is a
-    /// Node package the wizard can install.
+    /// Agent fronted by a separately packaged adapter: the runtime CLI and the adapter entry point are
+    /// detected independently, while the package coordinate is used only when the wizard installs the
+    /// adapter.
+    ///
+    /// The executable is the stable interoperability boundary. The same command can be supplied by a
+    /// renamed package, a third-party distribution, or a standalone install, and all are usable when the
+    /// later ACP handshake succeeds. Treating one publisher's package coordinate as adapter identity
+    /// rejects those valid installations before the protocol can verify them.
     /// </summary>
     private static AcpAgentDescriptor CreateAdapterFrontedAgent(
         string agentId,
@@ -42,9 +45,9 @@ internal static class AcpAgentCatalogEntries
         Uri runtimeDocumentation,
         string adapterId,
         string adapterDisplayName,
+        string adapterProbeCommand,
         string adapterPackageId,
         Uri adapterDocumentation,
-        IReadOnlyList<string> launchArguments,
         IReadOnlyList<AcpSetupParameterDefinition> parameters)
         => new()
         {
@@ -72,15 +75,14 @@ internal static class AcpAgentCatalogEntries
                         Id = adapterId,
                         DisplayName = adapterDisplayName,
                         Distribution = AcpDistributionKind.Npx,
-                        DetectionMode = AcpComponentDetectionMode.GlobalNodePackage,
-                        ProbeCommand = NpxCommand,
+                        DetectionMode = AcpComponentDetectionMode.ExecutableOnPath,
+                        ProbeCommand = adapterProbeCommand,
                         PackageId = adapterPackageId,
                         InstallDocumentation = adapterDocumentation
                     },
                     LaunchTemplate = new AcpLaunchTemplate
                     {
-                        Command = NpxCommand,
-                        FixedArguments = launchArguments,
+                        Command = adapterProbeCommand,
                         Parameters = parameters
                     }
                 }
@@ -164,9 +166,9 @@ internal static class AcpAgentCatalogEntries
             runtimeDocumentation: new Uri("https://docs.claude.com/en/docs/claude-code/setup"),
             adapterId: "claude-agent-acp",
             adapterDisplayName: "Claude Agent ACP",
+            adapterProbeCommand: "claude-agent-acp",
             adapterPackageId: "@agentclientprotocol/claude-agent-acp",
             adapterDocumentation: new Uri("https://github.com/agentclientprotocol/claude-agent-acp"),
-            launchArguments: new[] { "-y", "@agentclientprotocol/claude-agent-acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateCodex()
@@ -179,9 +181,9 @@ internal static class AcpAgentCatalogEntries
             runtimeDocumentation: new Uri("https://developers.openai.com/codex/cli/"),
             adapterId: "codex-acp",
             adapterDisplayName: "Codex ACP",
+            adapterProbeCommand: "codex-acp",
             adapterPackageId: "@agentclientprotocol/codex-acp",
             adapterDocumentation: new Uri("https://github.com/agentclientprotocol/codex-acp"),
-            launchArguments: new[] { "-y", "@agentclientprotocol/codex-acp" },
             parameters: Array.Empty<AcpSetupParameterDefinition>());
 
     private static AcpAgentDescriptor CreateGeminiCli()
