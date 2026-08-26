@@ -87,6 +87,43 @@ public sealed class AcpAgentCatalogTests
     }
 
     /// <summary>
+    /// A separately packaged adapter can move between publishers or be distributed independently while
+    /// keeping the same executable entry point. Detection and launch therefore meet at that executable;
+    /// the package coordinate remains only the wizard's recommended installation source.
+    /// </summary>
+    [Fact]
+    public void PackagedAdapters_DetectAndLaunchTheSameExecutable()
+    {
+        var failures = new System.Collections.Generic.List<string>();
+
+        foreach (var agent in new AcpAgentCatalog().Agents)
+        {
+            foreach (var adapter in agent.Adapters.Where(adapter => !adapter.Component.IsBuiltIn))
+            {
+                if (adapter.Component.DetectionMode != AcpComponentDetectionMode.ExecutableOnPath)
+                {
+                    failures.Add(
+                        $"{agent.Id}: detects adapter '{adapter.Component.Id}' by"
+                        + $" {adapter.Component.DetectionMode} instead of its executable entry point.");
+                    continue;
+                }
+
+                if (!string.Equals(
+                        adapter.Component.ProbeCommand,
+                        adapter.LaunchTemplate.Command,
+                        StringComparison.Ordinal))
+                {
+                    failures.Add(
+                        $"{agent.Id}: probes '{adapter.Component.ProbeCommand}' but launches"
+                        + $" '{adapter.LaunchTemplate.Command}'.");
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    /// <summary>
     /// A component the wizard offers to install must name the package to install, and one it cannot
     /// install must offer documentation instead. Otherwise a row shows a button that cannot work, or no
     /// route at all.

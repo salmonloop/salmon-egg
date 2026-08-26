@@ -246,6 +246,7 @@ internal sealed class RecordingConfigurationService : IConfigurationService
 internal static class AcpSetupWizardFixtures
 {
     public const string RuntimeCommand = "test-agent";
+    public const string AdapterCommand = "test-agent-acp";
     public const string AdapterPackage = "@scope/test-adapter";
 
     public static AcpComponentDescriptor Runtime(string id = "runtime.test")
@@ -298,6 +299,27 @@ internal static class AcpSetupWizardFixtures
             {
                 Command = "npx",
                 FixedArguments = new[] { AdapterPackage },
+                Parameters = parameters
+            }
+        };
+
+    public static AcpAdapterDescriptor ExecutableAdapter(
+        string id = "adapter.executable",
+        params AcpSetupParameterDefinition[] parameters)
+        => new()
+        {
+            Component = new AcpComponentDescriptor
+            {
+                Id = id,
+                DisplayName = "Executable ACP Adapter",
+                Distribution = AcpDistributionKind.Npx,
+                DetectionMode = AcpComponentDetectionMode.ExecutableOnPath,
+                ProbeCommand = AdapterCommand,
+                PackageId = AdapterPackage
+            },
+            LaunchTemplate = new AcpLaunchTemplate
+            {
+                Command = AdapterCommand,
                 Parameters = parameters
             }
         };

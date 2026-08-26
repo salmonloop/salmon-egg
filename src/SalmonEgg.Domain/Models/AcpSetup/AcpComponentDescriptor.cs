@@ -30,8 +30,9 @@ public sealed class AcpComponentDescriptor
     public IReadOnlyList<string> ProbeVersionArguments { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Package coordinate for package-manager distributions, without a pinned version so the
-    /// launcher resolves the current release.
+    /// Package coordinate the wizard installs for package-manager distributions. Detection may use the
+    /// installed executable instead: a package coordinate identifies one distribution source, not the
+    /// component's runtime identity.
     /// </summary>
     public string PackageId { get; init; } = string.Empty;
 
