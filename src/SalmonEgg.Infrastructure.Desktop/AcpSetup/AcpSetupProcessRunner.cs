@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using SalmonEgg.Infrastructure.Transport;
 
 namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 
@@ -58,20 +59,7 @@ internal static class AcpSetupProcessRunner
             return NotStarted("Executable name was empty.");
         }
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        var startInfo = CreateProcessStartInfo(fileName, arguments);
 
         using var process = new Process { StartInfo = startInfo };
         var standardOutput = new OutputAccumulator(onOutputLine);
@@ -130,6 +118,32 @@ internal static class AcpSetupProcessRunner
             standardOutput.ToString(),
             standardError.ToString(),
             FailureDetail: null);
+    }
+
+    /// <summary>
+    /// Builds the start info for one helper invocation: stdio redirected, and the command normalized
+    /// through <see cref="LauncherInvocation"/> so a batch shim is wrapped and the launcher's own
+    /// directory reaches the child's PATH.
+    /// </summary>
+    /// <remarks>
+    /// The PATH entry is what makes an absolute-path launcher usable at all. The wizard's answer to a GUI
+    /// process that cannot see the user's toolchain is to let them name the executable, but naming
+    /// <c>npm</c> alone leaves its sibling <c>node</c> unreachable and the probe dies at exit 127 — so the
+    /// override would resolve a command that still cannot run. See <see cref="LauncherInvocation"/>.
+    /// </remarks>
+    internal static ProcessStartInfo CreateProcessStartInfo(string fileName, IReadOnlyList<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        LauncherInvocation.Create(fileName, arguments).ApplyTo(startInfo);
+        return startInfo;
     }
 
     private static AcpSetupProcessResult NotStarted(string detail)

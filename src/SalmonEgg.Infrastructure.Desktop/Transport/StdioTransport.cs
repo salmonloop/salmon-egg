@@ -29,8 +29,7 @@ namespace SalmonEgg.Infrastructure.Transport
         private static readonly TimeSpan StartupObservationTimeout = TimeSpan.FromMilliseconds(500);
         private static readonly IReadOnlyDictionary<string, string> EmptyEnvironment =
             new Dictionary<string, string>(StringComparer.Ordinal);
-        private readonly string _command;
-        private readonly string[] _args;
+        private readonly LauncherInvocation _invocation;
         private readonly Encoding _encoding;
         private readonly string _workingDirectory;
         private readonly IReadOnlyDictionary<string, string> _environment;
@@ -72,27 +71,10 @@ namespace SalmonEgg.Infrastructure.Transport
             Encoding? encoding = null,
             IReadOnlyDictionary<string, string>? environment = null)
         {
-            // 去除命令和参数中的首尾空格（避免意外输入导致找不到文件）
-            string trimmedCommand = (command ?? string.Empty).Trim();
-            string[] trimmedArgs = args?.Select(a => a.Trim()).ToArray() ?? Array.Empty<string>();
-
-            // 解析命令并处理 .cmd/.bat 脚本
-            string resolvedCommand = StdioCommandResolver.Resolve(trimmedCommand);
-
-            // 如果是 .cmd 或 .bat 文件，需要通过 cmd.exe 执行
-            if (resolvedCommand.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) ||
-                resolvedCommand.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
-            {
-                _command = "cmd.exe";
-                _args = new[] { "/c", resolvedCommand }.Concat(trimmedArgs).ToArray();
-                _workingDirectory = ResolveWorkingDirectory(resolvedCommand);
-            }
-            else
-            {
-                _command = resolvedCommand;
-                _args = trimmedArgs;
-                _workingDirectory = ResolveWorkingDirectory(resolvedCommand);
-            }
+            // 命令解析、.cmd/.bat 包装与启动器目录上 PATH 都由 LauncherInvocation 统一负责，
+            // 使 ACP 向导的探测/安装与本传输走同一套规则。
+            _invocation = LauncherInvocation.Create(command, args);
+            _workingDirectory = ResolveWorkingDirectory(_invocation.ResolvedCommand);
 
             _encoding = NormalizeTransportEncoding(encoding ?? Encoding.UTF8);
             _environment = NormalizeEnvironment(environment);
@@ -163,7 +145,7 @@ namespace SalmonEgg.Infrastructure.Transport
                 starting.EnableRaisingEvents = true;
                 starting.Exited += OnProcessExited;
 
-                _logger.Information("[StdioTransport.Connect] Starting process. Command={Command} ArgsCount={ArgsCount}", _command, processInfo.ArgumentList.Count);
+                _logger.Information("[StdioTransport.Connect] Starting process. Command={Command} ArgsCount={ArgsCount}", _invocation.FileName, processInfo.ArgumentList.Count);
 
                 // 在后台启动进程，避免阻塞 UI 线程
                 await Task.Run(() =>
@@ -241,7 +223,6 @@ namespace SalmonEgg.Infrastructure.Transport
         {
             var processInfo = new ProcessStartInfo
             {
-                FileName = _command,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -253,16 +234,15 @@ namespace SalmonEgg.Infrastructure.Transport
                 WorkingDirectory = _workingDirectory
             };
 
-            foreach (var argument in _args)
-            {
-                processInfo.ArgumentList.Add(argument);
-            }
-
             // Applied after construction so configured values win over the inherited environment.
             foreach (var entry in _environment)
             {
                 processInfo.Environment[entry.Key] = entry.Value;
             }
+
+            // Last, so the launcher's own directory extends whatever PATH the configured environment
+            // settled on rather than the inherited one it may have replaced.
+            _invocation.ApplyTo(processInfo);
 
             return processInfo;
         }
