@@ -40,6 +40,7 @@ internal static class NumberBoxThemeProbeDriver
     private const int RenderCaptureAttemptCount = 5;
     private const int RenderCaptureRetryDelayMilliseconds = 100;
     private const int ViewportSettleAttemptCount = 20;
+    private const int InitialViewportSettleAttemptCount = 100;
     private const int ViewportSettleDelayMilliseconds = 50;
     private const double MinimumBackgroundSampleInset = 6;
     private const int BackgroundClusterTolerance = 6;
@@ -133,7 +134,11 @@ internal static class NumberBoxThemeProbeDriver
 
         return inputBox is null
             ? null
-            : new NumberBoxThemeProbeTargets(numberBox, inputBox, focusSink);
+            : new NumberBoxThemeProbeTargets(
+                numberBox,
+                inputBox,
+                focusSink,
+                FindAncestor<ScrollViewer>(numberBox));
     }
 
     private static async Task<NumberBoxThemeProbeRunResult> CollectSamplesAsync(
@@ -159,6 +164,20 @@ internal static class NumberBoxThemeProbeDriver
             .ConfigureAwait(true);
         await Task.Delay(SampleSettleDelayMilliseconds).ConfigureAwait(true);
 
+        // The first layout after Settings navigation may still be realizing the template, so the
+        // initial centering gets the wider budget; every later sample restores the same offset in
+        // one layout pass.
+        var viewportSettled = await WaitForSampleBoundsInsideViewportAsync(
+                targets,
+                InitialViewportSettleAttemptCount)
+            .ConfigureAwait(true);
+        App.BootLog(string.Create(
+            CultureInfo.InvariantCulture,
+            $"NumberBoxThemeProbe: viewport settled={viewportSettled}"
+            + $" scrollHost={(targets.ScrollHost is null ? "none" : "present")}"
+            + $" offset={targets.ScrollHost?.VerticalOffset ?? 0:F1}"
+            + $" viewport={targets.ScrollHost?.ViewportHeight ?? 0:F1}"));
+
         var completedSamples = 0;
         for (var sampleAttempt = 1;
             sampleAttempt <= SampleAttemptCount && completedSamples < SampleCount;
@@ -179,18 +198,15 @@ internal static class NumberBoxThemeProbeDriver
             targets.NumberBox.UpdateLayout();
             targets.InputBox.UpdateLayout();
 
-            // Focusing the sink scrolls the page away from the NumberBox, and BringIntoView only
-            // requests a scroll: it does not complete before the next layout pass. Capturing here
-            // without waiting samples a rect that still lies outside the render root, which yields
-            // an empty region indistinguishable from an unreadable frame. Wait for the realized
-            // geometry to land inside the render root before sampling pixels.
-            var boundsSettled = await WaitForSampleBoundsInsideRenderRootAsync(
-                    targets.NumberBox,
-                    targets.InputBox)
+            // Focusing the sink scrolls the page away from the NumberBox. Restore the viewport
+            // through its owner and confirm the realized geometry landed inside it: capturing an
+            // off-viewport rect yields an empty region indistinguishable from an unreadable frame.
+            var boundsSettled = await WaitForSampleBoundsInsideViewportAsync(
+                    targets,
+                    ViewportSettleAttemptCount)
                 .ConfigureAwait(true);
             var snapshot = await CaptureSnapshotAsync(
-                    targets.NumberBox,
-                    targets.InputBox,
+                    targets,
                     unfocusedBeforeSample && inputFocused,
                     boundsSettled)
                 .ConfigureAwait(true);
@@ -237,11 +253,12 @@ internal static class NumberBoxThemeProbeDriver
     }
 
     private static async Task<NumberBoxThemeProbeSnapshot> CaptureSnapshotAsync(
-        NumberBox numberBox,
-        TextBox inputBox,
+        NumberBoxThemeProbeTargets targets,
         bool focusTransitionSucceeded,
         bool boundsSettled)
     {
+        var numberBox = targets.NumberBox;
+        var inputBox = targets.InputBox;
         var contentElement = FindDescendant<ScrollViewer>(
             inputBox,
             static candidate => string.Equals(candidate.Name, ContentElementName, StringComparison.Ordinal));
@@ -249,7 +266,7 @@ internal static class NumberBoxThemeProbeDriver
             inputBox,
             static candidate => string.Equals(candidate.Name, BorderElementName, StringComparison.Ordinal));
 
-        var renderedColors = await TryCaptureRenderedColorsAsync(contentElement, borderElement)
+        var renderedColors = await TryCaptureRenderedColorsAsync(contentElement, borderElement, targets)
             .ConfigureAwait(true);
         var background = renderedColors.Background;
         var foreground = renderedColors.Foreground;
@@ -291,7 +308,8 @@ internal static class NumberBoxThemeProbeDriver
 
     private static async Task<RenderedColors> TryCaptureRenderedColorsAsync(
         ScrollViewer? contentElement,
-        Border? borderElement)
+        Border? borderElement,
+        NumberBoxThemeProbeTargets targets)
     {
         if (contentElement is null || borderElement is null)
         {
@@ -305,7 +323,8 @@ internal static class NumberBoxThemeProbeDriver
         for (var attempt = 1; attempt <= RenderCaptureAttemptCount; attempt++)
         {
             borderElement.UpdateLayout();
-            var capture = await TryCaptureRenderedBackgroundAsync(borderElement).ConfigureAwait(true);
+            var capture = await TryCaptureRenderedBackgroundAsync(borderElement, targets.ScrollHost)
+                .ConfigureAwait(true);
             background = capture.Color;
             diagnostic = capture.Diagnostic;
             foreground = background is null
@@ -331,9 +350,13 @@ internal static class NumberBoxThemeProbeDriver
             {
                 // RenderTargetBitmap can transiently return an incomplete Skia frame immediately
                 // after a native focus-state transition. Retry the same realized control instead
-                // of treating an unavailable frame as evidence of unreadable colors. Re-request the
-                // scroll as well: a delay alone cannot move a control that is still out of view.
-                borderElement.StartBringIntoView();
+                // of treating an unavailable frame as evidence of unreadable colors. Re-apply the
+                // owned viewport as well: a delay alone cannot move a control that is out of view.
+                if (TryCenterSampleViewport(targets) is null)
+                {
+                    borderElement.StartBringIntoView();
+                }
+
                 await Task.Delay(RenderCaptureRetryDelayMilliseconds).ConfigureAwait(true);
             }
         }
@@ -347,7 +370,8 @@ internal static class NumberBoxThemeProbeDriver
     /// a translucent offscreen composition or an ambiguous cluster, so every exit reports its cause.
     /// </summary>
     private static async Task<BackgroundCapture> TryCaptureRenderedBackgroundAsync(
-        Border borderElement)
+        Border borderElement,
+        ScrollViewer? scrollHost)
     {
         if (borderElement.DispatcherQueue is null || !borderElement.DispatcherQueue.HasThreadAccess)
         {
@@ -368,6 +392,17 @@ internal static class NumberBoxThemeProbeDriver
         {
             return BackgroundCapture.Unavailable(
                 $"sample-bounds-unresolved border={FormatSize(new Size(borderElement.ActualWidth, borderElement.ActualHeight))}");
+        }
+
+        // A control scrolled outside its scroll host is clipped away, yet its transformed bounds can
+        // still land inside the render root, where the capture would read whatever paints there.
+        // Rejecting that region keeps an unreadable sample from passing as a measured contrast.
+        var visibleRegion = ResolveVisibleSampleRegion(scrollHost, renderRoot);
+        if (!IsInsideRegion(sampleBounds.Value, visibleRegion))
+        {
+            return BackgroundCapture.Unavailable(
+                $"sample-outside-viewport rect={FormatRect(sampleBounds.Value)}"
+                + $" viewport={FormatRect(visibleRegion)}");
         }
 
         var bitmap = new RenderTargetBitmap();
@@ -409,29 +444,74 @@ internal static class NumberBoxThemeProbeDriver
     }
 
     /// <summary>
-    /// Waits until the inset BorderElement sample region is fully inside the render root, so the
-    /// pixel sample measures the realized control instead of an off-viewport empty rect.
+    /// Scrolls the realized NumberBox to the middle of its scroll host viewport, so the sampled
+    /// region cannot fall outside the region that shows it, and returns the applied offset.
     /// </summary>
-    private static async Task<bool> WaitForSampleBoundsInsideRenderRootAsync(
-        NumberBox numberBox,
-        TextBox inputBox)
+    /// <remarks>
+    /// The settled page layout leaves the NumberBox flush against the viewport bottom, where a few
+    /// pixels of scroll are enough to move the inset sample region off screen. Focusing the sink
+    /// scrolls the page away entirely, and <see cref="UIElement.StartBringIntoView()"/> only
+    /// requests an animated return that a slow headless runner does not finish inside the sample
+    /// budget. The scroll host owns the viewport, so the offset is derived from realized geometry
+    /// and applied with animation disabled, which lands in one layout pass and overrides any
+    /// in-flight bring-into-view. Recomputing it is stable: current offset plus the measured
+    /// position is the control position in content coordinates, which layout keeps constant.
+    /// </remarks>
+    private static double? TryCenterSampleViewport(NumberBoxThemeProbeTargets targets)
     {
-        for (var attempt = 1; attempt <= ViewportSettleAttemptCount; attempt++)
+        if (targets.ScrollHost is not { } scrollHost
+            || scrollHost.ViewportHeight <= 0
+            || targets.NumberBox.ActualHeight <= 0)
         {
-            numberBox.StartBringIntoView();
-            numberBox.UpdateLayout();
-            inputBox.UpdateLayout();
+            return null;
+        }
+
+        var positionInHost = targets.NumberBox
+            .TransformToVisual(scrollHost)
+            .TransformBounds(new Rect(0, 0, targets.NumberBox.ActualWidth, targets.NumberBox.ActualHeight));
+        var centeredTop = Math.Max(0, (scrollHost.ViewportHeight - positionInHost.Height) / 2);
+        var offset = Math.Clamp(
+            scrollHost.VerticalOffset + positionInHost.Y - centeredTop,
+            0,
+            Math.Max(0, scrollHost.ScrollableHeight));
+        return scrollHost.ChangeView(null, offset, null, disableAnimation: true) ? offset : null;
+    }
+
+    /// <summary>
+    /// Waits until the inset BorderElement sample region is fully inside the region that shows the
+    /// control, so the pixel sample measures the realized control and not an off-viewport rect.
+    /// </summary>
+    /// <remarks>
+    /// Measures before correcting: a scroll offset applied through the scroll host is realized by
+    /// the next layout pass, so reading the transformed bounds in the same iteration that requested
+    /// the scroll would observe the stale position and never accept a settled viewport.
+    /// </remarks>
+    private static async Task<bool> WaitForSampleBoundsInsideViewportAsync(
+        NumberBoxThemeProbeTargets targets,
+        int attemptCount)
+    {
+        for (var attempt = 1; attempt <= attemptCount; attempt++)
+        {
+            targets.NumberBox.UpdateLayout();
+            targets.InputBox.UpdateLayout();
 
             var borderElement = FindDescendant<Border>(
-                inputBox,
+                targets.InputBox,
                 static candidate => string.Equals(candidate.Name, BorderElementName, StringComparison.Ordinal));
             var renderRoot = borderElement is null ? null : FindVisualRoot(borderElement);
             if (borderElement is not null
                 && renderRoot is not null
                 && TryResolveSampleBounds(borderElement, renderRoot) is { } bounds
-                && IsInsideRenderRoot(bounds, renderRoot.RenderSize))
+                && IsInsideRegion(bounds, ResolveVisibleSampleRegion(targets.ScrollHost, renderRoot)))
             {
                 return true;
+            }
+
+            if (TryCenterSampleViewport(targets) is null)
+            {
+                // Without a scroll host the viewport cannot be owned, so fall back to the framework
+                // request that at least asks for the control to be shown.
+                targets.NumberBox.StartBringIntoView();
             }
 
             await Task.Delay(ViewportSettleDelayMilliseconds).ConfigureAwait(true);
@@ -440,11 +520,37 @@ internal static class NumberBoxThemeProbeDriver
         return false;
     }
 
-    private static bool IsInsideRenderRoot(Rect sampleBounds, Size renderSize)
-        => sampleBounds.X >= 0
-            && sampleBounds.Y >= 0
-            && sampleBounds.X + sampleBounds.Width <= renderSize.Width
-            && sampleBounds.Y + sampleBounds.Height <= renderSize.Height;
+    /// <summary>
+    /// Resolves the render-root region whose pixels actually show the sampled control: the render
+    /// root itself, narrowed to the scroll host viewport when one clips the control.
+    /// </summary>
+    private static Rect ResolveVisibleSampleRegion(ScrollViewer? scrollHost, UIElement renderRoot)
+    {
+        var rootRegion = new Rect(0, 0, renderRoot.RenderSize.Width, renderRoot.RenderSize.Height);
+        if (scrollHost is null || scrollHost.ViewportWidth <= 0 || scrollHost.ViewportHeight <= 0)
+        {
+            return rootRegion;
+        }
+
+        var viewport = scrollHost
+            .TransformToVisual(renderRoot)
+            .TransformBounds(new Rect(0, 0, scrollHost.ViewportWidth, scrollHost.ViewportHeight));
+        var left = Math.Max(rootRegion.X, viewport.X);
+        var top = Math.Max(rootRegion.Y, viewport.Y);
+        var right = Math.Min(rootRegion.X + rootRegion.Width, viewport.X + viewport.Width);
+        var bottom = Math.Min(rootRegion.Y + rootRegion.Height, viewport.Y + viewport.Height);
+        return right <= left || bottom <= top
+            ? new Rect(left, top, 0, 0)
+            : new Rect(left, top, right - left, bottom - top);
+    }
+
+    private static bool IsInsideRegion(Rect sampleBounds, Rect region)
+        => sampleBounds.Width > 0
+            && sampleBounds.Height > 0
+            && sampleBounds.X >= region.X
+            && sampleBounds.Y >= region.Y
+            && sampleBounds.X + sampleBounds.Width <= region.X + region.Width
+            && sampleBounds.Y + sampleBounds.Height <= region.Y + region.Height;
 
     /// <summary>
     /// Projects the inset BorderElement region into render-root coordinates, or <c>null</c> when the
@@ -736,6 +842,21 @@ internal static class NumberBoxThemeProbeDriver
         return default;
     }
 
+    private static T? FindAncestor<T>(DependencyObject element)
+        where T : DependencyObject
+    {
+        DependencyObject? current = element;
+        while ((current = VisualTreeHelper.GetParent(current)) is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+        }
+
+        return default;
+    }
+
     private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
         where T : DependencyObject
     {
@@ -802,7 +923,8 @@ internal static class NumberBoxThemeProbeDriver
     private sealed record NumberBoxThemeProbeTargets(
         NumberBox NumberBox,
         TextBox InputBox,
-        ToggleSwitch FocusSink);
+        ToggleSwitch FocusSink,
+        ScrollViewer? ScrollHost);
 
     private readonly record struct RenderedColors(
         Windows.UI.Color? Foreground,
