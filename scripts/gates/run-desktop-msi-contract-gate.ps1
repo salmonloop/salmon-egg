@@ -141,6 +141,21 @@ $cases = @(
         Expected    = 'MissingAppExe'
     }
     @{
+        # A real File table has rows whose FileName cell is empty. Reading them is what broke the third
+        # v1.3.0 attempt: PowerShell refuses to bind a [string[]] containing an empty string unless the
+        # parameter declares AllowEmptyString. No fake produced one, so no gate could have caught it.
+        Description = 'a package whose File table carries empty FileName cells alongside real ones'
+        FileNames   = @('', 'SalmonEgg.exe', '', 'SkiaSharp.dll')
+        Version     = '1.3.0'
+        Expected    = $null
+    }
+    @{
+        Description = 'a package of nothing but empty FileName cells'
+        FileNames   = @('', '', '')
+        Version     = '1.3.0'
+        Expected    = 'MissingAppExe'
+    }
+    @{
         Description = 'a package whose ProductVersion was never substituted'
         FileNames   = @('SalmonEgg.exe')
         Version     = '$(SalmonEggDisplayVersion)'
@@ -285,6 +300,23 @@ if (-not $aggregateThrew)
 }
 
 Write-Host '[desktop-msi-gate] the aggregate query that broke v1.3.0 is rejected before reaching OpenView'
+
+# The diagnostic runs before the verdict on every real build, so it must survive every cell shape the
+# File table produces -- including the empty ones that broke the third attempt. A diagnostic that throws
+# would replace a named violation with a crash.
+foreach ($shape in @(, @()), @(, @('')), @(, @('', 'SalmonEgg.exe')), @(, @('SALMON~1.EXE|SalmonEgg.exe')))
+{
+    try
+    {
+        Write-MsiFileTableShape -FileNames $shape[0] -SampleSize 2 6>$null
+    }
+    catch
+    {
+        Add-Failure "the File-table diagnostic threw on a $($shape[0].Count)-row shape: $($_.Exception.Message)"
+    }
+}
+
+Write-Host '[desktop-msi-gate] the File-table diagnostic survives empty, paired and absent cells'
 
 # Assert-DesktopMsiContract is what the release step calls, so verify it throws on a violation and lets a
 # conforming package through -- a silent Get-* consumer would defeat the whole gate.

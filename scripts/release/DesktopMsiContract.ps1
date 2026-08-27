@@ -193,8 +193,13 @@ function Get-MsiAppExecutableName
     #>
     [CmdletBinding()]
     param(
+        # AllowEmptyString is not decoration: a real File table carries rows whose FileName is empty, and
+        # PowerShell's default binding rejects a whole array that contains one. Without it the v1.3.0
+        # release build died on 'Cannot bind argument ... because it is an empty string' -- the third
+        # failure in this step, and one no fake ever produced because no fake had an empty cell.
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
+        [AllowEmptyString()]
         [string[]]$FileNames
     )
 
@@ -209,6 +214,40 @@ function Get-MsiAppExecutableName
     }
 
     return $null
+}
+
+function Write-MsiFileTableShape
+{
+    <#
+    .SYNOPSIS
+        Reports the shape of the File table the contract is about to judge.
+
+    .DESCRIPTION
+        Three v1.3.0 release builds died in this step, each on a property of the real File table that no
+        fake reproduced: no aggregate functions, no LIKE, and cells that are empty strings. Every one cost
+        a full tag-and-build cycle to discover because the step asserted without ever saying what it read.
+        Printing the shape first means the next surprise is diagnosable from the failed run's log.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$FileNames,
+
+        [int]$SampleSize = 12
+    )
+
+    $empty = @($FileNames | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count
+    $paired = @($FileNames | Where-Object { $_ -and $_.Contains('|') }).Count
+    Write-Host ("[desktop-msi] File table: $($FileNames.Count) row(s), $empty empty cell(s), " +
+                "$paired short|long pair(s)")
+
+    $sample = @($FileNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First $SampleSize)
+    if ($sample.Count -gt 0)
+    {
+        Write-Host "[desktop-msi] first $($sample.Count) name(s): $($sample -join ', ')"
+    }
 }
 
 function Get-DesktopMsiContractViolation
@@ -268,13 +307,17 @@ function Assert-DesktopMsiContract
         $Database
     )
 
+    # Read and report before judging. The three release builds this step took down all failed inside the
+    # reading, so a log that only ever shows the verdict leaves the next surprise undiagnosable.
+    $fileNames = Get-MsiColumn -Database $Database -Query 'SELECT `FileName` FROM `File`'
+    Write-MsiFileTableShape -FileNames $fileNames
+
     $violation = Get-DesktopMsiContractViolation -Database $Database
     if ($null -ne $violation)
     {
         throw "The built MSI breaks the desktop package contract ($($violation.Id)): $($violation.Detail)."
     }
 
-    $fileNames = Get-MsiColumn -Database $Database -Query 'SELECT `FileName` FROM `File`'
     $version = Get-MsiScalar -Database $Database `
         -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'"
     $appExe = Get-MsiAppExecutableName -FileNames $fileNames

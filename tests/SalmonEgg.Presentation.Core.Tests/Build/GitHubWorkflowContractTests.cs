@@ -178,6 +178,19 @@ public sealed class GitHubWorkflowContractTests
         // The second shape that died inside OpenView: the grammar allows = and <> for strings and nothing
         // else, so LIKE has to stay out of the queries and the suffix match happens in PowerShell.
         Assert.Contains("Like              = '(?i)\\bLIKE\\b'", contract, StringComparison.Ordinal);
+
+        // The third: a real File table has empty FileName cells, and PowerShell refuses to bind a
+        // [string[]] containing one unless the parameter says so.
+        Assert.Contains("[AllowEmptyString()]", contract, StringComparison.Ordinal);
+
+        // Each of those three cost a tag-and-build cycle to identify because the step asserted without
+        // reporting what it read. The diagnostic has to run before the verdict, not after it.
+        var shapeIndex = contract.IndexOf("Write-MsiFileTableShape -FileNames $fileNames", StringComparison.Ordinal);
+        var verdictIndex = contract.IndexOf("$violation = Get-DesktopMsiContractViolation", StringComparison.Ordinal);
+        Assert.True(shapeIndex >= 0, "the contract must report the File table shape it read");
+        Assert.True(
+            shapeIndex < verdictIndex,
+            "the File table diagnostic must run before the verdict so a failing build still logs it");
         var contractQueryLines = contract
             .Split('\n')
             .Where(line => line.Contains("-Query", StringComparison.Ordinal))
