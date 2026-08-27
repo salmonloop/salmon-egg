@@ -13,6 +13,11 @@
     Splitting the rule from the COM plumbing lets run-desktop-msi-contract-gate.ps1 drive it with fake
     databases on any platform, so a weakened or mis-written query fails on the pushing commit.
 
+    Two release builds have died inside OpenView on SQL this file once used: `SELECT COUNT(*)` (no
+    aggregates in the dialect) and `WHERE ... LIKE ...` (string comparison is = or <> only). Every query
+    below is therefore checked against the supported-grammar list before OpenView ever sees it, and the
+    selection work happens client-side: fetch the column, filter with PowerShell.
+
     The reader contract is one method, OpenView($query), returning an object with Execute() and Fetch();
     Fetch() returns a record exposing StringData($oneBasedColumn), or $null when the rows run out. That is
     exactly the surface WindowsInstaller.Installer's database COM object provides.
@@ -20,15 +25,18 @@
 
 Set-StrictMode -Version Latest
 
-# Aggregate functions, GROUP BY, JOIN, ORDER BY, DISTINCT and subqueries are all absent from Windows
-# Installer's SQL dialect: it fails inside OpenView rather than returning a wrong answer. Rejecting them
-# here turns "the release build died on a SQL error" into a named, testable violation.
+# Aggregate functions, GROUP BY, JOIN, ORDER BY, DISTINCT and LIKE are all absent from Windows Installer's
+# SQL dialect: it fails inside OpenView rather than returning a wrong answer. The grammar's WHERE clause
+# allows only column-to-column comparison, {column} {comparator} {constant}, IS [NOT] NULL -- and for
+# strings only = or <>. Rejecting the rest here turns "the release build died on a SQL error" into a
+# named, testable violation.
 $script:UnsupportedMsiSqlPatterns = [ordered]@{
     AggregateFunction = '(?i)\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\('
     GroupBy           = '(?i)\bGROUP\s+BY\b'
     OrderBy           = '(?i)\bORDER\s+BY\b'
     Distinct          = '(?i)\bDISTINCT\b'
     Join              = '(?i)\bJOIN\b'
+    Like              = '(?i)\bLIKE\b'
 }
 
 function Get-MsiQueryViolation
@@ -104,6 +112,41 @@ function Get-MsiScalar
     return $record.StringData(1)
 }
 
+function Get-MsiColumn
+{
+    <#
+    .SYNOPSIS
+        Returns the first column of every row a query yields, as a string array.
+
+    .DESCRIPTION
+        Filtering by suffix is not expressible in MSI SQL -- there is no LIKE, and string comparison is
+        limited to = and <>. So the rows come back whole and the caller matches them in PowerShell.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $Database,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Query
+    )
+
+    Assert-MsiQuerySupported -Query $Query
+
+    $view = $Database.OpenView($Query)
+    $view.Execute()
+
+    $values = [System.Collections.Generic.List[string]]::new()
+    while ($null -ne ($record = $view.Fetch()))
+    {
+        $values.Add($record.StringData(1))
+    }
+
+    # The unary comma keeps the array intact on return. Without it PowerShell unrolls it, and an empty
+    # result -- the EmptyPackage case this contract exists to catch -- would arrive as $null.
+    return , $values.ToArray()
+}
+
 function Measure-MsiRows
 {
     <#
@@ -137,6 +180,37 @@ function Measure-MsiRows
     return $count
 }
 
+function Get-MsiAppExecutableName
+{
+    <#
+    .SYNOPSIS
+        Returns the harvested name of the app executable, or $null when the package does not carry it.
+
+    .DESCRIPTION
+        The File table's FileName column holds either a long name or the pair 'SHORTNA~1.EXE|LongName.exe'.
+        Both halves are checked, because which form heat emits depends on whether the name needs a 8.3
+        alias -- and a rule that only understood one form would pass or fail for the wrong reason.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [string[]]$FileNames
+    )
+
+    foreach ($fileName in $FileNames)
+    {
+        if ([string]::IsNullOrWhiteSpace($fileName)) { continue }
+
+        foreach ($candidate in $fileName.Split('|'))
+        {
+            if ($candidate -eq 'SalmonEgg.exe') { return $fileName }
+        }
+    }
+
+    return $null
+}
+
 function Get-DesktopMsiContractViolation
 {
     <#
@@ -156,7 +230,8 @@ function Get-DesktopMsiContractViolation
         $Database
     )
 
-    $fileCount = Measure-MsiRows -Database $Database -Query 'SELECT `File` FROM `File`'
+    $fileNames = Get-MsiColumn -Database $Database -Query 'SELECT `FileName` FROM `File`'
+    $fileCount = $fileNames.Count
     if ($fileCount -lt 1)
     {
         return [pscustomobject]@{
@@ -165,8 +240,7 @@ function Get-DesktopMsiContractViolation
         }
     }
 
-    $appExe = Get-MsiScalar -Database $Database `
-        -Query "SELECT ``FileName`` FROM ``File`` WHERE ``FileName`` LIKE '%SalmonEgg.exe'"
+    $appExe = Get-MsiAppExecutableName -FileNames $fileNames
     if ([string]::IsNullOrWhiteSpace($appExe))
     {
         return [pscustomobject]@{ Id = 'MissingAppExe'; Detail = "$fileCount file rows, none of them SalmonEgg.exe" }
@@ -200,11 +274,10 @@ function Assert-DesktopMsiContract
         throw "The built MSI breaks the desktop package contract ($($violation.Id)): $($violation.Detail)."
     }
 
-    $fileCount = Measure-MsiRows -Database $Database -Query 'SELECT `File` FROM `File`'
+    $fileNames = Get-MsiColumn -Database $Database -Query 'SELECT `FileName` FROM `File`'
     $version = Get-MsiScalar -Database $Database `
         -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'"
-    $appExe = Get-MsiScalar -Database $Database `
-        -Query "SELECT ``FileName`` FROM ``File`` WHERE ``FileName`` LIKE '%SalmonEgg.exe'"
+    $appExe = Get-MsiAppExecutableName -FileNames $fileNames
 
-    Write-Host "[desktop-msi] verified: $fileCount file row(s), ProductVersion $version, $appExe present"
+    Write-Host "[desktop-msi] verified: $($fileNames.Count) file row(s), ProductVersion $version, $appExe present"
 }

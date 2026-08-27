@@ -65,8 +65,11 @@ class FakeMsiDatabase
     {
         $this.Queries.Add($query)
 
+        # Windows Installer parses the query here and rejects anything outside its grammar. LIKE is in that
+        # rejected set -- the fake used to implement it, which is exactly how the v1.3.0 retag still shipped
+        # a query the real database refuses.
         if ($query -match '(?i)\b(?:COUNT|SUM|AVG|MIN|MAX)\s*\(' -or
-            $query -match '(?i)\b(?:GROUP\s+BY|ORDER\s+BY|DISTINCT|JOIN)\b')
+            $query -match '(?i)\b(?:GROUP\s+BY|ORDER\s+BY|DISTINCT|JOIN|LIKE)\b')
         {
             throw 'OpenView,Sql'
         }
@@ -76,11 +79,6 @@ class FakeMsiDatabase
             $rows = @()
             foreach ($name in $this.FileNames)
             {
-                if ($query -match "(?i)LIKE\s+'%(?<suffix>[^']+)'")
-                {
-                    if (-not $name.EndsWith($Matches.suffix, [StringComparison]::Ordinal)) { continue }
-                }
-
                 $rows += [FakeMsiRecord]::new(@($name))
             }
 
@@ -118,6 +116,27 @@ $cases = @(
     @{
         Description = 'a package with files but without the app executable'
         FileNames   = @('SalmonEgg.dll', 'SkiaSharp.dll')
+        Version     = '1.3.0'
+        Expected    = 'MissingAppExe'
+    }
+    @{
+        # heat emits 'SHORT~1.EXE|Long.exe' whenever a name needs an 8.3 alias, so the rule has to read
+        # both halves. Matching the whole cell would miss the executable and fail for the wrong reason.
+        Description = 'a package whose File rows carry short|long name pairs'
+        FileNames   = @('SALMON~1.EXE|SalmonEgg.exe', 'SKIASH~1.DLL|SkiaSharp.dll')
+        Version     = '1.3.0'
+        Expected    = $null
+    }
+    @{
+        Description = 'a package whose short|long pairs never name the app executable'
+        FileNames   = @('SKIASH~1.DLL|SkiaSharp.dll', 'SALMON~2.DLL|SalmonEgg.dll')
+        Version     = '1.3.0'
+        Expected    = 'MissingAppExe'
+    }
+    @{
+        # Substring matching would accept this; the executable is SalmonEgg.exe, not a name ending in it.
+        Description = 'a package shipping a lookalike whose name merely ends with the executable name'
+        FileNames   = @('NotSalmonEgg.exe', 'SkiaSharp.dll')
         Version     = '1.3.0'
         Expected    = 'MissingAppExe'
     }
@@ -179,6 +198,23 @@ foreach ($query in $database.Queries)
 
 Write-Host "[desktop-msi-gate] every one of $($database.Queries.Count) issued queries is expressible in MSI SQL"
 
+# The check above trusts Get-MsiQueryViolation. This one does not: it replays each issued query through the
+# database whose OpenView rejects out-of-grammar SQL the way Windows Installer's does. A query the pattern
+# list happens to miss still fails here.
+foreach ($query in $database.Queries)
+{
+    try
+    {
+        [void]([FakeMsiDatabase]::new(@('SalmonEgg.exe'), '1.3.0')).OpenView($query)
+    }
+    catch
+    {
+        Add-Failure "OpenView rejected a query the contract issues: '$query' -> $($_.Exception.Message)"
+    }
+}
+
+Write-Host '[desktop-msi-gate] OpenView accepted every issued query'
+
 # Reverse verification: the query shape that broke the v1.3.0 release must still be rejected, and it must
 # be rejected before reaching OpenView so the failure names the cause instead of surfacing 'OpenView,Sql'.
 $unsupported = @(
@@ -188,6 +224,10 @@ $unsupported = @(
     @{ Query = 'SELECT DISTINCT `Component_` FROM `File`'; Expected = 'Distinct' }
     @{ Query = 'SELECT `FileName` FROM `File` GROUP BY `Component_`'; Expected = 'GroupBy' }
     @{ Query = 'SELECT `FileName` FROM `File` JOIN `Component`'; Expected = 'Join' }
+    # The second query shape to take down a v1.3.0 release build. The grammar allows only = and <> for
+    # string comparison, so suffix matching has to happen in PowerShell after the rows come back.
+    @{ Query = "SELECT ``FileName`` FROM ``File`` WHERE ``FileName`` LIKE '%SalmonEgg.exe'"; Expected = 'Like' }
+    @{ Query = 'SELECT `Value` FROM `Property` WHERE `Property` like ?'; Expected = 'Like' }
 )
 
 foreach ($case in $unsupported)
@@ -288,4 +328,5 @@ if ($failures.Count -gt 0)
 }
 
 Write-Host ("[desktop-msi-gate] passed: $($cases.Count) package cases, $($unsupported.Count) unsupported-SQL " +
-            'cases, query-expressibility and row-counting checks, plus 2 assertion-surface checks')
+            'cases, query-expressibility through both the pattern list and OpenView, row-counting checks, ' +
+            'plus 2 assertion-surface checks')

@@ -174,6 +174,17 @@ public sealed class GitHubWorkflowContractTests
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.Contains("Assert-MsiQuerySupported -Query $Query", contract, StringComparison.Ordinal);
         Assert.Contains("while ($null -ne $view.Fetch())", contract, StringComparison.Ordinal);
+
+        // The second shape that died inside OpenView: the grammar allows = and <> for strings and nothing
+        // else, so LIKE has to stay out of the queries and the suffix match happens in PowerShell.
+        Assert.Contains("Like              = '(?i)\\bLIKE\\b'", contract, StringComparison.Ordinal);
+        var contractQueryLines = contract
+            .Split('\n')
+            .Where(line => line.Contains("-Query", StringComparison.Ordinal))
+            .ToList();
+        Assert.DoesNotContain(
+            contractQueryLines,
+            line => line.Contains("LIKE", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
