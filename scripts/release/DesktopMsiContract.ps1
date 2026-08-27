@@ -102,7 +102,7 @@ function Get-MsiScalar
     Assert-MsiQuerySupported -Query $Query
 
     $view = $Database.OpenView($Query)
-    $view.Execute()
+    [void]$view.Execute()
     $record = $view.Fetch()
     if ($null -eq $record)
     {
@@ -134,7 +134,7 @@ function Get-MsiColumn
     Assert-MsiQuerySupported -Query $Query
 
     $view = $Database.OpenView($Query)
-    $view.Execute()
+    [void]$view.Execute()
 
     $values = [System.Collections.Generic.List[string]]::new()
     while ($null -ne ($record = $view.Fetch()))
@@ -169,7 +169,7 @@ function Measure-MsiRows
     Assert-MsiQuerySupported -Query $Query
 
     $view = $Database.OpenView($Query)
-    $view.Execute()
+    [void]$view.Execute()
 
     $count = 0
     while ($null -ne $view.Fetch())

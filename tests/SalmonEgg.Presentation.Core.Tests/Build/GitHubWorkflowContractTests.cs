@@ -183,7 +183,16 @@ public sealed class GitHubWorkflowContractTests
         // [string[]] containing one unless the parameter says so.
         Assert.Contains("[AllowEmptyString()]", contract, StringComparison.Ordinal);
 
-        // Each of those three cost a tag-and-build cycle to identify because the step asserted without
+        // The fourth: a bare $view.Execute() inside a function emits the COM call's return value into the
+        // function's output stream, so the reader returned [that value, the array] and the caller's
+        // [string[]] cast flattened 400+ names into one space-joined cell. Every Execute must be
+        // suppressed, and none may be left bare.
+        Assert.DoesNotContain(
+            contract.Split('\n'),
+            line => line.TrimStart().StartsWith("$view.Execute()", StringComparison.Ordinal));
+        Assert.Contains("[void]$view.Execute()", contract, StringComparison.Ordinal);
+
+        // Each of those four cost a tag-and-build cycle to identify because the step asserted without
         // reporting what it read. The diagnostic has to run before the verdict, not after it.
         var shapeIndex = contract.IndexOf("Write-MsiFileTableShape -FileNames $fileNames", StringComparison.Ordinal);
         var verdictIndex = contract.IndexOf("$violation = Get-DesktopMsiContractViolation", StringComparison.Ordinal);
@@ -213,6 +222,15 @@ public sealed class GitHubWorkflowContractTests
         // This one was missing, and the omission is what let the desktop MSI rule reach a tag with SQL
         // Windows Installer cannot parse: the release step is the only place it ran.
         Assert.Contains("run-desktop-msi-contract-gate.ps1", workflow, StringComparison.Ordinal);
+
+        // A gate is only worth its runtime if its fake behaves like the thing it stands in for. Four
+        // v1.3.0 release builds died on properties of the real Windows Installer database that this fake
+        // did not have -- the last one because its Execute() was [void] while COM's returns a value, so a
+        // bare call leaked into the reader's output stream on the real database only. Keep it returning.
+        var gate = TestSourceFiles.ReadAllText(@"scripts\gates\run-desktop-msi-contract-gate.ps1")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("[object] Execute()", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("[void] Execute()", gate, StringComparison.Ordinal);
     }
 
     [Fact]

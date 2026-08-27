@@ -35,7 +35,13 @@ class FakeMsiView
     [int]$Cursor = 0
     [bool]$Executed = $false
     FakeMsiView([object[]]$rows) { $this.Rows = $rows }
-    [void] Execute() { $this.Executed = $true; $this.Cursor = 0 }
+
+    # Returns a value, like the real COM View.Execute does, instead of being [void]. That difference is
+    # what let the v1.3.0 rehearsal fail: a bare $view.Execute() inside a function emits its return into
+    # the function's output stream, so Get-MsiColumn returned [Execute's value, the array] and the
+    # caller's [string[]] cast flattened 400+ names into one space-joined cell. A [void] fake cannot
+    # reproduce that, so it certified a rule the real database breaks.
+    [object] Execute() { $this.Executed = $true; $this.Cursor = 0; return $null }
     [object] Fetch()
     {
         if (-not $this.Executed) { throw 'Fetch before Execute' }
