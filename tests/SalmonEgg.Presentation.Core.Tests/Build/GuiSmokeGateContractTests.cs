@@ -49,6 +49,9 @@ public sealed class GuiSmokeGateContractTests
         Assert.Contains("libXtst.so.6", x11Probe, StringComparison.Ordinal);
         Assert.Contains("XTestFakeKeyEvent", x11Probe, StringComparison.Ordinal);
         Assert.Contains("Install the XTest runtime", x11Probe, StringComparison.Ordinal);
+        Assert.Contains("WINDOW_CREATED_MARKER=\"OnLaunched: window created\"", script, StringComparison.Ordinal);
+        Assert.Contains("wait_for_boot_marker \"${WINDOW_CREATED_MARKER}\" \"${WINDOW_CREATED_TIMEOUT_SECONDS}\"", script, StringComparison.Ordinal);
+        Assert.Contains("Skia Desktop GUI smoke exited before creating its window.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke did not expose a mapped, nonblank X11 window.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke did not expose a focusable X11 window that accepts synthetic keyboard input.", script, StringComparison.Ordinal);
         Assert.Contains("Skia Desktop GUI smoke requires Debug configuration", script, StringComparison.Ordinal);
