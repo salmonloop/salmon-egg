@@ -174,6 +174,11 @@ jobs:
       # no equivalent, so a heat harvest that picked up nothing would still emit a valid, installable,
       # and empty package. Read the built package's own tables rather than trusting the authoring above.
       #
+      # The rule itself lives in scripts/release/DesktopMsiContract.ps1 so that
+      # scripts/gates/run-desktop-msi-contract-gate.ps1 can rehearse it on every push. It used to be
+      # inline here, and being unrehearsable is how it shipped with `SELECT COUNT(*)` -- SQL Windows
+      # Installer cannot parse -- and took down the v1.3.0 release build from inside OpenView.
+      #
       # Native COM calls, matching build-cli-msi.ps1 after 2690a1eb: the GetType().InvokeMember(...) form
       # was tried and replaced there, and GitHubWorkflowContractTests pins the native shape. Using the
       # rejected form here would reintroduce what that commit removed.
@@ -185,48 +190,17 @@ jobs:
             throw "No .msi was produced under artifacts/installer."
           }
 
+          . ./scripts/release/DesktopMsiContract.ps1
+
           $installer = New-Object -ComObject WindowsInstaller.Installer
           $database = $installer.OpenDatabase($msi.FullName, 0)
           try {
-            function Get-MsiScalar {
-              param($Database, [string]$Query)
-
-              $view = $Database.OpenView($Query)
-              $view.Execute()
-              $record = $view.Fetch()
-              if ($null -eq $record) {
-                return $null
-              }
-
-              return $record.StringData(1)
-            }
-
-            # A package that installs no files is the failure mode a green candle/light run cannot show.
-            $fileCount = [int](Get-MsiScalar -Database $database -Query 'SELECT COUNT(*) FROM `File`')
-            if ($fileCount -lt 1) {
-              throw "The built MSI contains $fileCount file rows: the harvest produced an empty package."
-            }
-
-            # The executable this per-user install exists to deliver must actually be inside it.
-            $appExe = Get-MsiScalar -Database $database `
-              -Query "SELECT ``FileName`` FROM ``File`` WHERE ``FileName`` LIKE '%SalmonEgg.exe'"
-            if ([string]::IsNullOrWhiteSpace($appExe)) {
-              throw "The built MSI contains no SalmonEgg.exe file row."
-            }
-
-            $version = Get-MsiScalar -Database $database `
-              -Query "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='ProductVersion'"
-            if ($version -notmatch '^\d+\.\d+\.\d+$') {
-              throw "MSI ProductVersion must be a three-part numeric version, got: '$version'."
-            }
-
-            Write-Host "[desktop-msi] verified: $fileCount file row(s), ProductVersion $version, $appExe present"
+            Assert-DesktopMsiContract -Database $database
           }
           finally {
             [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
             [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
           }
-
       - name: Upload Windows Skia MSI artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:

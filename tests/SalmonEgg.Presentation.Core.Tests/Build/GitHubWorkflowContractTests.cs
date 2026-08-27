@@ -155,6 +155,25 @@ public sealed class GitHubWorkflowContractTests
         Assert.Contains("run-release-artifact-contract-gate.sh macos-bundle", workflow, StringComparison.Ordinal);
         Assert.Contains("run-msix-package-contract-gate.ps1 -Package", workflow, StringComparison.Ordinal);
         Assert.Contains("Verify Windows Skia MSI contract", workflow, StringComparison.Ordinal);
+
+        // The rule must stay in the shared script the push-time gate rehearses. Inlining it again is how
+        // it last shipped unverifiable.
+        Assert.Contains(". ./scripts/release/DesktopMsiContract.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("Assert-DesktopMsiContract -Database $database", workflow, StringComparison.Ordinal);
+
+        // Windows Installer has no aggregate functions, so this shape fails inside OpenView rather than
+        // failing an assertion. It took down the v1.3.0 release build. Scan the executable lines only:
+        // the comments above that step name the defect on purpose.
+        var executableLines = workflow
+            .Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+            .ToList();
+        Assert.DoesNotContain(executableLines, line => line.Contains("COUNT(*)", StringComparison.Ordinal));
+
+        var contract = TestSourceFiles.ReadAllText(@"scripts\release\DesktopMsiContract.ps1")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("Assert-MsiQuerySupported -Query $Query", contract, StringComparison.Ordinal);
+        Assert.Contains("while ($null -ne $view.Fetch())", contract, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -166,6 +185,10 @@ public sealed class GitHubWorkflowContractTests
 
         Assert.Contains("run-msix-package-contract-gate.ps1 -SelfTest", workflow, StringComparison.Ordinal);
         Assert.Contains("run-release-artifact-contract-gate.sh --self-test", workflow, StringComparison.Ordinal);
+
+        // This one was missing, and the omission is what let the desktop MSI rule reach a tag with SQL
+        // Windows Installer cannot parse: the release step is the only place it ran.
+        Assert.Contains("run-desktop-msi-contract-gate.ps1", workflow, StringComparison.Ordinal);
     }
 
     [Fact]
