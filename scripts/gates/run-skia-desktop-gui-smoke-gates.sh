@@ -13,6 +13,8 @@ APP_PATH="${REPO_ROOT}/SalmonEgg/SalmonEgg/bin/${CONFIGURATION}/net10.0-desktop/
 X11_PROBE="${REPO_ROOT}/scripts/gates/skia-desktop-x11-window-probe.py"
 SEED_WRITER_PROJECT="${REPO_ROOT}/tests/SalmonEgg.TestSupport/SalmonEgg.TestSupport.csproj"
 READY_MARKER="MainPage: initial shell content activated"
+WINDOW_CREATED_MARKER="OnLaunched: window created"
+WINDOW_CREATED_TIMEOUT_SECONDS=120
 TRANSCRIPT_SEED_CONVERSATION_ID="skia-mixed-session-01"
 TRANSCRIPT_SEED_MARKER="SKIA_MD_MARKER_7f3a"
 NUMBERBOX_PROBE_COMPLETE_MARKER="NumberBoxThemeProbe: complete"
@@ -99,6 +101,29 @@ start_xvfb() {
 
   cat "${XVFB_LOG}" >&2
   echo "Unable to start Xvfb for Skia Desktop GUI smoke." >&2
+  return 1
+}
+
+# Waits for a boot.log marker, failing fast if the app exits first. Startup duration and window
+# paint latency are separate facts: a shared deadline lets slow startup consume the paint budget and
+# report as "window never painted", which is the wrong diagnosis and the wrong thing to fix.
+wait_for_boot_marker() {
+  local marker="$1"
+  local timeout_seconds="$2"
+  local deadline=$((SECONDS + timeout_seconds))
+
+  while [ "${SECONDS}" -lt "${deadline}" ]; do
+    if ! kill -0 "${APP_PID}" 2>/dev/null; then
+      return 2
+    fi
+
+    if [ -f "${BOOT_LOG}" ] && grep -Fq "${marker}" "${BOOT_LOG}"; then
+      return 0
+    fi
+
+    sleep 0.2
+  done
+
   return 1
 }
 
@@ -201,6 +226,24 @@ fi
 APP_PID="$!"
 
 if [ "${OS_NAME}" = "Linux" ]; then
+  # A hosted runner has been measured taking 15s from process start to window creation, which left
+  # 5s of a shared 20s budget for map and paint and failed with distinctPixels=1 on an app that went
+  # on to render correctly. Spend the startup wait here so the probe budget measures only the paint.
+  wait_for_boot_marker "${WINDOW_CREATED_MARKER}" "${WINDOW_CREATED_TIMEOUT_SECONDS}"
+  window_created_status="$?"
+  if [ "${window_created_status}" -ne 0 ]; then
+    cat "${STDOUT_LOG}" >&2
+    if [ -f "${BOOT_LOG}" ]; then
+      cat "${BOOT_LOG}" >&2
+    fi
+    if [ "${window_created_status}" -eq 2 ]; then
+      echo "Skia Desktop GUI smoke exited before creating its window." >&2
+    else
+      echo "Skia Desktop GUI smoke did not log '${WINDOW_CREATED_MARKER}' within ${WINDOW_CREATED_TIMEOUT_SECONDS}s." >&2
+    fi
+    exit 1
+  fi
+
   if ! "${PYTHON_BIN}" "${X11_PROBE}" \
       --display "${SMOKE_DISPLAY}" \
       --pid "${APP_PID}" \
