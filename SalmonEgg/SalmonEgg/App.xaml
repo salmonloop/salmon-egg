@@ -1,6 +1,7 @@
 <Application x:Class="SalmonEgg.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:controls="using:Microsoft.UI.Xaml.Controls"
              xmlns:styles="using:SalmonEgg.Styles">
 
@@ -44,6 +45,40 @@
                     <StaticResource x:Key="AppOverlayScrimBrush" ResourceKey="SystemColorWindowTextColorBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <!--
+              The one base every list-row container style chains to. App styles must chain here,
+              never to DefaultListViewItemStyle directly, because the right base differs per
+              platform and the win: prefix below is what states that difference.
+
+              On WinUI an ItemContainerStyle REPLACES the framework's implicit ListViewItem style
+              rather than merging with it, and that implicit style declares no setters of its own -
+              its whole content is BasedOn="{StaticResource DefaultListViewItemStyle}". A container
+              style that does not re-chain therefore loses the Template, and with it the
+              ListViewItemPresenter that draws the selection indicator, corner radius and hover fill.
+
+              Uno inverts both halves. FrameworkElement.ApplyStyles applies the explicit style and
+              then the default style at the lower ImplicitStyle precedence, so a Template arrives
+              even when the explicit style omits one; and its keyed DefaultListViewItemStyle wraps a
+              ListViewItemPresenter Uno has never implemented (unoplatform/uno#1444) in a template
+              with zero VisualStateGroups. Chaining to it there would promote that empty template to
+              ExplicitStyle precedence and shadow the working ListViewItemExpanded template Uno
+              installs by default, costing the state fills. So the base must be absent there.
+
+              win: is Uno's conditional-XAML prefix for "Windows only" (Uno.UI.SourceGenerators.props
+              lists win in ExcludeXamlNamespaces unconditionally, so its generator drops the
+              attribute; on Windows the prefix maps to the default presentation namespace, making
+              win:BasedOn simply BasedOn). One declaration, correct on both.
+
+              CornerRadius belongs here rather than at each call site: Uno's row template
+              template-binds it from the container and defines no ListViewItem radius resource, so
+              omitting it renders square rows there, while WinUI's presenter reads
+              ThemeResource ListViewItemCornerRadius and ignores this setter. ControlCornerRadius is
+              used because Uno ships no ListViewItemCornerRadius; both are 4.
+            -->
+            <Style x:Key="AppListRowBaseStyle" TargetType="ListViewItem" win:BasedOn="{StaticResource DefaultListViewItemStyle}">
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+            </Style>
+
             <SolidColorBrush x:Key="AccentBrush" Color="{ThemeResource SystemAccentColor}" />
             <SolidColorBrush x:Key="AppTerminalSurfaceBrush" Color="{ThemeResource SystemAltHighColor}" />
             <FontFamily x:Key="AppMonospaceFontFamily">Consolas</FontFamily>

@@ -295,4 +295,35 @@ internal static class XamlComplianceTestHelpers
 
     internal static bool HasXUid(XElement element, string expectedValue)
         => string.Equals(GetAttributeByLocalName(element, "Uid"), expectedValue, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Asserts that <paramref name="anchor"/> appears inside a <c>#if <paramref name="condition"/></c>
+    /// region of <paramref name="source"/>.
+    /// </summary>
+    /// <remarks>
+    /// Counting how many times a directive appears couples every guard that shares a condition: adding a
+    /// second platform-conditional block to the same file breaks a test that has nothing to do with it.
+    /// Locating the anchor's enclosing region instead asserts the property each guard actually cares
+    /// about — that its own code is compiled only for its own platforms — and stays true as siblings
+    /// are added.
+    ///
+    /// The scan assumes the conditional regions in the file are not nested, which holds for the flat
+    /// platform switches this is used on; a nested <c>#if</c> would need a depth counter.
+    /// </remarks>
+    internal static void AssertInsideConditionalRegion(string source, string condition, string anchor)
+    {
+        var directive = "#if " + condition;
+        var anchorIndex = source.IndexOf(anchor, StringComparison.Ordinal);
+        Assert.True(anchorIndex >= 0, $"Expected to find '{anchor}' in the source.");
+
+        var openIndex = source.LastIndexOf(directive, anchorIndex, StringComparison.Ordinal);
+        Assert.True(
+            openIndex >= 0,
+            $"Expected '{anchor}' to be preceded by '{directive}', so it only compiles for those platforms.");
+
+        var closeIndex = source.IndexOf("#endif", openIndex, StringComparison.Ordinal);
+        Assert.True(
+            closeIndex > anchorIndex,
+            $"Expected '{anchor}' to sit inside the '{directive}' region rather than after its #endif.");
+    }
 }

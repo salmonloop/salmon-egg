@@ -53,7 +53,8 @@
                   SelectionChanged="OnSelectionChanged"
                   Visibility="{x:Bind ViewModel.HasProjects, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
+                <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </Style>
             </ListView.ItemContainerStyle>
