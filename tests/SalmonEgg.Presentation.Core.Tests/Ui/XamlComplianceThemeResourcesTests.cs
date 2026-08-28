@@ -441,7 +441,13 @@ public sealed class XamlComplianceThemeResourcesTests
         var appCode = LoadText(@"SalmonEgg\SalmonEgg\App.xaml.cs");
         var overrideXaml = LoadXaml(@"SalmonEgg\SalmonEgg\Styles\Skia\UnoNumberBoxThemeOverrides.xaml");
 
-        Assert.Equal(2, CountOccurrences(appCode, "#if __UNO_SKIA__ || __WASM__"));
+        // Both halves - the call and the method - must be behind the platform switch, or the workaround
+        // leaks into the Windows WinUI 3 path it exists to stay out of.
+        AssertInsideConditionalRegion(appCode, "__UNO_SKIA__ || __WASM__", "TryApplyUnoNumberBoxThemeOverride();");
+        AssertInsideConditionalRegion(
+            appCode,
+            "__UNO_SKIA__ || __WASM__",
+            "private void TryApplyUnoNumberBoxThemeOverride()");
         Assert.Contains("TryApplyUnoNumberBoxThemeOverride();", appCode, StringComparison.Ordinal);
         Assert.Contains("Styles/Skia/UnoNumberBoxThemeOverrides.xaml", appCode, StringComparison.Ordinal);
         Assert.Contains("Resources[typeof(Microsoft.UI.Xaml.Controls.NumberBox)] = numberBoxStyle;", appCode, StringComparison.Ordinal);

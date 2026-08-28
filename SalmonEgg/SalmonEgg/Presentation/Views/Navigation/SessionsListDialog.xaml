@@ -63,7 +63,8 @@
                   ItemClick="OnSessionItemClick"
                   SelectionMode="None">
             <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
+                <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
                     <!-- Stretch so the trailing timestamp reaches the row's right edge; without it
                          ListViewItem left-aligns its content (WinUI item-container guidance). -->
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

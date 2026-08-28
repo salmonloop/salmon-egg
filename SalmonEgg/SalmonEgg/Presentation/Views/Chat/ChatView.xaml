@@ -242,6 +242,9 @@
                                 </ItemsPanelTemplate>
                             </ListView.ItemsPanel>
                             <ListView.ItemContainerStyle>
+                                <!-- Deliberately not chained to AppListRowBaseStyle: a transcript is not a row picker.
+                                     SelectionMode is None and the bubbles own their bounds, so row chrome would only
+                                     paint hover fills behind chrome the bubble already draws. -->
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                     <Setter Property="Padding" Value="0" />

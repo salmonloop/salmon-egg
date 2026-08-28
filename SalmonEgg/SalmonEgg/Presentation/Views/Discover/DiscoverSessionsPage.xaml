@@ -40,25 +40,23 @@
              the templates below carry no padding of their own, and why row spacing needs no Margin.
              Compact short-height default keeps touch-friendly row height (>=44) while reclaiming
              vertical budget. Comfortable restores prior 104 marketing density. -->
-        <Style x:Key="DiscoverSessionItemStyleCompact" TargetType="ListViewItem">
+        <!-- Chaining to the seam is load-bearing, not decoration: see AppListRowBaseStyle in App.xaml. -->
+        <Style x:Key="DiscoverSessionItemStyleCompact" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="MinHeight" Value="80"/>
             <Setter Property="Padding" Value="{StaticResource DiscoverSessionRowPadding}"/>
-            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
         </Style>
-        <Style x:Key="DiscoverSessionItemStyleComfortable" TargetType="ListViewItem">
+        <Style x:Key="DiscoverSessionItemStyleComfortable" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="MinHeight" Value="104"/>
             <Setter Property="Padding" Value="{StaticResource DiscoverSessionRowPadding}"/>
-            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
         </Style>
 
-        <!-- Profile rows are a single-selection master list: the container owns selection visuals,
-             so the template is layout only. -->
-        <Style x:Key="DiscoverProfileItemStyle" TargetType="ListViewItem">
+        <!-- Profile rows are a single-selection master list: the row template inherited through the
+             seam owns the selection visuals, so the item template is layout only. -->
+        <Style x:Key="DiscoverProfileItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource AppListRowBaseStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Padding" Value="{StaticResource DiscoverProfileRowPadding}"/>
-            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}"/>
         </Style>
 
         <!-- Placeholder blocks for the loading skeletons. They stand in for text and controls that
