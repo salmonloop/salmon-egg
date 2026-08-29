@@ -52,19 +52,24 @@ public sealed class WindowsVersioningContractTests
         Assert.Contains("<PackageReference Include=\"MinVer\" />", projectFile, StringComparison.Ordinal);
 
         // The manifest templates are stamped with $(SalmonEggPackageVersion) at execution time, and
-        // MinVer only fills that value inside its own target. Chaining the generation after MinVer is
-        // what keeps the tag-derived version from being replaced by a pre-MinVer default, so the
-        // ordering is part of the contract, not an implementation detail.
+        // MinVer only fills that value inside its own target. The ordering is part of the contract,
+        // not an implementation detail, so the exact target wiring is pinned below.
         Assert.Contains(
             "<Target Name=\"GenerateVersionedApplicationManifests\"",
             projectFile,
             StringComparison.Ordinal);
-        Assert.Contains("AfterTargets=\"MinVer\"", projectFile, StringComparison.Ordinal);
-        // Both the derive target and this one hang off AfterTargets="MinVer"; MSBuild does not define
-        // the order between two targets on the same hook, so the dependency is what guarantees the
-        // manifest is generated after the tag-derived version exists.
+        // The generated manifest is consumed before BeforeCompile: WindowsAppSDK's mt.exe merge runs
+        // at AssignTargetPaths. Hanging the generation off AfterTargets="MinVer" loses that race on a
+        // clean obj, so the target runs at the pre-resolve consumer point and pulls MinVer in itself.
+        // Depending on MinVer also fires the derive target (which hangs off AfterTargets="MinVer")
+        // before the manifest is written, which is what pins the ordering against
+        // SalmonEggDeriveReleaseIdentity without two targets on the same undefined-order hook.
         Assert.Contains(
-            "DependsOnTargets=\"SalmonEggDeriveReleaseIdentity\"",
+            "BeforeTargets=\"_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild\"",
+            projectFile,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DependsOnTargets=\"MinVer\"",
             projectFile,
             StringComparison.Ordinal);
         Assert.Contains(

@@ -210,7 +210,7 @@ jobs:
         run: |
           dotnet_version="$(dotnet --version)"
           # The expected version is read from global.json so this check can never drift from
-          # the file that actually pins the SDK (the old "10.0.3xx" wildcard did exactly that).
+          # the file that actually pins the SDK (the previous wildcard install did exactly that).
           # global.json's rollForward: latestPatch legitimately resolves to a newer patch within
           # the same feature band, so the gate is: same band, never an older patch than the pin.
           expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
@@ -303,7 +303,7 @@ jobs:
         run: |
           dotnet_version="$(dotnet --version)"
           # The expected version is read from global.json so this check can never drift from
-          # the file that actually pins the SDK (the old "10.0.3xx" wildcard did exactly that).
+          # the file that actually pins the SDK (the previous wildcard install did exactly that).
           # global.json's rollForward: latestPatch legitimately resolves to a newer patch within
           # the same feature band, so the gate is: same band, never an older patch than the pin.
           expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
