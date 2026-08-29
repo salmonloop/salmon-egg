@@ -9,7 +9,14 @@ using SalmonEgg.Domain.Services;
 
 namespace SalmonEgg.Presentation.Core.Services.Chat;
 
-public interface IDiscoverSessionsConnectionFacade : INotifyPropertyChanged
+/// <remarks>
+/// 继承 <see cref="IAsyncDisposable"/> 而非只依赖 <see cref="IDisposable"/>：本 facade 持有的
+/// 是<b>不在会话注册表里</b>的 ACP 连接（它从不 <c>RecordSession</c>），因此基于注册表的
+/// 关闭 drain 抓不到它，只能由 teardown owner 直接释放。而释放要 <c>DisconnectAsync</c> 后
+/// 再 <c>Dispose</c>——同步的 <see cref="IDisposable.Dispose"/> 只能 fire-and-forget 这一段，
+/// 在进程退出路径上等于和进程赛跑，agent 子进程可能来不及被终止（issue #126）。
+/// </remarks>
+public interface IDiscoverSessionsConnectionFacade : INotifyPropertyChanged, IAsyncDisposable
 {
     bool IsConnecting { get; }
 
@@ -169,20 +176,9 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
 
     public void Dispose()
     {
-        if (_disposed)
+        if (!TryClaimDisposal(out var cts, out var currentService))
         {
             return;
-        }
-
-        _disposed = true;
-        CancellationTokenSource? cts;
-        IChatService? currentService;
-        lock (_connectSync)
-        {
-            cts = _connectCts;
-            _connectCts = null;
-            currentService = _currentChatService;
-            _currentChatService = null;
         }
 
         cts?.Cancel();
@@ -192,12 +188,52 @@ public sealed class DiscoverSessionsConnectionFacade : IDiscoverSessionsConnecti
             try
             {
                 // Dispose is synchronous by IDisposable contract; fire-and-forget is acceptable here.
+                // 关闭路径必须走 DisposeAsync 而不是这里——见 IDiscoverSessionsConnectionFacade 注释。
                 _ = DisposeServiceAsync(currentService).AsTask();
             }
             catch (Exception ex)
             {
                 _logger.LogDebug(ex, "Failed to dispose Discover ACP browse service");
             }
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (!TryClaimDisposal(out var cts, out var currentService))
+        {
+            return;
+        }
+
+        cts?.Cancel();
+        cts?.Dispose();
+
+        // 与 Dispose 的唯一区别：等待服务真正断开并释放。DisposeServiceAsync 自吞异常，
+        // 所以关闭路径不会因为这一步抛出。
+        await DisposeServiceAsync(currentService).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 原子地认领这一次释放：胜者拿走 CTS 与当前服务，其余调用直接返回。
+    /// </summary>
+    private bool TryClaimDisposal(out CancellationTokenSource? cts, out IChatService? currentService)
+    {
+        lock (_connectSync)
+        {
+            if (_disposed)
+            {
+                cts = null;
+                currentService = null;
+                return false;
+            }
+
+            _disposed = true;
+            cts = _connectCts;
+            _connectCts = null;
+            currentService = _currentChatService;
+            _currentChatService = null;
+            return true;
         }
     }
 

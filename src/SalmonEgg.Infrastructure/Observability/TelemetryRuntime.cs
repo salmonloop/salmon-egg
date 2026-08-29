@@ -150,8 +150,14 @@ public sealed class TelemetryRuntime : ITelemetryRuntime
     {
         try
         {
-            // 同上：Shutdown 同步阻塞等待导出，不能占用关闭流程所在线程。
-            await Task.Run(() => _telemetryManager.Shutdown(), cancellationToken).ConfigureAwait(false);
+            // 同上：Shutdown 是同步 API，不能占用关闭流程所在线程。
+            // 传非阻塞超时而非默认值：默认按 provider 串行各等 5000ms，端点不可达时会把
+            // 关闭拖到 10s 以上（issue #126）。这里只通知导出线程收尾，不等它。
+            await Task.Run(
+                    () => _telemetryManager.Shutdown(
+                        ITelemetryManager.NonBlockingShutdownTimeoutMilliseconds),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

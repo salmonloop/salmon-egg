@@ -1579,6 +1579,13 @@ public sealed class DiscoverSessionsViewModelTests
             IsConnected = true;
         }
 
+        public ValueTask DisposeAsync()
+        {
+            IsConnected = false;
+            CurrentChatService = null;
+            return ValueTask.CompletedTask;
+        }
+
         private void SetProperty<T>(ref T field, T value, string propertyName)
         {
             if (EqualityComparer<T>.Default.Equals(field, value))

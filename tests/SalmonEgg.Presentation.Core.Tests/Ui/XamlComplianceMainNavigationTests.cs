@@ -595,9 +595,28 @@ public sealed class XamlComplianceMainNavigationTests
         Assert.Contains("partial void InitializeTray();", sharedPage, StringComparison.Ordinal);
         Assert.Contains("partial void DisposePlatformTray();", sharedPage, StringComparison.Ordinal);
         Assert.DoesNotContain("TrayIconManager", sharedPage, StringComparison.Ordinal);
-        Assert.DoesNotContain("AppWindowClosingEventArgs", sharedPage, StringComparison.Ordinal);
         Assert.Contains("TrayIconManager", windowsPage, StringComparison.Ordinal);
-        Assert.Contains("AppWindowClosingEventArgs", windowsPage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainPage_KeepsClosePathSharedAndTrayOutOfIt()
+    {
+        // issue #126：关闭路径（AppWindow.Closing 拦截 → teardown → 真关闭）是跨平台共享代码，
+        // 放在 Platforms/Windows 会让 Skia 三端永远没有 teardown 时机。托盘是 Windows 专属，
+        // 且 AppWindow.Hide() 未在 Uno 实现，hide 动作必须留在平台 partial。
+        var shutdownPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.Shutdown.cs");
+        var sharedPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.xaml.cs");
+        var windowsPage = LoadText(@"SalmonEgg\SalmonEgg\Platforms\Windows\MainPage.Windows.cs");
+        var defaultPage = LoadText(@"SalmonEgg\SalmonEgg\MainPage.Default.cs");
+
+        Assert.Contains("AppWindowClosingEventArgs", shutdownPage, StringComparison.Ordinal);
+        Assert.Contains("FlushRuntimeThenCloseAsync", shutdownPage, StringComparison.Ordinal);
+        Assert.Contains("AttachAppWindowClosing", shutdownPage, StringComparison.Ordinal);
+        Assert.Contains("HideMainWindowToTray();", shutdownPage, StringComparison.Ordinal);
+        Assert.Contains("partial void HideMainWindowToTray();", sharedPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("AppWindowClosingEventArgs", windowsPage, StringComparison.Ordinal);
+        Assert.DoesNotContain("TrayIconManager", shutdownPage, StringComparison.Ordinal);
+        Assert.Contains("partial void HideMainWindowToTray()", defaultPage, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -194,6 +194,22 @@ public sealed class TelemetryRuntimeTests
     }
 
     [Fact]
+    public async Task ShutdownAsync_DoesNotWaitForExport()
+    {
+        // issue #126：默认超时是「每个 provider」5000ms 且串行，端点不可达时实测把关闭
+        // 拖到 10s 以上。关闭路径必须传非阻塞超时，否则用户为不可达端点买单。
+        // 断言复用契约常量而非魔法数 0。
+        var manager = new RecordingTelemetryManager();
+        var runtime = CreateRuntime(manager);
+
+        await runtime.ShutdownAsync();
+
+        Assert.Equal(
+            new[] { ITelemetryManager.NonBlockingShutdownTimeoutMilliseconds },
+            manager.ShutdownTimeouts);
+    }
+
+    [Fact]
     public async Task ShutdownAsync_WhenManagerThrows_DoesNotPropagate()
     {
         // 关闭路径不得抛：flush 失败不应阻塞进程退出。
@@ -222,6 +238,8 @@ public sealed class TelemetryRuntimeTests
         public List<TelemetrySettings> Applied { get; } = new();
 
         public int ShutdownCount { get; private set; }
+
+        public List<int> ShutdownTimeouts { get; } = new();
 
         public int MaxConcurrentReconfigures { get; private set; }
 
@@ -287,6 +305,7 @@ public sealed class TelemetryRuntimeTests
             lock (_sync)
             {
                 ShutdownCount++;
+                ShutdownTimeouts.Add(timeoutMilliseconds);
             }
 
             return true;

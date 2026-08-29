@@ -13,6 +13,21 @@ namespace SalmonEgg.Infrastructure.Observability;
 public interface ITelemetryManager
 {
     /// <summary>
+    /// 进程退出路径使用的 <see cref="Shutdown"/> 超时：不等待导出完成。
+    /// </summary>
+    /// <remarks>
+    /// 0 不是"跳过关闭"，而是 OpenTelemetry SDK 显式支持的非阻塞分支：
+    /// <c>BatchExportProcessor.OnShutdown</c> 与 <c>BatchExportThreadWorker.Shutdown</c>
+    /// 都对 0 单独取分支——置位 drain target、唤醒导出线程，但不 Join。语义是
+    /// "通知导出线程去收尾，但调用方不等它"。
+    ///
+    /// 关闭路径必须用它：<see cref="Shutdown"/> 逐个 provider 串行等待，tracer 与 meter
+    /// 各等一遍默认 5000ms，端点不可达时实测把关闭拖到 10s 以上（issue #126）。
+    /// 进程退出手感优先于最后一批 span 的送达率。
+    /// </remarks>
+    public const int NonBlockingShutdownTimeoutMilliseconds = 0;
+
+    /// <summary>
     /// 按给定配置装配遥测管线，使端点 / 凭证 / 开关变更立即生效，无需重启。
     /// 启动时的首次装配也走这里。
     /// </summary>
@@ -32,7 +47,12 @@ public interface ITelemetryManager
     /// <summary>
     /// 关闭 OpenTelemetry（应用退出时调用），在 timeout 内尽量导出残留数据。
     /// </summary>
-    /// <param name="timeoutMilliseconds">等待上限；-1 表示无限等待。</param>
+    /// <param name="timeoutMilliseconds">
+    /// 等待上限；-1 表示无限等待；
+    /// <see cref="NonBlockingShutdownTimeoutMilliseconds"/> 表示不等待。
+    /// 注意该上限是<em>每个 provider</em>的：实现串行关闭 tracer 与 meter，
+    /// 故调用方感知到的最长阻塞是本值的两倍。
+    /// </param>
     /// <returns>是否在超时前完成关闭。</returns>
     bool Shutdown(int timeoutMilliseconds = 5000);
 
