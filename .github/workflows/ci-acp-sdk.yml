@@ -42,7 +42,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DOTNET_VERSION: "10.0.3xx"
   CONFIGURATION: "Release"
   PACKAGE_OUTPUT: "artifacts/acp-sdk-pack"
 
@@ -52,17 +51,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The package version is derived from the acp-sdk-v* tag history by MinVer, so the full
+      # history (tags included) must be present. A shallow clone would pack a 0.0.0-alpha version
+      # and the baseline guard in SalmonEgg.Acp.csproj would fail the pack.
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Run ACP SDK gate script
         env:
           DOTNET_BIN: dotnet
+          # Every version after the first shipped one must package-validate against the last
+          # published package. The baseline is stored as a repository variable, matching the
+          # release workflow, so CI and release cannot disagree about what was last published.
+          ACP_PACKAGE_BASELINE_VERSION: ${{ vars.ACP_PACKAGE_BASELINE_VERSION }}
         run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
 
       - name: Verify release tag/version gate rules
@@ -86,7 +94,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Download ACP SDK package
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
