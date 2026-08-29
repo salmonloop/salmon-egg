@@ -35,7 +35,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DOTNET_VERSION: "10.0.3xx"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -56,7 +55,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Install WASM workload
         run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
