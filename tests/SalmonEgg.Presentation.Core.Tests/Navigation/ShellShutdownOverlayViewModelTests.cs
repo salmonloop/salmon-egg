@@ -24,7 +24,7 @@ public sealed class ShellShutdownOverlayViewModelTests
 
         store.ReportPhase(ApplicationShutdownPhase.PersistingState);
 
-        await Task.Delay(Threshold / 2);
+        await Task.Delay(Threshold / 2, TestContext.Current.CancellationToken);
         Assert.False(sut.IsOverlayVisible);
     }
 
@@ -37,7 +37,7 @@ public sealed class ShellShutdownOverlayViewModelTests
         store.ReportPhase(ApplicationShutdownPhase.ClosingChildProcesses);
 
         // 阈值计时器自身还有调度抖动，多留一截余量，别让测试去撞调度器的下限。
-        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500));
+        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
         Assert.True(sut.IsOverlayVisible);
     }
 
@@ -50,7 +50,7 @@ public sealed class ShellShutdownOverlayViewModelTests
         store.ReportPhase(ApplicationShutdownPhase.PersistingState);
         store.ReportPhase(ApplicationShutdownPhase.Completed);
 
-        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500));
+        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
         Assert.False(sut.IsOverlayVisible);
     }
 
@@ -65,7 +65,7 @@ public sealed class ShellShutdownOverlayViewModelTests
         store.ReportPhase(ApplicationShutdownPhase.PersistingState);
         store.ReportPhase(ApplicationShutdownPhase.ClosingChildProcesses);
 
-        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500));
+        await Task.Delay(Threshold + TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
         Assert.True(sut.IsOverlayVisible);
     }
 

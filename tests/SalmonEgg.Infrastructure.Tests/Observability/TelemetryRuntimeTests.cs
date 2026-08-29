@@ -24,7 +24,7 @@ public sealed class TelemetryRuntimeTests
             TelemetrySharingEnabled = true,
             TelemetryCustomEndpoint = "https://collector.example.com:4318",
             TelemetryAuthHeader = "api-key=abc123"
-        });
+        }, TestContext.Current.CancellationToken);
 
         var applied = Assert.Single(manager.Applied);
         Assert.True(applied.Enabled);
@@ -38,7 +38,7 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager();
         var runtime = CreateRuntime(manager);
 
-        await runtime.ApplyAsync(new AppSettings { TelemetrySharingEnabled = false });
+        await runtime.ApplyAsync(new AppSettings { TelemetrySharingEnabled = false }, TestContext.Current.CancellationToken);
 
         var applied = Assert.Single(manager.Applied);
         Assert.False(applied.Enabled);
@@ -51,8 +51,8 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager();
         var runtime = CreateRuntime(manager);
 
-        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" });
-        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" });
+        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" }, TestContext.Current.CancellationToken);
+        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" }, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, manager.Applied.Count);
         Assert.Equal("https://second.example.com:4318", manager.Applied[^1].OtlpEndpoint);
@@ -69,12 +69,12 @@ public sealed class TelemetryRuntimeTests
         {
             TelemetryCustomEndpoint = "https://collector.example.com:4318",
             TelemetryAuthHeader = "api-key=old"
-        });
+        }, TestContext.Current.CancellationToken);
         await runtime.ApplyAsync(new AppSettings
         {
             TelemetryCustomEndpoint = "https://collector.example.com:4318",
             TelemetryAuthHeader = "api-key=new"
-        });
+        }, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, manager.Applied.Count);
         Assert.Equal("api-key=new", manager.Applied[^1].OtlpHeaders);
@@ -91,12 +91,12 @@ public sealed class TelemetryRuntimeTests
         {
             Theme = "Light",
             TelemetryCustomEndpoint = "https://collector.example.com:4318"
-        });
+        }, TestContext.Current.CancellationToken);
         await runtime.ApplyAsync(new AppSettings
         {
             Theme = "Dark",
             TelemetryCustomEndpoint = "https://collector.example.com:4318"
-        });
+        }, TestContext.Current.CancellationToken);
 
         Assert.Single(manager.Applied);
     }
@@ -108,9 +108,9 @@ public sealed class TelemetryRuntimeTests
         var runtime = CreateRuntime(manager);
         var settings = new AppSettings { TelemetryCustomEndpoint = "https://collector.example.com:4318" };
 
-        await runtime.ApplyAsync(settings);
-        await runtime.ApplyAsync(settings);
-        await runtime.ApplyAsync(settings);
+        await runtime.ApplyAsync(settings, TestContext.Current.CancellationToken);
+        await runtime.ApplyAsync(settings, TestContext.Current.CancellationToken);
+        await runtime.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.Single(manager.Applied);
     }
@@ -122,8 +122,8 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager();
         var runtime = CreateRuntime(manager);
 
-        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" });
-        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" });
+        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" }, TestContext.Current.CancellationToken);
+        await runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" }, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, manager.Applied.Count);
         Assert.Equal(
@@ -139,7 +139,7 @@ public sealed class TelemetryRuntimeTests
         var runtime = CreateRuntime(manager);
 
         var exception = await Record.ExceptionAsync(
-            () => runtime.ApplyAsync(new AppSettings()));
+            () => runtime.ApplyAsync(new AppSettings(), TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
     }
@@ -152,9 +152,9 @@ public sealed class TelemetryRuntimeTests
         var runtime = CreateRuntime(manager);
         var settings = new AppSettings { TelemetryCustomEndpoint = "https://collector.example.com:4318" };
 
-        await runtime.ApplyAsync(settings);
+        await runtime.ApplyAsync(settings, TestContext.Current.CancellationToken);
         manager.ThrowOnReconfigure = false;
-        await runtime.ApplyAsync(settings);
+        await runtime.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.Single(manager.Applied);
         Assert.Equal("https://collector.example.com:4318", manager.Applied[0].OtlpEndpoint);
@@ -167,13 +167,13 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager { BlockInsideReconfigure = true };
         var runtime = CreateRuntime(manager);
 
-        var first = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" });
+        var first = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://first.example.com:4318" }, TestContext.Current.CancellationToken);
         Assert.True(
-            await manager.ReconfigureEntered.WaitAsync(TimeSpan.FromSeconds(5)),
+            await manager.ReconfigureEntered.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken),
             "The first apply never reached the manager.");
 
-        var second = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" });
-        var third = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://third.example.com:4318" });
+        var second = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://second.example.com:4318" }, TestContext.Current.CancellationToken);
+        var third = runtime.ApplyAsync(new AppSettings { TelemetryCustomEndpoint = "https://third.example.com:4318" }, TestContext.Current.CancellationToken);
 
         manager.ReleaseReconfigure();
         await Task.WhenAll(first, second, third);
@@ -188,7 +188,7 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager();
         var runtime = CreateRuntime(manager);
 
-        await runtime.ShutdownAsync();
+        await runtime.ShutdownAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, manager.ShutdownCount);
     }
@@ -202,7 +202,7 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager();
         var runtime = CreateRuntime(manager);
 
-        await runtime.ShutdownAsync();
+        await runtime.ShutdownAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(
             new[] { ITelemetryManager.NonBlockingShutdownTimeoutMilliseconds },
@@ -216,7 +216,7 @@ public sealed class TelemetryRuntimeTests
         var manager = new RecordingTelemetryManager { ThrowOnShutdown = true };
         var runtime = CreateRuntime(manager);
 
-        var exception = await Record.ExceptionAsync(() => runtime.ShutdownAsync());
+        var exception = await Record.ExceptionAsync(() => runtime.ShutdownAsync(TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
     }
