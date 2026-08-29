@@ -112,8 +112,16 @@ jobs:
           # TEMP DIAGNOSTIC: apply formatting for real, export the diff as an artifact so the
           # exact changes the formatter wants are readable locally (CI console eats CRLF diffs).
           dotnet format SalmonEgg.sln --no-restore --verbosity diagnostic --include $files
-          git --no-pager diff | Out-File formatter-diff.txt -Encoding utf8
-          git --no-pager diff --stat | Out-File formatter-stat.txt -Encoding utf8
+          Write-Host "=== core.autocrlf ==="
+          git config --get core.autocrlf
+          Write-Host "=== diff with autocrlf disabled ==="
+          git -c core.autocrlf=false --no-pager diff --stat
+          git -c core.autocrlf=false --no-pager diff | Out-File formatter-diff.txt -Encoding utf8
+          Write-Host "=== first bytes of the 3 flagged files ==="
+          foreach ($f in @('tests/SalmonEgg.Infrastructure.Tests/Observability/TelemetryRuntimeTests.cs','tests/SalmonEgg.Presentation.Core.Tests/Services/ApplicationShutdownWorkflowTests.cs','tests/SalmonEgg.Presentation.Core.Tests/Navigation/ShellShutdownOverlayViewModelTests.cs'))
+          {
+            (Get-Content $f -AsByteStream -TotalCount 240) -join ' '
+          }
           exit 1
 
       - name: Upload formatter diff
