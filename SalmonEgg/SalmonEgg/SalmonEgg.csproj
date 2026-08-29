@@ -339,13 +339,20 @@
     <DisableImplicitUnoPackages>true</DisableImplicitUnoPackages>
   </PropertyGroup>
 
-  <!-- DependsOnTargets pins the order against the root derive target: both are AfterTargets="MinVer",
-       and the relative order of two targets on the same hook is unspecified in MSBuild. Without the
-       dependency the manifest could be generated before SalmonEggPackageVersion exists. -->
+  <!-- The generated manifest is consumed early: WindowsAppSDK's CreateWinRTRegistration merges it
+       with mt.exe BeforeTargets="AssignTargetPaths", and the version substitution needs MinVer's
+       output, which only exists once the MinVer target has run. So this target must not hang off
+       AfterTargets="MinVer" (that fires at BeforeCompile, after the mt.exe merge) — instead it runs
+       at the pre-resolve consumer point and pulls MinVer in explicitly. Depending on MinVer triggers
+       the AfterTargets="MinVer" derive target first, which pins the ordering against
+       SalmonEggDeriveReleaseIdentity; MinVer itself is cached via $(MinVerVersion), so the later
+       BeforeCompile hook is a no-op. The condition mirrors MinVer's own skip conditions: a design-time
+       or skipped MinVer would make the DependsOnTargets reference resolve to a missing target
+       (MSB4057), and versioned manifests are meaningless without a version anyway. -->
   <Target Name="GenerateVersionedApplicationManifests"
-          AfterTargets="MinVer"
-          DependsOnTargets="SalmonEggDeriveReleaseIdentity"
-          Condition="'$(SalmonEggGeneratedApplicationManifest)' != ''">
+          BeforeTargets="_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild"
+          DependsOnTargets="MinVer"
+          Condition="'$(SalmonEggGeneratedApplicationManifest)' != '' AND '$(DesignTimeBuild)' != 'true' AND '$(MinVerSkip)' != 'true'">
     <PropertyGroup>
       <_SalmonEggPackageManifestTemplate Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>
       <_SalmonEggApplicationManifestTemplate>$(MSBuildProjectDirectory)\app.manifest</_SalmonEggApplicationManifestTemplate>
