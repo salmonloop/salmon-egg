@@ -109,13 +109,22 @@ jobs:
           ${{ steps.changed_cs.outputs.files }}
           "@
           $files = $raw -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-          # TEMP DIAGNOSTIC: actually apply formatting so `git diff` reveals exactly what the
-          # formatter wants, then fail ourselves. Remove once the silent failure is identified.
+          # TEMP DIAGNOSTIC: apply formatting for real, export the diff as an artifact so the
+          # exact changes the formatter wants are readable locally (CI console eats CRLF diffs).
           dotnet format SalmonEgg.sln --no-restore --verbosity diagnostic --include $files
-          git --no-pager diff --stat
-          git --no-pager diff --unified=6 | Out-File diff.txt
-          Get-Content diff.txt -TotalCount 400
-          if ((git diff --quiet)) { Write-Host "NO DIFF - formatter made no changes" } else { exit 1 }
+          git --no-pager diff | Out-File formatter-diff.txt -Encoding utf8
+          git --no-pager diff --stat | Out-File formatter-stat.txt -Encoding utf8
+          exit 1
+
+      - name: Upload formatter diff
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: formatter-diff
+          path: |
+            formatter-diff.txt
+            formatter-stat.txt
+          if-no-files-found: ignore
 
       - name: Build with analyzers
         run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true
