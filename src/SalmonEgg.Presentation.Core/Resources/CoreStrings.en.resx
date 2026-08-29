@@ -503,6 +503,15 @@ Create the corresponding Markdown file in:
   <data name="AcpSetup_Install_Failed" xml:space="preserve">
     <value>Installation failed.</value>
   </data>
+  <data name="AcpSetup_Adapter_ToolchainMissing" xml:space="preserve">
+    <value>{0} is required before this adapter can be installed. Install it, then detect again.</value>
+  </data>
+  <data name="AcpSetup_Agent_ToolchainMissingHint" xml:space="preserve">
+    <value>{0} is required to install this automatically.</value>
+  </data>
+  <data name="AcpSetup_Install_ToolchainMissing" xml:space="preserve">
+    <value>{0} is required before this component can be installed automatically. Install it, then run detection again.</value>
+  </data>
   <data name="AcpSetup_Stage_Validation" xml:space="preserve">
     <value>Parameter validation</value>
   </data>

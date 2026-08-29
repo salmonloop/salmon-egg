@@ -36,7 +36,13 @@ public sealed class AcpSetupWizardOrchestrator
         _configurationService = configurationService ?? throw new ArgumentNullException(nameof(configurationService));
     }
 
-    /// <summary>True when this platform can install components for the user.</summary>
+    /// <summary>
+    /// True when this platform can run installers at all.
+    /// </summary>
+    /// <remarks>
+    /// A platform capability. Whether <em>this machine</em> has the toolchain an install needs is
+    /// <see cref="DetectToolchainAsync"/>'s answer, and a caller offering a one-click install needs both.
+    /// </remarks>
     public bool SupportsAutomaticInstall => _installer.SupportsAutomaticInstall;
 
     public IReadOnlyList<AcpAgentDescriptor> Agents => _catalog.Agents;
@@ -56,7 +62,21 @@ public sealed class AcpSetupWizardOrchestrator
             var runtime = await _detector
                 .DetectAsync(agent.Runtime, overrides, cancellationToken)
                 .ConfigureAwait(false);
-            states.Add(new AcpAgentDetectionState { Agent = agent, Runtime = runtime });
+
+            // Probed alongside the runtime rather than on demand from the row, so a row that has to
+            // decide whether to offer an install already holds the answer. Deferring it would either
+            // show a button before the answer arrives — the defect this replaces — or make every row
+            // launch its own process after the sweep already had the chance.
+            var toolchain = await _detector
+                .DetectToolchainAsync(agent.Runtime, overrides, cancellationToken)
+                .ConfigureAwait(false);
+
+            states.Add(new AcpAgentDetectionState
+            {
+                Agent = agent,
+                Runtime = runtime,
+                RuntimeToolchain = toolchain
+            });
         }
 
         return states;
@@ -67,6 +87,16 @@ public sealed class AcpSetupWizardOrchestrator
         AcpCommandOverrides? overrides = null,
         CancellationToken cancellationToken = default)
         => _detector.DetectAsync(component, overrides, cancellationToken);
+
+    /// <summary>
+    /// Probes the toolchain <paramref name="component"/> installs through, or returns null when it needs
+    /// none. Callers offer a one-click install only when the result allows the attempt.
+    /// </summary>
+    public Task<AcpToolchainProbeResult?> DetectToolchainAsync(
+        AcpComponentDescriptor component,
+        AcpCommandOverrides? overrides = null,
+        CancellationToken cancellationToken = default)
+        => _detector.DetectToolchainAsync(component, overrides, cancellationToken);
 
     /// <summary>
     /// Installs a component and re-probes it, so callers always see verified availability rather than

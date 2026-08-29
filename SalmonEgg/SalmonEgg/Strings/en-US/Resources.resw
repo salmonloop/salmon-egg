@@ -861,6 +861,9 @@
   <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
     <value>Install docs</value>
   </data>
+  <data name="AcpSetup_InstallToolchainDocs.Content" xml:space="preserve">
+    <value>Set up toolchain</value>
+  </data>
   <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
     <value>3. Launch parameters</value>
   </data>

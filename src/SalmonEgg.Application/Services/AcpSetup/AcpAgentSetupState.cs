@@ -17,6 +17,12 @@ public sealed class AcpAgentDetectionState
     /// <summary>Probe of the recommended adapter, or null when the adapter has not been probed yet.</summary>
     public AcpComponentProbeResult? Adapter { get; init; }
 
+    /// <summary>
+    /// Whether the toolchain the runtime would install through exists here. Null when the runtime needs
+    /// no toolchain, which is not the same as one being absent.
+    /// </summary>
+    public AcpToolchainProbeResult? RuntimeToolchain { get; init; }
+
     /// <summary>True when the agent can be configured without installing anything.</summary>
     public bool IsReady => Runtime.IsUsable && Adapter?.IsUsable == true;
 }

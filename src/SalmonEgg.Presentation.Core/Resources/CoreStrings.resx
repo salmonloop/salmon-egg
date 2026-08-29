@@ -505,6 +505,15 @@
   <data name="AcpSetup_Install_Failed" xml:space="preserve">
     <value>安装失败。</value>
   </data>
+  <data name="AcpSetup_Adapter_ToolchainMissing" xml:space="preserve">
+    <value>需要先安装 {0} 才能安装此适配器。安装完成后请重新检测。</value>
+  </data>
+  <data name="AcpSetup_Agent_ToolchainMissingHint" xml:space="preserve">
+    <value>需要 {0} 才能自动安装。</value>
+  </data>
+  <data name="AcpSetup_Install_ToolchainMissing" xml:space="preserve">
+    <value>需要先安装 {0} 才能自动安装此组件。安装完成后请重新检测。</value>
+  </data>
   <data name="AcpSetup_Stage_Validation" xml:space="preserve">
     <value>参数校验</value>
   </data>

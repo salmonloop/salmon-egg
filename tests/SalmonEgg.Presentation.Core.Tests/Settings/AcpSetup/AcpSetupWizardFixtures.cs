@@ -54,6 +54,29 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
     private readonly Dictionary<string, bool?> _uvTools = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Package managers resolve by default, so the stub models an ordinary developer machine.
+    /// </summary>
+    /// <remarks>
+    /// The wizard withholds an install offer when the toolchain that would run it is absent, so an
+    /// unset manager is not a neutral default — it makes every install test a toolchain-absence test.
+    /// A test about that case removes them with <see cref="WithoutPackageManagers"/>, which states the
+    /// intent where the reader can see it.
+    /// </remarks>
+    public StubExecutableProbe()
+    {
+        _paths["npm"] = "/test/bin/npm";
+        _paths["uv"] = "/test/bin/uv";
+    }
+
+    /// <summary>Models a machine with no Node or uv toolchain at all.</summary>
+    public StubExecutableProbe WithoutPackageManagers()
+    {
+        _paths["npm"] = null;
+        _paths["uv"] = null;
+        return this;
+    }
+
     public bool SupportsProcessProbing { get; set; } = true;
 
     public void SetExecutable(string command, string? path, string? version = null)
