@@ -288,13 +288,11 @@ public sealed class WasmStartupAssetsTests
         Assert.Equal(2, gate.Split("-p:TrimMode=copy", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("-p:PublishTrimmed=false", gate, StringComparison.Ordinal);
         Assert.DoesNotContain("-p:MtouchLink=", gate, StringComparison.Ordinal);
-        Assert.Contains("DOTNET_VERSION: \"10.0.3xx\"", gate, StringComparison.Ordinal);
-
         // One per job: linux-desktop, macos-desktop, windows-msix, android, ios. Every job must resolve
-        // the SDK from the shared DOTNET_VERSION rather than pinning its own.
+        // the SDK from global.json -- the file that pins it -- rather than restating a version band.
         Assert.Equal(
             5,
-            gate.Split("dotnet-version: ${{ env.DOTNET_VERSION }}", StringSplitOptions.None).Length - 1);
+            gate.Split("global-json-file: global.json", StringSplitOptions.None).Length - 1);
 
         // The MSIX job is the one place a single TargetFramework is legitimately forced: the WinUI head is
         // built in isolation, exactly as the release workflow does it, because its target cannot be
@@ -304,9 +302,15 @@ public sealed class WasmStartupAssetsTests
             2,
             gate.Split("/p:TargetFramework=net10.0-windows10.0.26100.0", StringSplitOptions.None).Length - 1);
         Assert.Contains("/p:AppxPackageSigningEnabled=false", gate, StringComparison.Ordinal);
-        Assert.DoesNotContain("global-json-file:", gate, StringComparison.Ordinal);
         Assert.Equal(2, gate.Split("dotnet workload list", StringSplitOptions.None).Length - 1);
-        Assert.Equal(2, gate.Split("10.0.3??", StringSplitOptions.None).Length - 1);
+        // The Android/iOS "Verify .NET SDK" steps read the expected version from global.json at run
+        // time and accept only a same-band patch roll-forward, so the check can never drift from the
+        // file that pins the SDK.
+        Assert.Equal(
+            2,
+            gate.Split("expected_version=\"$(python3 -c 'import json; print(json.load(open(\"global.json\"))[\"sdk\"][\"version\"])')\"", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("10.0.3xx", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("10.0.3??", gate, StringComparison.Ordinal);
         Assert.True(
             gate.IndexOf("Verify Android .NET SDK", StringComparison.Ordinal)
             < gate.IndexOf("Install Android workload", StringComparison.Ordinal));
@@ -358,9 +362,12 @@ public sealed class WasmStartupAssetsTests
         foreach (var workflowPath in workflowPaths)
         {
             var workflow = LoadFile(workflowPath);
-            Assert.Contains("10.0.3xx", workflow, StringComparison.Ordinal);
-            Assert.DoesNotContain("10.0.x", workflow, StringComparison.Ordinal);
-            Assert.DoesNotContain("global-json-file:", workflow, StringComparison.Ordinal);
+            // The single source of truth for the SDK version is global.json: workflows hand that
+            // file to setup-dotnet instead of restating a version band here, where it would drift
+            // from the pin.
+            Assert.Contains("global-json-file: global.json", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("10.0.3xx", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("dotnet-version:", workflow, StringComparison.Ordinal);
         }
 
         foreach (var gate in new[] { wasmSmokeGate, linuxGamepadGate })
