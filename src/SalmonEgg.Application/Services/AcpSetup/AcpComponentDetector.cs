@@ -60,6 +60,62 @@ public sealed class AcpComponentDetector
         };
     }
 
+    /// <summary>
+    /// Resolves whether the toolchain <paramref name="component"/> would install through exists on this
+    /// machine, or null when the component needs no toolchain.
+    /// </summary>
+    /// <remarks>
+    /// This deliberately reproduces <c>DesktopAcpComponentInstaller</c>'s command derivation step for
+    /// step — the same launcher resolution, the same sibling derivation, and the same
+    /// <see cref="AcpPackageManagerCandidates.Preferred"/>-only choice. Its whole purpose is to predict
+    /// what an install would do, so a derivation that differed anywhere would let the wizard promise an
+    /// install that then fails, or withhold one that would have worked. If the installer's derivation
+    /// changes, this must change with it.
+    /// </remarks>
+    public async Task<AcpToolchainProbeResult?> DetectToolchainAsync(
+        AcpComponentDescriptor component,
+        AcpCommandOverrides? overrides = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+
+        if (component.RequiredToolchain is not { } requirement)
+        {
+            return null;
+        }
+
+        if (!_probe.SupportsProcessProbing)
+        {
+            return AcpToolchainProbeResult.Undetermined(requirement, ProbingUnsupportedDetail);
+        }
+
+        var effectiveOverrides = overrides ?? AcpCommandOverrides.Empty;
+
+        // The component's own launcher is resolved first only to sharpen the sibling derivation; not
+        // finding it is ordinary, because the manager may be on PATH while the component is not — which is
+        // exactly the state this probe exists to recognise.
+        var resolvedLauncher = await _probe
+            .ResolveExecutablePathAsync(
+                effectiveOverrides.Resolve(component.ProbeCommand),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var manager = AcpPackageManagerCommand
+            .Resolve(component.Distribution, resolvedLauncher, effectiveOverrides)
+            .Preferred;
+
+        var managerPath = await _probe
+            .ResolveExecutablePathAsync(manager, cancellationToken)
+            .ConfigureAwait(false);
+
+        return string.IsNullOrWhiteSpace(managerPath)
+            ? AcpToolchainProbeResult.Missing(requirement, ToolchainMissingDetail(manager))
+            : AcpToolchainProbeResult.Available(requirement, managerPath);
+    }
+
+    private static string ToolchainMissingDetail(string manager)
+        => $"Package manager '{manager}' was not found on PATH.";
+
     private async Task<AcpComponentProbeResult> DetectExecutableAsync(
         AcpComponentDescriptor component,
         AcpCommandOverrides overrides,

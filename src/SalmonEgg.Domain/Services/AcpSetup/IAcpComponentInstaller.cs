@@ -7,7 +7,7 @@ namespace SalmonEgg.Domain.Services.AcpSetup;
 
 /// <summary>
 /// Installs an ACP component through its declared package manager. Only distributions that report
-/// <see cref="AcpComponentDescriptor.SupportsAutomaticInstall"/> may be passed in.
+/// <see cref="AcpComponentDescriptor.HasAutomaticInstallPath"/> may be passed in.
 /// </summary>
 public interface IAcpComponentInstaller
 {
@@ -15,6 +15,11 @@ public interface IAcpComponentInstaller
     /// True when this platform can run installers at all. When false the wizard shows manual
     /// instructions instead of a one-click button.
     /// </summary>
+    /// <remarks>
+    /// A platform capability, not a machine fact: a desktop reports true even with no toolchain
+    /// installed, because it can run a package manager once one exists. Whether this particular machine
+    /// has one is a probe's answer, not this property's.
+    /// </remarks>
     bool SupportsAutomaticInstall { get; }
 
     /// <summary>

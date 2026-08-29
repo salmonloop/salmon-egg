@@ -112,6 +112,11 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
     [NotifyPropertyChangedFor(nameof(AdapterProbeCommand))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
+    // Read by IsAdapterToolchainMissing for the component's install path.
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
     private AcpAdapterDescriptor? _selectedAdapter;
 
     /// <summary>
@@ -122,6 +127,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     partial void OnSelectedAdapterChanged(AcpAdapterDescriptor? value)
     {
         AdapterProbe = null;
+        AdapterToolchain = null;
         TestResult = null;
         Parameters.Clear();
         LaunchCommandPreview = string.Empty;
@@ -147,7 +153,29 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsAdapterBuiltIn))]
     [NotifyPropertyChangedFor(nameof(IsAdapterInstalled))]
     [NotifyPropertyChangedFor(nameof(HasAdapterProbeCommand))]
+    // IsAdapterToolchainMissing is gated on IsAdapterMissing, so it changes with the component probe as
+    // well as with the toolchain probe. Both notify lists must raise it or the surface it gates goes stale.
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
     private AcpComponentProbeResult? _adapterProbe;
+
+    /// <summary>
+    /// Latest toolchain probe for the selected adapter, or null when it needs none or has not been
+    /// probed.
+    /// </summary>
+    /// <remarks>
+    /// Null does not withhold the install offer, for the same reason an undetermined component probe does
+    /// not block the walk: an unanswered question is not evidence of absence.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallAdapterCommand))]
+    [NotifyPropertyChangedFor(nameof(IsAdapterToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(MissingAdapterToolchainName))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainMissingText))]
+    [NotifyPropertyChangedFor(nameof(AdapterToolchainDocumentation))]
+    private AcpToolchainProbeResult? _adapterToolchain;
 
     /// <summary>
     /// A path the user supplied for the adapter's launcher, empty when they supplied none.
@@ -231,6 +259,43 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     public bool IsAdapterUndetermined
         => AdapterProbe?.Availability == AcpComponentAvailability.Undetermined;
+
+    /// <summary>
+    /// True when the selected adapter is missing and the toolchain that would install it is absent too —
+    /// the state where a one-click install cannot succeed and the user needs the toolchain first.
+    /// </summary>
+    /// <remarks>
+    /// Gated on the adapter actually being missing so this never contradicts an installed adapter: an
+    /// adapter already present on a machine whose package manager has since gone is usable, and telling
+    /// the user to install a toolchain for it would be advice about nothing.
+    /// </remarks>
+    public bool IsAdapterToolchainMissing
+        => IsAdapterMissing
+            && SelectedAdapter?.Component.HasAutomaticInstallPath == true
+            && AdapterToolchain?.IsMissing == true;
+
+    /// <summary>Name of the adapter's absent toolchain, empty when none is absent.</summary>
+    public string MissingAdapterToolchainName
+        => IsAdapterToolchainMissing ? AdapterToolchain!.Requirement.DisplayName : string.Empty;
+
+    /// <summary>Documentation for the adapter's absent toolchain, null when none is absent.</summary>
+    public Uri? AdapterToolchainDocumentation
+        => IsAdapterToolchainMissing ? AdapterToolchain!.Requirement.Documentation : null;
+
+    /// <summary>
+    /// Localized sentence naming the toolchain the adapter install needs, empty when it is present.
+    /// </summary>
+    /// <remarks>
+    /// Composed here rather than through the view's <c>x:Uid</c> because it interpolates the toolchain
+    /// name, and a <c>Message</c> assigned from a resw would overwrite the binding.
+    /// </remarks>
+    public string AdapterToolchainMissingText
+        => IsAdapterToolchainMissing
+            ? FormatLocalize(
+                AdapterToolchainMissingKey,
+                "{0} is required before this adapter can be installed. Install it, then detect again.",
+                MissingAdapterToolchainName)
+            : string.Empty;
 
     /// <summary>
     /// Diagnostic detail from the adapter probe, empty when it reported none.
@@ -363,9 +428,18 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         await RunOperationAsync(
             async token =>
             {
+                var overrides = CollectCommandOverrides();
                 var probe = await _orchestrator
-                    .DetectComponentAsync(adapter.Component, CollectCommandOverrides(), token)
+                    .DetectComponentAsync(adapter.Component, overrides, token)
                     .ConfigureAwait(false);
+
+                // Probed in the same operation as the component: the install button this gates appears on
+                // the same render as the "missing" verdict that reveals it, so it is never briefly offered
+                // on a machine that cannot honour it.
+                var toolchain = await _orchestrator
+                    .DetectToolchainAsync(adapter.Component, overrides, token)
+                    .ConfigureAwait(false);
+
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
@@ -375,6 +449,7 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
                         if (ReferenceEquals(SelectedAdapter, adapter))
                         {
                             AdapterProbe = probe;
+                            AdapterToolchain = toolchain;
                         }
                     })
                     .ConfigureAwait(false);
@@ -396,10 +471,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     /// see whether its own component is installable; whether this platform installs anything at all is
     /// the orchestrator's answer, and a platform that declines every request would otherwise be handed
     /// one and report its refusal as a failure the user is invited to retry.
+    ///
+    /// <see cref="AcpSetupAgentRowViewModel.CanInstallHere"/> covers the machine's own toolchain, so a
+    /// row whose package manager is absent is not handed a request that could only fail. This is restated
+    /// here rather than trusted to the button's visibility because the button raises an event rather than
+    /// binding a command, and an event has no CanExecute to consult.
     /// </remarks>
     private void InstallAgentRow(AcpSetupAgentRowViewModel row)
     {
-        if (IsBusy || !SupportsAutomaticInstall || !row.SupportsAutomaticInstall)
+        if (IsBusy || !SupportsAutomaticInstall || !row.CanInstallHere)
         {
             return;
         }
@@ -407,13 +487,23 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         _ = RunOperationAsync(
             async token =>
             {
+                var overrides = CollectCommandOverrides();
                 var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, CollectCommandOverrides(), token)
+                    .InstallComponentAsync(row.Agent.Runtime, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
+
+                // Re-probed after the attempt because a failed install is evidence about the toolchain
+                // too: the manager may have disappeared since the sweep, and leaving the stale verdict
+                // would keep offering a button that just failed.
+                var toolchain = await _orchestrator
+                    .DetectToolchainAsync(row.Agent.Runtime, overrides, token)
+                    .ConfigureAwait(false);
+
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
                         row.Runtime = probe;
+                        row.RuntimeToolchain = toolchain;
                         ReportInstallFailure(install);
                     })
                     .ConfigureAwait(false);
@@ -433,15 +523,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         await RunOperationAsync(
             async token =>
             {
+                var overrides = CollectCommandOverrides();
                 var (install, probe) = await _orchestrator
-                    .InstallComponentAsync(adapter.Component, AppendInstallOutput, CollectCommandOverrides(), token)
+                    .InstallComponentAsync(adapter.Component, AppendInstallOutput, overrides, token)
                     .ConfigureAwait(false);
+                var toolchain = await _orchestrator
+                    .DetectToolchainAsync(adapter.Component, overrides, token)
+                    .ConfigureAwait(false);
+
                 await _uiDispatcher
                     .EnqueueAsync(() =>
                     {
                         if (ReferenceEquals(SelectedAdapter, adapter))
                         {
                             AdapterProbe = probe;
+                            AdapterToolchain = toolchain;
                             ReportInstallFailure(install);
                         }
                     })
@@ -450,11 +546,20 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Installing the adapter needs three things to hold: the platform runs installers, the component has
+    /// an install command, and this machine has the toolchain to run it.
+    /// </summary>
+    /// <remarks>
+    /// A toolchain probe that came back undetermined does not withhold the offer — the installer's own
+    /// report is a better answer than refusing over a question the probe could not settle.
+    /// </remarks>
     private bool CanInstallAdapter()
         => !IsBusy
             && SelectedAdapter is not null
             && SupportsAutomaticInstall
-            && SelectedAdapter.Component.SupportsAutomaticInstall;
+            && SelectedAdapter.Component.HasAutomaticInstallPath
+            && AdapterToolchain?.IsMissing != true;
 
     // ── Test and save ───────────────────────────────────────────────────────
 
@@ -772,19 +877,25 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         });
     }
 
+    /// <remarks>
+    /// The toolchain verdict is written before the component probe. Both feed the row's install offer, and
+    /// the component probe is what raises the flags the view reads — so writing it last means the view
+    /// never renders a "missing" row against a toolchain answer from the previous sweep.
+    /// </remarks>
     private void ApplyRuntimeProbes(IReadOnlyList<AcpAgentDetectionState> states)
     {
-        var byAgentId = new Dictionary<string, AcpComponentProbeResult>(StringComparer.Ordinal);
+        var byAgentId = new Dictionary<string, AcpAgentDetectionState>(StringComparer.Ordinal);
         foreach (var state in states)
         {
-            byAgentId[state.Agent.Id] = state.Runtime;
+            byAgentId[state.Agent.Id] = state;
         }
 
         foreach (var row in Agents)
         {
-            if (byAgentId.TryGetValue(row.AgentId, out var probe))
+            if (byAgentId.TryGetValue(row.AgentId, out var state))
             {
-                row.Runtime = probe;
+                row.RuntimeToolchain = state.RuntimeToolchain;
+                row.Runtime = state.Runtime;
             }
         }
     }
@@ -855,10 +966,27 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasInstallOutput));
     }
 
+    /// <summary>
+    /// Surfaces a failed install, preferring localized advice over the platform layer's raw detail.
+    /// </summary>
+    /// <remarks>
+    /// A remediation key wins over <see cref="AcpComponentInstallResult.ErrorDetail"/> because the detail
+    /// is untranslated diagnostics naming an executable, while the key resolves to the thing the user has
+    /// to do. The detail is not lost — the installer output surface still carries it.
+    /// </remarks>
     private void ReportInstallFailure(AcpComponentInstallResult install)
     {
         if (install.IsSuccess)
         {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(install.RemediationKey))
+        {
+            ErrorMessage = FormatLocalize(
+                install.RemediationKey!,
+                "{0} is required to install this component. Install it, then run detection again.",
+                install.MissingToolchainName ?? string.Empty);
             return;
         }
 
@@ -910,6 +1038,8 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         => CoreStringResolver.ResolveFormat(_localizer, key, fallbackFormat, arguments);
 
     private const string InstallFailedKey = "AcpSetup_Install_Failed";
+
+    private const string AdapterToolchainMissingKey = "AcpSetup_Adapter_ToolchainMissing";
 
     /// <summary>Localization keys for the stage a failed test reached.</summary>
     private static class StageKeys

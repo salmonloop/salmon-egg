@@ -142,16 +142,48 @@
                                                                    IsTextSelectionEnabled="True"
                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                                                     </StackPanel>
+                                                    <!-- Offered only when this machine can honour it:
+                                                         CanInstallHere folds the catalog's install path
+                                                         together with a probe of the toolchain that would
+                                                         run it, so the button is absent rather than
+                                                         failing on click. -->
                                                     <Button x:Name="InstallAgentInlineButton"
                                                             x:Uid="AcpSetup_InstallAgentRow"
                                                             Tag="{x:Bind}"
                                                             Click="OnInstallAgentRowClick"
                                                             AutomationProperties.AutomationId="AcpSetup.Agents.InstallRow"
-                                                            Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            Visibility="{x:Bind CanInstallHere, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                    <!-- Distribution the wizard never automates (a
+                                                         prebuilt binary): the agent's own install page is
+                                                         the right destination. -->
                                                     <HyperlinkButton NavigateUri="{x:Bind InstallDocumentation}"
                                                                      x:Uid="AcpSetup_InstallDocs"
-                                                                     Visibility="{x:Bind SupportsAutomaticInstall, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                                                     Visibility="{x:Bind HasAutomaticInstallPath, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+                                                    <!-- Installable in principle, but the toolchain is
+                                                         absent. Points at the toolchain rather than the
+                                                         agent, because the agent's page assumes a
+                                                         toolchain this user does not have yet. -->
+                                                    <HyperlinkButton NavigateUri="{x:Bind ToolchainDocumentation, Mode=OneWay}"
+                                                                     x:Uid="AcpSetup_InstallToolchainDocs"
+                                                                     AutomationProperties.AutomationId="AcpSetup.Agents.ToolchainDocs"
+                                                                     Visibility="{x:Bind IsToolchainMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                 </StackPanel>
+
+                                                <!-- Says why there is no install button, naming the
+                                                     toolchain. Withdrawing the button without this would
+                                                     leave the row looking like the agent simply cannot be
+                                                     installed, which is a different and wrong conclusion.
+
+                                                     Text is composed by the row rather than carrying an
+                                                     x:Uid: the sentence interpolates the toolchain name,
+                                                     and an x:Uid would assign .Text from the resw and
+                                                     overwrite this binding. -->
+                                                <TextBlock Text="{x:Bind ToolchainMissingHint, Mode=OneWay}"
+                                                           Visibility="{x:Bind IsToolchainMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                           AutomationProperties.AutomationId="AcpSetup.Agents.ToolchainMissingHint"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           TextWrapping="Wrap"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
                                                 <Expander x:Name="AgentProbeDiagnosticsExpander"
                                                           IsExpanded="False"
@@ -219,9 +251,28 @@
                                                 x:Uid="AcpSetup_RedetectAdapter"
                                                 AutomationProperties.AutomationId="AcpSetup.Adapter.Redetect"
                                                 Command="{x:Bind ViewModel.DetectAdapterCommand}"/>
+                                        <!-- The install button above is command-bound, so a missing
+                                             toolchain already disables it. A disabled button explains
+                                             nothing on its own, so the way forward is offered beside it:
+                                             the toolchain's own documentation, named in the text below. -->
+                                        <HyperlinkButton x:Name="AcpSetupAdapterToolchainDocsButton"
+                                                         x:Uid="AcpSetup_InstallToolchainDocs"
+                                                         NavigateUri="{x:Bind ViewModel.AdapterToolchainDocumentation, Mode=OneWay}"
+                                                         AutomationProperties.AutomationId="AcpSetup.Adapter.ToolchainDocs"
+                                                         Visibility="{x:Bind ViewModel.IsAdapterToolchainMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     </StackPanel>
                                 </InfoBar.Content>
                             </InfoBar>
+
+                            <!-- Named separately from the warning above because it is a different
+                                 problem with a different fix: the adapter is installable, but nothing on
+                                 this machine can install it yet. -->
+                            <InfoBar x:Name="AcpSetupAdapterToolchainMissingBar"
+                                     IsOpen="{x:Bind ViewModel.IsAdapterToolchainMissing, Mode=OneWay}"
+                                     Message="{x:Bind ViewModel.AdapterToolchainMissingText, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="AcpSetup.Adapter.ToolchainMissingBar"
+                                     Severity="Warning"
+                                     IsClosable="False"/>
 
                             <InfoBar x:Name="AcpSetupAdapterReadyBar"
                                      x:Uid="AcpSetup_AdapterReadyBar"

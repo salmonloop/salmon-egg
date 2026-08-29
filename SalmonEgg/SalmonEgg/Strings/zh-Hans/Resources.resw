@@ -786,6 +786,9 @@
   <data name="AcpSetup_InstallDocs.Content" xml:space="preserve">
     <value>安装文档</value>
   </data>
+  <data name="AcpSetup_InstallToolchainDocs.Content" xml:space="preserve">
+    <value>安装工具链</value>
+  </data>
   <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
     <value>3. 启动参数</value>
   </data>

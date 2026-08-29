@@ -1008,10 +1008,21 @@ public sealed class AcpSetupWizardViewModelTests
         return (wizard, installer);
     }
 
+    /// <summary>
+    /// A machine with the runtime installed and its package manager beside it.
+    /// </summary>
+    /// <remarks>
+    /// The sibling entry is load-bearing, not padding. An install derives its package manager from the
+    /// resolved launcher's own directory and uses only that candidate, so a machine whose npm is somewhere
+    /// else genuinely cannot install this component — and the wizard now withholds the offer instead of
+    /// discovering it on click. Registering the sibling is what makes this the ordinary machine the
+    /// install tests mean to describe.
+    /// </remarks>
     private static StubExecutableProbe ProbeForInstalledRuntime()
     {
         var probe = new StubExecutableProbe();
         probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        probe.SetExecutable("/usr/bin/npm", "/usr/bin/npm");
         return probe;
     }
 
@@ -1035,4 +1046,247 @@ public sealed class AcpSetupWizardViewModelTests
             tester ?? new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success()),
             configuration ?? new RecordingConfigurationService(),
             localizer);
+
+    // ── Missing toolchain ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// The shipped defect: a row whose agent is missing offered an enabled install button on a machine
+    /// with no package manager at all, and the absence only surfaced as a failed install after the click.
+    /// </summary>
+    /// <remarks>
+    /// Asserts the offer is withdrawn <em>and</em> that the row says why — withdrawing it alone would
+    /// leave the row looking like the agent cannot be installed, which is a different, wrong conclusion.
+    /// </remarks>
+    [Fact]
+    public async Task DetectAgents_WithNoPackageManager_WithdrawsTheInstallOfferAndExplainsWhy()
+    {
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizard(probe, installer);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsMissing);
+        Assert.False(row.CanInstallHere);
+        Assert.True(row.IsToolchainMissing);
+        Assert.Equal("Node.js", row.MissingToolchainName);
+        Assert.NotNull(row.ToolchainDocumentation);
+        // The row still reports an install path exists, so the view can tell "we never automate this"
+        // from "we would, but not on this machine".
+        Assert.True(row.HasAutomaticInstallPath);
+    }
+
+    /// <summary>
+    /// Reverse verification for the test above: the very same walk on a machine that <em>does</em> have a
+    /// package manager must keep offering the install. Without this, a bug that withheld the button
+    /// unconditionally would pass the assertions above.
+    /// </summary>
+    [Fact]
+    public async Task DetectAgents_WithPackageManagerPresent_StillOffersTheInstall()
+    {
+        var probe = new StubExecutableProbe();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var wizard = CreateWizard(probe, new StubComponentInstaller());
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsMissing);
+        Assert.True(row.CanInstallHere);
+        Assert.False(row.IsToolchainMissing);
+        Assert.Empty(row.MissingToolchainName);
+        Assert.Null(row.ToolchainDocumentation);
+        Assert.Empty(row.ToolchainMissingHint);
+    }
+
+    /// <summary>
+    /// The install request itself must be refused, not merely hidden. The row's button raises an event
+    /// rather than binding a command, so there is no CanExecute to stop it — a caller reaching the
+    /// handler directly (or a stale view) would otherwise run an install that cannot succeed.
+    /// </summary>
+    [Fact]
+    public async Task InstallAgentRow_WithNoPackageManager_IsRefusedWithoutCallingTheInstaller()
+    {
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var installer = new StubComponentInstaller();
+        installer.OutputLines.Add("added 1 package");
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Single(wizard.Agents).RequestInstall();
+
+        Assert.Empty(installer.InstalledComponentIds);
+        Assert.False(wizard.HasInstallOutput);
+        Assert.False(wizard.IsBusy);
+    }
+
+    /// <summary>
+    /// A missing toolchain must reach the user as localized advice naming the toolchain, not as the
+    /// platform layer's raw diagnostic naming a package-manager executable.
+    /// </summary>
+    /// <remarks>
+    /// The installer is the real desktop one's contract rather than a bare stub: the key and the toolchain
+    /// name travel on <see cref="AcpComponentInstallResult"/>, and this asserts the wizard prefers them
+    /// over <c>ErrorDetail</c>. The raw detail is what shipped, and it was untranslated.
+    /// </remarks>
+    [Fact]
+    public async Task InstallAgentRow_ToolchainFailure_SurfacesLocalizedAdviceRatherThanRawDetail()
+    {
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "AcpSetup_Install_ToolchainMissing", "先装 {0} 再来。");
+        var installer = new StubComponentInstaller(component =>
+            AcpComponentInstallResult.Failure(
+                component.Id,
+                exitCode: null,
+                output: null,
+                errorDetail: "'npm' was not found on PATH.",
+                remediationKey: "AcpSetup_Install_ToolchainMissing",
+                missingToolchainName: "Node.js"));
+        var wizard = CreateWizard(ProbeForInstalledRuntime(), installer, localizer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Single(wizard.Agents).RequestInstall();
+
+        Assert.Equal("先装 Node.js 再来。", wizard.ErrorMessage);
+        // The executable-naming diagnostic must not be what the user reads.
+        Assert.DoesNotContain("npm", wizard.ErrorMessage);
+    }
+
+    /// <summary>
+    /// Reverse verification: a failure carrying no remediation key still surfaces its raw detail, so the
+    /// change above narrowed the message for one cause rather than swallowing every other one.
+    /// </summary>
+    [Fact]
+    public async Task InstallAgentRow_FailureWithoutRemediationKey_StillSurfacesRawDetail()
+    {
+        var installer = new StubComponentInstaller(component =>
+            AcpComponentInstallResult.Failure(component.Id, 1, output: null, "network down"));
+        var wizard = CreateWizard(ProbeForInstalledRuntime(), installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Single(wizard.Agents).RequestInstall();
+
+        Assert.Equal("network down", wizard.ErrorMessage);
+    }
+
+    /// <summary>
+    /// An undetermined toolchain probe must not withhold the offer, matching how an undetermined component
+    /// probe does not block the walk: an unanswerable probe is not evidence of absence, and the installer's
+    /// own report is a better answer than refusing up front.
+    /// </summary>
+    [Fact]
+    public async Task DetectAgents_WhenProbingIsUnsupported_StillOffersTheInstall()
+    {
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        probe.SupportsProcessProbing = false;
+        var wizard = CreateWizard(probe, new StubComponentInstaller());
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsUndetermined);
+        Assert.False(row.IsToolchainMissing);
+        Assert.True(row.CanInstallHere);
+    }
+
+    /// <summary>
+    /// Installing a toolchain out of band and re-detecting must restore the offer. Without a re-probe the
+    /// row would keep the stale verdict and the user could never get the button back.
+    /// </summary>
+    [Fact]
+    public async Task DetectAgents_AfterToolchainAppears_RestoresTheInstallOffer()
+    {
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, path: null);
+        var wizard = CreateWizard(probe, new StubComponentInstaller());
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = Assert.Single(wizard.Agents);
+        Assert.True(row.IsToolchainMissing);
+
+        probe.SetExecutable("npm", "/usr/local/bin/npm");
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.False(row.IsToolchainMissing);
+        Assert.True(row.CanInstallHere);
+    }
+
+    /// <summary>
+    /// The adapter step's install command is gated the same way. Its button is command-bound, so this
+    /// asserts CanExecute goes false and that the step names the toolchain the user has to install.
+    /// </summary>
+    [Fact]
+    public async Task AdapterStep_WithNoPackageManager_DisablesInstallAndNamesTheToolchain()
+    {
+        var agent = AcpSetupWizardFixtures.Agent(
+            adapters: new[] { AcpSetupWizardFixtures.PackagedAdapter() });
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        var localizer = new MutableTestCoreStringLocalizer();
+        localizer.Set("zh-Hans", "AcpSetup_Adapter_ToolchainMissing", "缺少 {0}。");
+        var wizard = CreateWizardFor(agent, probe, new StubComponentInstaller(), localizer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.True(wizard.IsAdapterToolchainMissing);
+        Assert.Equal("Node.js", wizard.MissingAdapterToolchainName);
+        Assert.Equal("缺少 Node.js。", wizard.AdapterToolchainMissingText);
+        Assert.NotNull(wizard.AdapterToolchainDocumentation);
+        Assert.False(wizard.InstallAdapterCommand.CanExecute(null));
+
+        // Direct invocation bypasses CanExecute, so the handler must hold the line too.
+        await wizard.InstallAdapterCommand.ExecuteAsync(null);
+        Assert.Empty(wizard.InstallOutput);
+    }
+
+    /// <summary>
+    /// Reverse verification for the adapter gate: with a package manager present the same walk keeps the
+    /// install enabled and raises none of the toolchain surface.
+    /// </summary>
+    [Fact]
+    public async Task AdapterStep_WithPackageManagerPresent_KeepsInstallEnabled()
+    {
+        var agent = AcpSetupWizardFixtures.Agent(
+            adapters: new[] { AcpSetupWizardFixtures.PackagedAdapter() });
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable("npx", "/usr/bin/npx");
+        probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, installed: false);
+        var wizard = CreateWizardFor(agent, probe, new StubComponentInstaller(), localizer: null);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterMissing);
+        Assert.False(wizard.IsAdapterToolchainMissing);
+        Assert.Empty(wizard.AdapterToolchainMissingText);
+        Assert.True(wizard.InstallAdapterCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// A built-in adapter has no toolchain to need, so the toolchain surface must stay silent. This is the
+    /// case a naive "no manager on PATH means missing toolchain" rule would get wrong, telling most of the
+    /// catalog's users to install Node for an adapter that installs nothing.
+    /// </summary>
+    [Fact]
+    public async Task AdapterStep_BuiltInAdapter_NeverReportsAMissingToolchain()
+    {
+        var probe = new StubExecutableProbe().WithoutPackageManagers();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+        var wizard = CreateWizard(probe, new StubComponentInstaller());
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+
+        Assert.True(wizard.IsAdapterBuiltIn);
+        Assert.False(wizard.IsAdapterToolchainMissing);
+        Assert.Empty(wizard.AdapterToolchainMissingText);
+    }
 }

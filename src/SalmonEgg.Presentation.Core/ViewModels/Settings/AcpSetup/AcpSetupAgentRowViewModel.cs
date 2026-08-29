@@ -98,8 +98,77 @@ public sealed partial class AcpSetupAgentRowViewModel : ObservableObject
 
     public bool HasVersion => !string.IsNullOrWhiteSpace(Runtime.Version);
 
-    /// <summary>True when this agent can be installed by the wizard rather than by hand.</summary>
-    public bool SupportsAutomaticInstall => Agent.Runtime.SupportsAutomaticInstall;
+    /// <summary>
+    /// Latest toolchain probe for this agent's runtime, or null when it needs no toolchain or has not
+    /// been probed yet.
+    /// </summary>
+    /// <remarks>
+    /// Null carries two meanings that both resolve to "do not withhold the button": a component with no
+    /// prerequisite, and one whose prerequisite has not been established. Only a probe that positively
+    /// reports the toolchain missing turns the offer into documentation, matching how a
+    /// <see cref="AcpComponentAvailability.Undetermined"/> component probe does not block the wizard.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanInstallHere))]
+    [NotifyPropertyChangedFor(nameof(IsToolchainMissing))]
+    [NotifyPropertyChangedFor(nameof(MissingToolchainName))]
+    [NotifyPropertyChangedFor(nameof(ToolchainMissingHint))]
+    [NotifyPropertyChangedFor(nameof(ToolchainDocumentation))]
+    private AcpToolchainProbeResult? _runtimeToolchain;
+
+    /// <summary>
+    /// True when this agent's distribution has an install command the wizard could run.
+    /// </summary>
+    /// <remarks>
+    /// Authoring data only. The view gates on <see cref="CanInstallHere"/>; this stays exposed because
+    /// it is what distinguishes "we never automate this distribution" (goose) from "we would, but this
+    /// machine lacks the toolchain" — two states that must not share one message.
+    /// </remarks>
+    public bool HasAutomaticInstallPath => Agent.Runtime.HasAutomaticInstallPath;
+
+    /// <summary>True when the wizard should offer to install this agent on this machine.</summary>
+    public bool CanInstallHere
+        => HasAutomaticInstallPath && RuntimeToolchain?.IsMissing != true;
+
+    /// <summary>
+    /// True when an install path exists but the toolchain that would run it does not.
+    /// </summary>
+    /// <remarks>
+    /// The state the wizard previously had no name for: it showed an enabled install button and let the
+    /// package manager's absence surface as a failed install.
+    /// </remarks>
+    public bool IsToolchainMissing
+        => HasAutomaticInstallPath && RuntimeToolchain?.IsMissing == true;
+
+    /// <summary>Name of the absent toolchain, empty when none is absent. A vendor name, not localized.</summary>
+    public string MissingToolchainName
+        => IsToolchainMissing ? RuntimeToolchain!.Requirement.DisplayName : string.Empty;
+
+    /// <summary>
+    /// Localized sentence explaining why this row offers no install button, empty when it offers one.
+    /// </summary>
+    /// <remarks>
+    /// Composed here because it interpolates <see cref="MissingToolchainName"/>, and the UI layer's
+    /// <c>x:Uid</c> pipeline cannot reach this assembly's CoreStrings resources — the same reason
+    /// <see cref="Description"/> resolves here rather than in the view.
+    /// </remarks>
+    public string ToolchainMissingHint
+        => IsToolchainMissing
+            ? CoreStringResolver.ResolveFormat(
+                _localizer,
+                ToolchainMissingHintKey,
+                "{0} is required to install this automatically.",
+                MissingToolchainName)
+            : string.Empty;
+
+    private const string ToolchainMissingHintKey = "AcpSetup_Agent_ToolchainMissingHint";
+
+    /// <summary>
+    /// Where to send the user when the toolchain is missing: the toolchain's own documentation, since
+    /// the agent's install page assumes a toolchain they do not have yet.
+    /// </summary>
+    public Uri? ToolchainDocumentation
+        => IsToolchainMissing ? RuntimeToolchain!.Requirement.Documentation : null;
 
     /// <summary>Documentation to offer when automatic installation is unavailable or fails.</summary>
     public Uri? InstallDocumentation => Agent.Runtime.InstallDocumentation;

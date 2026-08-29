@@ -146,7 +146,7 @@ public sealed class AcpAgentCatalogTests
 
         void Check(string label, AcpComponentDescriptor component)
         {
-            if (component.SupportsAutomaticInstall)
+            if (component.HasAutomaticInstallPath)
             {
                 if (string.IsNullOrWhiteSpace(component.PackageId))
                 {

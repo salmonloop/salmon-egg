@@ -57,6 +57,47 @@ public sealed class DesktopAcpComponentInstallerTests
     }
 
     /// <summary>
+    /// An absent package manager is a missing toolchain, and the result must say so in a form the
+    /// presentation layer can localize.
+    /// </summary>
+    /// <remarks>
+    /// What shipped was the raw detail above and nothing else, so the user read an untranslated sentence
+    /// naming <c>npm</c> — an executable they may never have installed deliberately — rather than being
+    /// told they need Node.js. The detail stays for diagnostics; the key and the toolchain name are what
+    /// the wizard shows.
+    /// </remarks>
+    [Fact]
+    public async Task InstallAsync_WhenLauncherMissingFromPath_ShouldCarryLocalizableToolchainAdvice()
+    {
+        var probe = new StubAcpExecutableProbe();
+        probe.SetResolvedPath("npm", null);
+        var installer = new DesktopAcpComponentInstaller(probe);
+
+        var result = await installer.InstallAsync(AcpSetupFixtures.NpxComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            DesktopAcpComponentInstaller.ToolchainMissingRemediationKey,
+            result.RemediationKey);
+        Assert.Equal("Node.js", result.MissingToolchainName);
+    }
+
+    /// <summary>
+    /// Reverse verification: a failure from the package manager itself carries no toolchain advice, so the
+    /// key marks the one cause it names rather than every install failure.
+    /// </summary>
+    [Fact]
+    public async Task InstallAsync_ForBinaryDistribution_ShouldCarryNoToolchainAdvice()
+    {
+        var installer = new DesktopAcpComponentInstaller(new StubAcpExecutableProbe());
+
+        var result = await installer.InstallAsync(AcpSetupFixtures.BinaryComponent(), onOutput: null, overrides: null, TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Null(result.RemediationKey);
+        Assert.Null(result.MissingToolchainName);
+    }
+
+    /// <summary>
     /// The component's own launcher is resolved before the manager, because the manager is derived from
     /// the launcher's directory: a user who names <c>npx</c> has named which toolchain's <c>npm</c> to
     /// install through, and deriving that needs the launcher's real path.

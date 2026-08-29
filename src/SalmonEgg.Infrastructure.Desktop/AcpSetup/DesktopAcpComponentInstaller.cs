@@ -21,6 +21,12 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
 {
     private static readonly TimeSpan InstallTimeout = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// Advice key for an install that could not start because the toolchain is absent. A key rather than a
+    /// sentence: this layer knows the cause, and the presentation layer owns the words.
+    /// </summary>
+    internal const string ToolchainMissingRemediationKey = "AcpSetup_Install_ToolchainMissing";
+
     private readonly IAcpExecutableProbe _probe;
 
     public DesktopAcpComponentInstaller(IAcpExecutableProbe probe)
@@ -38,7 +44,7 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
     {
         ArgumentNullException.ThrowIfNull(component);
 
-        if (!component.SupportsAutomaticInstall)
+        if (!component.HasAutomaticInstallPath)
         {
             return AcpComponentInstallResult.Failure(
                 component.Id,
@@ -64,11 +70,17 @@ public sealed class DesktopAcpComponentInstaller : IAcpComponentInstaller
 
         if (string.IsNullOrWhiteSpace(launcherPath))
         {
+            // The absent executable is a package manager, so the user's problem is a missing toolchain
+            // rather than a missing command. Naming the toolchain — and carrying a key the presentation
+            // layer localizes — is the difference between advice they can act on and an untranslated
+            // sentence about a program they may never have installed deliberately.
             return AcpComponentInstallResult.Failure(
                 component.Id,
                 exitCode: null,
                 output: null,
-                errorDetail: $"'{launcher}' was not found on PATH.");
+                errorDetail: $"'{launcher}' was not found on PATH.",
+                remediationKey: ToolchainMissingRemediationKey,
+                missingToolchainName: component.RequiredToolchain?.DisplayName);
         }
 
         var result = await AcpSetupProcessRunner
