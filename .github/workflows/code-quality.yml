@@ -109,7 +109,7 @@ jobs:
           ${{ steps.changed_cs.outputs.files }}
           "@
           $files = $raw -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-          dotnet format SalmonEgg.sln --verify-no-changes --no-restore --include $files
+          dotnet format SalmonEgg.sln --verify-no-changes --no-restore --verbosity diagnostic --include $files
 
       - name: Build with analyzers
         run: dotnet build SalmonEgg.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:EnforceCodeStyleInBuild=true
