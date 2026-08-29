@@ -63,10 +63,16 @@
   <!-- Fail closed on a missing baseline. GenerateNuspec only runs during pack, so forgetting
        AcpPackageBaselineVersion is a pack-time error, not something that blocks everyday builds.
        The baseline package itself is downloaded by a restore that runs with the baseline property
-       set (see scripts/gates/run-acp-sdk-gates.sh); validation compares against its nupkg on disk. -->
+       set (see scripts/gates/run-acp-sdk-gates.sh); validation compares against its nupkg on disk.
+
+       The first error is a distinct diagnosis: 0.0.0 is MinVer's no-tag fallback, so reaching it
+       means the acp-sdk-v* history was never fetched (shallow checkout), not that the baseline is
+       missing. Packing a 0.0.0 package must fail regardless of what baseline was supplied. -->
   <Target Name="AcpBaselineRequired" BeforeTargets="GenerateNuspec">
+    <Error Condition="$([System.String]::Copy('$(Version)').StartsWith('0.0.0'))"
+           Text="SalmonEgg.Acp version is $(Version), which means MinVer found no acp-sdk-v* tag: the checkout is shallow. Fetch the full history (fetch-depth: 0) so the package version can be derived, instead of packing a placeholder version." />
     <Error Condition="'$(Version)' != '$(AcpPackageFirstReleasedVersion)' AND '$(PackageValidationBaselineVersion)' == ''"
-           Text="SalmonEgg.Acp $(Version) is past the first release $(AcpPackageFirstReleasedVersion), so package validation needs a published baseline. Pass -p:AcpPackageBaselineVersion=&lt;last published version&gt;." />
+           Text="SalmonEgg.Acp $(Version) is past the first release $(AcpPackageFirstReleasedVersion), so package validation needs a published baseline. Pass -p:AcpPackageBaselineVersion=&lt;last published version&gt; (or set the ACP_PACKAGE_BASELINE_VERSION repository variable)." />
   </Target>
 
   <ItemGroup>
