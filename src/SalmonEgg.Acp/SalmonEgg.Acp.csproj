@@ -76,7 +76,10 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="MinVer" Version="6.0.0" />
+    <!-- MinVer is a build-time versioning tool, not a runtime dependency: PrivateAssets keeps it
+         out of the packed nuspec, where it would force every consumer to resolve a package their
+         source mapping may not carry. -->
+    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Internals remain available to first-party contract tests. External consumers use the public surface. -->
