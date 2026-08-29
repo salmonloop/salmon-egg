@@ -505,10 +505,15 @@ public class UiConventionsTests
             "MIT",
             root.Descendants("PackageLicenseExpression").Select(node => node.Value.Trim()).SingleOrDefault(),
             StringComparer.Ordinal);
+        // The version identity is derived from the acp-sdk-v* tag history by MinVer. A hardcoded
+        // <Version> would silently override it and desync the published package from the tag that
+        // released it, so the convention is: the tag namespace is pinned, the version is not.
         Assert.Equal(
-            "1.0.0",
-            root.Descendants("Version").Select(node => node.Value.Trim()).SingleOrDefault(),
+            "acp-sdk-v",
+            root.Descendants("MinVerTagPrefix").Select(node => node.Value.Trim()).SingleOrDefault(),
             StringComparer.Ordinal);
+        Assert.Empty(root.Descendants("Version"));
+        Assert.Empty(root.Descendants("VersionPrefix"));
         Assert.Equal(
             "true",
             root.Descendants("GenerateDocumentationFile").Select(node => node.Value.Trim()).SingleOrDefault(),
