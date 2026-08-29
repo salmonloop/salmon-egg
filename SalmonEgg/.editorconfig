@@ -72,8 +72,10 @@ indent_size = 2
 end_of_line = lf
 
 [*.cs]
-# EOL should be normalized by Git. See https://github.com/dotnet/format/issues/1099
-end_of_line = unset
+# LF on disk is a repo contract (see .gitattributes *.cs eol=lf). This must stay an explicit
+# setting: `unset` used to disable the check, but newer SDKs treat it as "inherit" and fall
+# back to the [*] crlf rule, which flips the whole format gate.
+end_of_line = lf
 
 # See https://github.com/dotnet/roslyn/issues/20356#issuecomment-310143926
 trim_trailing_whitespace = false
