@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -72,6 +74,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -99,10 +103,11 @@ jobs:
           $installerDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\installer"
           New-Item -ItemType Directory -Force -Path $installerDir | Out-Null
 
-          # Evaluate the shared release identity instead of scraping project XML: the version lives in
-          # the repository-root Directory.Build.props, and only MSBuild evaluation sees imports and
+          # Evaluate the shared release identity instead of scraping project XML. The version comes
+          # from the git tag via MinVer, so running the MinVer target is what produces it; the checkout
+          # above uses fetch-depth: 0 so the tag is reachable. Only MSBuild evaluation sees imports and
           # conditions the way the build itself does.
-          $displayVersion = (dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -getProperty:SalmonEggDisplayVersion -nologo).Trim()
+          $displayVersion = (dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo).Trim()
           if ($displayVersion -notmatch '^\d+\.\d+\.\d+$') {
             throw "SalmonEggDisplayVersion must be a three-part numeric version, got: $displayVersion"
           }
@@ -214,6 +219,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -335,6 +342,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -455,6 +464,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -573,6 +584,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           path: repo
+          fetch-depth: 0
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
@@ -654,7 +666,7 @@ jobs:
           supported_rids="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
             -getProperty:SalmonEggCliSupportedRuntimeIdentifiers -nologo | tr -d '\r' | tail -n 1)"
           display_version="$(cd repo && dotnet msbuild src/SalmonEgg.Cli/SalmonEgg.Cli.csproj \
-            -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
+            -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
 
           missing=""
           IFS=';' read -ra rids <<< "$supported_rids"

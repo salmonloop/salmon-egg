@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using System.Text.RegularExpressions;
+using System.Reflection;
 
 namespace SalmonEgg.Cli.Tests;
 
@@ -8,9 +8,10 @@ namespace SalmonEgg.Cli.Tests;
 /// Locates repository-level release facts that CLI contract tests assert against.
 /// </summary>
 /// <remarks>
-/// Tests must never restate the release version as a literal. The version is owned by the
-/// repository root <c>Directory.Build.props</c> so the GUI and CLI artifacts cannot drift apart;
-/// a hardcoded copy in a test is a second owner that turns every release bump into a red gate.
+/// Tests must never restate the release version as a literal. The version is owned by the git tag
+/// and stamped into the assemblies by MinVer at build time, so the GUI and CLI artifacts cannot
+/// drift apart; a hardcoded copy in a test is a second owner that turns every release bump into a
+/// red gate.
 /// </remarks>
 internal static class RepositoryLayout
 {
@@ -34,25 +35,19 @@ internal static class RepositoryLayout
     }
 
     /// <summary>
-    /// Reads the shared display version (for example <c>1.1.0</c>) from the root build properties.
+    /// Reads the informational version MinVer stamped onto the CLI assembly (for example <c>1.1.0</c>).
     /// </summary>
-    public static string ReadSharedDisplayVersion()
+    public static string ReadCliInformationalVersion()
     {
-        var propertiesPath = Path.Combine(FindRoot(), "Directory.Build.props");
-        var properties = File.ReadAllText(propertiesPath);
-        var match = Regex.Match(
-            properties,
-            @"<SalmonEggDisplayVersion[^>]*>(?<version>[^<]+)</SalmonEggDisplayVersion>",
-            RegexOptions.None,
-            TimeSpan.FromSeconds(5));
+        var attribute = typeof(CliApplication).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
 
-        if (!match.Success)
+        if (attribute is null || string.IsNullOrWhiteSpace(attribute.InformationalVersion))
         {
             throw new InvalidOperationException(
-                $"SalmonEggDisplayVersion is not declared in '{propertiesPath}'. The shared release "
-                + "identity must stay in the repository root build properties.");
+                "SalmonEgg.Cli carries no AssemblyInformationalVersion. The release identity is derived "
+                + "from the git tag by MinVer and must stay stamped onto the shipped assembly.");
         }
 
-        return match.Groups["version"].Value.Trim();
+        return attribute.InformationalVersion;
     }
 }

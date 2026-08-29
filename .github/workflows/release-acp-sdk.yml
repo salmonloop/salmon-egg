@@ -28,8 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The package version is derived from the acp-sdk-v* tag history by MinVer, so the full
+      # history (tags included) must be present. A shallow clone would pack a 0.0.0-alpha version
+      # and the tag/version gate below would catch it - but only after the whole pack had run.
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -41,6 +46,10 @@ jobs:
       - name: Run ACP SDK gate script
         env:
           DOTNET_BIN: dotnet
+          # Once the SDK has shipped its first version, every later version must package-validate
+          # against the last published one. The baseline is the version of the package actually
+          # published before this release; unset for 1.0.0, which has no predecessor.
+          ACP_PACKAGE_BASELINE_VERSION: ${{ vars.ACP_PACKAGE_BASELINE_VERSION }}
         run: ./scripts/gates/run-acp-sdk-gates.sh "${{ env.CONFIGURATION }}" "${{ env.PACKAGE_OUTPUT }}"
 
       # Verify the rule itself before trusting it on an irreversible publish.

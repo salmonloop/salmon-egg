@@ -28,7 +28,8 @@ $executablePath = (Resolve-Path -LiteralPath $Executable).Path
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $cliProject = Join-Path $repoRoot 'src/SalmonEgg.Cli/SalmonEgg.Cli.csproj'
-    $Version = (dotnet msbuild $cliProject -getProperty:SalmonEggDisplayVersion -nologo).Trim()
+    # -t:MinVer runs the MinVer target so the property holds the tag-derived version.
+    $Version = (dotnet msbuild $cliProject -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo).Trim()
 }
 
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {

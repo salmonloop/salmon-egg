@@ -59,8 +59,9 @@ if ! command -v dpkg-deb >/dev/null 2>&1; then
 fi
 
 if [ -z "$VERSION" ]; then
+  # -t:MinVer runs the MinVer target so the property holds the tag-derived version, not a default.
   VERSION="$("$DOTNET_BIN" msbuild "$REPO_ROOT/src/SalmonEgg.Cli/SalmonEgg.Cli.csproj" \
-    -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
+    -restore -t:MinVer -getProperty:SalmonEggDisplayVersion -nologo | tr -d '\r' | tail -n 1)"
 fi
 
 case "$VERSION" in
