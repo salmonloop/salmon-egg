@@ -24,7 +24,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOTNET_VERSION: "10.0.3xx"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -45,7 +44,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Install WASM workload
         run: dotnet workload install wasm-tools --skip-manifest-update --disable-parallel --no-http-cache
@@ -80,7 +79,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish Desktop (Windows)
         run: |
@@ -225,7 +224,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore WinUI app for isolated MSIX build
         shell: pwsh
@@ -348,7 +347,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish macOS app bundle
         shell: pwsh
@@ -470,7 +469,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Build CLI artifact
         id: build-cli
@@ -543,7 +542,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'

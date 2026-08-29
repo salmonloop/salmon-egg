@@ -48,7 +48,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
-  DOTNET_VERSION: "10.0.3xx"
   CONFIGURATION: "Release"
   SALMONEGG_ONEDRIVE_CLIENT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_CLIENT_ID || vars.SALMONEGG_ONEDRIVE_CLIENT_ID }}
   SALMONEGG_ONEDRIVE_TENANT_ID: ${{ secrets.SALMONEGG_ONEDRIVE_TENANT_ID || vars.SALMONEGG_ONEDRIVE_TENANT_ID }}
@@ -71,7 +70,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish Linux Desktop
         run: >-
@@ -100,7 +99,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish macOS Desktop
         run: >-
@@ -131,7 +130,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore WinUI app for isolated MSIX build
         shell: pwsh
@@ -205,15 +204,18 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Verify Android .NET SDK
         run: |
           dotnet_version="$(dotnet --version)"
-          case "${dotnet_version}" in
-            10.0.3??) ;;
-            *) echo "Expected .NET SDK 10.0.3xx, got ${dotnet_version}." >&2; exit 1 ;;
-          esac
+          # The expected version is read from global.json so this check can never drift from
+          # the file that actually pins the SDK (the old "10.0.3xx" wildcard did exactly that).
+          expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
+          if [ "${dotnet_version}" != "${expected_version}" ]; then
+            echo "Expected .NET SDK ${expected_version} (pinned in global.json), got ${dotnet_version}." >&2
+            exit 1
+          fi
           echo ".NET SDK ${dotnet_version}"
 
       - name: Install Android workload
@@ -268,7 +270,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Select compatible Xcode
         shell: bash
@@ -298,10 +300,13 @@ jobs:
       - name: Verify iOS .NET SDK
         run: |
           dotnet_version="$(dotnet --version)"
-          case "${dotnet_version}" in
-            10.0.3??) ;;
-            *) echo "Expected .NET SDK 10.0.3xx, got ${dotnet_version}." >&2; exit 1 ;;
-          esac
+          # The expected version is read from global.json so this check can never drift from
+          # the file that actually pins the SDK (the old "10.0.3xx" wildcard did exactly that).
+          expected_version="$(python3 -c 'import json; print(json.load(open("global.json"))["sdk"]["version"])')"
+          if [ "${dotnet_version}" != "${expected_version}" ]; then
+            echo "Expected .NET SDK ${expected_version} (pinned in global.json), got ${dotnet_version}." >&2
+            exit 1
+          fi
           echo ".NET SDK ${dotnet_version}"
 
       - name: Install iOS workload
