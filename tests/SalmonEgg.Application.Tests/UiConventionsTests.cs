@@ -372,7 +372,7 @@ public class UiConventionsTests
 
         // The WINDOWS branch only compiles on Windows CI; at least keep it syntactically valid
         // from the cross-platform suite (ReadCSharpSyntaxTree parses with WINDOWS defined).
-        Assert.Empty(root.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.DoesNotContain(root.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
 
         var displayNameConst = root
             .DescendantNodes()
