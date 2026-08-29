@@ -655,6 +655,12 @@ public static class DependencyInjection
             sp.GetRequiredService<MainNavigationViewModel>());
         services.AddSingleton<IConversationOpenRouter, ConversationOpenRouter>();
         services.AddSingleton<ShellSessionActivationOverlayViewModel>();
+        // 关闭遮罩必须单例：它订阅 shutdown 进度源，多例会重复起阈值计时。
+        services.AddSingleton<ShellShutdownOverlayViewModel>(sp =>
+            new ShellShutdownOverlayViewModel(
+                sp.GetRequiredService<IApplicationShutdownProgress>(),
+                sp.GetRequiredService<IUiDispatcher>(),
+                sp.GetService<IStringLocalizer<CoreStrings>>()));
         services.AddSingleton<IDiscoverSessionsConnectionFacade>(sp =>
             new DiscoverSessionsConnectionFacade(
                 sp.GetRequiredService<IAcpChatServiceFactory>(),
@@ -764,11 +770,29 @@ public static class DependencyInjection
         });
         services.AddSingleton<ChatCompletionNotificationCoordinator>();
         services.AddSingleton<NotificationActivationCoordinator>();
+        // 关闭进度：Core 持有事实，读写面分开注册，写入面只给 teardown owner。
+        services.AddSingleton<ApplicationShutdownProgressStore>();
+        services.AddSingleton<IApplicationShutdownProgress>(sp =>
+            sp.GetRequiredService<ApplicationShutdownProgressStore>());
+        services.AddSingleton<IApplicationShutdownProgressSink>(sp =>
+            sp.GetRequiredService<ApplicationShutdownProgressStore>());
         services.AddSingleton<IApplicationShutdownWorkflow>(sp =>
             new ApplicationShutdownWorkflow(
                 sp.GetRequiredService<IChatRuntimePersistence>(),
+                sp.GetRequiredService<IAcpConnectionSessionCleaner>(),
+                sp.GetRequiredService<IDiscoverSessionsConnectionFacade>(),
+                sp.GetRequiredService<ITerminalSessionManager>(),
+                sp.GetRequiredService<IApplicationShutdownProgressSink>(),
                 sp.GetRequiredService<ITelemetryRuntime>(),
-                sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>()));
+                sp.GetRequiredService<ILogger<ApplicationShutdownWorkflow>>(),
+                // 本地 PTY 协调器只在 desktop 注册；其余平台传 null，由 workflow 跳过该段。
+                // 用 GetService 而非 GetRequiredService 表达"可选"，避免为此在各平台注册空实现。
+#if !__WASM__ && !__ANDROID__ && !__IOS__
+                sp.GetService<LocalTerminalPanelCoordinator>()
+#else
+                null
+#endif
+                ));
 
         // Global search
         services.AddSingleton<IGlobalSearchPipeline, DefaultGlobalSearchPipeline>();

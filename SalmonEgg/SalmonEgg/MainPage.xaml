@@ -797,6 +797,44 @@
                     <TranslateTransform x:Name="LeftNavResizerTransform" X="{x:Bind LayoutVM.LeftNavResizerLeft, Mode=OneWay}" />
                 </controls:ResizeGrip.RenderTransform>
             </controls:ResizeGrip>
+
+            <!-- 关闭遮罩（issue #126）：清理超过阈值才出现，结构照 ChatViewLoadingOverlay。
+                 文案由 ShellShutdownOverlayViewModel 按 CoreStrings 本地化，不占 x:Uid 的 Text 面。 -->
+            <ContentControl x:Name="ShellShutdownOverlay"
+                            x:Uid="ShellShutdownOverlay"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            IsTabStop="False"
+                            AutomationProperties.AutomationId="Shell.ShutdownOverlay"
+                            Visibility="{x:Bind ShutdownOverlayVM.IsOverlayVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                            Opacity="0.85"
+                            AutomationProperties.AutomationId="Shell.ShutdownOverlayMask" />
+
+                    <Grid>
+                        <Border VerticalAlignment="Bottom"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,0,48"
+                                Padding="16,8"
+                                Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="20">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <ProgressRing IsActive="True" Width="16" Height="16" />
+                                <TextBlock AutomationProperties.AutomationId="Shell.ShutdownOverlayStatus"
+                                           Text="{x:Bind ShutdownOverlayVM.StatusText, Mode=OneWay}"
+                                           FontSize="12"
+                                           FontWeight="Medium"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </ContentControl>
         </Grid>
     </Grid>
 </Page>

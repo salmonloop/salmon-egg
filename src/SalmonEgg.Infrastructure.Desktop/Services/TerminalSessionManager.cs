@@ -238,7 +238,9 @@ namespace SalmonEgg.Infrastructure.Services
 
                 try
                 {
-                    _process.Kill();
+                    // entireProcessTree 与 StdioTransport 同理:agent 请求的命令常经 shell /
+                    // 启动器执行,真正干活的进程是孙进程。只杀直接子进程会把它留给 init。
+                    _process.Kill(entireProcessTree: true);
                 }
                 catch (InvalidOperationException)
                 {
@@ -258,8 +260,10 @@ namespace SalmonEgg.Infrastructure.Services
                 {
                     if (!_process.HasExited)
                     {
-                        _process.Kill();
-                        _process.WaitForExit();
+                        // 不 WaitForExit:本方法在进程退出路径上被调用,而 WaitForExit() 无超时,
+                        // 一个不肯死的子进程就能把关闭无限期挂住(issue #126)。与
+                        // StdioTransport.Dispose 同契约——同步发出终止信号,不等待收尸。
+                        _process.Kill(entireProcessTree: true);
                     }
                 }
                 catch

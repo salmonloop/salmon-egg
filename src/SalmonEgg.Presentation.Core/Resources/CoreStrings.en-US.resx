@@ -267,6 +267,16 @@
   <data name="ChatLoading_PreparingSession" xml:space="preserve">
     <value>Switching chat...</value>
   </data>
+
+  <data name="ShutdownOverlay_PersistingState" xml:space="preserve">
+    <value>Saving conversations...</value>
+  </data>
+  <data name="ShutdownOverlay_ClosingChildProcesses" xml:space="preserve">
+    <value>Closing agent processes...</value>
+  </data>
+  <data name="ShutdownOverlay_Generic" xml:space="preserve">
+    <value>Shutting down...</value>
+  </data>
   <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
     <value>Failed to open mini window. Please ensure you are running as an MSIX package.</value>
   </data>

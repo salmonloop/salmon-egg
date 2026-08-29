@@ -19,6 +19,21 @@ public interface IAcpConnectionSessionCleaner
         Func<AcpConnectionSession, bool>? isPinned = null,
         Func<AcpConnectionSession, bool>? isHardPinned = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 进程退出路径专用：摘除并释放<b>全部</b>缓存会话，含当前活跃的那一个。
+    /// </summary>
+    /// <remarks>
+    /// 为什么不是给 <see cref="CleanupStaleAsync"/> 加参数：那条路的两项保护
+    /// （放过 <c>activeService</c>、放过 soft/hard pinned）在关闭语义下全部是错的——
+    /// 关闭时活跃连接同样必须终止，否则 agent 子进程会被 reparent 到 init 后继续运行
+    /// （issue #126 实测）。把互斥语义塞进同一方法会让"关闭"与"换配置"共用一组判定，
+    /// 日后任一侧的改动都会静默影响另一侧。
+    ///
+    /// 不接受 <c>CancellationToken</c>：摘除之后这些会话再无任何持有者，唯有本方法负责
+    /// 归还底层进程 / 套接字；中途放弃就等于制造无主的泄漏连接。
+    /// </remarks>
+    Task<AcpConnectionSessionCleanupResult> DrainAllAsync();
 }
 
 public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
@@ -163,6 +178,35 @@ public sealed class AcpConnectionSessionCleaner : IAcpConnectionSessionCleaner
         }
 
         return new AcpConnectionSessionCleanupResult(removed.Count + removedWarmCount, disposeFailureCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<AcpConnectionSessionCleanupResult> DrainAllAsync()
+    {
+        // 一次 RemoveWhere 全部摘净：逐个 RemoveByProfile 会在两次调用之间留出窗口，
+        // 让并发的 connect apply 又塞回一个会话，从而漏掉它。
+        var removed = _sessionRegistry.RemoveWhere(static _ => true);
+        if (removed.Count == 0)
+        {
+            return new AcpConnectionSessionCleanupResult(0, 0);
+        }
+
+        // releaseAfterDisconnectFailure: true —— 关闭路径上 DisconnectAsync 失败（例如对端
+        // 已经没了）绝不能就此放手：Dispose 才是真正 Kill(entireProcessTree) 的那一步。
+        var disposeFailureCount = await DisposeDetachedSessionsAsync(
+            removed,
+            static (logger, session, ex) => logger.LogDebug(
+                ex,
+                "Failed to disconnect cached ACP session during shutdown drain. profileId={ProfileId}",
+                session.ProfileId),
+            releaseAfterDisconnectFailure: true).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "ACP connection pool drained for shutdown. removedCount={RemovedCount} disposeFailureCount={DisposeFailureCount}",
+            removed.Count,
+            disposeFailureCount);
+
+        return new AcpConnectionSessionCleanupResult(removed.Count, disposeFailureCount);
     }
 
     /// <summary>

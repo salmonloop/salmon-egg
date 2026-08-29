@@ -265,6 +265,16 @@
   <data name="ChatLoading_PreparingSession" xml:space="preserve">
     <value>正在切换会话...</value>
   </data>
+
+  <data name="ShutdownOverlay_PersistingState" xml:space="preserve">
+    <value>正在保存会话记录...</value>
+  </data>
+  <data name="ShutdownOverlay_ClosingChildProcesses" xml:space="preserve">
+    <value>正在关闭 agent 进程...</value>
+  </data>
+  <data name="ShutdownOverlay_Generic" xml:space="preserve">
+    <value>正在关闭...</value>
+  </data>
   <data name="ChatMiniWindow_OpenFailed" xml:space="preserve">
     <value>无法打开迷你窗口。请确认应用以 MSIX 包方式运行。</value>
   </data>

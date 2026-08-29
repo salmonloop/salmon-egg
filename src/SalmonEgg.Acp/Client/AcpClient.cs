@@ -2146,8 +2146,11 @@ namespace SalmonEgg.Acp.Client
             // The transport is owned exclusively by this client (process / socket / HttpClient / Rx
             // subject), and Dispose is its authoritative release path; a graceful protocol-level
             // disconnect is the job of an explicit DisconnectAsync, awaited by the caller beforehand.
-            // The terminal session manager is a singleton shared across connections and owned by the DI
-            // container, so this client must not dispose it.
+            // The terminal session manager is shared across connections, so this client must not
+            // dispose it: releasing it here would kill terminals still owned by other live clients.
+            // Its lifetime belongs to whoever supplied it, and that host must dispose it on its own
+            // teardown path — registering it in a container is not by itself such a path, since a
+            // container that is never disposed never runs it (this was a real process-leak defect).
             try
             {
                 _transport.Dispose();

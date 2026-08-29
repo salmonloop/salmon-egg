@@ -64,6 +64,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     private readonly ChatViewModel _chatViewModel;
     public ChatViewModel ChatVM => _chatViewModel;
     public ShellSessionActivationOverlayViewModel ShellOverlayVM { get; }
+    public ShellShutdownOverlayViewModel ShutdownOverlayVM { get; }
     public ShellLayoutViewModel LayoutVM { get; }
     private readonly WindowMetricsProvider _metricsProvider;
     private readonly AppActivationSignalSource _appActivationSignalSource;
@@ -88,6 +89,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
         NavVM = App.ServiceProvider.GetRequiredService<MainNavigationViewModel>();
         _chatViewModel = App.ServiceProvider.GetRequiredService<ChatViewModel>();
         ShellOverlayVM = App.ServiceProvider.GetRequiredService<ShellSessionActivationOverlayViewModel>();
+        ShutdownOverlayVM = App.ServiceProvider.GetRequiredService<ShellShutdownOverlayViewModel>();
         SearchVM = App.ServiceProvider.GetRequiredService<GlobalSearchViewModel>();
 
         LayoutVM = App.ServiceProvider.GetRequiredService<ShellLayoutViewModel>();
@@ -716,6 +718,7 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
     {
         AttachGamepadInput();
         AttachDebugKeyLogging();
+        AttachAppWindowClosing();
         _titleBarAdapter.Configure(App.MainWindowInstance);
         _appActivationSignalSource.Attach(App.MainWindowInstance!);
         _metricsProvider.Attach(App.MainWindowInstance!, _titleBarAdapter);
@@ -1425,9 +1428,9 @@ public sealed partial class MainPage : Page, INavigationIntentConsumer, IGamepad
 
     partial void UpdateTrayState();
 
-    partial void DisposePlatformTray();
+    partial void HideMainWindowToTray();
 
-    partial void DetachAppWindowClosing();
+    partial void DisposePlatformTray();
 
     partial void AttachDebugKeyLogging();
 

@@ -100,6 +100,37 @@ public sealed class DynamicTelemetryLoggerProviderTests
     }
 
     [Fact]
+    public void RetireWithoutWaitingForExport_StopsLoggingSynchronously()
+    {
+        // 关闭路径的契约：本方法返回后，写日志必须已经不再进入 OTel 管线（摘除是同步的），
+        // 而释放退役 factory 允许滞后。若摘除也被挪到后台，关闭瞬间的日志会写进正在被
+        // dispose 的 factory。
+        var factory = new CapturingExporterFactory();
+        using var provider = new DynamicTelemetryLoggerProvider(factory);
+        using var loggerFactory = CreateLoggerFactory(provider);
+        var logger = loggerFactory.CreateLogger("Test");
+
+        provider.Reconfigure(CreateSettings(enabled: true, "https://first.example.com:4318"), ResourceBuilder.CreateDefault());
+        Assert.True(logger.IsEnabled(LogLevel.Information));
+
+        provider.RetireWithoutWaitingForExport();
+
+        Assert.False(logger.IsEnabled(LogLevel.Information));
+        Assert.Null(Record.Exception(() => logger.LogInformation("after retire")));
+    }
+
+    [Fact]
+    public void RetireWithoutWaitingForExport_WhenNothingConfigured_IsNoOp()
+    {
+        // 遥测从未启用时关闭路径同样会走到这里，不得抛。
+        var factory = new CapturingExporterFactory();
+        using var provider = new DynamicTelemetryLoggerProvider(factory);
+
+        Assert.Null(Record.Exception(provider.RetireWithoutWaitingForExport));
+        Assert.Null(Record.Exception(provider.RetireWithoutWaitingForExport));
+    }
+
+    [Fact]
     public void AfterDispose_LoggingIsInert()
     {
         var factory = new CapturingExporterFactory();

@@ -12,18 +12,13 @@ public sealed partial class MainPage
 #if DEBUG
     private InputKeyboardSource? _debugKeyboardSource;
 #endif
-    private bool _allowClose;
 
     partial void InitializeTray()
     {
+        // 只管托盘。窗口关闭路径已上提到共享的 MainPage.Shutdown.cs——Uno 的三个 Skia host
+        // 同样 raise AppWindow.Closing 并尊重 Cancel，留在这里会让非 Windows 平台永远没有
+        // teardown 时机（issue #126）。
         UpdateTrayState();
-
-        var window = App.MainWindowInstance;
-        if (window?.AppWindow != null)
-        {
-            window.AppWindow.Closing -= OnAppWindowClosing;
-            window.AppWindow.Closing += OnAppWindowClosing;
-        }
     }
 
     partial void UpdateTrayState()
@@ -50,13 +45,9 @@ public sealed partial class MainPage
         _trayIcon = null;
     }
 
-    partial void DetachAppWindowClosing()
+    partial void HideMainWindowToTray()
     {
-        var window = App.MainWindowInstance;
-        if (window?.AppWindow != null)
-        {
-            window.AppWindow.Closing -= OnAppWindowClosing;
-        }
+        App.MainWindowInstance?.AppWindow?.Hide();
     }
 
     private void EnsureTrayIcon()
@@ -106,40 +97,6 @@ public sealed partial class MainPage
         // Tray exit is a second process boundary and must persist state like the window close path.
         // The shutdown workflow is idempotent, so both paths can drive it.
         _ = FlushRuntimeThenCloseAsync();
-    }
-
-    private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
-    {
-        if (_allowClose)
-        {
-            return;
-        }
-
-        if (Preferences.MinimizeToTray)
-        {
-            args.Cancel = true;
-            sender.Hide();
-            return;
-        }
-
-        // This is the WinUI process boundary. Teardown is asynchronous, so cancel this pass, flush,
-        // then close for real: the closing event cannot be awaited and a window that is already gone
-        // can no longer persist anything.
-        args.Cancel = true;
-        _ = FlushRuntimeThenCloseAsync();
-    }
-
-    private async Task FlushRuntimeThenCloseAsync()
-    {
-        try
-        {
-            await App.ShutdownRuntimeAsync().ConfigureAwait(true);
-        }
-        finally
-        {
-            _allowClose = true;
-            App.MainWindowInstance?.Close();
-        }
     }
 
     partial void AttachDebugKeyLogging()

@@ -30,11 +30,18 @@ public interface ITelemetryRuntime
     Task ApplyAsync(AppSettings settings, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 进程退出前尽量导出残留数据。
+    /// 进程退出前收尾遥测管线。
     /// </summary>
     /// <remarks>
-    /// 返回 <see cref="Task"/> 不是假异步：底层 SDK 的 Shutdown 是同步阻塞（按 timeout 等待
-    /// 导出完成），实现必须把它移出调用线程，否则关闭窗口时会冻结 UI 线程数秒。
+    /// 语义是「通知导出线程收尾后立即返回」，<b>不等待导出完成</b>。关闭路径的预算属于
+    /// 用户：底层 SDK 的 Shutdown 是同步阻塞且<em>按 provider 串行</em>计时，tracer 与
+    /// meter 各等一遍，端点不可达时实测把关闭拖到 10s 以上（issue #126）。因此实现既要
+    /// 把同步调用移出调用线程，也要传入非阻塞超时，二者缺一都会让关闭重新卡住。
+    ///
+    /// 代价是明确接受的：进程随即退出，缓冲区中尚未导出的 span 会丢失。若将来需要保住
+    /// 崩溃诊断数据，正确做法是落盘后下次启动补寄，而不是把等待加回关闭路径。
+    ///
+    /// 失败不抛：遥测是旁路能力，收尾失败不得阻塞进程退出。
     /// </remarks>
     Task ShutdownAsync(CancellationToken cancellationToken = default);
 }

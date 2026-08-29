@@ -210,9 +210,11 @@ public sealed class TelemetryManager : ITelemetryManager, IDisposable
             _tracerProvider = null;
             _meterProvider = null;
             _initialized = false;
-            _dynamicLoggerProvider?.Reconfigure(
-                new TelemetrySettings { Enabled = false, ServiceName = _settings.ServiceName },
-                BuildResource(_settings));
+
+            // 不走 Reconfigure：那条路会同步 Dispose 退役的 OTel logger factory，而
+            // LoggerProviderSdk.Dispose 硬编码 Processor.Shutdown(5000)，会成为第三段
+            // 不受 timeoutMilliseconds 约束的等待（issue #126）。摘除同步完成，释放交后台。
+            _dynamicLoggerProvider?.RetireWithoutWaitingForExport();
             return tracerOk && meterOk;
         }
     }

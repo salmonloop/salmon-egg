@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
@@ -82,6 +83,43 @@ public sealed class DynamicTelemetryLoggerProvider : ILoggerProvider
         }
 
         return replacement;
+    }
+
+    /// <summary>
+    /// 进程退出路径专用：立刻停止把日志写入 OTel 管线，但不等待残留批次导出。
+    /// </summary>
+    /// <remarks>
+    /// 为什么不能复用 <see cref="Reconfigure"/>：退役 factory 的 <c>Dispose</c> 最终落到
+    /// OTel 的 <c>LoggerProviderSdk.Dispose</c>，而后者<b>硬编码</b> <c>Processor.Shutdown(5000)</c>；
+    /// <c>ILoggerFactory</c> 这一层没有任何入口能把超时传进去，所以无法像 tracer / meter
+    /// 那样传 <see cref="ITelemetryManager.NonBlockingShutdownTimeoutMilliseconds"/>。
+    /// 若在关闭路径上同步 Dispose，它就成了第三段不受调用方超时约束的 5s 等待（issue #126）。
+    ///
+    /// 因此这里把两件事拆开：<em>摘除</em>同步完成（返回后写日志不再进入该 factory，
+    /// 与代次自增一起对齐 <see cref="TryCommitReplacement"/> 的可见性契约），
+    /// <em>释放</em>交给线程池。线程池线程是后台线程，进程退出时可能被截断——这与
+    /// <see cref="ITelemetryRuntime.ShutdownAsync"/> 声明的取舍一致：宁可丢掉最后一批日志，
+    /// 也不让用户为不可达端点多等几秒。
+    /// </remarks>
+    public void RetireWithoutWaitingForExport()
+    {
+        ILoggerFactory? previous;
+        lock (_sync)
+        {
+            previous = _innerFactory;
+            _innerFactory = null;
+
+            // 与 TryCommitReplacement 同序：先换掉再自增，外壳 logger 才会丢弃旧缓存。
+            _generation++;
+        }
+
+        if (previous is null)
+        {
+            return;
+        }
+
+        // 不 await、不记录 task：DisposeSafely 自吞异常，故不存在 unobserved exception。
+        _ = Task.Run(() => DisposeSafely(previous));
     }
 
     internal bool TryCommitReplacement(ILoggerFactory? replacement)
