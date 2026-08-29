@@ -1712,7 +1712,7 @@ public sealed class DiscoverSessionsViewModelTests
 
     }
 
-        private sealed class StubProjectAffinityResolver : IProjectAffinityResolver
+    private sealed class StubProjectAffinityResolver : IProjectAffinityResolver
     {
         private readonly ProjectAffinityResolution _resolution;
 
@@ -1724,7 +1724,7 @@ public sealed class DiscoverSessionsViewModelTests
         public ProjectAffinityResolution Resolve(ProjectAffinityRequest request) => _resolution;
     }
 
-private sealed class FakeChatService : IChatService
+    private sealed class FakeChatService : IChatService
     {
         public void Dispose()
         {

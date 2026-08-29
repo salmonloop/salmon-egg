@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using SalmonEgg.Platforms.Windows;
 using WinUIKeyEventArgs = Microsoft.UI.Input.KeyEventArgs;
 
