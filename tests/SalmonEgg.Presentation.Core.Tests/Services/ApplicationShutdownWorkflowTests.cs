@@ -17,7 +17,7 @@ public sealed class ApplicationShutdownWorkflowTests
         // 多出一个本可避免的成因），遥测最后 flush，这样上面任何失败产生的 span 仍能被处理。
         var harness = new Harness();
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(
             new[] { "chat", "acp-drain", "discover", "acp-terminal", "local-terminal", "telemetry" },
@@ -32,7 +32,7 @@ public sealed class ApplicationShutdownWorkflowTests
         // 漏掉任何一个，那一类子进程就会被 reparent 到 init 后继续运行。
         var harness = new Harness();
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         harness.ConnectionCleaner.Verify(cleaner => cleaner.DrainAllAsync(), Times.Once);
         Assert.Equal(1, harness.DiscoverFacade.DisposeAsyncCount);
@@ -49,7 +49,7 @@ public sealed class ApplicationShutdownWorkflowTests
             .Setup(cleaner => cleaner.DrainAllAsync())
             .ThrowsAsync(new InvalidOperationException("drain failed"));
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, harness.DiscoverFacade.DisposeAsyncCount);
         Assert.Equal(1, harness.AcpTerminals.DisposeCount);
@@ -67,7 +67,7 @@ public sealed class ApplicationShutdownWorkflowTests
             .Setup(p => p.FlushPendingStateAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("flush failed"));
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         harness.ConnectionCleaner.Verify(cleaner => cleaner.DrainAllAsync(), Times.Once);
         harness.Telemetry.Verify(runtime => runtime.ShutdownAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -84,11 +84,11 @@ public sealed class ApplicationShutdownWorkflowTests
             .Setup(p => p.FlushPendingStateAsync(It.IsAny<CancellationToken>()))
             .Returns(release.Task);
 
-        var first = harness.Workflow.ShutdownAsync();
-        var second = harness.Workflow.ShutdownAsync();
+        var first = harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
+        var second = harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
         release.SetResult();
         await Task.WhenAll(first, second);
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         harness.Persistence.Verify(p => p.FlushPendingStateAsync(It.IsAny<CancellationToken>()), Times.Once);
         harness.ConnectionCleaner.Verify(cleaner => cleaner.DrainAllAsync(), Times.Once);
@@ -102,7 +102,7 @@ public sealed class ApplicationShutdownWorkflowTests
         // 本地 PTY 只在 desktop 注册，WASM / 移动端为 null：可选依赖缺失不得让关闭崩掉。
         var harness = new Harness(includeLocalTerminals: false);
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         harness.ConnectionCleaner.Verify(cleaner => cleaner.DrainAllAsync(), Times.Once);
         harness.Telemetry.Verify(runtime => runtime.ShutdownAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -116,7 +116,7 @@ public sealed class ApplicationShutdownWorkflowTests
         // 否则提示会永久停在"正在关闭"。
         var harness = new Harness();
 
-        await harness.Workflow.ShutdownAsync();
+        await harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(
             new[]
@@ -139,7 +139,7 @@ public sealed class ApplicationShutdownWorkflowTests
             .Setup(runtime => runtime.ShutdownAsync(It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("telemetry shutdown failed"));
 
-        var exception = await Record.ExceptionAsync(() => harness.Workflow.ShutdownAsync());
+        var exception = await Record.ExceptionAsync(() => harness.Workflow.ShutdownAsync(TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
         Assert.Equal(ApplicationShutdownPhase.Completed, harness.Progress.Phase);
