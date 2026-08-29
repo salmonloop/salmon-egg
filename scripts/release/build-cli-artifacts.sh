@@ -53,6 +53,12 @@ read_project_property() {
   "$DOTNET_BIN" msbuild "$CLI_PROJECT" "-getProperty:$1" -nologo | tr -d '\r' | tail -n 1
 }
 
+# Release identity is derived from the git tag by MinVer, so the property only holds a version once
+# the MinVer target has executed; a plain -getProperty evaluation would return the pre-MinVer default.
+read_release_version() {
+  "$DOTNET_BIN" msbuild "$CLI_PROJECT" -restore -t:MinVer "-getProperty:$1" -nologo | tr -d '\r' | tail -n 1
+}
+
 # macOS ships `shasum`, not GNU `sha256sum`. Both print "<hash>  <name>", so the sidecar format is
 # identical either way and `shasum -c` / `sha256sum -c` can both verify it.
 write_sha256() {
@@ -67,7 +73,7 @@ write_sha256() {
   fi
 }
 
-DISPLAY_VERSION="$(read_project_property SalmonEggDisplayVersion)"
+DISPLAY_VERSION="$(read_release_version SalmonEggDisplayVersion)"
 SUPPORTED_RIDS="$(read_project_property SalmonEggCliSupportedRuntimeIdentifiers)"
 
 case "$DISPLAY_VERSION" in

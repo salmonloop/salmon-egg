@@ -8,10 +8,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>salmon-egg</AssemblyName>
     <RootNamespace>SalmonEgg.Cli</RootNamespace>
-    <Version>$(SalmonEggPackageVersion)</Version>
-    <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
-    <FileVersion>$(SalmonEggPackageVersion)</FileVersion>
-    <InformationalVersion>$(SalmonEggPackageVersion)</InformationalVersion>
+    <!-- Version identity comes from the git tag via MinVer (root Directory.Build.props). -->
     <SalmonEggCliSupportedRuntimeIdentifiers>win-x64;linux-x64;osx-arm64</SalmonEggCliSupportedRuntimeIdentifiers>
   </PropertyGroup>
 
@@ -66,6 +63,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="MinVer" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageReference Include="System.CommandLine" Version="2.0.11" />
   </ItemGroup>

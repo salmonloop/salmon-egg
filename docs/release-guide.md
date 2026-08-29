@@ -364,15 +364,13 @@ git push origin v1.0.0
 发布前检查清单：
 
 - [ ] 所有测试通过
-- [ ] 版本号已更新（只改根 `Directory.Build.props` 的 `SalmonEggDisplayVersion`）
 - [ ] CLI 三个支持 RID 的产物均已构建
 - [ ] CLI 真实产物 smoke 与安装 / PATH 门禁通过
 - [ ] 确认 GitHub 自动生成的 release notes 或维护中的变更记录已覆盖本版本
 - [ ] 更新 README.md（如需要）
 - [ ] 构建发布版本
 - [ ] 在测试环境验证
-- [ ] 创建 Git tag
-- [ ] 推送到远程仓库
+- [ ] 创建 Git tag 并推送到远程仓库（版本号由 MinVer 从 tag 推导，无需改任何文件）
 - [ ] 验证 CI/CD 流程
 - [ ] 检查发布产物
 
@@ -424,8 +422,8 @@ SDK 与应用是两条独立的发布线，各有自己的 tag 命名空间与�
 
 | | tag | 版本来源 | workflow |
 |---|---|---|---|
-| GUI / CLI | `v*` | 根 `Directory.Build.props` 的 `SalmonEggDisplayVersion` | `release-packaging.yml` |
-| ACP SDK | `acp-sdk-v*` | `src/SalmonEgg.Acp/SalmonEgg.Acp.csproj` 的 `<Version>` | `release-acp-sdk.yml` |
+| GUI / CLI | `v*` | git tag（MinVer 从 tag 推导，根 `Directory.Build.props` 派生 `SalmonEggDisplayVersion`） | `release-packaging.yml` |
+| ACP SDK | `acp-sdk-v*` | git tag（MinVer 以 `MinVerTagPrefix=acp-sdk-v` 推导） | `release-acp-sdk.yml` |
 
 两者必须保持分离：共用 `v*` 会让每次 SDK 发布都重建桌面安装包，也会让应用发版误触发 NuGet 推送。
 
@@ -462,16 +460,15 @@ OIDC 交换未产出 key 时 `publish-nuget` 会显式失败而非静默跳过 �
 ### 发布步骤
 
 ```bash
-# 1. 更新 SDK 版本（首发之后必须同时提供上一个已发布版本作为兼容性基线）
-#    src/SalmonEgg.Acp/SalmonEgg.Acp.csproj: <Version>1.0.1</Version>
-
-# 2. 本地跑完整门禁 + 真实包消费验证
-./scripts/gates/run-acp-sdk-gates.sh Release artifacts/acp-sdk-pack
+# 1. 本地跑完整门禁 + 真实包消费验证（SDK 版本由 MinVer 从 tag 历史推导；
+#    非首发版本必须同时提供上一个已发布版本作为兼容性基线）
+ACP_PACKAGE_BASELINE_VERSION=1.0.0 ./scripts/gates/run-acp-sdk-gates.sh Release artifacts/acp-sdk-pack
 ./scripts/gates/run-acp-sdk-tag-version-gate-selftest.sh
 ./scripts/gates/run-acp-sdk-tag-version-gate.sh acp-sdk-v1.0.1 artifacts/acp-sdk-pack
 ./scripts/gates/run-acp-consumer-package-smoke.sh artifacts/acp-sdk-pack Release
 
-# 3. 打 tag 推送，workflow 接管 pack -> consumer smoke -> nuget push
+# 2. 打 tag 推送，workflow 接管 pack -> consumer smoke -> nuget push；
+#    版本号即 tag 上的数字，MinVer 负责把同样的版本打进包里
 git tag acp-sdk-v1.0.1
 git push origin acp-sdk-v1.0.1
 ```
@@ -480,11 +477,13 @@ git push origin acp-sdk-v1.0.1
 
 `EnablePackageValidation` 需要一个已发布版本作为对比基线才有意义。首发版本（`AcpPackageFirstReleasedVersion`，当前 `1.0.0`）在 nuget.org 上没有前身，写死基线会导致 restore 报 `NU1101`，因此该版本不启用基线比对。
 
-`<Version>` 一旦超过首发版本，构建就要求显式传入基线，否则 `AcpBaselineRequired` 直接报错：
+版本一旦超过首发版本，pack 就要求显式传入基线，否则 `AcpBaselineRequired` 直接报错（普通开发构建与测试不受影响，报错只在产出包的 pack 管线触发）：
 
 ```bash
 dotnet pack src/SalmonEgg.Acp/SalmonEgg.Acp.csproj -c Release -p:AcpPackageBaselineVersion=1.0.0
 ```
+
+CI 侧由仓库变量 `ACP_PACKAGE_BASELINE_VERSION` 提供基线：发下一个 SDK 版本前，把它设为当前已发布的版本号。`run-acp-sdk-gates.sh` 会在带该属性的 restore 中预先下载基线包，pack 时 ApiCompat 才能找到它做比对。
 
 这条门禁是 fail-closed 的：忘记传基线会构建失败，而不是让包验证退化成"什么都不比"的假绿。
 
@@ -498,11 +497,11 @@ nuget.org 的推送无法撤回，也无法覆盖同版本号。因此：
 
 ### SDK 发布清单
 
-- [ ] `<Version>` 已更新，且非首发版本时已确定 `AcpPackageBaselineVersion`
+- [ ] 版本号由 `acp-sdk-v*` tag 决定，无需改文件；非首发版本时已设置仓库变量 `ACP_PACKAGE_BASELINE_VERSION`
 - [ ] `run-acp-sdk-gates.sh` 全绿（format / analyzer / 契约测试 / pack）
 - [ ] `run-acp-sdk-tag-version-gate-selftest.sh` 通过（门禁规则本身的正反例）
 - [ ] `run-acp-sdk-tag-version-gate.sh` 通过
 - [ ] `run-acp-consumer-package-smoke.sh` 通过（真实 nupkg restore + build + run）
-- [ ] tag 使用 `acp-sdk-v` 前缀，且与 `<Version>` 一致
+- [ ] tag 使用 `acp-sdk-v` 前缀（包版本即 tag 上的数字，由 MinVer 推导）
 - [ ] nuget.org 受信任发布策略、`NUGET_USER` 变量与 `nuget-publish` environment 均已就绪
 - [ ] 发布后在 nuget.org 确认包与符号均已上架

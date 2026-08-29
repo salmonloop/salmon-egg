@@ -40,6 +40,7 @@
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="Microsoft.Identity.Client" />
     <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
+    <PackageReference Include="MinVer" />
     <PackageReference Include="Serilog.Extensions.Logging" />
     <PackageReference Include="Uno.Extensions.Reactive" />
     <PackageReference Include="Uno.Fonts.Fluent" GeneratePathProperty="true" />
@@ -262,13 +263,8 @@
     <ApplicationTitle>SalmonEgg</ApplicationTitle>
     <!-- App Identifier -->
     <ApplicationId>com.companyname.salmonegg</ApplicationId>
-    <!-- Versions. SalmonEggDisplayVersion / SalmonEggPackageVersion come from the repository root
-         Directory.Build.props so the GUI packages and the CLI release assets cannot drift apart. -->
-    <Version>$(SalmonEggPackageVersion)</Version>
-    <AssemblyVersion>$(SalmonEggPackageVersion)</AssemblyVersion>
-    <FileVersion>$(SalmonEggPackageVersion)</FileVersion>
-    <InformationalVersion>$(SalmonEggPackageVersion)</InformationalVersion>
-    <ApplicationDisplayVersion>$(SalmonEggDisplayVersion)</ApplicationDisplayVersion>
+    <!-- Versions are derived from the git tag by MinVer (see the root Directory.Build.props derive
+         target); the Store-facing four-part MSIX form is SalmonEggDisplayVersion + ".0". -->
     <ApplicationVersion>1</ApplicationVersion>
     <!-- Package Publisher -->
     <ApplicationPublisher>SalmonEgg</ApplicationPublisher>
@@ -343,8 +339,12 @@
     <DisableImplicitUnoPackages>true</DisableImplicitUnoPackages>
   </PropertyGroup>
 
+  <!-- DependsOnTargets pins the order against the root derive target: both are AfterTargets="MinVer",
+       and the relative order of two targets on the same hook is unspecified in MSBuild. Without the
+       dependency the manifest could be generated before SalmonEggPackageVersion exists. -->
   <Target Name="GenerateVersionedApplicationManifests"
-          BeforeTargets="_EnsureAppxManifestExists;ResolveReferences;ResolveProjectReferences;BeforeBuild"
+          AfterTargets="MinVer"
+          DependsOnTargets="SalmonEggDeriveReleaseIdentity"
           Condition="'$(SalmonEggGeneratedApplicationManifest)' != ''">
     <PropertyGroup>
       <_SalmonEggPackageManifestTemplate Condition="'$(SalmonEggGeneratedPackageManifest)' != ''">$(MSBuildProjectDirectory)\Package.appxmanifest</_SalmonEggPackageManifestTemplate>

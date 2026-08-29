@@ -71,16 +71,16 @@ public sealed class CliApplicationTests
     [Fact]
     public async Task RunAsync_WithVersion_WritesCliAssemblyVersion()
     {
-        // 期望值取自仓库根的共享版本，而不是写死字面量：CLI 与 GUI 共用同一个版本真相源，
-        // 写死会让每次发布抬版本都变成一次红灯。
-        var expectedVersionPrefix = RepositoryLayout.ReadSharedDisplayVersion() + ".";
+        // 期望值取自被测程序集自身的 InformationalVersion，而不是写死字面量：版本真相源现在是
+        // git tag（MinVer 在构建期打进程序集），写死会让每次发布抬版本都变成一次红灯。
+        var expectedVersion = RepositoryLayout.ReadCliInformationalVersion();
         await using var stdout = new StringWriter();
         await using var stderr = new StringWriter();
 
         var exitCode = await CliApplication.RunAsync(["--version"], stdout, stderr, TestContext.Current.CancellationToken);
 
         Assert.Equal(CliExitCodes.Success, exitCode);
-        Assert.StartsWith(expectedVersionPrefix, stdout.ToString(), StringComparison.Ordinal);
+        Assert.Equal(expectedVersion, stdout.ToString().TrimEnd());
         Assert.Empty(stderr.ToString());
     }
 
