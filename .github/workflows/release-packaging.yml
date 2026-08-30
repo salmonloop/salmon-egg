@@ -546,35 +546,35 @@ jobs:
 
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: desktop-windows-msix
           path: windows-msix
 
       - name: Download WebAssembly artifact
         if: needs.package-wasm.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: wasm-build
           path: wasm-build
 
       - name: Download Windows Skia MSI artifact
         if: needs.package-desktop.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: desktop-windows-skia-msi
           path: windows-skia-msi
 
       - name: Download macOS bundle artifact
         if: needs.package-macos.result == 'success'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: desktop-macos-bundle
           path: macos-bundle
 
       - name: Download macOS .dmg artifact
         if: needs.package-macos.outputs.dmg-produced == 'true'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: desktop-macos-dmg
           path: macos-dmg
@@ -586,7 +586,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download CLI artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: cli-*
           merge-multiple: true
