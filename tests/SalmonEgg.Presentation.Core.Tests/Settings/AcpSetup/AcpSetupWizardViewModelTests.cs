@@ -1187,7 +1187,7 @@ public sealed class AcpSetupWizardViewModelTests
                 }
             }
 
-            await Task.Delay(25);
+            await Task.Delay(25, TestContext.Current.CancellationToken);
         }
 
         dispatcher.RunAll();

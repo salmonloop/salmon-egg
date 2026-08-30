@@ -8,13 +8,19 @@ using SalmonEgg.Domain.Services.AcpSetup;
 namespace SalmonEgg.Infrastructure.Tests.AcpSetup;
 
 /// <summary>
-/// A real executable in a directory that only an <see cref="IAcpSearchPathSource"/> reports, so a test can
-/// tell "the probe consulted the sources" apart from "the command happened to be on PATH".
+/// A real, runnable executable in a directory that only an <see cref="IAcpSearchPathSource"/> reports, so a
+/// test can tell "the probe consulted the sources" apart from "the command happened to be on PATH".
 /// </summary>
 /// <remarks>
-/// A real file rather than a stubbed probe: the behaviour under test is how this probe resolves and starts a
-/// command, which a stub would replace rather than exercise. The command name carries a GUID so nothing the
-/// host machine has installed can answer for it — which is what makes the paired negative tests meaningful.
+/// A real file rather than a stubbed probe: the behaviour under test is how this probe resolves and then
+/// starts a command, which a stub would replace rather than exercise. The command name carries a GUID so
+/// nothing the host machine has installed can answer for it — which is what makes the paired negative tests
+/// meaningful.
+///
+/// Written per platform rather than skipped off POSIX, because both platforms have a scriptable launcher and
+/// the resolution being tested is platform-specific in exactly this way: Windows finds a bare name through
+/// PATHEXT and cannot start an extensionless file, so a <c>#!/bin/sh</c> script there resolves to nothing.
+/// A batch shim is also what npm actually installs on Windows, so this is the shape the wizard meets.
 /// </remarks>
 internal sealed class ExecutableFixture : IDisposable
 {
@@ -28,7 +34,7 @@ internal sealed class ExecutableFixture : IDisposable
         Source = new FixedSearchPathSource(System.IO.Path.GetDirectoryName(path)!);
     }
 
-    /// <summary>The bare name to ask the probe for. Unique per fixture.</summary>
+    /// <summary>The bare name to ask the probe for. Unique per fixture, and carries no extension.</summary>
     public string Command { get; }
 
     /// <summary>Absolute path of the executable, for asserting which one answered.</summary>
@@ -38,9 +44,13 @@ internal sealed class ExecutableFixture : IDisposable
     public IAcpSearchPathSource Source { get; }
 
     /// <summary>
-    /// Writes an executable script whose body is <paramref name="body"/>.
+    /// Writes an executable that prints <paramref name="output"/> and exits successfully.
     /// </summary>
-    public static ExecutableFixture Create(string body)
+    /// <remarks>
+    /// The caller supplies what the command should print rather than a whole script, because the script
+    /// around it has to differ per platform and every caller wants the same thing from it.
+    /// </remarks>
+    public static ExecutableFixture Printing(string output)
     {
         var root = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(),
@@ -49,9 +59,19 @@ internal sealed class ExecutableFixture : IDisposable
         Directory.CreateDirectory(bin);
 
         var command = "acp-fixture-cmd-" + Guid.NewGuid().ToString("N");
-        var path = System.IO.Path.Combine(bin, command);
-        File.WriteAllText(path, body);
-        if (!OperatingSystem.IsWindows())
+        var isWindows = OperatingSystem.IsWindows();
+        // Resolved by PATHEXT on Windows, where an extensionless file cannot be started at all.
+        var path = System.IO.Path.Combine(bin, isWindows ? command + ".cmd" : command);
+
+        File.WriteAllText(
+            path,
+            isWindows
+                // @echo off so the interpreter does not echo the command itself onto the same stdout the
+                // caller reads the payload from.
+                ? "@echo off\r\necho " + output + "\r\n"
+                : "#!/bin/sh\necho '" + output + "'\n");
+
+        if (!isWindows)
         {
             File.SetUnixFileMode(
                 path,
