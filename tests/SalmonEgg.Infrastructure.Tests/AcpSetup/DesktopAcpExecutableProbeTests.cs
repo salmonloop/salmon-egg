@@ -278,7 +278,7 @@ public sealed class DesktopAcpExecutableProbeTests
     [Fact]
     public async Task ReadVersionAsync_ForCommandOnlyASourceCanSee_ShouldReadTheVersion()
     {
-        using var toolchain = ExecutableFixture.Create("#!/bin/sh\necho 9.9.9\n");
+        using var toolchain = ExecutableFixture.Printing("9.9.9");
 
         var version = await new DesktopAcpExecutableProbe(new[] { toolchain.Source })
             .ReadVersionAsync(toolchain.Command, new[] { "--version" }, TestContext.Current.CancellationToken);
@@ -293,7 +293,7 @@ public sealed class DesktopAcpExecutableProbeTests
     [Fact]
     public async Task ReadVersionAsync_ForTheSameCommandWithoutTheSource_ShouldReturnNull()
     {
-        using var toolchain = ExecutableFixture.Create("#!/bin/sh\necho 9.9.9\n");
+        using var toolchain = ExecutableFixture.Printing("9.9.9");
 
         var version = await new DesktopAcpExecutableProbe()
             .ReadVersionAsync(toolchain.Command, new[] { "--version" }, TestContext.Current.CancellationToken);
@@ -313,8 +313,7 @@ public sealed class DesktopAcpExecutableProbeTests
     [Fact]
     public async Task LocateGlobalPackageAsync_ForManagerOnlyASourceCanSee_ShouldQueryIt()
     {
-        using var manager = ExecutableFixture.Create(
-            "#!/bin/sh\necho /fake/lib/node_modules/probe-pkg\n");
+        using var manager = ExecutableFixture.Printing("/fake/lib/node_modules/probe-pkg");
 
         var result = await new DesktopAcpExecutableProbe(new[] { manager.Source }).LocateGlobalPackageAsync(
             AcpDistributionKind.Npx,
@@ -332,8 +331,7 @@ public sealed class DesktopAcpExecutableProbeTests
     [Fact]
     public async Task LocateGlobalPackageAsync_ForTheSameManagerWithoutTheSource_ShouldReturnUnknown()
     {
-        using var manager = ExecutableFixture.Create(
-            "#!/bin/sh\necho /fake/lib/node_modules/probe-pkg\n");
+        using var manager = ExecutableFixture.Printing("/fake/lib/node_modules/probe-pkg");
 
         var result = await new DesktopAcpExecutableProbe().LocateGlobalPackageAsync(
             AcpDistributionKind.Npx,
