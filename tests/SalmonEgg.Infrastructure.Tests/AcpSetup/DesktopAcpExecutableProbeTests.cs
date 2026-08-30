@@ -266,6 +266,85 @@ public sealed class DesktopAcpExecutableProbeTests
         Assert.Equal(expectedMatch, location is not null);
     }
 
+    /// <summary>
+    /// A version read must search the same directories a resolution does.
+    /// </summary>
+    /// <remarks>
+    /// The widened search is this feature's whole reason for existing: a GUI process cannot see the PATH a
+    /// shell profile builds, so a version-manager toolchain is reachable only through the sources. A version
+    /// read that consulted the inherited PATH alone therefore failed on exactly the machines the sources were
+    /// added for, and the row showed a component as installed with no version beside it.
+    /// </remarks>
+    [Fact]
+    public async Task ReadVersionAsync_ForCommandOnlyASourceCanSee_ShouldReadTheVersion()
+    {
+        using var toolchain = ExecutableFixture.Create("#!/bin/sh\necho 9.9.9\n");
+
+        var version = await new DesktopAcpExecutableProbe(new[] { toolchain.Source })
+            .ReadVersionAsync(toolchain.Command, new[] { "--version" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal("9.9.9", version);
+    }
+
+    /// <summary>
+    /// Reverse verification: without the source, the same command is unreachable — so the test above
+    /// passes because of the widened search rather than because the command happened to be on PATH.
+    /// </summary>
+    [Fact]
+    public async Task ReadVersionAsync_ForTheSameCommandWithoutTheSource_ShouldReturnNull()
+    {
+        using var toolchain = ExecutableFixture.Create("#!/bin/sh\necho 9.9.9\n");
+
+        var version = await new DesktopAcpExecutableProbe()
+            .ReadVersionAsync(toolchain.Command, new[] { "--version" }, TestContext.Current.CancellationToken);
+
+        Assert.Null(version);
+    }
+
+    /// <summary>
+    /// A package query must reach a manager only a source can see, for the same reason.
+    /// </summary>
+    /// <remarks>
+    /// This failure was worse than the version one: the query reported <c>Unknown</c> with no executable
+    /// named, which the wizard renders as "could not determine". A user whose npm lives in an nvm directory
+    /// therefore got an undetermined verdict for every package-detected component, with nothing on screen
+    /// pointing at the cause.
+    /// </remarks>
+    [Fact]
+    public async Task LocateGlobalPackageAsync_ForManagerOnlyASourceCanSee_ShouldQueryIt()
+    {
+        using var manager = ExecutableFixture.Create(
+            "#!/bin/sh\necho /fake/lib/node_modules/probe-pkg\n");
+
+        var result = await new DesktopAcpExecutableProbe(new[] { manager.Source }).LocateGlobalPackageAsync(
+            AcpDistributionKind.Npx,
+            "probe-pkg",
+            AcpPackageManagerCandidates.Exact(manager.Command),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsInstalled);
+        Assert.Equal(manager.Path, result.QueryExecutablePath);
+    }
+
+    /// <summary>
+    /// Reverse verification for the query: the same manager is unreachable without the source.
+    /// </summary>
+    [Fact]
+    public async Task LocateGlobalPackageAsync_ForTheSameManagerWithoutTheSource_ShouldReturnUnknown()
+    {
+        using var manager = ExecutableFixture.Create(
+            "#!/bin/sh\necho /fake/lib/node_modules/probe-pkg\n");
+
+        var result = await new DesktopAcpExecutableProbe().LocateGlobalPackageAsync(
+            AcpDistributionKind.Npx,
+            "probe-pkg",
+            AcpPackageManagerCandidates.Exact(manager.Command),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(result.IsInstalled);
+        Assert.Null(result.QueryExecutablePath);
+    }
+
     [Fact]
     public void FindPackageLocation_ReturnsTheMatchedPath_SoTheToolchainCanBeNamed()
     {
