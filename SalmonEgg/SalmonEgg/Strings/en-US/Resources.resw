@@ -906,6 +906,9 @@
   <data name="AcpSetup_Working.Text" xml:space="preserve">
     <value>Working, please wait…</value>
   </data>
+  <data name="AcpSetup_CancelOperation.Content" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
   <data name="AcpSetup_StatusInstalled.AutomationProperties.Name" xml:space="preserve">
     <value>Installed</value>
   </data>

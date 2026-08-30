@@ -1048,6 +1048,153 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Equal("second install line", wizard.LatestInstallOutputLine);
     }
 
+    // ── Cancelling a running operation ──────────────────────────────────────
+
+    /// <summary>
+    /// Cancelling reaches an install started from an agent row.
+    /// </summary>
+    /// <remarks>
+    /// The row is the case a per-command token cannot serve: its button raises an event rather than binding
+    /// a command, so the install was previously started with <c>CancellationToken.None</c> and the only
+    /// thing that could end it was the installer's own ten-minute timeout. Cancellation therefore lives on
+    /// the shared operation scope, which every entry point already goes through.
+    /// </remarks>
+    [Fact]
+    public async Task CancelOperation_ShouldCancelAnInstallStartedFromAnAgentRow()
+    {
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        // Cancelled from inside the install, which is where a user would press it: while it runs.
+        installer.OnInstallWithToken += _ => wizard.CancelOperationCommand.Execute(null);
+
+        wizard.Agents[0].RequestInstall();
+
+        var token = Assert.Single(installer.ReceivedTokens);
+        Assert.True(token.IsCancellationRequested);
+        // Cancellation is a user action, so it leaves no error on screen and does not wedge the wizard.
+        Assert.False(wizard.IsBusy);
+        Assert.False(wizard.HasErrorMessage);
+    }
+
+    /// <summary>
+    /// Reverse verification: without pressing cancel the same install runs with an uncancelled token, so
+    /// the assertion above is about cancellation rather than about a token that arrives cancelled anyway.
+    /// </summary>
+    [Fact]
+    public async Task WithoutCancelling_AnInstallShouldRunWithALiveToken()
+    {
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        wizard.Agents[0].RequestInstall();
+
+        Assert.False(Assert.Single(installer.ReceivedTokens).IsCancellationRequested);
+    }
+
+    /// <summary>
+    /// Cancel is offered exactly while something is running: enabled during an operation, and not before
+    /// or after, so it is never a button that does nothing.
+    /// </summary>
+    [Fact]
+    public async Task CancelOperation_ShouldOnlyBeExecutableWhileBusy()
+    {
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizard(probe, installer);
+        Assert.False(wizard.CancelOperationCommand.CanExecute(null));
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var executableDuringInstall = false;
+        installer.OnInstallWithToken += _ => executableDuringInstall = wizard.CancelOperationCommand.CanExecute(null);
+
+        wizard.Agents[0].RequestInstall();
+
+        Assert.True(executableDuringInstall);
+        Assert.False(wizard.CancelOperationCommand.CanExecute(null));
+    }
+
+    /// <summary>
+    /// Cancelling with nothing running is a no-op rather than a crash: the button's enablement and the
+    /// command's own behaviour are separate guarantees, and only the latter holds on every platform where a
+    /// stale binding could still invoke it.
+    /// </summary>
+    [Fact]
+    public void CancelOperation_WithNothingRunning_ShouldDoNothing()
+    {
+        var wizard = CreateWizard();
+
+        wizard.CancelOperationCommand.Execute(null);
+
+        Assert.False(wizard.IsBusy);
+        Assert.False(wizard.HasErrorMessage);
+    }
+
+    /// <summary>
+    /// A cancel arriving while an operation is still unwinding is harmless.
+    /// </summary>
+    /// <remarks>
+    /// The real dispatcher marshals every UI write to another thread, so <c>IsBusy = false</c> lands after
+    /// the operation's cleanup has already released its cancellation source. The button a user sees is
+    /// therefore still enabled for a moment after there is anything left to cancel, and a click in that
+    /// window must not reach a disposed source. Clearing the field before disposing it is what makes the
+    /// click a no-op instead of an <see cref="ObjectDisposedException"/> inside a command handler.
+    ///
+    /// Modelled with a queueing dispatcher because an immediate one closes the window by construction: it
+    /// applies the busy flag inline, so the button is already disabled.
+    /// </remarks>
+    [Fact]
+    public async Task CancelOperation_ArrivingAsAnOperationWindsDown_ShouldBeHarmless()
+    {
+        var dispatcher = new QueueingUiDispatcher();
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var wizard = AcpSetupWizardFixtures.CreateWizard(
+            new StubAgentCatalog(AcpSetupWizardFixtures.Agent()),
+            probe,
+            new StubComponentInstaller(),
+            new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success()),
+            new RecordingConfigurationService(),
+            localizer: null,
+            dispatcher);
+
+        var detecting = wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        // Pump the queue, pressing cancel from inside every callback. One of those callbacks is the
+        // cleanup's own IsBusy = false, which runs between the wizard releasing its cancellation source and
+        // disposing it — the precise window a user's click can land in, and the only one where the two
+        // orderings of that release differ. Driving it from inside the callback makes hitting it certain
+        // rather than a matter of thread timing.
+        while (!detecting.IsCompleted)
+        {
+            while (dispatcher.PendingCount > 0)
+            {
+                if (wizard.CancelOperationCommand.CanExecute(null))
+                {
+                    wizard.CancelOperationCommand.Execute(null);
+                }
+
+                dispatcher.RunNext();
+                if (wizard.CancelOperationCommand.CanExecute(null))
+                {
+                    wizard.CancelOperationCommand.Execute(null);
+                }
+            }
+
+            await Task.Delay(25);
+        }
+
+        dispatcher.RunAll();
+        Assert.False(wizard.IsBusy);
+        Assert.False(wizard.HasErrorMessage);
+    }
+
     // ── Re-detection sees the machine as it is now ──────────────────────────
 
     /// <summary>

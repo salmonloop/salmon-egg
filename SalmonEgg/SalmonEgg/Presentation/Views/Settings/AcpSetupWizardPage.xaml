@@ -534,7 +534,12 @@
                             </Expander>
                         </StackPanel>
 
-                        <!-- Busy feedback shared by every long operation. -->
+                        <!-- Busy feedback shared by every long operation, with the way out beside it.
+
+                             Cancel sits here rather than next to each install button because the operation
+                             it stops is shared: whichever entry point started it, this is where the user is
+                             already looking. It is enabled only while something runs, which is the same
+                             condition that reveals this panel. -->
                         <StackPanel Orientation="Horizontal" Spacing="8"
                                     Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                             <ProgressRing IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
@@ -543,6 +548,10 @@
                             <TextBlock x:Uid="AcpSetup_Working"
                                        VerticalAlignment="Center"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <Button x:Name="AcpSetupCancelOperationButton"
+                                    x:Uid="AcpSetup_CancelOperation"
+                                    Command="{x:Bind ViewModel.CancelOperationCommand}"
+                                    AutomationProperties.AutomationId="AcpSetup.CancelOperation"/>
                         </StackPanel>
 
                         <!-- ── Wizard navigation bar ───────────────────────── -->
