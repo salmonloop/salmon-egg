@@ -1015,6 +1015,116 @@ public sealed class AcpSetupWizardViewModelTests
     /// The sibling entry is load-bearing, not padding. An install derives its package manager from the
     /// resolved launcher's own directory and uses only that candidate, so a machine whose npm is somewhere
     /// else genuinely cannot install this component — and the wizard now withholds the offer instead of
+    /// <summary>
+    /// A second install starts from an empty log rather than appending to the previous one's.
+    /// </summary>
+    /// <remarks>
+    /// The output surface is shared by both install entry points, so a log that carried over would show one
+    /// component's installer lines under another component's name. Clearing on step entry alone did not
+    /// cover this: two installs can happen without ever leaving the selection step.
+    /// </remarks>
+    [Fact]
+    public async Task ASecondInstall_ShouldNotInheritTheFirstInstallsOutput()
+    {
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var installer = new StubComponentInstaller();
+        installer.OutputLines.Add("first install line");
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = wizard.Agents[0];
+
+        row.RequestInstall();
+        Assert.False(wizard.IsBusy);
+        Assert.Equal(new[] { "first install line" }, wizard.InstallOutput);
+
+        installer.OutputLines.Clear();
+        installer.OutputLines.Add("second install line");
+
+        row.RequestInstall();
+        Assert.False(wizard.IsBusy);
+
+        Assert.Equal(new[] { "second install line" }, wizard.InstallOutput);
+        Assert.Equal("second install line", wizard.LatestInstallOutputLine);
+    }
+
+    // ── Re-detection sees the machine as it is now ──────────────────────────
+
+    /// <summary>
+    /// Detecting on the user's request must search the machine again, not answer from a cached search.
+    /// </summary>
+    /// <remarks>
+    /// This is the wizard's own loop: it reports a toolchain missing, points the user at its documentation,
+    /// and offers "detect again". The search behind that is cached — it spawns a login shell and walks the
+    /// filesystem, which is too expensive to repeat per component — so without this the button re-ran a
+    /// detection against the machine as it was <em>before</em> the user installed anything, and reported the
+    /// toolchain missing however many times they pressed it. The only way out was restarting the app.
+    /// </remarks>
+    [Fact]
+    public async Task DetectAgents_ShouldInvalidateTheSearchFirst()
+    {
+        var probe = ProbeForInstalledRuntime();
+        var wizard = CreateWizard(probe);
+
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, probe.InvalidateCount);
+    }
+
+    /// <summary>
+    /// Re-detecting the adapter does the same, since it backs the "detect again" button beside the
+    /// adapter's own toolchain-missing surface.
+    /// </summary>
+    [Fact]
+    public async Task DetectAdapter_ShouldInvalidateTheSearchFirst()
+    {
+        var probe = ProbeForInstalledRuntime();
+        var wizard = CreateWizard(probe);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        var afterWalk = probe.InvalidateCount;
+
+        await wizard.DetectAdapterCommand.ExecuteAsync(null);
+
+        Assert.True(
+            probe.InvalidateCount > afterWalk,
+            $"expected re-detection to invalidate the search; count stayed at {afterWalk}.");
+    }
+
+    /// <summary>
+    /// An install changes the machine, so the re-probe that follows it must not reuse the search from
+    /// before.
+    /// </summary>
+    /// <remarks>
+    /// A package manager writes the new executable into its own bin directory, and a first global install
+    /// can create that directory outright — which a directory list captured beforehand cannot contain. The
+    /// re-probe would then contradict an install that had just succeeded.
+    /// </remarks>
+    [Fact]
+    public async Task InstallAgentRow_ShouldInvalidateTheSearchBeforeReprobing()
+    {
+        var probe = ProbeForInstalledRuntime();
+        probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, null);
+        var installer = new StubComponentInstaller();
+        var wizard = CreateWizard(probe, installer);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        var row = wizard.Agents[0];
+        var afterDetect = probe.InvalidateCount;
+        installer.OnInstall += _ =>
+            probe.SetExecutable(AcpSetupWizardFixtures.RuntimeCommand, "/usr/bin/test-agent", "1.0.0");
+
+        row.RequestInstall();
+        // Inline completion: the stub installer and the test dispatcher are both synchronous, so a settled
+        // busy flag is proof the whole chain finished rather than a race.
+        Assert.False(wizard.IsBusy);
+
+        Assert.True(
+            probe.InvalidateCount > afterDetect,
+            $"expected the install's re-probe to invalidate the search; count stayed at {afterDetect}.");
+        Assert.True(row.IsInstalled);
+    }
+
     /// discovering it on click. Registering the sibling is what makes this the ordinary machine the
     /// install tests mean to describe.
     /// </remarks>

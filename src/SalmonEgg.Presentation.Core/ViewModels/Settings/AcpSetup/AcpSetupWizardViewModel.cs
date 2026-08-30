@@ -68,14 +68,21 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     public ObservableCollection<AcpSetupParameterRowViewModel> Parameters { get; } = new();
 
     /// <summary>
-    /// Live installer output, capped so a chatty installer cannot grow without bound.
+    /// Live output of the install currently running or last run, capped so a chatty installer cannot grow
+    /// without bound.
     /// </summary>
     /// <remarks>
+    /// One collection for every install entry point, because the surface showing it is shared: a runtime
+    /// install starts from an agent row on the selection step and an adapter install from the component
+    /// step, and both are watched in the same place. Each install therefore clears this before it begins,
+    /// so the log on screen always belongs to the component named beside it.
+    ///
     /// <see cref="LatestInstallOutputLine"/> and <see cref="HasInstallOutput"/> are computed from this
     /// collection, and a collection's own change notifications say nothing about properties derived from
     /// it. Every mutation therefore goes through <see cref="AppendInstallOutput"/> or
-    /// <see cref="ResetInstallOutput"/>, which raise those two — mutating this collection directly
-    /// leaves the surface bound to a stale value.
+    /// <see cref="ResetInstallOutput"/>, which raise those two and marshal to the UI thread — mutating this
+    /// collection directly leaves the surface bound to a stale value, and does so from whichever thread the
+    /// caller happened to be on.
     /// </remarks>
     public ObservableCollection<string> InstallOutput { get; } = new();
 
@@ -376,12 +383,22 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
 
     // ── Detection ───────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Probes every catalog agent, searching the machine afresh.
+    /// </summary>
+    /// <remarks>
+    /// The search is invalidated first because this command is the button the wizard points a user at after
+    /// telling them to install a missing toolchain. Reusing the cached search would answer about the machine
+    /// as it was before they did so, and report the toolchain still absent no matter how many times they
+    /// pressed it.
+    /// </remarks>
     [RelayCommand(CanExecute = nameof(CanRunOperation))]
     private async Task DetectAgentsAsync(CancellationToken cancellationToken)
     {
         await RunOperationAsync(
             async token =>
             {
+                _orchestrator.InvalidateSearchPaths();
                 MarkAgentsChecking();
                 var states = await _orchestrator
                     .DetectAgentsAsync(CollectCommandOverrides(), token)
@@ -428,6 +445,10 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         await RunOperationAsync(
             async token =>
             {
+                // Same reason as DetectAgentsAsync: this command backs the "detect again" button the
+                // toolchain-missing surface offers, so it must look at the machine rather than at the
+                // search that was current when the wizard first said the toolchain was absent.
+                _orchestrator.InvalidateSearchPaths();
                 var overrides = CollectCommandOverrides();
                 var probe = await _orchestrator
                     .DetectComponentAsync(adapter.Component, overrides, token)
@@ -484,6 +505,12 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             return;
         }
 
+        // Each install starts from its own log. The output surface is shared by every install entry point,
+        // so without this a row install would open showing the lines a previous component produced,
+        // attributed to this one. Cleared before the operation starts so the panel is empty for the whole of
+        // it, rather than showing the previous log until the first line of this one arrives.
+        ResetInstallOutput();
+
         _ = RunOperationAsync(
             async token =>
             {
@@ -519,6 +546,9 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         {
             return;
         }
+
+        // Same reason as the row install: one shared surface, so each install starts from its own log.
+        ResetInstallOutput();
 
         await RunOperationAsync(
             async token =>
@@ -953,11 +983,23 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         });
     }
 
-    /// <summary>Clears installer output so a new component's install does not inherit the last one's.</summary>
+    /// <summary>
+    /// Clears installer output so a new component's install does not inherit the last one's.
+    /// </summary>
+    /// <remarks>
+    /// Marshalled like <see cref="AppendInstallOutput"/> rather than mutating the collection directly. This
+    /// collection is bound to a list, so a change raised off the UI thread is a crash on WinUI rather than a
+    /// glitch — and the callers are no longer all on that thread now that both install entry points clear
+    /// before starting. Routing it here means the guarantee holds wherever it is called from, instead of
+    /// resting on each call site sitting in the right place.
+    /// </remarks>
     private void ResetInstallOutput()
     {
-        InstallOutput.Clear();
-        NotifyInstallOutputChanged();
+        _uiDispatcher.Enqueue(() =>
+        {
+            InstallOutput.Clear();
+            NotifyInstallOutputChanged();
+        });
     }
 
     private void NotifyInstallOutputChanged()

@@ -79,6 +79,11 @@ internal sealed class StubExecutableProbe : IAcpExecutableProbe
 
     public bool SupportsProcessProbing { get; set; } = true;
 
+    /// <summary>How many times a caller asked for the search to be redone.</summary>
+    public int InvalidateCount { get; private set; }
+
+    public void InvalidateSearchPaths() => InvalidateCount++;
+
     public void SetExecutable(string command, string? path, string? version = null)
     {
         _paths[command] = path;
