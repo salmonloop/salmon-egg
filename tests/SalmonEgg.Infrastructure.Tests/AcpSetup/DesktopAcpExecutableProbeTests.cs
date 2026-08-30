@@ -322,7 +322,13 @@ public sealed class DesktopAcpExecutableProbeTests
             TestContext.Current.CancellationToken);
 
         Assert.True(result.IsInstalled);
-        Assert.Equal(manager.Path, result.QueryExecutablePath);
+        // Compared the way this platform compares file names. On Windows the probe appends an extension from
+        // PATHEXT, which is conventionally upper case, so the path it reports differs in case from the one on
+        // disk while naming the same file.
+        Assert.Equal(
+            manager.Path,
+            result.QueryExecutablePath,
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     }
 
     /// <summary>
