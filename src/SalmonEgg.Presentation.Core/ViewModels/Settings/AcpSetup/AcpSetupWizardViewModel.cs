@@ -107,6 +107,9 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(DetectAdapterCommand))]
     [NotifyCanExecuteChangedFor(nameof(TestCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    // Cancel is the one command enabled *by* being busy, so it tracks the same flag in the opposite
+    // direction rather than needing a signal of its own.
+    [NotifyCanExecuteChangedFor(nameof(CancelOperationCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -1038,6 +1041,39 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
     private bool CanRunOperation() => !IsBusy;
 
     /// <summary>
+    /// Asks the running operation to stop.
+    /// </summary>
+    /// <remarks>
+    /// Needed most by installs, which are the wizard's one genuinely long operation: a package manager
+    /// fetching over a slow network can sit for minutes, and the guard against that hanging forever is a
+    /// ten-minute timeout. Without a way out, a user who started the wrong install, or whose network
+    /// stalled, could only wait it out or kill the app.
+    ///
+    /// Cancelling is not the same as undoing. The package manager is killed with its process tree, which
+    /// leaves whatever it had already written on disk — so the re-probe after the operation is what says
+    /// where the component actually stands, exactly as it does for an install that ran to completion.
+    ///
+    /// Placed on the shared operation scope rather than per command because one entry point has no command
+    /// to cancel: an agent row raises an event, so a per-command token would leave the row's install — the
+    /// most likely one to need stopping — the only one that could not be.
+    ///
+    /// A no-op once the operation has released its cancellation source, which is briefly true while the busy
+    /// flag is still on its way to the UI thread. Doing nothing is the right answer there: the work being
+    /// cancelled has already finished.
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(IsBusy))]
+    private void CancelOperation() => _operationCancellation?.Cancel();
+
+    /// <summary>
+    /// Cancellation source for the operation in flight, or null when none is running.
+    /// </summary>
+    /// <remarks>
+    /// Single because <see cref="RunOperationAsync"/> admits one operation at a time; the busy flag it
+    /// checks is what makes that true.
+    /// </remarks>
+    private CancellationTokenSource? _operationCancellation;
+
+    /// <summary>
     /// Runs one wizard operation with the shared busy flag and failure surface, so no command has to
     /// re-implement that bookkeeping and none can leave the wizard stuck busy.
     /// </summary>
@@ -1050,11 +1086,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
             return;
         }
 
+        // Linked so both routes into cancellation work: the caller's own token — a command's token, or
+        // CancellationToken.None from an event-raised install — and the user pressing cancel.
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _operationCancellation = cancellation;
         IsBusy = true;
         ErrorMessage = string.Empty;
         try
         {
-            await operation(cancellationToken).ConfigureAwait(false);
+            await operation(cancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1069,7 +1109,15 @@ public sealed partial class AcpSetupWizardViewModel : ObservableObject
         }
         finally
         {
+            // Released before it is disposed, and disposed only after the busy flag has been cleared.
+            // The flag is marshalled to the UI thread, so it lands after this method has moved on: that
+            // leaves a window where the button is still enabled with nothing left to cancel. Clearing the
+            // field first makes a click in that window a no-op — the alternative order leaves the field
+            // pointing at a disposed source, where Cancel throws ObjectDisposedException inside a command
+            // handler.
+            _operationCancellation = null;
             await _uiDispatcher.EnqueueAsync(() => IsBusy = false).ConfigureAwait(false);
+            cancellation.Dispose();
         }
     }
 

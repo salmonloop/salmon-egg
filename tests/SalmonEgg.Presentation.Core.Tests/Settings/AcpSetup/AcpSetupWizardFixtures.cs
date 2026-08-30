@@ -10,6 +10,7 @@ using SalmonEgg.Domain.Models.AcpSetup;
 using SalmonEgg.Domain.Services;
 using SalmonEgg.Domain.Services.AcpSetup;
 using SalmonEgg.Presentation.Core.Resources;
+using SalmonEgg.Presentation.Core.Services;
 using SalmonEgg.Presentation.Core.Tests.Threading;
 using SalmonEgg.Presentation.ViewModels.Settings.AcpSetup;
 
@@ -188,6 +189,19 @@ internal sealed class StubComponentInstaller : IAcpComponentInstaller
     /// </summary>
     public List<AcpCommandOverrides?> ReceivedOverrides { get; } = new();
 
+    /// <summary>
+    /// Invoked with the token the install was handed, before any result is produced.
+    /// </summary>
+    /// <remarks>
+    /// Lets a test model an install that is still running: the real installer waits on a package manager,
+    /// which this stub cannot do without becoming a timing test. A hook that observes the token instead
+    /// lets the test assert what the token does, which is the whole contract cancellation rests on.
+    /// </remarks>
+    public Action<CancellationToken>? OnInstallWithToken { get; set; }
+
+    /// <summary>The token each install was handed, so a test can assert cancellation reached it.</summary>
+    public List<CancellationToken> ReceivedTokens { get; } = new();
+
     public Task<AcpComponentInstallResult> InstallAsync(
         AcpComponentDescriptor component,
         Action<string>? onOutput = null,
@@ -196,12 +210,18 @@ internal sealed class StubComponentInstaller : IAcpComponentInstaller
     {
         InstalledComponentIds.Add(component.Id);
         ReceivedOverrides.Add(overrides);
+        ReceivedTokens.Add(cancellationToken);
         foreach (var line in OutputLines)
         {
             onOutput?.Invoke(line);
         }
 
+        OnInstallWithToken?.Invoke(cancellationToken);
         OnInstall?.Invoke(component);
+
+        // Honoured the way the real installer does: a cancelled install reports cancellation rather than a
+        // result, so the wizard's own cancellation handling is what the test exercises.
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(_resultFactory(component));
     }
 }
@@ -388,7 +408,8 @@ internal static class AcpSetupWizardFixtures
         IAcpComponentInstaller installer,
         IAcpSetupConnectivityTester connectivityTester,
         IConfigurationService configurationService,
-        IStringLocalizer<CoreStrings>? localizer = null)
+        IStringLocalizer<CoreStrings>? localizer = null,
+        IUiDispatcher? uiDispatcher = null)
         => new(
             new AcpSetupWizardOrchestrator(
                 catalog,
@@ -396,7 +417,10 @@ internal static class AcpSetupWizardFixtures
                 installer,
                 connectivityTester,
                 configurationService),
-            new ImmediateUiDispatcher(),
+            // Immediate by default so most tests read as straight-line code. A test about what the wizard
+            // does while a UI update is still in flight supplies a queueing dispatcher instead, which is
+            // what the real WinUI one does: every marshalled write lands later, on another thread.
+            uiDispatcher ?? new ImmediateUiDispatcher(),
             NullLogger<AcpSetupWizardViewModel>.Instance,
             localizer);
 
