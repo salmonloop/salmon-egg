@@ -148,6 +148,65 @@ public sealed class LoginShellSearchPathSourceTests : IDisposable
         Assert.Empty(await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// Invalidating drops the capture, so the next call runs the shell again and sees what it now reports.
+    /// </summary>
+    /// <remarks>
+    /// A toolchain installer edits the very startup files this reads — nvm appends its sourcing lines to the
+    /// user's profile. So after the user installs one, the cached capture is the one answer guaranteed not to
+    /// mention it, and holding it for the process lifetime made the wizard's "install it, then detect again"
+    /// advice impossible to follow.
+    /// </remarks>
+    [Fact]
+    public async Task Invalidate_ShouldRecaptureWhatTheShellNowReports()
+    {
+        SkipOnWindows();
+
+        var shell = CreateShell();
+        var captures = 0;
+        var source = new LoginShellSearchPathSource(
+            marker =>
+            {
+                var path = Interlocked.Increment(ref captures) == 1 ? "/before" : "/before:/after-install";
+                return marker + $$"""{"PATH":"{{path}}"}""" + marker;
+            },
+            () => shell);
+
+        Assert.Equal(new[] { "/before" }, await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+
+        source.Invalidate();
+
+        Assert.Equal(
+            new[] { "/before", "/after-install" },
+            await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, captures);
+    }
+
+    /// <summary>
+    /// Reverse verification: without invalidating, the same source keeps answering from the first capture —
+    /// so the test above passes because the cache was dropped, not because it never cached.
+    /// </summary>
+    [Fact]
+    public async Task WithoutInvalidate_ShouldKeepAnsweringFromTheFirstCapture()
+    {
+        SkipOnWindows();
+
+        var shell = CreateShell();
+        var captures = 0;
+        var source = new LoginShellSearchPathSource(
+            marker =>
+            {
+                var path = Interlocked.Increment(ref captures) == 1 ? "/before" : "/before:/after-install";
+                return marker + $$"""{"PATH":"{{path}}"}""" + marker;
+            },
+            () => shell);
+
+        Assert.Equal(new[] { "/before" }, await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(new[] { "/before" }, await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, captures);
+    }
+
     [Fact]
     public void Constructor_WithNullCommandFactory_ShouldThrow()
         => Assert.Throws<ArgumentNullException>(() => new LoginShellSearchPathSource(null!));

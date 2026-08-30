@@ -28,7 +28,7 @@ public sealed class ToolchainScanSearchPathSource : IAcpSearchPathSource
     private readonly IReadOnlyList<AcpToolchainLayout> _layouts;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private IReadOnlyList<string>? _cached;
+    private volatile IReadOnlyList<string>? _cached;
 
     public ToolchainScanSearchPathSource(IReadOnlyList<AcpToolchainLayout>? layouts = null)
     {
@@ -51,14 +51,27 @@ public sealed class ToolchainScanSearchPathSource : IAcpSearchPathSource
                 return existing;
             }
 
-            _cached = Scan(cancellationToken);
-            return _cached;
+            // Returned from the local rather than by re-reading the field: an Invalidate arriving between the
+            // two would otherwise make this return null, which callers are promised never happens.
+            var scanned = Scan(cancellationToken);
+            _cached = scanned;
+            return scanned;
         }
         finally
         {
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// Drops the scan, so the next call walks the filesystem again.
+    /// </summary>
+    /// <remarks>
+    /// Cleared without taking the gate: a scan already in flight will overwrite this with its own result,
+    /// which is a scan of the machine as it was during that call rather than a stale one, and taking the
+    /// gate would make invalidation wait on the very scan it wants replaced.
+    /// </remarks>
+    public void Invalidate() => _cached = null;
 
     /// <summary>
     /// Expands every layout to the directories that exist, in layout order.

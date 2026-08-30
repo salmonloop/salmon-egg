@@ -242,6 +242,11 @@ public sealed class AcpToolchainDetectionTests
 
         public bool SupportsProcessProbing { get; set; } = true;
 
+        /// <summary>How many times a caller asked for the search to be redone.</summary>
+        public int InvalidateCount { get; private set; }
+
+        public void InvalidateSearchPaths() => InvalidateCount++;
+
         public List<string> ResolvedCommands { get; } = new();
 
         public void SetExecutable(string command, string? path) => _paths[command] = path;

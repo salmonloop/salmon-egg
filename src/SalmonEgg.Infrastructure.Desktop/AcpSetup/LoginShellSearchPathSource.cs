@@ -18,7 +18,9 @@ namespace SalmonEgg.Infrastructure.Desktop.AcpSetup;
 ///
 /// Captured once and reused. A capture spawns an interactive login shell, which runs the user's startup
 /// files and routinely takes seconds; repeating that per probe would multiply the cost across every
-/// component the wizard inspects, for an answer that does not change while the app runs.
+/// component the wizard inspects. The capture is dropped on <see cref="Invalidate"/> rather than held for
+/// the process lifetime, because a toolchain installer edits the very startup files this reads — so after
+/// the user installs one, the cached answer is the one thing guaranteed not to mention it.
 /// </remarks>
 public sealed class LoginShellSearchPathSource : IAcpSearchPathSource
 {
@@ -26,7 +28,7 @@ public sealed class LoginShellSearchPathSource : IAcpSearchPathSource
     private readonly Func<string, string> _printEnvironmentCommand;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private IReadOnlyList<string>? _cached;
+    private volatile IReadOnlyList<string>? _cached;
 
     /// <param name="printEnvironmentCommand">
     /// Builds a shell-ready command that prints the environment wrapped in the supplied marker.
@@ -62,14 +64,28 @@ public sealed class LoginShellSearchPathSource : IAcpSearchPathSource
                 return existing;
             }
 
-            _cached = await CaptureDirectoriesAsync(cancellationToken).ConfigureAwait(false);
-            return _cached;
+            // Returned from the local rather than by re-reading the field, for the same reason the scan
+            // source does: an Invalidate landing between the two would make this return null, which callers
+            // are promised never happens.
+            var captured = await CaptureDirectoriesAsync(cancellationToken).ConfigureAwait(false);
+            _cached = captured;
+            return captured;
         }
         finally
         {
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// Drops the captured environment, so the next call starts a fresh login shell.
+    /// </summary>
+    /// <remarks>
+    /// Cleared without taking the gate, for the same reason the scan source does: a capture in flight
+    /// overwrites this with a reading of the shell as it was during that call, and waiting on the gate would
+    /// block invalidation behind the capture it means to replace.
+    /// </remarks>
+    public void Invalidate() => _cached = null;
 
     private async Task<IReadOnlyList<string>> CaptureDirectoriesAsync(CancellationToken cancellationToken)
     {

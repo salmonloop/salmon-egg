@@ -19,6 +19,11 @@ public sealed class UnsupportedAcpExecutableProbe : IAcpExecutableProbe
 {
     public bool SupportsProcessProbing => false;
 
+    /// <summary>Nothing was ever searched for, so there is nothing to discard.</summary>
+    public void InvalidateSearchPaths()
+    {
+    }
+
     public Task<string?> ResolveExecutablePathAsync(
         string command,
         CancellationToken cancellationToken = default)

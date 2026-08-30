@@ -134,6 +134,10 @@ public sealed class AcpPackageManagerOverrideTests
 
         public bool SupportsProcessProbing => true;
 
+        public void InvalidateSearchPaths() => InvalidateCount++;
+
+        public int InvalidateCount { get; private set; }
+
         public Task<string?> ResolveExecutablePathAsync(
             string command,
             CancellationToken cancellationToken = default)

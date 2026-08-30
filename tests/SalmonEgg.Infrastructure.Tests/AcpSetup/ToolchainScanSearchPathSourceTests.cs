@@ -184,6 +184,64 @@ public sealed class ToolchainScanSearchPathSourceTests : IDisposable
             "b",
             AcpToolchainLayout.VersionWildcard));
 
+    /// <summary>
+    /// The wizard's own advice, end to end: it reports the toolchain missing, the user installs it, the user
+    /// presses detect again. That last step has to see the install.
+    /// </summary>
+    /// <remarks>
+    /// The scan is cached because the wizard probes many components and the filesystem does not change
+    /// mid-sweep. It does change between sweeps, and the one action the wizard asks the user to take is
+    /// exactly what changes it — so a cache with no way out reported the toolchain missing forever and the
+    /// only fix was restarting the app.
+    /// </remarks>
+    [Fact]
+    public async Task Invalidate_AfterAToolchainIsInstalled_ShouldReportIt()
+    {
+        var source = new ToolchainScanSearchPathSource(new[] { VersionedLayout() });
+        var before = await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(before);
+
+        var installed = CreateDirectory("versions", "v24.14.1", "bin");
+        source.Invalidate();
+
+        var after = await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(installed, Assert.Single(after));
+    }
+
+    /// <summary>
+    /// Reverse verification: without the invalidation the same install stays invisible, so the test above
+    /// passes because the cache was dropped rather than because the scan never cached at all.
+    /// </summary>
+    [Fact]
+    public async Task WithoutInvalidate_AToolchainInstalledLater_StaysInvisible()
+    {
+        var source = new ToolchainScanSearchPathSource(new[] { VersionedLayout() });
+        Assert.Empty(await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+
+        CreateDirectory("versions", "v24.14.1", "bin");
+
+        Assert.Empty(await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Invalidating before anything was cached, and twice in a row, must both be harmless: callers
+    /// invalidate on every user-requested detection without knowing whether a scan has happened.
+    /// </summary>
+    [Fact]
+    public async Task Invalidate_BeforeAnyScanAndTwice_ShouldStillScan()
+    {
+        var installed = CreateDirectory("versions", "v22.0.0", "bin");
+        var source = new ToolchainScanSearchPathSource(new[] { VersionedLayout() });
+
+        source.Invalidate();
+        source.Invalidate();
+
+        Assert.Equal(
+            installed,
+            Assert.Single(await source.GetSearchDirectoriesAsync(TestContext.Current.CancellationToken)));
+    }
+
     private async Task<IReadOnlyList<string>> ScanAsync(params AcpToolchainLayout[] layouts)
         => await new ToolchainScanSearchPathSource(layouts)
             .GetSearchDirectoriesAsync(TestContext.Current.CancellationToken);
