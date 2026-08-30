@@ -237,32 +237,37 @@
                                      x:Uid="AcpSetup_AdapterMissingBar"
                                      IsOpen="{x:Bind ViewModel.IsAdapterMissing, Mode=OneWay}"
                                      Severity="Warning"
-                                     IsClosable="False">
-                                <!-- Two actions, so they go in Content: ActionButton holds a single
-                                     ButtonBase and a panel there would not render as buttons. -->
-                                <InfoBar.Content>
-                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                                        <Button x:Name="AcpSetupInstallAdapterButton"
-                                                x:Uid="AcpSetup_InstallAdapter"
-                                                Style="{StaticResource AccentButtonStyle}"
-                                                AutomationProperties.AutomationId="AcpSetup.Adapter.Install"
-                                                Command="{x:Bind ViewModel.InstallAdapterCommand}"/>
-                                        <Button x:Name="AcpSetupRedetectAdapterButton"
-                                                x:Uid="AcpSetup_RedetectAdapter"
-                                                AutomationProperties.AutomationId="AcpSetup.Adapter.Redetect"
-                                                Command="{x:Bind ViewModel.DetectAdapterCommand}"/>
-                                        <!-- The install button above is command-bound, so a missing
-                                             toolchain already disables it. A disabled button explains
-                                             nothing on its own, so the way forward is offered beside it:
-                                             the toolchain's own documentation, named in the text below. -->
-                                        <HyperlinkButton x:Name="AcpSetupAdapterToolchainDocsButton"
-                                                         x:Uid="AcpSetup_InstallToolchainDocs"
-                                                         NavigateUri="{x:Bind ViewModel.AdapterToolchainDocumentation, Mode=OneWay}"
-                                                         AutomationProperties.AutomationId="AcpSetup.Adapter.ToolchainDocs"
-                                                         Visibility="{x:Bind ViewModel.IsAdapterToolchainMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                    </StackPanel>
-                                </InfoBar.Content>
-                            </InfoBar>
+                                     IsClosable="False"/>
+                            <!-- The three recovery actions sit beside the verdict instead of inside
+                                 it. The InfoBar template places Content on a second row below the
+                                 icon-height first row, so buttons hosted there float in the gap
+                                 under the text and end flush against the bar's bottom border, and
+                                 both spacings shift again once the panel stacks vertically.
+                                 ActionButton holds a single ButtonBase, so it cannot carry the
+                                 three actions either; a plain row in the step's flow is the one
+                                 place whose spacing holds on every platform and width. -->
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        Visibility="{x:Bind ViewModel.IsAdapterMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button x:Name="AcpSetupInstallAdapterButton"
+                                        x:Uid="AcpSetup_InstallAdapter"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        AutomationProperties.AutomationId="AcpSetup.Adapter.Install"
+                                        Command="{x:Bind ViewModel.InstallAdapterCommand}"/>
+                                <Button x:Name="AcpSetupRedetectAdapterButton"
+                                        x:Uid="AcpSetup_RedetectAdapter"
+                                        AutomationProperties.AutomationId="AcpSetup.Adapter.Redetect"
+                                        Command="{x:Bind ViewModel.DetectAdapterCommand}"/>
+                                <!-- The install button above is command-bound, so a missing
+                                     toolchain already disables it. A disabled button explains
+                                     nothing on its own, so the way forward is offered beside it:
+                                     the toolchain's own documentation, named in the text below. -->
+                                <HyperlinkButton x:Name="AcpSetupAdapterToolchainDocsButton"
+                                                 x:Uid="AcpSetup_InstallToolchainDocs"
+                                                 NavigateUri="{x:Bind ViewModel.AdapterToolchainDocumentation, Mode=OneWay}"
+                                                 AutomationProperties.AutomationId="AcpSetup.Adapter.ToolchainDocs"
+                                                 Visibility="{x:Bind ViewModel.IsAdapterToolchainMissing, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
 
                             <!-- Named separately from the warning above because it is a different
                                  problem with a different fix: the adapter is installable, but nothing on
