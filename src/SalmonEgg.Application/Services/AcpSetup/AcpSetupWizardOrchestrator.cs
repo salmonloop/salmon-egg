@@ -99,6 +99,16 @@ public sealed class AcpSetupWizardOrchestrator
         => _detector.DetectToolchainAsync(component, overrides, cancellationToken);
 
     /// <summary>
+    /// Makes the next detection search the machine again instead of answering from a cached search.
+    /// </summary>
+    /// <remarks>
+    /// For callers re-detecting because the user asked. A search is cached to keep the wizard from spawning
+    /// a login shell per component, which means the answer outlives whatever the user did in between — and
+    /// what the wizard asks them to do is install the missing toolchain and detect again.
+    /// </remarks>
+    public void InvalidateSearchPaths() => _detector.InvalidateSearchPaths();
+
+    /// <summary>
     /// Installs a component and re-probes it, so callers always see verified availability rather than
     /// trusting the installer's exit code.
     /// </summary>
@@ -115,6 +125,13 @@ public sealed class AcpSetupWizardOrchestrator
         var install = await _installer
             .InstallAsync(component, onOutput, overrides, cancellationToken)
             .ConfigureAwait(false);
+
+        // An install is the one moment this layer knows the machine changed, so the re-probe below must not
+        // reuse the search that was current before it. A package manager places a new executable in its own
+        // bin directory, and a first install through a manager can create that directory outright — which a
+        // cached directory list cannot contain.
+        _detector.InvalidateSearchPaths();
+
         var probe = await _detector
             .DetectAsync(component, overrides, cancellationToken)
             .ConfigureAwait(false);

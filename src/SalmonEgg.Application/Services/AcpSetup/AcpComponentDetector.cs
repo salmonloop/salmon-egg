@@ -22,6 +22,16 @@ public sealed class AcpComponentDetector
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
     }
 
+    /// <summary>
+    /// Makes the next detection look at the machine again rather than answer from a cached search.
+    /// </summary>
+    /// <remarks>
+    /// Routed through here because this type owns the probe. A caller that re-detects on the user's request
+    /// is asserting the machine may have changed — which is exactly what happens after the wizard's own
+    /// "install the toolchain, then detect again" advice is followed.
+    /// </remarks>
+    public void InvalidateSearchPaths() => _probe.InvalidateSearchPaths();
+
     /// <param name="overrides">
     /// User-supplied paths for commands the catalog names by executable name. Applied here so a probe
     /// answers about the executable the launch plan will actually run; see

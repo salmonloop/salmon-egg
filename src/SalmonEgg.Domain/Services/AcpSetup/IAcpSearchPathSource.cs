@@ -35,6 +35,23 @@ public interface IAcpSearchPathSource
     /// Empty rather than throwing when this source has nothing to contribute or could not answer. A
     /// source that fails must not deny the search the directories other sources found, and must never
     /// prevent the inherited PATH from being used.
+    ///
+    /// A source may cache its answer, and both shipped ones do — one spawns a login shell, the other walks
+    /// the filesystem, and the wizard probes many components. Callers must therefore treat a repeat call as
+    /// possibly answering from before, and use <see cref="Invalidate"/> when the machine may have changed.
     /// </remarks>
     Task<IReadOnlyList<string>> GetSearchDirectoriesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Discards any cached answer, so the next call looks at the machine again.
+    /// </summary>
+    /// <remarks>
+    /// Part of the seam rather than an implementation detail, because caching is only defensible with a way
+    /// out of it. The wizard's own flow ends in "install the toolchain, then detect again": without this,
+    /// the answer captured before the install is the one every later probe sees, and a user who did exactly
+    /// what the wizard asked is told the toolchain is still missing until they restart the app.
+    ///
+    /// Idempotent and safe on a source that caches nothing, so callers need not know which do.
+    /// </remarks>
+    void Invalidate();
 }

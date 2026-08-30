@@ -29,6 +29,20 @@ public interface IAcpExecutableProbe
     Task<string?> ResolveExecutablePathAsync(string command, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Discards anything this probe cached about where executables live, so the next resolution looks at
+    /// the machine again.
+    /// </summary>
+    /// <remarks>
+    /// Exposed because the wizard's own advice creates the stale state: it tells a user to install a
+    /// toolchain and then detect again, and a probe that answered from before the install reports the
+    /// toolchain still missing. Only the caller knows that the machine may have changed between two probes,
+    /// so the decision to re-look belongs here rather than to a heuristic inside an implementation.
+    ///
+    /// Idempotent, and a no-op on a probe that caches nothing.
+    /// </remarks>
+    void InvalidateSearchPaths();
+
+    /// <summary>
     /// Resolves every distinct executable <paramref name="command"/> matches, in PATH precedence order.
     /// </summary>
     /// <remarks>
