@@ -36,6 +36,18 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
 
     public bool SupportsProcessProbing => true;
 
+    /// <summary>
+    /// Forwards invalidation to every source. The inherited PATH is re-read on each resolution already, so
+    /// the sources hold the only cached state there is.
+    /// </summary>
+    public void InvalidateSearchPaths()
+    {
+        foreach (var source in _searchPathSources)
+        {
+            source.Invalidate();
+        }
+    }
+
     public async Task<string?> ResolveExecutablePathAsync(
         string command,
         CancellationToken cancellationToken = default)
@@ -103,6 +115,14 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         return directories;
     }
 
+    /// <summary>
+    /// Runs the command's version arguments and returns the first line it printed.
+    /// </summary>
+    /// <remarks>
+    /// Resolved through the widened search, the same way detection resolves it. Anything narrower reads a
+    /// version for a command the sources found only when PATH could have found it too — so a component
+    /// living in a version-manager directory showed as installed with no version beside it.
+    /// </remarks>
     public async Task<string?> ReadVersionAsync(
         string command,
         IReadOnlyList<string> versionArguments,
@@ -113,7 +133,8 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
             return null;
         }
 
-        var executable = ResolveExecutablePath(command);
+        var executable = await ResolveExecutablePathAsync(command, cancellationToken)
+            .ConfigureAwait(false);
         if (executable is null)
         {
             return null;
@@ -137,6 +158,12 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
     /// never a manager's answer: a manager that ran and said "no" has answered for the toolchain the
     /// caller chose, and trying the next candidate would replace that answer with one about a different
     /// toolchain.
+    ///
+    /// Each candidate is resolved through the widened search, not the inherited PATH: the sources exist
+    /// because a GUI process cannot see a version manager's directories, and a manager reachable only
+    /// through them is the ordinary case on such a machine. Resolving here against PATH alone reported
+    /// <see cref="AcpPackageQueryResult.Unknown()"/> with no executable named, so every package-detected
+    /// component came back undetermined with nothing on screen naming the cause.
     /// </remarks>
     public async Task<AcpPackageQueryResult> LocateGlobalPackageAsync(
         AcpDistributionKind distribution,
@@ -154,7 +181,9 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         foreach (var candidate in packageManager.Commands)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (ResolveExecutablePath(candidate) is { } executable)
+            var executable = await ResolveExecutablePathAsync(candidate, cancellationToken)
+                .ConfigureAwait(false);
+            if (executable is not null)
             {
                 return await QueryPackageListAsync(executable, arguments, packageId, cancellationToken)
                     .ConfigureAwait(false);
@@ -337,37 +366,6 @@ public sealed class DesktopAcpExecutableProbe : IAcpExecutableProbe
         }
 
         return candidates;
-    }
-
-    /// <summary>
-    /// Resolves <paramref name="command"/> against the inherited PATH only.
-    /// </summary>
-    /// <remarks>
-    /// Used by the paths that run a process they have already decided on. It stays synchronous and
-    /// PATH-only because those callers were handed a command that a source already resolved, or a bare name
-    /// whose own resolution is the caller's question rather than this method's.
-    /// </remarks>
-    private static string? ResolveExecutablePath(string command)
-    {
-        if (string.IsNullOrWhiteSpace(command))
-        {
-            return null;
-        }
-
-        var trimmed = command.Trim();
-        if (trimmed.IndexOfAny(new[] { '/', '\\' }) >= 0)
-        {
-            return File.Exists(trimmed) ? Path.GetFullPath(trimmed) : null;
-        }
-
-        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-        var directories = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-            .Split(
-                isWindows ? ';' : ':',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var candidates = FindCandidates(trimmed, directories);
-        return candidates.Count == 0 ? null : candidates[0];
     }
 
     /// <summary>
