@@ -376,42 +376,6 @@
                                       DisplayMemberPath="Component.DisplayName"
                                       MinWidth="280"
                                       HorizontalAlignment="Left"/>
-                            <!-- Installer progress. The latest line stays visible while it runs; the
-                                 full log is one disclosure away because it only matters on failure. -->
-                            <StackPanel Spacing="8"
-                                        Visibility="{x:Bind ViewModel.HasInstallOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <TextBlock x:Name="AcpSetupInstallOutputLatest"
-                                           Text="{x:Bind ViewModel.LatestInstallOutputLine, Mode=OneWay}"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           FontFamily="Consolas"
-                                           TextWrapping="NoWrap"
-                                           TextTrimming="CharacterEllipsis"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           AutomationProperties.AutomationId="AcpSetup.Install.LatestLine"/>
-                                <Expander x:Name="AcpSetupInstallOutputExpander"
-                                          IsExpanded="False"
-                                          HorizontalAlignment="Stretch"
-                                          HorizontalContentAlignment="Stretch">
-                                    <Expander.Header>
-                                        <TextBlock x:Uid="AcpSetup_InstallOutputToggle"/>
-                                    </Expander.Header>
-                                    <ListView x:Name="AcpSetupInstallOutputList"
-                                              ItemsSource="{x:Bind ViewModel.InstallOutput}"
-                                              SelectionMode="None"
-                                              MaxHeight="200"
-                                              AutomationProperties.AutomationId="AcpSetup.Install.Output">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="x:String">
-                                                <TextBlock Text="{x:Bind}"
-                                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                                           FontFamily="Consolas"
-                                                           IsTextSelectionEnabled="True"
-                                                           TextWrapping="Wrap"/>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
-                                </Expander>
-                            </StackPanel>
                         </StackPanel>
 
                         <!-- ── Step 3: launch parameters ───────────────────── -->
@@ -522,6 +486,52 @@
                                      IsOpen="{x:Bind ViewModel.HasSavedProfile, Mode=OneWay}"
                                      Severity="Success"
                                      IsClosable="False"/>
+                        </StackPanel>
+
+                        <!-- Installer progress, shared by every install entry point.
+
+                             Sits at this level rather than inside a step panel because installs start
+                             from two places: the agent row's inline button on step 1, and the adapter
+                             button on step 2. Nested inside step 2, a row install on step 1 showed only
+                             the shared spinner — the output was being produced into a subtree that step
+                             was not rendering.
+
+                             The latest line stays visible while it runs; the full log is one disclosure
+                             away because it only matters on failure. HasInstallOutput keeps the whole
+                             panel absent until an install has actually produced something. -->
+                        <StackPanel Spacing="8"
+                                    Visibility="{x:Bind ViewModel.HasInstallOutput, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock x:Name="AcpSetupInstallOutputLatest"
+                                       Text="{x:Bind ViewModel.LatestInstallOutputLine, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       FontFamily="Consolas"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       AutomationProperties.AutomationId="AcpSetup.Install.LatestLine"/>
+                            <Expander x:Name="AcpSetupInstallOutputExpander"
+                                      IsExpanded="False"
+                                      HorizontalAlignment="Stretch"
+                                      HorizontalContentAlignment="Stretch">
+                                <Expander.Header>
+                                    <TextBlock x:Uid="AcpSetup_InstallOutputToggle"/>
+                                </Expander.Header>
+                                <ListView x:Name="AcpSetupInstallOutputList"
+                                          ItemsSource="{x:Bind ViewModel.InstallOutput}"
+                                          SelectionMode="None"
+                                          MaxHeight="200"
+                                          AutomationProperties.AutomationId="AcpSetup.Install.Output">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{x:Bind}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       FontFamily="Consolas"
+                                                       IsTextSelectionEnabled="True"
+                                                       TextWrapping="Wrap"/>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Expander>
                         </StackPanel>
 
                         <!-- Busy feedback shared by every long operation. -->
