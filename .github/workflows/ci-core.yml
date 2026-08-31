@@ -139,3 +139,28 @@ jobs:
         with:
           name: coverage-report
           path: "**/coverage*.xml"
+
+  # Its own job, on Linux, deliberately. This gate parses workflow YAML and touches neither .NET nor the
+  # solution, so pinning it to the Windows build job would couple a static rule to a 45-minute build and
+  # make it wait on a toolchain it does not use. It also needs Python: every other .py gate in
+  # scripts/gates runs only on ubuntu runners, and whether `python3` resolves inside Windows Git Bash is
+  # not a bet worth taking for a gate whose entire value is failing closed.
+  workflow-workspace-contract:
+    name: Workflow Workspace Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The rule rehearses its own failure cases before it judges the repository. A gate that has never
+      # been shown to fail is indistinguishable from a gate that passes everything -- which is precisely
+      # how the defect it catches reached two releases.
+      - name: Run workflow workspace contract gate self-test
+        run: ./scripts/gates/run-workflow-workspace-contract-gate.sh --self-test
+
+      - name: Run workflow workspace contract gate
+        run: ./scripts/gates/run-workflow-workspace-contract-gate.sh
