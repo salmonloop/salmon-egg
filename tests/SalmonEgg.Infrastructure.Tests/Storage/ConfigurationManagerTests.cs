@@ -270,6 +270,143 @@ public sealed class ConfigurationManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadConfigurationAsync_WithSchemaVersion3File_DefaultsVerificationToUnknown()
+    {
+        const string configId = "schema-v3-no-verification-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 3
+            id: schema-v3-no-verification-001
+            name: Legacy Profile
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """, TestContext.Current.CancellationToken);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(ProfileVerification.Unknown, loaded!.Verification);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithUnknownVerification_OmitsVerificationKeys()
+    {
+        var config = CreateTestConfiguration("verification-unknown-001");
+        config.Verification = ProfileVerification.Unknown;
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("verification:", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("verified_at_utc:", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Equal(ProfileVerification.Unknown, loaded!.Verification);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithUnverifiedVerification_RoundTripsWithoutTimestamp()
+    {
+        var config = CreateTestConfiguration("verification-unverified-001");
+        config.Verification = ProfileVerification.Unverified;
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        Assert.Contains("verification: unverified", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("verified_at_utc:", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Equal(ProfileVerification.Unverified, loaded!.Verification);
+    }
+
+    [Fact]
+    public async Task SaveConfigurationAsync_WithVerifiedVerification_RoundTripsUtcTimestamp()
+    {
+        var config = CreateTestConfiguration("verification-verified-001");
+        var passedAt = new DateTimeOffset(2026, 8, 30, 20, 15, 30, TimeSpan.FromHours(8));
+        config.Verification = ProfileVerification.Verified(passedAt);
+
+        await _configManager.SaveConfigurationAsync(config);
+
+        var yaml = await File.ReadAllTextAsync(GetServerYamlPath(config.Id), TestContext.Current.CancellationToken);
+        Assert.Contains("verification: verified", yaml, StringComparison.Ordinal);
+        Assert.Contains("verified_at_utc:", yaml, StringComparison.Ordinal);
+
+        var loaded = await _configManager.LoadConfigurationAsync(config.Id);
+        Assert.NotNull(loaded);
+        Assert.Equal(config.Verification, loaded!.Verification);
+        Assert.Equal(TimeSpan.Zero, loaded.Verification.VerifiedAtUtc!.Value.Offset);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WithUnknownVerificationToken_DefaultsToUnknown()
+    {
+        const string configId = "verification-future-token-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 4
+            id: verification-future-token-001
+            name: Future Verification
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            verification: conditionally_verified
+            verified_at_utc: 2026-08-30T12:15:30.0000000+00:00
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """, TestContext.Current.CancellationToken);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(ProfileVerification.Unknown, loaded!.Verification);
+    }
+
+    [Fact]
+    public async Task LoadConfigurationAsync_WithVerifiedVerdictButMissingTimestamp_DefaultsToUnknown()
+    {
+        const string configId = "verification-missing-timestamp-001";
+        var path = GetServerYamlPath(configId);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """
+            schema_version: 4
+            id: verification-missing-timestamp-001
+            name: Missing Verification Evidence
+            transport: websocket
+            server_url: ws://localhost:8080
+            connection_timeout_seconds: 10
+            verification: verified
+            authentication:
+              mode: none
+            proxy:
+              mode: system
+            """, TestContext.Current.CancellationToken);
+
+        var loaded = await _configManager.LoadConfigurationAsync(configId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(ProfileVerification.Unknown, loaded!.Verification);
+    }
+
+    [Fact]
     public async Task TransportPersistence_WritesAndReadsCanonicalStreamableHttp()
     {
         var config = CreateTestConfiguration("streamable-http-001");
