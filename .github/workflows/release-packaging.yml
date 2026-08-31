@@ -539,10 +539,24 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
+      # Checkout leads this job because the step below reads global.json out of the workspace. When
+      # `Setup .NET` came first the SDK pin resolved against an empty workspace and every tag build died
+      # on "The specified global.json file 'global.json' does not exist" -- after all seven packaging jobs
+      # had already succeeded, so the release ended up tagged with zero assets.
+      #
+      # The tree lands in `repo/` rather than the workspace root so the artifact downloads below own the
+      # root without colliding with tracked paths, and `global-json-file` is pointed at it. Full history
+      # is required: the CLI asset step reads the display version from MinVer, which needs the tags.
+      - name: Checkout for release tooling
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          path: repo
+          fetch-depth: 0
+
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          global-json-file: global.json
+          global-json-file: repo/global.json
 
       - name: Download Windows MSIX artifact
         if: needs.package-windows-msix.result == 'success'
@@ -578,12 +592,6 @@ jobs:
         with:
           name: desktop-macos-dmg
           path: macos-dmg
-
-      - name: Checkout for release tooling
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          path: repo
-          fetch-depth: 0
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0

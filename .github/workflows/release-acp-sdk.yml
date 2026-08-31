@@ -113,6 +113,21 @@ jobs:
       # should be able to request an identity token.
       id-token: write
     steps:
+      # This job never checked out at all: it downloads a prebuilt package and pushes it, so nothing
+      # here reads tracked source. But `global-json-file` does read a tracked file, and with no
+      # checkout it resolves against an empty workspace. The same defect broke every
+      # release-packaging tag build; it survived here only because the last SDK publish predates the
+      # switch from `dotnet-version` to `global.json`, so this path has never actually run.
+      #
+      # Sparse: global.json is the only tracked file this job touches. The package it pushes comes
+      # from the `pack` job's artifact, not from source.
+      - name: Checkout for the SDK pin
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          sparse-checkout: global.json
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
