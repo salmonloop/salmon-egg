@@ -290,12 +290,13 @@ public sealed class AcpSetupWizardViewModelTests
         // The launcher the plan runs is the adapter's, not the runtime's, so the override belongs here.
         Assert.Equal("npx", wizard.AdapterProbeCommand);
         wizard.AdapterCustomCommand = customNpx;
-        await wizard.GoNextCommand.ExecuteAsync(null); // -> Parameters
+        await wizard.DetectAdapterCommand.ExecuteAsync(null);
+        Assert.True(wizard.IsAdapterUsable);
+        await wizard.GoNextCommand.ExecuteAsync(null); // -> Test; the empty parameter step is folded
 
         // The preview a user reviews before testing must already show the path they supplied.
         Assert.StartsWith(customNpx, wizard.LaunchCommandPreview, StringComparison.Ordinal);
 
-        await wizard.GoNextCommand.ExecuteAsync(null); // -> Test
         await wizard.TestCommand.ExecuteAsync(null);
         Assert.True(wizard.IsTestSuccessful);
         // What was tested carries the override too, so the verdict is about the real command.
@@ -363,9 +364,11 @@ public sealed class AcpSetupWizardViewModelTests
     /// Built-in is now its own state, separate from "installed", so the step can say why it is satisfied.
     /// </summary>
     [Fact]
-    public async Task BuiltInAdapter_ReportsBuiltIn_NotInstalled_AndAllowsAdvance()
+    public async Task BuiltInAdapter_WhenItIsTheOnlyChoice_AutoSkipsComponentSetup()
     {
-        var agent = AcpSetupWizardFixtures.Agent(adapters: AcpSetupWizardFixtures.BuiltInAdapter());
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", defaultValue: "sonnet");
+        var agent = AcpSetupWizardFixtures.Agent(
+            adapters: AcpSetupWizardFixtures.BuiltInAdapter(parameters: parameter));
         var wizard = CreateWizardFor(
             agent,
             ProbeForInstalledRuntime(),
@@ -375,13 +378,26 @@ public sealed class AcpSetupWizardViewModelTests
         wizard.SelectedAgent = Assert.Single(wizard.Agents);
         await wizard.GoNextCommand.ExecuteAsync(null);
 
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
         Assert.True(wizard.IsAdapterBuiltIn);
         Assert.False(wizard.IsAdapterInstalled);
         Assert.False(wizard.IsAdapterMissing);
         Assert.False(wizard.IsAdapterUndetermined);
+        Assert.Equal("sonnet", Assert.Single(wizard.Parameters).Value);
         // A built-in adapter has no launcher to name, so the override disclosure stays hidden.
         Assert.False(wizard.HasAdapterProbeCommand);
         Assert.True(wizard.GoNextCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Parameters_WhenTemplateIsEmpty_AutoSkipsToTestAfterPreparingThePlan()
+    {
+        var (wizard, _, _) = await WalkToTestStepAsync();
+
+        Assert.Equal(AcpSetupWizardStep.Test, wizard.Step);
+        Assert.Empty(wizard.Parameters);
+        Assert.Contains(AcpSetupWizardFixtures.AdapterPackage, wizard.LaunchCommandPreview, StringComparison.Ordinal);
+        Assert.True(wizard.IsSkipTestVisible);
     }
 
     /// <summary>
@@ -592,11 +608,11 @@ public sealed class AcpSetupWizardViewModelTests
         var zh = new MutableTestCoreStringLocalizer();
         zh.Set("zh-Hans", "AcpSetup_Step_Position", "第 {0} 步，共 {1} 步");
         var (wizardZh, _, _) = await WalkToComponentSetupAsync(localizer: zh);
-        Assert.Equal("第 2 步，共 5 步", wizardZh.StepPositionText);
+        Assert.Equal("第 2 步，共 4 步", wizardZh.StepPositionText);
 
         // Without a localizer the fallback template formats, so the position is still stated.
         var (wizardFallback, _, _) = await WalkToComponentSetupAsync(localizer: null);
-        Assert.Equal("Step 2 of 5", wizardFallback.StepPositionText);
+        Assert.Equal("Step 2 of 4", wizardFallback.StepPositionText);
     }
 
     [Fact]
@@ -619,6 +635,11 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.True(wizard.IsAdapterMissing);
         Assert.Contains("/test/bin/npm", wizard.AdapterProbeDetail, StringComparison.Ordinal);
         Assert.False(wizard.GoNextCommand.CanExecute(null));
+
+        // A stale binding can still invoke an async command directly. The handler must keep the same gate
+        // as CanExecute, otherwise automatic folding would become a back door around a missing adapter.
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
 
         // Installing flips the package answer; the orchestrator re-probes after the install.
         installer.OnInstall = _ => probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, true);
@@ -665,7 +686,8 @@ public sealed class AcpSetupWizardViewModelTests
     [Fact]
     public async Task GoBack_RewindsOneStepAtATime_AndClearsErrorSurface()
     {
-        var (wizard, tester, configuration) = await WalkToTestAsync();
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", defaultValue: "sonnet");
+        var (wizard, tester, configuration) = await WalkToTestAsync(parameters: new[] { parameter });
 
         wizard.ErrorMessage = "boom";
         wizard.GoBackCommand.Execute(null);
@@ -681,21 +703,72 @@ public sealed class AcpSetupWizardViewModelTests
     }
 
     [Fact]
+    public async Task GoBack_WhenIntermediateStepsWereFolded_ReturnsToThePreviousVisibleStep()
+    {
+        var wizard = CreateWizard();
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = Assert.Single(wizard.Agents);
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        Assert.Equal(AcpSetupWizardStep.Test, wizard.Step);
+        Assert.Equal("Step 2 of 3", wizard.StepPositionText);
+
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.AgentSelection, wizard.Step);
+        Assert.False(wizard.GoBackCommand.CanExecute(null));
+
+        await wizard.GoNextCommand.ExecuteAsync(null);
+        Assert.Equal(AcpSetupWizardStep.Test, wizard.Step);
+    }
+
+    [Fact]
     public async Task Test_SuccessfulHandshake_UnlocksSaveAndCarriesPlan()
     {
-        var (wizard, tester, configuration) = await WalkToTestStepAsync();
+        var verifiedAt = new DateTimeOffset(2026, 8, 30, 12, 34, 56, TimeSpan.Zero);
+        var (wizard, tester, configuration) = await WalkToTestStepAsync(
+            timeProvider: new FixedTimeProvider(verifiedAt));
 
         await wizard.TestCommand.ExecuteAsync(null);
 
         Assert.True(wizard.IsTestSuccessful);
+        Assert.Equal(ProfileVerificationState.Verified, wizard.Verification.State);
+        Assert.Equal(verifiedAt, wizard.Verification.VerifiedAtUtc);
         Assert.Equal(1, tester.TestCount);
         // The walk adapter is npx-packaged, so the plan launches through npx.
         Assert.NotNull(tester.LastPlan);
-        Assert.Equal("npx", tester.LastPlan!.Command);
+        Assert.Equal("/usr/bin/npx", tester.LastPlan!.Command);
         Assert.Contains(AcpSetupWizardFixtures.AdapterPackage, tester.LastPlan!.Arguments, StringComparer.Ordinal);
         // The name is still empty at this point, so save stays locked until the user names it.
         Assert.False(wizard.SaveCommand.CanExecute(null));
         Assert.True(wizard.GoNextCommand.CanExecute(null));
+        Assert.False(wizard.IsSkipTestVisible);
+        Assert.False(wizard.SkipTestCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task SkipTest_RecordsUnverifiedAndAllowsSavingWithoutRunningTheTester()
+    {
+        var (wizard, tester, configuration) = await WalkToTestStepAsync();
+
+        Assert.Equal(ProfileVerificationState.Unknown, wizard.Verification.State);
+        Assert.True(wizard.IsSkipTestVisible);
+        Assert.True(wizard.SkipTestCommand.CanExecute(null));
+
+        wizard.SkipTestCommand.Execute(null);
+
+        Assert.Equal(AcpSetupWizardStep.Save, wizard.Step);
+        Assert.Equal("Test Agent", wizard.ProfileName);
+        Assert.Equal(ProfileVerificationState.Unverified, wizard.Verification.State);
+        Assert.Null(wizard.Verification.VerifiedAtUtc);
+        Assert.False(wizard.IsSkipTestVisible);
+        Assert.Equal(0, tester.TestCount);
+        Assert.True(wizard.SaveCommand.CanExecute(null));
+
+        await wizard.SaveCommand.ExecuteAsync(null);
+
+        var saved = Assert.Single(configuration.Saved);
+        Assert.Equal(ProfileVerificationState.Unverified, saved.Verification.State);
+        Assert.Null(saved.Verification.VerifiedAtUtc);
     }
 
     [Fact]
@@ -822,7 +895,9 @@ public sealed class AcpSetupWizardViewModelTests
     [Fact]
     public async Task Save_AfterSuccessfulTest_PersistsStdioProfileShape()
     {
-        var (wizard, tester, configuration) = await WalkToTestAsync();
+        var verifiedAt = new DateTimeOffset(2026, 8, 30, 1, 2, 3, TimeSpan.Zero);
+        var (wizard, tester, configuration) = await WalkToTestAsync(
+            timeProvider: new FixedTimeProvider(verifiedAt));
 
         await wizard.GoNextCommand.ExecuteAsync(null); // → Save; name prefilled from the agent
         Assert.Equal("Test Agent", wizard.ProfileName);
@@ -833,23 +908,56 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.Same(saved, wizard.SavedProfile);
         Assert.Equal("Test Agent", saved.Name);
         Assert.Equal(TransportType.Stdio, saved.Transport);
-        Assert.Equal("npx", saved.StdioCommand);
+        Assert.Equal("/usr/bin/npx", saved.StdioCommand);
         Assert.Contains(AcpSetupWizardFixtures.AdapterPackage, saved.StdioArguments!, StringComparer.Ordinal);
+        Assert.Equal(ProfileVerificationState.Verified, saved.Verification.State);
+        Assert.Equal(verifiedAt, saved.Verification.VerifiedAtUtc);
         Assert.True(wizard.IsOnSave);
     }
 
     [Fact]
-    public async Task Save_RequiresSuccessfulTest_EvenWhenInvokedDirectly()
+    public async Task Save_RequiresAnExplicitVerdict_EvenWhenInvokedDirectly()
     {
         var (wizard, tester, configuration) = await WalkToTestStepAsync();
 
-        Assert.False(wizard.SaveCommand.CanExecute(null), "an untested draft must not be savable");
+        Assert.False(wizard.SaveCommand.CanExecute(null), "a draft with no test or skip verdict must not be savable");
 
         // Direct invocation bypasses CanExecute, so the handler itself must hold the line too.
         await wizard.SaveCommand.ExecuteAsync(null);
 
         Assert.Empty(configuration.Saved);
         Assert.Equal(0, tester.TestCount);
+    }
+
+    [Fact]
+    public async Task ParameterChange_AfterPassingTest_ClearsTheVerifiedVerdict()
+    {
+        var parameter = AcpSetupWizardFixtures.Parameter("--model", defaultValue: "sonnet");
+        var (wizard, _, _) = await WalkToTestAsync(parameters: new[] { parameter });
+        Assert.True(wizard.IsTestSuccessful);
+
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
+        Assert.Single(wizard.Parameters).Value = "opus";
+
+        Assert.Equal(ProfileVerificationState.Unknown, wizard.Verification.State);
+        Assert.False(wizard.IsTestSuccessful);
+        Assert.False(wizard.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AdapterOverrideChange_AfterPassingTest_ClearsTheVerifiedVerdict()
+    {
+        var (wizard, _, _) = await WalkToTestAsync();
+        Assert.True(wizard.IsTestSuccessful);
+
+        wizard.GoBackCommand.Execute(null);
+        Assert.Equal(AcpSetupWizardStep.ComponentSetup, wizard.Step);
+        wizard.AdapterCustomCommand = "/opt/node/bin/npx";
+
+        Assert.Equal(ProfileVerificationState.Unknown, wizard.Verification.State);
+        Assert.False(wizard.IsTestSuccessful);
+        Assert.False(wizard.SaveCommand.CanExecute(null));
     }
 
     [Fact]
@@ -942,6 +1050,7 @@ public sealed class AcpSetupWizardViewModelTests
         MutableTestCoreStringLocalizer? localizer = null)
     {
         var probe = ProbeForInstalledRuntime();
+        ConfigurePackagedAdapterProbe(probe);
         var packagedAdapter = AcpSetupWizardFixtures.PackagedAdapter(
             parameters: parameters ?? Array.Empty<AcpSetupParameterDefinition>());
         return WalkToParametersAsync(probe, packagedAdapter, localizer);
@@ -961,16 +1070,41 @@ public sealed class AcpSetupWizardViewModelTests
         wizard.SelectedAgent = wizard.Agents[0];
         await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup
         await wizard.GoNextCommand.ExecuteAsync(null); // → Parameters
+        Assert.Equal(AcpSetupWizardStep.Parameters, wizard.Step);
         return (wizard, tester, configuration);
     }
 
     /// <summary>Walks to the Test step without running the test.</summary>
     private static async Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToTestStepAsync(
         AcpSetupParameterDefinition[]? parameters = null,
-        MutableTestCoreStringLocalizer? localizer = null)
+        MutableTestCoreStringLocalizer? localizer = null,
+        TimeProvider? timeProvider = null)
     {
-        var (wizard, tester, configuration) = await WalkToParametersAsync(parameters, localizer);
-        await wizard.GoNextCommand.ExecuteAsync(null); // → Test
+        var probe = ProbeForInstalledRuntime();
+        ConfigurePackagedAdapterProbe(probe);
+        var adapter = AcpSetupWizardFixtures.PackagedAdapter(
+            parameters: parameters ?? Array.Empty<AcpSetupParameterDefinition>());
+        var agent = AcpSetupWizardFixtures.Agent(adapters: adapter);
+        var tester = new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success());
+        var configuration = new RecordingConfigurationService();
+        var wizard = CreateWizardFor(
+            agent,
+            probe,
+            new StubComponentInstaller(),
+            localizer,
+            tester,
+            configuration,
+            timeProvider);
+        await wizard.DetectAgentsCommand.ExecuteAsync(null);
+        wizard.SelectedAgent = wizard.Agents[0];
+        await wizard.GoNextCommand.ExecuteAsync(null); // → ComponentSetup
+        await wizard.GoNextCommand.ExecuteAsync(null); // → Parameters or Test when the form is empty
+        if (wizard.IsOnParameters)
+        {
+            await wizard.GoNextCommand.ExecuteAsync(null); // → Test
+        }
+
+        Assert.Equal(AcpSetupWizardStep.Test, wizard.Step);
         return (wizard, tester, configuration);
     }
 
@@ -980,9 +1114,10 @@ public sealed class AcpSetupWizardViewModelTests
     /// </summary>
     private static async Task<(AcpSetupWizardViewModel Wizard, StubConnectivityTester Tester, RecordingConfigurationService Configuration)> WalkToTestAsync(
         AcpSetupParameterDefinition[]? parameters = null,
-        MutableTestCoreStringLocalizer? localizer = null)
+        MutableTestCoreStringLocalizer? localizer = null,
+        TimeProvider? timeProvider = null)
     {
-        var walked = await WalkToTestStepAsync(parameters, localizer);
+        var walked = await WalkToTestStepAsync(parameters, localizer, timeProvider);
         await walked.Wizard.TestCommand.ExecuteAsync(null);
         return walked;
     }
@@ -1283,6 +1418,12 @@ public sealed class AcpSetupWizardViewModelTests
         return probe;
     }
 
+    private static void ConfigurePackagedAdapterProbe(StubExecutableProbe probe)
+    {
+        probe.SetExecutable("npx", "/usr/bin/npx");
+        probe.SetNodePackage(AcpSetupWizardFixtures.AdapterPackage, installed: true);
+    }
+
     private static AcpSetupWizardViewModel CreateWizard(
         StubExecutableProbe? probe = null,
         StubComponentInstaller? installer = null,
@@ -1295,14 +1436,16 @@ public sealed class AcpSetupWizardViewModelTests
         StubComponentInstaller installer,
         MutableTestCoreStringLocalizer? localizer,
         StubConnectivityTester? tester = null,
-        RecordingConfigurationService? configuration = null)
+        RecordingConfigurationService? configuration = null,
+        TimeProvider? timeProvider = null)
         => AcpSetupWizardFixtures.CreateWizard(
             new StubAgentCatalog(agent),
             probe,
             installer,
             tester ?? new StubConnectivityTester(AcpSetupWizardFixtures.WellKnownResults.Success()),
             configuration ?? new RecordingConfigurationService(),
-            localizer);
+            localizer,
+            timeProvider: timeProvider);
 
     // ── Missing toolchain ───────────────────────────────────────────────────
 
@@ -1545,5 +1688,10 @@ public sealed class AcpSetupWizardViewModelTests
         Assert.True(wizard.IsAdapterBuiltIn);
         Assert.False(wizard.IsAdapterToolchainMissing);
         Assert.Empty(wizard.AdapterToolchainMissingText);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

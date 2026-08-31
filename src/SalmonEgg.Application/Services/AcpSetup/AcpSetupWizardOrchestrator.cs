@@ -192,7 +192,8 @@ public sealed class AcpSetupWizardOrchestrator
             Transport = TransportType.Stdio,
             StdioCommand = launchPlan.Command,
             StdioArguments = new List<string>(launchPlan.Arguments),
-            StdioEnvironment = new Dictionary<string, string>(launchPlan.Environment, StringComparer.Ordinal)
+            StdioEnvironment = new Dictionary<string, string>(launchPlan.Environment, StringComparer.Ordinal),
+            Verification = draft.Verification
         };
     }
 }

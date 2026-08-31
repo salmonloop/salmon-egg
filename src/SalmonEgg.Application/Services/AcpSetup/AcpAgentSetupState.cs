@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SalmonEgg.Domain.Models;
 using SalmonEgg.Domain.Models.AcpSetup;
 
 namespace SalmonEgg.Application.Services.AcpSetup;
@@ -40,6 +41,13 @@ public sealed class AcpSetupDraft
 
     /// <summary>Profile name the configuration is saved under.</summary>
     public required string ProfileName { get; init; }
+
+    /// <summary>
+    /// Verification fact attached to this draft. The wizard sets this to <c>Verified</c> after a
+    /// successful end-to-end test, or <c>Unverified</c> when the user explicitly skips that step.
+    /// Leaving it as <c>Unknown</c> is reserved for callers that have not made either claim.
+    /// </summary>
+    public ProfileVerification Verification { get; init; } = ProfileVerification.Unknown;
 
     /// <summary>
     /// User-supplied paths for commands the catalog names by executable name.
