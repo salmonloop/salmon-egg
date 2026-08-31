@@ -1024,6 +1024,36 @@ public sealed class AcpConnectionSettingsViewModelTests
     }
 
     [Fact]
+    public void ProfileVerificationProjection_OnlyExplicitSkipShowsWarningAndRefreshes()
+    {
+        var registry = new InMemoryAcpConnectionSessionRegistry();
+        using var item = CreateAgentProfileItem("profile-a", registry, new TestConnectionCommands());
+        var changed = new List<string?>();
+        item.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        Assert.False(item.IsUnverified);
+
+        item.UpdateProfile(new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "profile-a",
+            Verification = ProfileVerification.Unverified
+        });
+
+        Assert.True(item.IsUnverified);
+        Assert.Contains(nameof(AgentProfileItemViewModel.IsUnverified), changed);
+
+        item.UpdateProfile(new ServerConfiguration
+        {
+            Id = "profile-a",
+            Name = "profile-a",
+            Verification = ProfileVerification.Verified(DateTimeOffset.UtcNow)
+        });
+
+        Assert.False(item.IsUnverified);
+    }
+
+    [Fact]
     public void ApplyConnectionToggleRequestCommand_WhenConnectIsPending_UsesConnectingLabelAndKeepsAuthoritativeSwitchState()
     {
         var registry = new InMemoryAcpConnectionSessionRegistry();

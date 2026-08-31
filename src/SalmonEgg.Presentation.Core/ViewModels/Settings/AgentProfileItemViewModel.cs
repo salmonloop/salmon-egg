@@ -107,6 +107,12 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
     public string TransportGlyph => AcpTransportGlyph.Resolve(_profile.Transport);
 
     /// <summary>
+    /// True only when the setup wizard explicitly offered a connection test and the user skipped it.
+    /// Unknown profiles stay visually neutral so older and externally-created profiles are not mislabeled.
+    /// </summary>
+    public bool IsUnverified => _profile.Verification.IsUnverified;
+
+    /// <summary>
     /// Short status string suitable for a badge or subtitle.
     /// </summary>
     public string StatusLabel => IsConnecting && _transitionKind == ConnectionTransitionKind.Reconnecting
@@ -184,6 +190,7 @@ public sealed partial class AgentProfileItemViewModel : ObservableObject, IDispo
         Name = profile.Name;
         EndpointDescription = BuildEndpointDescription(profile);
         OnPropertyChanged(nameof(TransportGlyph));
+        OnPropertyChanged(nameof(IsUnverified));
     }
 
     internal void ReprojectLocalizedState()

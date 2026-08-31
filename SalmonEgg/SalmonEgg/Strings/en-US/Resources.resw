@@ -789,6 +789,9 @@
   <data name="Acp_ProfileReconnect.Text" xml:space="preserve">
     <value>Reconnect</value>
   </data>
+  <data name="Acp_ProfileUnverified.Text" xml:space="preserve">
+    <value>Unverified</value>
+  </data>
   <data name="Acp_ProfileConnect.Text" xml:space="preserve">
     <value>Connect</value>
   </data>
@@ -844,13 +847,13 @@
     <value>Detect your agent, install the ACP adapter, fill in launch parameters, verify the connection, and save it as a profile.</value>
   </data>
   <data name="AcpSetup_AgentsTitle.Text" xml:space="preserve">
-    <value>1. Choose an agent</value>
+    <value>Choose an agent</value>
   </data>
   <data name="AcpSetup_DetectAgents.Content" xml:space="preserve">
     <value>Detect again</value>
   </data>
   <data name="AcpSetup_ComponentsTitle.Text" xml:space="preserve">
-    <value>2. Check components</value>
+    <value>Check components</value>
   </data>
   <data name="AcpSetup_InstallAdapter.Content" xml:space="preserve">
     <value>Install adapter</value>
@@ -865,19 +868,25 @@
     <value>Set up toolchain</value>
   </data>
   <data name="AcpSetup_ParametersTitle.Text" xml:space="preserve">
-    <value>3. Launch parameters</value>
+    <value>Launch parameters</value>
   </data>
   <data name="AcpSetup_CommandPreviewLabel.Text" xml:space="preserve">
     <value>Command preview</value>
   </data>
   <data name="AcpSetup_TestTitle.Text" xml:space="preserve">
-    <value>4. Test connection</value>
+    <value>Test connection</value>
   </data>
   <data name="AcpSetup_RunTest.Content" xml:space="preserve">
     <value>Run test</value>
   </data>
+  <data name="AcpSetup_SkipTest.Content" xml:space="preserve">
+    <value>Skip test</value>
+  </data>
+  <data name="AcpSetup_SkipTest.AutomationProperties.HelpText" xml:space="preserve">
+    <value>Continue without testing. The saved profile will be marked unverified.</value>
+  </data>
   <data name="AcpSetup_SaveTitle.Text" xml:space="preserve">
-    <value>5. Save profile</value>
+    <value>Save profile</value>
   </data>
   <data name="AcpSetup_Back.Content" xml:space="preserve">
     <value>Back</value>

@@ -32,7 +32,9 @@
                             <TextBlock x:Name="AcpSetupStepPosition"
                                        Text="{x:Bind ViewModel.StepPositionText, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       AutomationProperties.AutomationId="AcpSetup.StepPosition"
+                                       AutomationProperties.LiveSetting="Polite"/>
                         </StackPanel>
 
                         <!-- Operation failure surface, shared by every command. -->
@@ -558,12 +560,24 @@
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,8,0,24">
                             <Button x:Name="AcpSetupBackStepButton"
                                     x:Uid="AcpSetup_Back"
-                                    Command="{x:Bind ViewModel.GoBackCommand}"/>
-                            <Button x:Name="AcpSetupNextStepButton"
-                                    Grid.Column="2"
-                                    x:Uid="AcpSetup_Next"
-                                    Style="{StaticResource AccentButtonStyle}"
-                                    Command="{x:Bind ViewModel.GoNextCommand}"/>
+                                    Command="{x:Bind ViewModel.GoBackCommand}"
+                                    AutomationProperties.AutomationId="AcpSetup.Back"/>
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        Spacing="8">
+                                <!-- Skipping a test is a secondary choice with a durable consequence.
+                                     Keep the native default button appearance subordinate to Next. -->
+                                <Button x:Name="AcpSetupSkipTestButton"
+                                        x:Uid="AcpSetup_SkipTest"
+                                        Command="{x:Bind ViewModel.SkipTestCommand}"
+                                        Visibility="{x:Bind ViewModel.IsSkipTestVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        AutomationProperties.AutomationId="AcpSetup.SkipTest"/>
+                                <Button x:Name="AcpSetupNextStepButton"
+                                        x:Uid="AcpSetup_Next"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Command="{x:Bind ViewModel.GoNextCommand}"
+                                        AutomationProperties.AutomationId="AcpSetup.Next"/>
+                            </StackPanel>
                         </Grid>
                     </StackPanel>
                 </controls:ResponsiveContentHost.Child>
