@@ -202,12 +202,32 @@
                                                     </Grid>
                                                 </Grid>
 
-                                                <TextBlock Grid.Row="1"
-                                                           Grid.Column="1"
-                                                           Text="{x:Bind EndpointDescription}"
-                                                           Style="{StaticResource SettingsRowDescriptionTextStyle}"
-                                                           TextWrapping="NoWrap"
-                                                           TextTrimming="CharacterEllipsis"/>
+                                                <Grid Grid.Row="1"
+                                                      Grid.Column="1"
+                                                      ColumnDefinitions="*,Auto"
+                                                      ColumnSpacing="10">
+                                                    <TextBlock Text="{x:Bind EndpointDescription}"
+                                                               Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                               TextWrapping="NoWrap"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <!-- Verification and connection are independent facts: an
+                                                         unverified profile may still be connected successfully. -->
+                                                    <StackPanel Grid.Column="1"
+                                                                Orientation="Horizontal"
+                                                                Spacing="4"
+                                                                VerticalAlignment="Center"
+                                                                Visibility="{x:Bind IsUnverified, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                AutomationProperties.AutomationId="Acp.Profile.Unverified">
+                                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                                  Glyph="&#xE7BA;"
+                                                                  FontSize="12"
+                                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                                  AutomationProperties.AccessibilityView="Raw"/>
+                                                        <TextBlock x:Uid="Acp_ProfileUnverified"
+                                                                   Style="{StaticResource SettingsRowDescriptionTextStyle}"
+                                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                                                    </StackPanel>
+                                                </Grid>
 
                                                 <Grid Grid.RowSpan="2"
                                                       Grid.Column="2"

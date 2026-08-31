@@ -211,6 +211,7 @@ public sealed class AcpConnectionSettingsXamlTests
         string[] requiredResources =
         [
             "Acp_ProfileReconnect.Text",
+            "Acp_ProfileUnverified.Text",
             "AgentProfileEditor_CurrentConnectionSavedNoticeMessage"
         ];
 
@@ -268,6 +269,31 @@ public sealed class AcpConnectionSettingsXamlTests
         Assert.Contains("<MenuFlyout>", xaml, StringComparison.Ordinal);
         AssertProfileMenuItem(document, "Acp_ProfileEdit", "\uE70F");
         AssertProfileMenuItem(document, "Acp_ProfileDelete", "\uE74D");
+    }
+
+    [Fact]
+    public void AcpConnectionSettingsPage_ProfileList_ProjectsUnverifiedSeparatelyFromConnectionState()
+    {
+        var xaml = LoadFile(@"SalmonEgg\SalmonEgg\Presentation\Views\Settings\AcpConnectionSettingsPage.xaml");
+        var document = XDocument.Parse(xaml);
+        var unverified = Assert.Single(document.Descendants(), element =>
+            string.Equals(
+                (string?)element.Attribute("AutomationProperties.AutomationId"),
+                "Acp.Profile.Unverified",
+                StringComparison.Ordinal));
+
+        Assert.Equal(
+            "{x:Bind IsUnverified, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}",
+            (string?)unverified.Attribute("Visibility"));
+        Assert.Contains(unverified.Descendants(), element =>
+            string.Equals(element.Name.LocalName, "TextBlock", StringComparison.Ordinal)
+            && string.Equals(
+                element.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "Uid")?.Value,
+                "Acp_ProfileUnverified",
+                StringComparison.Ordinal));
+
+        Assert.Contains("Visibility=\"{x:Bind IsStableConnected, Mode=OneWay", xaml, StringComparison.Ordinal);
+        Assert.Contains("Visibility=\"{x:Bind IsStableDisconnected, Mode=OneWay", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
